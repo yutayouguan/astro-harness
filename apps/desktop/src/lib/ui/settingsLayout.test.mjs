@@ -6,6 +6,7 @@ const [
   appShellCss,
   preferencesCss,
   settingsCardCss,
+  settingsMaterialCss,
   terminalCss,
   browserCss,
   preferences,
@@ -17,6 +18,7 @@ const [
     "../../styles/features/shell/layout/projects.css",
     "../../styles/features/preferences.css",
     "../../styles/features/settings-card-surfaces.css",
+    "../../styles/features/settings-material-unified.css",
     "../../styles/features/terminal-settings.css",
     "../../styles/features/browser-settings.css",
     "../../components/settings/PreferencesPanel.tsx",
@@ -50,8 +52,8 @@ test("preference-backed tabs render independent glass cards", () => {
     /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?gap:\s*14px;[\s\S]*?background:\s*transparent;/,
   );
   assert.match(
-    settingsCardCss,
-    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?border-radius:\s*var\(--settings-panel-radius[\s\S]*?background:\s*var\(--settings-panel-background/,
+    settingsMaterialCss,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?background:\s*var\(--settings-panel-background/,
   );
   assert.match(
     preferencesCss,
@@ -103,7 +105,7 @@ test("appearance and conversation use responsive grouped layouts", () => {
 
   const colorOptions = preferences.slice(
     preferences.indexOf("const colorStyleOptions"),
-    preferences.indexOf("const glassOptions"),
+    preferences.indexOf("const langOptions"),
   );
   assert.ok(
     colorOptions.indexOf('id: "unified"') <
@@ -114,18 +116,8 @@ test("appearance and conversation use responsive grouped layouts", () => {
       colorOptions.indexOf('id: "colorful"'),
   );
 
-  const glassOptions = preferences.slice(
-    preferences.indexOf("const glassOptions"),
-    preferences.indexOf("const langOptions"),
-  );
-  for (const [left, right] of [
-    ['id: "minimal"', 'id: "normal"'],
-    ['id: "normal"', 'id: "rich"'],
-    ['id: "rich"', 'id: "liquid-soft"'],
-    ['id: "liquid-soft"', 'id: "liquid"'],
-  ]) {
-    assert.ok(glassOptions.indexOf(left) < glassOptions.indexOf(right));
-  }
+  assert.match(preferences, /min=\{GLASS_INTENSITY_MIN\}/);
+  assert.match(preferences, /max=\{GLASS_INTENSITY_MAX\}/);
   assert.match(
     preferencesCss,
     /\.prefs-card--conversation-display \.prefs-toggle-list[\s\S]*?grid-template-columns:\s*repeat\(2,/,

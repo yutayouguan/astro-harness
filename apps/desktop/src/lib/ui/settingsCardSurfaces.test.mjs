@@ -14,7 +14,7 @@ const [indexCss, surfacesCss, terminal, terminalCss, browser, browserCss] =
     ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
 
-test("settings card overrides load between shared and page-specific styles", () => {
+test("settings stack override loads before page-specific card styles", () => {
   assert.ok(
     indexCss.indexOf("./features/settings-card-surfaces.css") >
       indexCss.indexOf("./features/preferences.css"),
@@ -27,18 +27,12 @@ test("settings card overrides load between shared and page-specific styles", () 
     surfacesCss,
     /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?gap:\s*14px;[\s\S]*?background:\s*transparent;/,
   );
-  assert.match(
-    surfacesCss,
-    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?border-radius:\s*var\(--settings-panel-radius[\s\S]*?background:\s*var\(--settings-panel-background/,
-  );
+  assert.doesNotMatch(surfacesCss, /> \.prefs-card|> \.prefs-section/);
 });
 
 test("general preferences expose language and system as separate cards", () => {
   assert.match(browser, /browser-settings-card--runtime/);
-  assert.match(
-    surfacesCss,
-    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?border-radius:\s*var\(--settings-panel-radius/,
-  );
+  assert.match(terminal, /terminal-settings-section--mode/);
 });
 
 test("terminal and browser settings keep independent functional sections", () => {

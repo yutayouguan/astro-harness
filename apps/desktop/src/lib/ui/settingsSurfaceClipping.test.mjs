@@ -7,10 +7,11 @@ const surfaces = await readFile(
   "utf8",
 );
 
-test("independent settings cards clip WebView backdrop layers to their radius", () => {
+test("settings stack stays transparent and does not wrap card surfaces", () => {
   assert.match(
     surfaces,
-    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?isolation:\s*isolate;[\s\S]*?overflow:\s*hidden;[\s\S]*?background-clip:\s*padding-box;/,
+    /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.doesNotMatch(surfaces, /prefs-card--general|prefs-general-group/);
+  assert.doesNotMatch(surfaces, /> \.prefs-card|> \.prefs-section/);
 });
