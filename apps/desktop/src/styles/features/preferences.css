@@ -1293,6 +1293,256 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.prefs-conversation-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(320px, 1.28fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.prefs-conversation-layout-grid .answer-layout-options {
+  grid-template-columns: 1fr;
+  align-content: start;
+}
+
+.prefs-conversation-preview {
+  min-width: 0;
+  min-height: 270px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 13%, var(--glass-edge));
+  border-radius: 16px;
+  background:
+    radial-gradient(
+      circle at 84% 12%,
+      color-mix(in srgb, var(--tone-soft) 42%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--glass-fill, #fff) 66%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.prefs-conversation-preview-head {
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink-mute);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.prefs-conversation-preview-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prefs-conversation-preview-head i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 0 3px var(--tone-soft);
+}
+
+.prefs-conversation-preview-head > span:last-child {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-soft) 42%, transparent);
+  color: var(--tone);
+}
+
+.prefs-conversation-preview-feed {
+  padding-top: 8px;
+  display: grid;
+  gap: 12px;
+}
+
+.prefs-conversation-preview-user {
+  max-width: 78%;
+  margin-left: auto;
+  padding: 8px 10px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--tone-soft) 48%, var(--glass-fill));
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.prefs-conversation-preview time {
+  flex: 0 0 auto;
+  color: var(--ink-mute);
+  font-size: 8px;
+}
+
+.prefs-conversation-preview-assistant {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.prefs-conversation-preview-avatar {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #3779f0, #7558e6);
+  color: white;
+  font-size: 9px;
+  font-weight: 760;
+  box-shadow: 0 4px 10px rgba(74, 62, 164, 0.17);
+}
+
+.prefs-conversation-preview-turn {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.prefs-conversation-preview-activities {
+  position: relative;
+  display: grid;
+  gap: 3px;
+}
+
+.prefs-conversation-preview-activities::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 10px;
+  width: 1px;
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+.prefs-conversation-preview-activities > div {
+  position: relative;
+  min-height: 24px;
+  padding: 3px 7px 3px 27px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 7px;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.prefs-conversation-preview-activities > div > i {
+  position: absolute;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--tone-soft) 56%, var(--glass-fill));
+  color: var(--tone);
+}
+
+.prefs-conversation-preview-activities > div > span {
+  flex: 1;
+}
+
+.prefs-conversation-preview-activities small {
+  color: #239462;
+  font-size: 8px;
+}
+
+.prefs-conversation-preview-more {
+  justify-self: start;
+  margin-left: 27px;
+  padding: 2px 6px !important;
+  min-height: auto !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--tone-soft) 36%, transparent);
+  color: var(--tone) !important;
+  font-size: 8px !important;
+}
+
+.prefs-conversation-preview-group {
+  min-height: 36px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--tone) 11%, var(--glass-edge));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--glass-fill, #fff) 58%, transparent);
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.prefs-conversation-preview-icons {
+  display: flex;
+  align-items: center;
+}
+
+.prefs-conversation-preview-icons i {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-radius: 50%;
+  background: var(--glass-fill, #fff);
+  color: var(--tone);
+}
+
+.prefs-conversation-preview-icons i + i {
+  margin-left: -4px;
+}
+
+.prefs-conversation-preview-group > span:nth-child(2) {
+  flex: 1;
+}
+
+.prefs-conversation-preview-group b {
+  color: var(--ink-mute);
+}
+
+.prefs-conversation-preview-answer {
+  position: relative;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 65%, transparent);
+  border-radius: 5px 12px 12px 12px;
+  background: color-mix(in srgb, var(--glass-fill, #fff) 70%, transparent);
+  color: var(--ink-soft);
+}
+
+.prefs-conversation-preview-answer strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--tone);
+  font-size: 9px;
+}
+
+.prefs-conversation-preview-answer p {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.prefs-conversation-preview-answer time {
+  position: absolute;
+  right: 8px;
+  bottom: -13px;
+}
+
+html[data-theme="dark"] .prefs-conversation-preview,
+html[data-theme="dark"] .prefs-conversation-preview-answer,
+html[data-theme="dark"] .prefs-conversation-preview-group {
+  background: color-mix(in srgb, var(--tone-soft) 10%, rgba(8, 6, 18, 0.42));
+  border-color: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.08));
+}
+
 .theme-option {
   position: relative;
   display: flex;
@@ -2901,6 +3151,7 @@ html[data-theme="dark"] .prefs-context-budget-ico {
 
 @container (max-width: 760px) {
   .prefs-category-stack--appearance:not([hidden]),
+  .prefs-conversation-layout-grid,
   .prefs-card--conversation-display .prefs-toggle-list,
   .prefs-about-features,
   .prefs-about-meta,

@@ -2351,6 +2351,21 @@ export const zh = {
   "prefs.chat.layout.timelineDesc": "按真实顺序展示思考、工具和回答片段",
   "prefs.chat.layout.grouped": "归类视图",
   "prefs.chat.layout.groupedDesc": "合并思考、集中工具，并将正文整理为完整回答",
+  "prefs.chat.preview.title": "即时预览",
+  "prefs.chat.preview.user": "整理今天完成的设置界面，并说明验证结果。",
+  "prefs.chat.preview.status": "准备任务",
+  "prefs.chat.preview.tool": "运行测试",
+  "prefs.chat.preview.skill": "加载 Skill",
+  "prefs.chat.preview.mcp": "查询 MCP",
+  "prefs.chat.preview.hook": "执行 Hook",
+  "prefs.chat.preview.memory": "更新记忆",
+  "prefs.chat.preview.done": "已完成",
+  "prefs.chat.preview.grouped": "已完成 {{count}} 项过程",
+  "prefs.chat.preview.answer.compact": "已完成设置更新并通过检查。",
+  "prefs.chat.preview.answer.normal":
+    "已完成设置界面更新，格式、类型检查与测试均已通过。",
+  "prefs.chat.preview.answer.detailed":
+    "已完成设置界面更新。各页交互与现有功能保持一致，格式、类型检查、样式规则和全量测试均已通过。",
   "prefs.chat.verbosity": "显示详细程度",
   "prefs.chat.compact": "简洁",
   "prefs.chat.compactDesc": "只显示对话正文，隐藏过程卡片",
@@ -5528,6 +5543,23 @@ export const en: Record<MessageKey, string> = {
   "prefs.chat.layout.grouped": "Grouped view",
   "prefs.chat.layout.groupedDesc":
     "Merge reasoning, collect tools, and combine text into one answer",
+  "prefs.chat.preview.title": "Live preview",
+  "prefs.chat.preview.user":
+    "Summarize the settings work completed today and include validation results.",
+  "prefs.chat.preview.status": "Preparing task",
+  "prefs.chat.preview.tool": "Running tests",
+  "prefs.chat.preview.skill": "Loading Skill",
+  "prefs.chat.preview.mcp": "Querying MCP",
+  "prefs.chat.preview.hook": "Running Hook",
+  "prefs.chat.preview.memory": "Updating memory",
+  "prefs.chat.preview.done": "Done",
+  "prefs.chat.preview.grouped": "Completed {{count}} process items",
+  "prefs.chat.preview.answer.compact":
+    "The settings update is complete and checks pass.",
+  "prefs.chat.preview.answer.normal":
+    "The settings UI update is complete. Formatting, type checks, and tests all pass.",
+  "prefs.chat.preview.answer.detailed":
+    "The settings UI update is complete. Each interaction remains aligned with existing behavior, and formatting, type checks, style rules, and the full test suite all pass.",
   "prefs.chat.verbosity": "Verbosity",
   "prefs.chat.compact": "Compact",
   "prefs.chat.compactDesc": "Messages only — hide process cards",

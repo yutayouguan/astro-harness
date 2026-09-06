@@ -371,6 +371,99 @@ const TOGGLE_KEYS: {
   },
 ];
 
+function ConversationLayoutPreview({ prefs }: { prefs: ChatDisplayPrefs }) {
+  const { t } = useI18n();
+  const activities: {
+    key: ChatDisplayToggleKey;
+    label: MessageKey;
+    Icon: LucideIcon;
+  }[] = [
+    { key: "showStatus", label: "prefs.chat.preview.status", Icon: Activity },
+    { key: "showTools", label: "prefs.chat.preview.tool", Icon: Wrench },
+    { key: "showSkills", label: "prefs.chat.preview.skill", Icon: Sparkles },
+    { key: "showMcp", label: "prefs.chat.preview.mcp", Icon: Plug },
+    { key: "showHooks", label: "prefs.chat.preview.hook", Icon: Webhook },
+    { key: "showMemory", label: "prefs.chat.preview.memory", Icon: Brain },
+  ];
+  const visibleActivities = activities.filter(({ key }) => prefs[key]);
+  const shownActivities = visibleActivities.slice(0, 4);
+  const hiddenCount = visibleActivities.length - shownActivities.length;
+  const answerKey =
+    `prefs.chat.preview.answer.${prefs.verbosity}` as MessageKey;
+
+  return (
+    <div
+      className="prefs-conversation-preview"
+      data-layout={prefs.answerLayout}
+      aria-label={t("prefs.chat.preview.title")}
+    >
+      <div className="prefs-conversation-preview-head">
+        <span>
+          <i aria-hidden />
+          {t("prefs.chat.preview.title")}
+        </span>
+        <span>
+          {t(`prefs.chat.layout.${prefs.answerLayout}` as MessageKey)}
+        </span>
+      </div>
+      <div className="prefs-conversation-preview-feed">
+        <div className="prefs-conversation-preview-user">
+          <span>{t("prefs.chat.preview.user")}</span>
+          {prefs.showTimestamps ? <time>10:42</time> : null}
+        </div>
+        <div className="prefs-conversation-preview-assistant">
+          <span className="prefs-conversation-preview-avatar" aria-hidden>
+            A
+          </span>
+          <div className="prefs-conversation-preview-turn">
+            {shownActivities.length > 0 ? (
+              prefs.answerLayout === "grouped" ? (
+                <div className="prefs-conversation-preview-group">
+                  <span className="prefs-conversation-preview-icons">
+                    {shownActivities.map(({ key, Icon }) => (
+                      <i key={key}>
+                        <Icon size={11} strokeWidth={2.2} />
+                      </i>
+                    ))}
+                  </span>
+                  <span>
+                    {t("prefs.chat.preview.grouped", {
+                      count: String(visibleActivities.length),
+                    })}
+                  </span>
+                  <b aria-hidden>›</b>
+                </div>
+              ) : (
+                <div className="prefs-conversation-preview-activities">
+                  {shownActivities.map(({ key, label, Icon }) => (
+                    <div key={key}>
+                      <i aria-hidden>
+                        <Icon size={11} strokeWidth={2.2} />
+                      </i>
+                      <span>{t(label)}</span>
+                      <small>{t("prefs.chat.preview.done")}</small>
+                    </div>
+                  ))}
+                  {hiddenCount > 0 ? (
+                    <div className="prefs-conversation-preview-more">
+                      +{hiddenCount}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            ) : null}
+            <div className="prefs-conversation-preview-answer">
+              <strong>Astro</strong>
+              <p>{t(answerKey)}</p>
+              {prefs.showTimestamps ? <time>10:42</time> : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PreferencesPanel({
   mode,
   onChange,
@@ -1330,31 +1423,34 @@ export default function PreferencesPanel({
               </div>
             </div>
 
-            <div
-              className="theme-options answer-layout-options"
-              role="radiogroup"
-              aria-label={t("prefs.chat.layout.title")}
-            >
-              {answerLayoutOptions.map(({ id, labelKey, descKey, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={prefs.answerLayout === id}
-                  className={`theme-option ${prefs.answerLayout === id ? "active" : ""}`}
-                  data-tone={tone}
-                  onClick={() => onChatAnswerLayoutChange(id)}
-                >
-                  <span className="theme-option-icon" aria-hidden>
-                    <Icon size={18} strokeWidth={2} />
-                  </span>
-                  <span className="theme-option-text">
-                    <span className="theme-option-label">{t(labelKey)}</span>
-                    <span className="theme-option-desc">{t(descKey)}</span>
-                  </span>
-                  <span className="theme-option-check" aria-hidden />
-                </button>
-              ))}
+            <div className="prefs-conversation-layout-grid">
+              <div
+                className="theme-options answer-layout-options"
+                role="radiogroup"
+                aria-label={t("prefs.chat.layout.title")}
+              >
+                {answerLayoutOptions.map(({ id, labelKey, descKey, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={prefs.answerLayout === id}
+                    className={`theme-option ${prefs.answerLayout === id ? "active" : ""}`}
+                    data-tone={tone}
+                    onClick={() => onChatAnswerLayoutChange(id)}
+                  >
+                    <span className="theme-option-icon" aria-hidden>
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
+                    <span className="theme-option-text">
+                      <span className="theme-option-label">{t(labelKey)}</span>
+                      <span className="theme-option-desc">{t(descKey)}</span>
+                    </span>
+                    <span className="theme-option-check" aria-hidden />
+                  </button>
+                ))}
+              </div>
+              <ConversationLayoutPreview prefs={prefs} />
             </div>
           </section>
 
