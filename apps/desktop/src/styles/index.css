@@ -87,6 +87,7 @@
 @import "./features/preferences.css" layer(features);
 @import "./features/browser-settings.css" layer(features);
 @import "./features/terminal-settings.css" layer(features);
+@import "./features/settings-card-surfaces.css" layer(features);
 @import "./features/tools.css" layer(features);
 @import "./features/skills/core.css" layer(features);
 @import "./features/skills/gallery.css" layer(features);

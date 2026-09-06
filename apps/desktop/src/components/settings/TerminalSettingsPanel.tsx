@@ -1,4 +1,4 @@
-import { RotateCcw, ShieldCheck, TerminalSquare, Type } from "lucide-react";
+import { CornerDownLeft, RotateCcw, TerminalSquare, Type } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { useI18n } from "../../i18n/LocaleContext";
@@ -37,7 +37,7 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
           <section className="prefs-card terminal-settings-section terminal-settings-section--mode">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <ShieldCheck size={20} />
+                <TerminalSquare size={20} />
               </div>
               <div>
                 <h2 className="prefs-card-title">
@@ -48,13 +48,18 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                 </p>
               </div>
             </div>
-            <div className="terminal-mode-options">
+            <div
+              className="terminal-mode-options"
+              role="radiogroup"
+              aria-label={t("terminal.settings.mode.title")}
+            >
               {(["system", "project"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
+                  role="radio"
                   className={`terminal-mode-option ${settings.executionMode === mode ? "is-active" : ""}`}
-                  aria-pressed={settings.executionMode === mode}
+                  aria-checked={settings.executionMode === mode}
                   onClick={() => update({ executionMode: mode })}
                 >
                   <span>
@@ -199,7 +204,7 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
           <section className="prefs-card terminal-settings-section terminal-settings-section--behavior">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <TerminalSquare size={20} />
+                <CornerDownLeft size={20} />
               </div>
               <div className="terminal-settings-head-copy">
                 <h2 className="prefs-card-title">

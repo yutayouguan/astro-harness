@@ -5,6 +5,7 @@ import test from "node:test";
 const [
   appShellCss,
   preferencesCss,
+  settingsCardCss,
   terminalCss,
   browserCss,
   preferences,
@@ -15,6 +16,7 @@ const [
   [
     "../../styles/features/shell/layout/projects.css",
     "../../styles/features/preferences.css",
+    "../../styles/features/settings-card-surfaces.css",
     "../../styles/features/terminal-settings.css",
     "../../styles/features/browser-settings.css",
     "../../components/settings/PreferencesPanel.tsx",
@@ -42,14 +44,14 @@ test("preference-backed settings use one scroll owner and one content width", ()
   assert.doesNotMatch(browserCss, /max-width:\s*760px/);
 });
 
-test("preference-backed tabs share a surface except appearance cards", () => {
+test("preference-backed tabs render independent glass cards", () => {
   assert.match(
-    preferencesCss,
-    /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?background:\s*var\(--settings-panel-background[\s\S]*?backdrop-filter:\s*var\(--settings-panel-backdrop/,
+    settingsCardCss,
+    /\.prefs-page\.is-embedded \.prefs-category-stack\s*\{[\s\S]*?gap:\s*14px;[\s\S]*?background:\s*transparent;/,
   );
   assert.match(
-    preferencesCss,
-    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?background:\s*transparent;[\s\S]*?backdrop-filter:\s*none;/,
+    settingsCardCss,
+    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?border-radius:\s*var\(--settings-panel-radius[\s\S]*?background:\s*var\(--settings-panel-background/,
   );
   assert.match(
     preferencesCss,
