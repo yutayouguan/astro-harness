@@ -14,6 +14,8 @@ const [
   terminal,
   compression,
   updater,
+  prototypePages,
+  prototypeCss,
 ] = await Promise.all(
   [
     "../../styles/features/shell/layout/projects.css",
@@ -27,6 +29,8 @@ const [
     "../../components/settings/TerminalSettingsPanel.tsx",
     "../../components/settings/CompressionSettingsCard.tsx",
     "../../../src-tauri/src/commands/updater.rs",
+    "../../../../../designs/astro-wallpaper/settings-pages.jsx",
+    "../../../../../designs/astro-wallpaper/settings-prototype.css",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
@@ -94,6 +98,7 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.doesNotMatch(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);
   assert.match(preferences, /prefs-card--conversation-controls/);
+  assert.match(preferences, /prefs-conversation-choice-column/);
   assert.match(preferences, /ConversationLayoutPreview/);
   assert.match(preferences, /prefs-conversation-preview/);
   assert.match(preferences, /data-layout=\{prefs\.answerLayout\}/);
@@ -143,16 +148,35 @@ test("appearance and conversation use responsive grouped layouts", () => {
   );
   assert.match(
     preferencesCss,
-    /\.prefs-conversation-layout-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(220px, 0\.72fr\) minmax\(320px, 1\.28fr\);/,
-  );
-  assert.match(
-    preferencesCss,
-    /\.prefs-conversation-controls-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(220px, 0\.72fr\) minmax\(0, 1\.28fr\);/,
+    /\.prefs-conversation-layout-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(250px, 0\.78fr\) minmax\(320px, 1\.22fr\);/,
   );
 
   const conversation = preferences.slice(
     preferences.indexOf('hidden={activeCategory !== "conversation"}'),
     preferences.indexOf('hidden={activeCategory !== "context"}'),
+  );
+  const layoutCard = conversation.slice(
+    conversation.indexOf("prefs-card--conversation-display"),
+    conversation.indexOf("prefs-card--conversation-controls"),
+  );
+  const controlsCard = conversation.slice(
+    conversation.indexOf("prefs-card--conversation-controls"),
+  );
+  assert.match(layoutCard, /prefs-conversation-verbosity-options/);
+  assert.ok(
+    layoutCard.indexOf("prefs-conversation-choice-column") <
+      layoutCard.indexOf("<ConversationLayoutPreview"),
+  );
+  assert.doesNotMatch(controlsCard, /prefs-conversation-verbosity-options/);
+  assert.doesNotMatch(preferencesCss, /prefs-conversation-controls-grid/);
+  assert.match(prototypePages, /conversation-layout-composer/);
+  assert.ok(
+    prototypePages.indexOf("conversation-choice-stack") <
+      prototypePages.indexOf("conversation-live-preview"),
+  );
+  assert.match(
+    prototypeCss,
+    /\.conversation-layout-composer\s*\{[^}]*grid-template-columns:\s*minmax\(260px, 0\.78fr\) minmax\(340px, 1\.22fr\);/,
   );
   const general = preferences.slice(
     preferences.indexOf('hidden={activeCategory !== "general"}'),

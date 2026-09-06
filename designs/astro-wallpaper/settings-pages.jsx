@@ -186,28 +186,35 @@ function ConversationPage({ tab, settings, patch }) {
       <PageHeader tab={tab} />
       <div className="page-stack">
         <Card icon="≡" title="回答编排" subtitle="选择长回答与工具过程的组织方式。">
-          <div className="choice-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-            {[
-              ["timeline", "时间线", "按执行顺序呈现思考、工具与回答。"],
-              ["grouped", "分组", "将连续的工具活动收纳为一个阶段。"],
-            ].map(([value, title, description]) => (
-              <button key={value} className={`choice-card ${settings.answerLayout === value ? "active" : ""}`} onClick={() => patch({ answerLayout: value })}>
-                <strong>{title}</strong><small>{description}</small>
-              </button>
-            ))}
+          <div className="conversation-layout-composer">
+            <div className="conversation-choice-stack">
+              <div className="conversation-choice-group">
+                <strong className="conversation-choice-title">布局选择</strong>
+                <div className="choice-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  {[
+                    ["timeline", "时间线", "按执行顺序呈现思考、工具与回答。"],
+                    ["grouped", "分组", "将连续的工具活动收纳为一个阶段。"],
+                  ].map(([value, title, description]) => (
+                    <button key={value} className={`choice-card ${settings.answerLayout === value ? "active" : ""}`} onClick={() => patch({ answerLayout: value })}>
+                      <strong>{title}</strong><small>{description}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="conversation-choice-group">
+                <strong className="conversation-choice-title">详细程度</strong>
+                <Segmented label="回答密度" value={settings.verbosity} options={[{ value: "compact", label: "简洁" }, { value: "normal", label: "常规" }, { value: "detailed", label: "详细" }]} onChange={setVerbosity} />
+              </div>
+            </div>
+            <div className="conversation-live-preview">
+              <strong className="conversation-choice-title">即时预览</strong>
+              <div className="detail-panel">
+                <div className="inline-tags"><Tag tone="tone">{settings.answerLayout === "timeline" ? "时间线" : "分组"}</Tag><Tag>{settings.verbosity === "normal" ? "常规" : settings.verbosity === "compact" ? "简洁" : "详细"}</Tag></div>
+                <p style={{ marginTop: 9 }}>思考摘要 → 工具活动 → 最终回答，异常状态会自动展开。</p>
+              </div>
+            </div>
           </div>
         </Card>
-        <div className="two-column">
-          <Card icon="▶" title="回答密度" subtitle="调整默认详细程度，不影响你在对话中的明确要求。">
-            <Segmented label="回答密度" value={settings.verbosity} options={[{ value: "compact", label: "简洁" }, { value: "normal", label: "常规" }, { value: "detailed", label: "详细" }]} onChange={setVerbosity} />
-          </Card>
-          <Card icon="◉" title="即时预览" subtitle="当前组合会如何呈现在对话中。">
-            <div className="detail-panel">
-              <div className="inline-tags"><Tag tone="tone">{settings.answerLayout === "timeline" ? "时间线" : "分组"}</Tag><Tag>{settings.verbosity === "normal" ? "常规" : settings.verbosity === "compact" ? "简洁" : "详细"}</Tag></div>
-              <p style={{ marginTop: 9 }}>思考摘要 → 工具活动 → 最终回答，异常状态会自动展开。</p>
-            </div>
-          </Card>
-        </div>
         <Card icon="▤" title="过程可见性" subtitle="只显示对你有帮助的运行信息。">
           <div className="setting-list">
             {toggles.map(([key, title, description]) => (

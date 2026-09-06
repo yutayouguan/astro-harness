@@ -1595,12 +1595,34 @@ html[data-theme="dark"] .wallpaper-preview-shade {
 
 .prefs-conversation-layout-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(320px, 1.28fr);
+  grid-template-columns: minmax(250px, 0.78fr) minmax(320px, 1.22fr);
   gap: 14px;
   align-items: stretch;
 }
 
-.prefs-conversation-layout-grid .answer-layout-options {
+.prefs-conversation-choice-column {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.prefs-conversation-choice-group {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.prefs-conversation-choice-group + .prefs-conversation-choice-group {
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.prefs-conversation-choice-group .prefs-toggle-heading {
+  margin-bottom: 0;
+}
+
+.prefs-conversation-choice-group .theme-options {
   grid-template-columns: 1fr;
   align-content: start;
 }
@@ -2009,40 +2031,6 @@ html[data-theme="dark"] .theme-option-icon {
   border-radius: 50%;
   background: #fff;
   clip-path: polygon(14% 44%, 0 60%, 42% 100%, 100% 18%, 82% 0, 40% 62%);
-}
-
-/* 过程信息开关列表 */
-.prefs-conversation-controls-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
-  align-items: start;
-  gap: 14px;
-}
-
-.prefs-conversation-control-group {
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid
-    color-mix(in srgb, var(--tone) 10%, rgba(255, 255, 255, 0.45));
-  border-radius: 16px;
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.18),
-      rgba(255, 255, 255, 0.08)
-    ),
-    color-mix(in srgb, var(--tone-soft) 18%, transparent);
-}
-
-html[data-theme="dark"] .prefs-conversation-control-group {
-  border-color: rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.05),
-      rgba(255, 255, 255, 0.01)
-    ),
-    rgba(8, 6, 18, 0.35);
 }
 
 .prefs-conversation-verbosity-options {
@@ -3501,12 +3489,15 @@ html[data-theme="dark"] .prefs-context-budget-ico {
 @container (max-width: 760px) {
   .prefs-category-stack--appearance:not([hidden]),
   .prefs-category-stack--about:not([hidden]),
-  .prefs-conversation-layout-grid,
-  .prefs-conversation-controls-grid {
+  .prefs-conversation-layout-grid {
     grid-template-columns: 1fr;
   }
 
-  .prefs-conversation-verbosity-options {
+  .prefs-conversation-choice-group .answer-layout-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prefs-conversation-choice-group .prefs-conversation-verbosity-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -3541,7 +3532,7 @@ html[data-theme="dark"] .prefs-context-budget-ico {
     grid-template-columns: 1fr;
   }
 
-  .prefs-conversation-verbosity-options,
+  .prefs-conversation-choice-group .prefs-conversation-verbosity-options,
   .prefs-card--conversation-controls .prefs-toggle-list {
     grid-template-columns: 1fr;
   }

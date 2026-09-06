@@ -524,6 +524,13 @@ body { overflow: hidden; color: var(--ink); background: #dfe5f2; }
 .choice-card.active { border-color: rgba(109, 92, 232, 0.31); background: rgba(239, 236, 255, 0.58); box-shadow: inset 0 0 0 1px rgba(109, 92, 232, 0.1); }
 .choice-card strong { font-size: 12px; }
 .choice-card small { color: var(--ink-mute); font-size: 10px; line-height: 1.4; }
+.conversation-layout-composer { display: grid; grid-template-columns: minmax(260px, 0.78fr) minmax(340px, 1.22fr); gap: 14px; align-items: stretch; }
+.conversation-choice-stack { display: grid; align-content: start; gap: 14px; }
+.conversation-choice-group { display: grid; gap: 8px; }
+.conversation-choice-group + .conversation-choice-group { padding-top: 12px; border-top: 1px solid rgba(76, 74, 108, 0.08); }
+.conversation-choice-title { color: var(--ink-mute); font-size: 10.5px; letter-spacing: 0.04em; }
+.conversation-choice-group .segmented { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.conversation-live-preview { min-height: 290px; padding: 14px; display: grid; align-content: start; gap: 8px; border: 1px solid rgba(76, 74, 108, 0.09); border-radius: 15px; background: rgba(255, 255, 255, 0.2); }
 .context-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; transition: opacity 150ms ease; }
 .context-stages.is-disabled { opacity: 0.42; pointer-events: none; }
 .context-stage { padding: 12px; display: grid; gap: 10px; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 13px; background: rgba(255, 255, 255, 0.26); }
@@ -697,7 +704,7 @@ body { overflow: hidden; color: var(--ink); background: #dfe5f2; }
 @media (max-width: 1180px) {
   .app-window { --rail-size: 64px; --settings-nav-size: 218px; --content-gutter: 25px; }
   .content { padding-inline: 25px; }
-  .wallpaper-editor, .split-column { grid-template-columns: 1fr; }
+  .wallpaper-editor, .split-column, .conversation-layout-composer { grid-template-columns: 1fr; }
   .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
