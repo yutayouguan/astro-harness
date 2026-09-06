@@ -159,6 +159,16 @@ test("settings content panels consume one shared glass material contract", () =>
   }
 });
 
+test("embedded settings clip tinted sections to the shared panel radius", () => {
+  const clip = rule(
+    projectStyles,
+    ".settings-content-inline > .prefs-page.is-embedded .prefs-category-stack",
+  );
+
+  assert.ok(clip, "missing embedded settings clipping rule");
+  assert.match(clip, /overflow:\s*hidden;/);
+});
+
 test("preference-backed settings tabs render their glass material on the first frame", () => {
   const stack = rule(preferenceStyles, ".prefs-category-stack");
 

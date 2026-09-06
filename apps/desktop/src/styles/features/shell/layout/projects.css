@@ -1133,6 +1133,11 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
   overflow: hidden;
 }
 
+/* 子分区可带轻量底色，必须裁进主玻璃的圆角，避免露出直角矩形。 */
+.settings-content-inline > .prefs-page.is-embedded .prefs-category-stack {
+  overflow: hidden;
+}
+
 /* 定时任务 / 智能流程 / 插件：内联在内容区，撑满可用高度 */
 .feature-content-inline {
   flex: 1;
