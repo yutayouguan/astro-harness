@@ -101,6 +101,7 @@ export default function TerminalDock({
 
     const terminal = new XtermTerminal({
       allowProposedApi: false,
+      allowTransparency: true,
       convertEol: false,
       cursorBlink: settings.cursorBlink,
       cursorStyle: settings.cursorStyle,

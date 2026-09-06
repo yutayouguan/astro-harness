@@ -113,19 +113,17 @@ test("terminal content is borderless and keeps all four xterm corners square", (
   );
 });
 
-test("terminal uses a denser readable material when wallpaper is active", () => {
+test("terminal always uses the denser readable glass material", () => {
   const app = source("App.tsx");
   const dock = source("components/chat/TerminalTabsDock.tsx");
   const css = source("styles/features/chat/terminal-dock.css");
 
-  assert.match(app, /root\.setAttribute\("data-wallpaper", "true"\)/);
-  assert.match(app, /root\.removeAttribute\("data-wallpaper"\)/);
   assert.match(dock, /"--terminal-screen-bg"/);
-  assert.match(dock, /allowTransparency:\s*wallpaperActive/);
-  assert.match(app, /wallpaperActive=\{wallpaperEnabled\}/);
-  assert.match(dock, /activeSession\.id.*wallpaperActive/s);
-  assert.match(dock, /"data-wallpaper"/);
-  assert.match(css, /html\[data-wallpaper="true"\]\[data-theme="light"\]/);
+  assert.match(dock, /allowTransparency:\s*true/);
+  assert.doesNotMatch(app, /wallpaperActive=\{wallpaperEnabled\}/);
+  assert.doesNotMatch(dock, /wallpaperActive/);
+  assert.doesNotMatch(dock, /"data-wallpaper"/);
+  assert.match(css, /html\[data-theme="light"\]/);
   assert.match(css, /--terminal-screen-bg:\s*rgba\(0, 0, 0, 0\)/);
   assert.match(css, /padding:\s*4px 10px 0 14px/);
   assert.match(css, /border-bottom-right-radius:\s*0/);
@@ -135,7 +133,7 @@ test("terminal uses a denser readable material when wallpaper is active", () => 
     css,
     /background-color:\s*var\(--terminal-screen-bg\) !important/,
   );
-  assert.match(css, /html\[data-wallpaper="true"\] \.terminal-dock\s*\{/);
+  assert.match(css, /\.terminal-dock\s*\{[\s\S]*?backdrop-filter:\s*blur\(/);
   assert.match(css, /backdrop-filter:\s*blur\(/);
   assert.match(css, /prefers-reduced-transparency/);
   assert.match(css, /prefers-contrast:\s*more/);

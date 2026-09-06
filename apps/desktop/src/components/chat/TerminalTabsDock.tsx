@@ -59,7 +59,6 @@ type Props = {
   projectId: string;
   projectName: string;
   projectRoot: string;
-  wallpaperActive: boolean;
   onClose: () => void;
 };
 
@@ -68,7 +67,6 @@ type TerminalPaneProps = {
   visible: boolean;
   session: TerminalSessionDto;
   settings: TerminalSettings;
-  wallpaperActive: boolean;
   onSessionProgress: (clientId: string, session: TerminalSessionDto) => void;
   onError: (message: string | null) => void;
 };
@@ -141,7 +139,6 @@ function TerminalPane({
   visible,
   session,
   settings,
-  wallpaperActive,
   onSessionProgress,
   onError,
 }: TerminalPaneProps) {
@@ -162,7 +159,7 @@ function TerminalPane({
 
     const terminal = new XtermTerminal({
       allowProposedApi: false,
-      allowTransparency: wallpaperActive,
+      allowTransparency: true,
       convertEol: false,
       cursorBlink: settings.cursorBlink,
       cursorStyle: settings.cursorStyle,
@@ -240,7 +237,7 @@ function TerminalPane({
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "data-theme", "data-wallpaper", "style"],
+      attributeFilter: ["class", "data-theme", "style"],
     });
 
     const readOutput = async () => {
@@ -302,7 +299,7 @@ function TerminalPane({
       xtermRef.current = null;
       fitRef.current = null;
     };
-  }, [session.id, t, wallpaperActive]);
+  }, [session.id, t]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
@@ -329,7 +326,6 @@ export default function TerminalTabsDock({
   projectId,
   projectName,
   projectRoot,
-  wallpaperActive,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -832,12 +828,11 @@ export default function TerminalTabsDock({
       </header>
       {activeSession ? (
         <TerminalPane
-          key={`${activeSession.id}:${wallpaperActive ? "wallpaper" : "color"}`}
+          key={activeSession.id}
           clientId={activeTab.clientId}
           visible={open}
           session={activeSession}
           settings={settings}
-          wallpaperActive={wallpaperActive}
           onSessionProgress={updateSessionProgress}
           onError={(message) => {
             if (!activeTab) return;
