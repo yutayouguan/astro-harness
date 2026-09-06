@@ -258,6 +258,18 @@ Azure `gpt-image-2` 文档：
 ## 常用命令
 
 ```bash
+# 格式化全部后端 Rust 代码
+cargo fmt --all
+
+# 检查后端格式（不修改文件）
+cargo fmt --all -- --check
+
+# 格式化全部前端代码
+npm --prefix apps/desktop run format
+
+# 检查前端格式（不修改文件）
+npm --prefix apps/desktop run format:check
+
 # Workspace 检查
 cargo check
 
