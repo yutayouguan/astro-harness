@@ -1,7 +1,8 @@
 /** 设置页 tab 元数据：侧栏导航与标题栏共用同一份定义。 */
 import type { ComponentType, SVGProps } from "react";
 import {
-  IconAtom,
+  IconAbout,
+  IconAppearance,
   IconBrowser,
   IconChat,
   IconContext,
@@ -44,7 +45,7 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
       {
         id: "preferences:appearance",
         labelKey: "settings.sidebar.tab.appearance",
-        Icon: IconSparkles,
+        Icon: IconAppearance,
       },
       {
         id: "preferences:conversation",
@@ -117,7 +118,7 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
       {
         id: "preferences:about",
         labelKey: "settings.sidebar.tab.about",
-        Icon: IconAtom,
+        Icon: IconAbout,
       },
     ],
   },

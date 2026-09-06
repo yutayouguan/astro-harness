@@ -184,6 +184,14 @@ test("settings navigation uses one Astro icon family and one optical canvas", ()
   assert.doesNotMatch(settingsTabsSource, /label:\s*"[^"\n]*[\u3400-\u9fff]/);
   assert.match(settingsTabsSource, /IconContext/);
   assert.match(settingsTabsSource, /IconDiagnostics/);
+  assert.match(
+    settingsTabsSource,
+    /id:\s*"preferences:appearance",[\s\S]*?Icon:\s*IconAppearance/,
+  );
+  assert.match(
+    settingsTabsSource,
+    /id:\s*"preferences:about",[\s\S]*?Icon:\s*IconAbout/,
+  );
 
   const icon = rule(projectStyles, ".settings-sidebar-icon");
   const iconSvg = rule(projectStyles, ".settings-sidebar-icon svg");

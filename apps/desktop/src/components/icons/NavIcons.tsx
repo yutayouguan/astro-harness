@@ -216,6 +216,18 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
+/** 外观 — 调色盘轮廓与三枚色点 */
+export function IconAppearance(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <path d="M12 3a9 9 0 1 0 0 18h1.1a1.9 1.9 0 0 0 1.34-3.24A1.9 1.9 0 0 1 15.78 14H18a3 3 0 0 0 3-3 8 8 0 0 0-9-8Z" />
+      <circle className="nav-icon-dot" cx="7.7" cy="10.2" r="1.15" />
+      <circle className="nav-icon-dot" cx="10.2" cy="6.8" r="1.15" />
+      <circle className="nav-icon-dot" cx="14.5" cy="7.1" r="1.15" />
+    </NavIconBase>
+  );
+}
+
 /** 智能流程 — 圆形本体内嵌流程连线：上游节点经折线接到下游节点 */
 export function IconLoop(props: IconProps) {
   return (
@@ -369,6 +381,17 @@ export function IconAtom(props: IconProps) {
         className="nav-icon-stroke"
         d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5"
       />
+    </NavIconBase>
+  );
+}
+
+/** 关于 — 清晰的信息圆标 */
+export function IconAbout(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path className="nav-icon-stroke" d="M12 11v5" />
+      <circle className="nav-icon-dot" cx="12" cy="7.5" r="1.15" />
     </NavIconBase>
   );
 }
