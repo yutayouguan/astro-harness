@@ -7,7 +7,6 @@ import {
   IconClarify,
   IconCodeExec,
   IconEye,
-  IconFileOps,
   IconImageGen,
   IconMemoryTool,
   IconMultiAgent,
@@ -24,15 +23,21 @@ import {
   IconWebSearch,
 } from "../../components/icons/ToolIcons";
 import type { MessageKey } from "../../i18n/messages";
+import {
+  mergeToolCatalog,
+  type CatalogItemDto,
+} from "../../lib/tools/agentToolCatalog";
 
 const IS_TAURI =
   typeof window !== "undefined" &&
-  !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  !!(window as unknown as { __TAURI_INTERNALS__?: unknown })
+    .__TAURI_INTERNALS__;
 
 export type AgentToolId =
   | "web_search"
-  | "terminal"
-  | "file_ops"
+  | "browser"
+  | "exec_command"
+  | "apply_patch"
   | "code_exec"
   | "image_analyze"
   | "robotics"
@@ -47,10 +52,12 @@ export type AgentToolId =
   | "context_search"
   | "pin_context"
   | "ask_user"
+  | "request_user_input_async"
   | "switch_mode"
   | "present"
   | "subagents"
   | "cron"
+  | "workflow"
   | "persona"
   | "todo";
 
@@ -82,10 +89,14 @@ export type ToolParam = {
 };
 
 export type AgentToolFnDef = {
+  /** 模型可见调用名，namespace 工具为 namespace.child。 */
   name: string;
+  namespace?: string;
+  registeredName?: string;
   description?: string;
   emoji?: string;
   params?: ToolParam[];
+  exposure?: string;
 };
 
 export type AgentToolDef = {
@@ -103,6 +114,9 @@ export type AgentToolDef = {
   apiDescription?: string;
   /** toolset 下可切换的函数明细 */
   functions?: AgentToolFnDef[];
+  namespace?: string;
+  registeredName?: string;
+  exposure?: string;
 };
 
 /** UI 元数据（图标 / i18n / 色调）；params 为后端 schema 未就绪时的回退 */
@@ -122,9 +136,22 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "terminal",
-    titleKey: "agentTools.terminal.title",
-    descKey: "agentTools.terminal.desc",
+    id: "browser",
+    titleKey: "agentTools.browser.title",
+    descKey: "agentTools.browser.desc",
+    Icon: IconWebSearch,
+    tone: "cyan",
+    params: [
+      { name: "url", type: "string", optional: true },
+      { name: "selector", type: "string", optional: true },
+      { name: "text", type: "string", optional: true },
+      { name: "intent", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "exec_command",
+    titleKey: "agentTools.execCommand.title",
+    descKey: "agentTools.execCommand.desc",
     Icon: IconTerminal,
     tone: "purple",
     params: [
@@ -138,22 +165,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
-    id: "file_ops",
-    titleKey: "agentTools.fileOps.title",
-    descKey: "agentTools.fileOps.desc",
-    Icon: IconFileOps,
+    id: "apply_patch",
+    titleKey: "agentTools.applyPatch.title",
+    descKey: "agentTools.applyPatch.desc",
+    Icon: IconTerminal,
     tone: "green",
-    params: [
-      { name: "path", type: "string" },
-      { name: "operation", type: "string" },
-      { name: "content", type: "string", optional: true },
-      { name: "query", type: "string", optional: true },
-      { name: "old_string", type: "string", optional: true },
-      { name: "new_string", type: "string", optional: true },
-      { name: "offset", type: "number", optional: true },
-      { name: "limit", type: "number", optional: true },
-      { name: "recursive", type: "boolean", optional: true },
-    ],
+    params: [{ name: "patch", type: "string" }],
   },
   {
     id: "code_exec",
@@ -341,6 +358,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
+    id: "request_user_input_async",
+    titleKey: "agentTools.sendUserMessageAsync.title",
+    descKey: "agentTools.sendUserMessageAsync.desc",
+    Icon: IconClarify,
+    tone: "blue",
+    params: [{ name: "questions", type: "array" }],
+  },
+  {
     id: "switch_mode",
     titleKey: "agentTools.switchMode.title",
     descKey: "agentTools.switchMode.desc",
@@ -439,6 +464,14 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     ],
   },
   {
+    id: "workflow",
+    titleKey: "agentTools.workflow.title",
+    descKey: "agentTools.workflow.desc",
+    Icon: IconScheduled,
+    tone: "fuchsia",
+    params: [],
+  },
+  {
     id: "persona",
     titleKey: "agentTools.persona.title",
     descKey: "agentTools.persona.desc",
@@ -467,32 +500,6 @@ export const AGENT_TOOLS: AgentToolDef[] = [
   },
 ];
 
-type CatalogParamDto = {
-  name: string;
-  type: string;
-  optional: boolean;
-  description?: string | null;
-};
-
-type CatalogFnDto = {
-  name: string;
-  description: string;
-  icon: string;
-  params: CatalogParamDto[];
-};
-
-type CatalogItemDto = {
-  id: string;
-  name: string;
-  description: string;
-  /** Lucide 图标 id（kebab-case），来自后端 ToolEntry.icon */
-  icon: string;
-  params: CatalogParamDto[];
-  tools: string[];
-  functions?: CatalogFnDto[];
-};
-
-
 function defaultEnabled(): Record<AgentToolId, boolean> {
   return Object.fromEntries(
     AGENT_TOOLS.map((tool) => [tool.id, true]),
@@ -512,47 +519,8 @@ function mergeEnabled(
   return base;
 }
 
-function mapCatalogParam(p: CatalogParamDto): ToolParam {
-  return {
-    name: p.name,
-    type: p.type,
-    optional: p.optional,
-    description: p.description ?? undefined,
-  };
-}
-
-function mergeCatalog(catalog: CatalogItemDto[]): AgentToolDef[] {
-  const byId = new Map(catalog.map((c) => [c.id, c]));
-  return AGENT_TOOLS.map((tool) => {
-    const item = byId.get(tool.id);
-    if (!item) return tool;
-
-    const params = item.params.map(mapCatalogParam);
-    const functions: AgentToolFnDef[] =
-      item.functions && item.functions.length > 0
-        ? item.functions.map((fn) => ({
-            name: fn.name,
-            description: fn.description || undefined,
-            emoji: fn.icon || undefined,
-            params: fn.params.map(mapCatalogParam),
-          }))
-        : (item.tools ?? []).map((name) => ({
-            name,
-            description:
-              name === item.name ? item.description || undefined : undefined,
-            emoji: item.icon || undefined,
-            params: name === item.name ? params : undefined,
-          }));
-
-    return {
-      ...tool,
-      params,
-      tools: item.tools.length > 0 ? item.tools : functions.map((f) => f.name),
-      emoji: item.icon || tool.emoji,
-      apiDescription: item.description || tool.apiDescription,
-      functions: functions.length > 0 ? functions : tool.functions,
-    };
-  });
+export function mergeCatalog(catalog: CatalogItemDto[]): AgentToolDef[] {
+  return mergeToolCatalog(AGENT_TOOLS, catalog);
 }
 
 /** 拉取后端 schemars 目录，合并到 UI 工具定义（参数以后端为准） */
@@ -586,7 +554,8 @@ export function useAgentToolDefs() {
 }
 
 export function useAgentTools(agentId?: string | null) {
-  const [enabled, setEnabled] = useState<Record<AgentToolId, boolean>>(defaultEnabled);
+  const [enabled, setEnabled] =
+    useState<Record<AgentToolId, boolean>>(defaultEnabled);
   const [ready, setReady] = useState(false);
   const skipNextSave = useRef(true);
   const { tools, catalogReady } = useAgentToolDefs();
@@ -610,9 +579,12 @@ export function useAgentTools(agentId?: string | null) {
         return;
       }
       try {
-        const stored = await invoke<Record<string, boolean>>("get_tools_enabled", {
-          agentId: agentId || null,
-        });
+        const stored = await invoke<Record<string, boolean>>(
+          "get_tools_enabled",
+          {
+            agentId: agentId || null,
+          },
+        );
         if (!cancelled) {
           setEnabled(mergeEnabled(stored));
           setReady(true);
@@ -641,7 +613,10 @@ export function useAgentTools(agentId?: string | null) {
       }
       return;
     }
-    void invoke("set_tools_enabled", { enabled, agentId: agentId || null }).catch(() => {});
+    void invoke("set_tools_enabled", {
+      enabled,
+      agentId: agentId || null,
+    }).catch(() => {});
   }, [enabled, ready, agentId]);
 
   const toggle = useCallback((id: AgentToolId) => {

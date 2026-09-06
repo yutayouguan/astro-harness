@@ -29,7 +29,13 @@ interface KeyValueEditorProps {
 }
 
 export function KeyValueEditor({
-  label, value, onChange, keyPlaceholder = "键", valuePlaceholder = "值", hint, maxRows,
+  label,
+  value,
+  onChange,
+  keyPlaceholder = "键",
+  valuePlaceholder = "值",
+  hint,
+  maxRows,
 }: KeyValueEditorProps) {
   const add = useCallback(() => {
     if (maxRows && value.length >= maxRows) return;
@@ -70,7 +76,11 @@ export function KeyValueEditor({
                 onChange={(e) => update(i, "value", e.target.value)}
                 placeholder={valuePlaceholder}
               />
-              <button className="se-remove" onClick={() => remove(i)} type="button">
+              <button
+                className="se-remove"
+                onClick={() => remove(i)}
+                type="button"
+              >
                 <X size={12} />
               </button>
             </div>
@@ -103,7 +113,13 @@ interface TagInputProps {
   hint?: string;
 }
 
-export function TagInput({ label, value, onChange, placeholder = "回车添加标签", hint }: TagInputProps) {
+export function TagInput({
+  label,
+  value,
+  onChange,
+  placeholder = "回车添加标签",
+  hint,
+}: TagInputProps) {
   const [input, setInput] = useState("");
 
   const add = useCallback(() => {
@@ -127,7 +143,11 @@ export function TagInput({ label, value, onChange, placeholder = "回车添加�
           {value.map((tag, i) => (
             <span key={i} className="se-tag">
               <span>{tag}</span>
-              <button className="se-tag-remove" onClick={() => remove(i)} type="button">
+              <button
+                className="se-tag-remove"
+                onClick={() => remove(i)}
+                type="button"
+              >
                 <X size={10} />
               </button>
             </span>
@@ -139,7 +159,10 @@ export function TagInput({ label, value, onChange, placeholder = "回车添加�
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); add(); }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            add();
+          }
         }}
         placeholder={placeholder}
       />
@@ -171,7 +194,13 @@ interface RowListEditorProps {
 }
 
 export function RowListEditor({
-  label, columns, value, onChange, hint, maxRows, addLabel = "添加",
+  label,
+  columns,
+  value,
+  onChange,
+  hint,
+  maxRows,
+  addLabel = "添加",
 }: RowListEditorProps) {
   const newRow = useCallback((): Record<string, string> => {
     const row: Record<string, string> = {};
@@ -206,7 +235,11 @@ export function RowListEditor({
           {/* 表头 */}
           <div className="se-row-header">
             {columns.map((col) => (
-              <span key={col.key} className="se-col-label" style={{ flex: col.flex ?? 1 }}>
+              <span
+                key={col.key}
+                className="se-col-label"
+                style={{ flex: col.flex ?? 1 }}
+              >
                 {col.label}
               </span>
             ))}
@@ -225,7 +258,11 @@ export function RowListEditor({
                   placeholder={col.placeholder}
                 />
               ))}
-              <button className="se-remove" onClick={() => remove(i)} type="button">
+              <button
+                className="se-remove"
+                onClick={() => remove(i)}
+                type="button"
+              >
                 <X size={12} />
               </button>
             </div>
@@ -254,17 +291,28 @@ export function RowListEditor({
 export function jsonToKvEntries(raw: unknown): KvEntry[] {
   if (Array.isArray(raw)) {
     return raw
-      .filter((e): e is KvEntry => typeof e === "object" && e !== null && "key" in e)
+      .filter(
+        (e): e is KvEntry => typeof e === "object" && e !== null && "key" in e,
+      )
       .map((e) => ({ key: String(e.key ?? ""), value: String(e.value ?? "") }));
   }
   if (typeof raw === "string" && raw.trim()) {
     try {
       const parsed = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return Object.entries(parsed).map(([k, v]) => ({ key: k, value: String(v) }));
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+      ) {
+        return Object.entries(parsed).map(([k, v]) => ({
+          key: k,
+          value: String(v),
+        }));
       }
       if (Array.isArray(parsed)) return jsonToKvEntries(parsed);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
     return Object.entries(raw as Record<string, unknown>).map(([k, v]) => ({
@@ -286,13 +334,19 @@ export function kvEntriesToObj(entries: KvEntry[]): Record<string, string> {
 
 /** JSON 字符串 → string[]，兼容 ["a","b"] 和 "a,b" */
 export function jsonToStringArray(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === "string");
+  if (Array.isArray(raw))
+    return raw.filter((x): x is string => typeof x === "string");
   if (typeof raw === "string" && raw.trim()) {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed.map(String);
-    } catch { /* ignore */ }
-    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+    } catch {
+      /* ignore */
+    }
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
   return [];
 }
@@ -301,7 +355,10 @@ export function jsonToStringArray(raw: unknown): string[] {
 export function jsonToRowList(raw: unknown): Record<string, string>[] {
   if (Array.isArray(raw)) {
     return raw
-      .filter((e): e is Record<string, unknown> => typeof e === "object" && e !== null)
+      .filter(
+        (e): e is Record<string, unknown> =>
+          typeof e === "object" && e !== null,
+      )
       .map((e) => {
         const row: Record<string, string> = {};
         for (const [k, v] of Object.entries(e)) row[k] = String(v ?? "");
@@ -312,7 +369,9 @@ export function jsonToRowList(raw: unknown): Record<string, string>[] {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return jsonToRowList(parsed);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return [];
 }

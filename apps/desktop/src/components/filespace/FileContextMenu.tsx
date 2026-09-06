@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   ClipboardCopy,
   ClipboardPaste,
+  Code2,
   Copy,
   ExternalLink,
   File,
@@ -43,6 +44,7 @@ export type FileMenuAction =
   | "newFile"
   | "newFolder"
   | "openExternally"
+  | "openInVscode"
   | "openInWorkspace";
 
 /** 菜单单项 */
@@ -87,10 +89,18 @@ const ACTION_ICONS: Record<FileMenuAction, ComponentType<LucideProps>> = {
   newFile: FilePlus,
   newFolder: FolderPlus,
   openExternally: ExternalLink,
+  openInVscode: Code2,
   openInWorkspace: FolderTree,
 };
 
-export default function FileContextMenu({ x, y, items, onAction, onClose, className }: Props) {
+export default function FileContextMenu({
+  x,
+  y,
+  items,
+  onAction,
+  onClose,
+  className,
+}: Props) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -140,8 +150,13 @@ export default function FileContextMenu({ x, y, items, onAction, onClose, classN
       {items.map((it) => {
         const Icon = ACTION_ICONS[it.action];
         return (
-          <div key={it.action} className={it.separatorBefore ? "fs-ctx-group" : undefined}>
-            {it.separatorBefore ? <div className="fs-ctx-sep" role="separator" /> : null}
+          <div
+            key={it.action}
+            className={it.separatorBefore ? "fs-ctx-group" : undefined}
+          >
+            {it.separatorBefore ? (
+              <div className="fs-ctx-sep" role="separator" />
+            ) : null}
             <button
               type="button"
               role="menuitem"

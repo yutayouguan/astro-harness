@@ -38,7 +38,11 @@ export default function OutputConfig({ config, onChange }: ConfigProps) {
           label="导出路径"
           value={cfgStr(config, "export_path")}
           onChange={(v) => onChange({ ...config, export_path: v })}
-          placeholder={exportMode === "folder" ? "~/Desktop/workflow-output" : "~/Desktop/output.json"}
+          placeholder={
+            exportMode === "folder"
+              ? "~/Desktop/workflow-output"
+              : "~/Desktop/output.json"
+          }
           hint="支持 ~ 和 {{var}} 引用"
         />
       )}

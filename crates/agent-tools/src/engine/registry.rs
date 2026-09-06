@@ -1,11 +1,11 @@
 //! 工具注册表：集中管理内置与 MCP 工具的元数据、schema 与启用状态。
 //!
-//! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，持有所有可调用工具的
-//! [`ToolEntry`]，并按当前 Agent 的 `tools_enabled`（或全局
+//! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，同时持有可调用工具的
+//! [`ToolEntry`] 和 [`crate::CoreToolRuntime`]，并按当前 Agent 的 `tools_enabled`（或全局
 //! `~/.astro/tools-enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -56,43 +56,183 @@ pub type DynToolHandler = Arc<
         + Sync,
 >;
 
+#[derive(Clone)]
 pub struct ToolRegistry {
     /// 已注册的全部工具条目。
     tools: HashMap<String, ToolEntry>,
-    /// 运行时动态注册的 handler（MCP 工具等）— 按工具名查找。
-    dynamic_handlers: HashMap<String, DynToolHandler>,
+    /// 工具执行运行时；与元数据使用同一 registered name 索引。
+    runtimes: HashMap<String, Arc<dyn crate::engine::executor::CoreToolRuntime>>,
     /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
     skill_override_enabled: std::collections::HashSet<String>,
+    /// 当前 turn 的 ExtensionSnapshot 声明的 toolset；每次发布 snapshot 时整体替换。
+    extension_override_enabled: std::collections::HashSet<String>,
+}
+
+fn namespace_child_name(entry: &ToolEntry) -> String {
+    match entry.tool_name() {
+        types::ToolName::Plain(name) | types::ToolName::Namespaced { name, .. } => name,
+    }
+}
+
+fn is_code_mode_control(name: &str) -> bool {
+    matches!(name, "exec" | "wait")
+}
+
+fn entry_api_spec(entry: &ToolEntry, defer_loading: bool) -> serde_json::Value {
+    if entry.name == "tool_search" {
+        return serde_json::json!({
+            "type": "tool_search",
+            "execution": "client",
+            "description": entry.description,
+            "parameters": crate::schema::sanitize_tool_schema(entry.schema.clone()),
+        });
+    }
+    if let Some(format) = &entry.freeform_format {
+        return serde_json::json!({
+            "type": "custom",
+            "name": entry.name,
+            "description": entry.description,
+            "defer_loading": defer_loading.then_some(true),
+            "format": format,
+        });
+    }
+    serde_json::json!({
+        "type": "function",
+        "name": entry.name,
+        "description": entry.description,
+        "strict": false,
+        "defer_loading": defer_loading.then_some(true),
+        "parameters": crate::schema::sanitize_tool_schema(entry.schema.clone()),
+    })
+}
+
+fn api_specs<'a>(entries: impl IntoIterator<Item = &'a ToolEntry>) -> Vec<serde_json::Value> {
+    let mut plain = Vec::new();
+    let mut namespaces = std::collections::BTreeMap::<String, Vec<serde_json::Value>>::new();
+    for entry in entries {
+        let defer_loading = entry.exposure.is_deferred();
+        if entry.namespace.is_empty() {
+            plain.push((entry.name.clone(), entry_api_spec(entry, defer_loading)));
+            continue;
+        }
+
+        let mut child = entry_api_spec(entry, defer_loading);
+        if let Some(object) = child.as_object_mut() {
+            object.insert(
+                "name".to_string(),
+                serde_json::json!(namespace_child_name(entry)),
+            );
+        }
+        namespaces
+            .entry(entry.namespace.clone())
+            .or_default()
+            .push(child);
+    }
+    plain.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut specs: Vec<_> = plain.into_iter().map(|(_, spec)| spec).collect();
+    specs.extend(namespaces.into_iter().map(|(name, mut tools)| {
+        tools.sort_by(|left, right| {
+            left.get("name")
+                .and_then(serde_json::Value::as_str)
+                .cmp(&right.get("name").and_then(serde_json::Value::as_str))
+        });
+        serde_json::json!({
+            "type": "namespace",
+            "name": name,
+            "description": format!("Tools in the {name} namespace."),
+            "tools": tools,
+        })
+    }));
+    specs
 }
 
 impl ToolRegistry {
+    fn is_entry_available(&self, entry: &ToolEntry) -> bool {
+        let toolset_enabled = if entry.toolset == "mcp" {
+            true
+        } else {
+            self.is_toolset_enabled(&entry.toolset)
+        };
+        toolset_enabled && entry.check_fn.as_ref().map(|check| check()).unwrap_or(true)
+    }
+
     /// 创建空注册表。
     pub fn new() -> Self {
         ToolRegistry {
             tools: HashMap::new(),
-            dynamic_handlers: HashMap::new(),
+            runtimes: HashMap::new(),
             enabled: HashMap::new(),
             skill_override_enabled: std::collections::HashSet::new(),
+            extension_override_enabled: std::collections::HashSet::new(),
         }
     }
 
     /// 注册一个动态工具（含 handler 闭包）。MCP 工具用此方法注册。
     pub fn register_dynamic(&mut self, entry: ToolEntry, handler: DynToolHandler) {
         let name = entry.name.clone();
+        let runtime = Arc::new(crate::engine::executor::DynamicToolAdapter::new(
+            entry.clone(),
+            Arc::clone(&handler),
+        ));
         self.tools.insert(name.clone(), entry);
-        self.dynamic_handlers.insert(name, handler);
+        self.runtimes
+            .insert(runtime.registered_name().to_string(), runtime);
     }
 
-    /// 获取动态 handler 的共享快照（供释放注册表锁后执行）。
-    pub fn dynamic_handler(&self, name: &str) -> Option<DynToolHandler> {
-        self.dynamic_handlers.get(name).cloned()
+    /// 将 inventory 元数据与其执行器绑定到同一注册表。
+    pub fn bind_builtin_runtime(&mut self, name: &str, handler: BuiltinToolHandler) {
+        let Some(entry) = self.tools.get(name).cloned() else {
+            panic!("builtin tool handler has no registered metadata: {name}");
+        };
+        self.runtimes.insert(
+            name.to_string(),
+            Arc::new(crate::engine::executor::LegacyToolAdapter::new(
+                name.to_string(),
+                entry,
+                handler,
+            )),
+        );
     }
 
-    /// 克隆动态 handler 句柄，供调用方在释放注册表锁后执行。
-    pub fn dynamic_handler_cloned(&self, name: &str) -> Option<DynToolHandler> {
-        self.dynamic_handlers.get(name).cloned()
+    /// 注册一个原生执行器及其元数据。
+    pub fn register_runtime(
+        &mut self,
+        entry: ToolEntry,
+        runtime: Arc<dyn crate::engine::executor::CoreToolRuntime>,
+    ) {
+        assert_eq!(
+            runtime.tool_name(),
+            entry.tool_name(),
+            "CoreToolRuntime identity must match ToolEntry identity"
+        );
+        let name = entry.name.clone();
+        self.tools.insert(name.clone(), entry);
+        self.runtimes.insert(name, runtime);
+    }
+
+    /// 获取可跨 Step 快照共享的执行器。
+    pub fn runtime(&self, name: &str) -> Option<Arc<dyn crate::engine::executor::CoreToolRuntime>> {
+        self.runtimes.get(name).cloned()
+    }
+
+    /// 通过注册表中的 [`crate::CoreToolRuntime`] 执行工具。
+    pub async fn dispatch(
+        &self,
+        ctx: &mut ToolContext<'_>,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<types::ToolOutput> {
+        let runtime = self.runtime(name);
+        crate::dispatch::dispatch_runtime(
+            self.is_tool_allowed(name),
+            runtime.as_ref(),
+            ctx,
+            name,
+            args,
+        )
+        .await
     }
 
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
@@ -113,7 +253,9 @@ impl ToolRegistry {
     ///
     /// Skill 激活的 `skill_override_enabled` 可 additive 放宽被禁用的 toolset。
     pub fn is_toolset_enabled(&self, toolset: &str) -> bool {
-        if self.skill_override_enabled.contains(toolset) {
+        if self.skill_override_enabled.contains(toolset)
+            || self.extension_override_enabled.contains(toolset)
+        {
             return true;
         }
         self.enabled.get(toolset).copied().unwrap_or(true)
@@ -136,13 +278,40 @@ impl ToolRegistry {
         v
     }
 
+    /// 原子替换当前 turn 的扩展 toolset 贡献。
+    ///
+    /// Skill 激活集合是会话级 additive 状态；扩展集合则跟随
+    /// `ExtensionSnapshot`，因此必须可在下一 turn 撤销。
+    pub fn set_extension_toolsets(&mut self, toolsets: &[String]) {
+        self.extension_override_enabled = toolsets
+            .iter()
+            .map(|toolset| toolset.trim())
+            .filter(|toolset| !toolset.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+
+    /// 当前 ExtensionSnapshot 放宽的 toolset 列表（测试 / 观测）。
+    pub fn extension_toolsets(&self) -> Vec<String> {
+        let mut values = self
+            .extension_override_enabled
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        values.sort();
+        values
+    }
+
     /// 判断指定工具名当前是否允许调用。
     ///
     /// MCP 工具（`mcp__` 前缀）以是否已注册为准；其余工具按名称映射到 toolset 后检查开关。
     pub fn is_tool_allowed(&self, name: &str) -> bool {
-        // MCP：已注册即允许（注册时已按 server/tool 开关过滤）
         if name.starts_with("mcp__") {
             return self.tools.contains_key(name);
+        }
+        if let Some(entry) = self.tools.get(name) {
+            // MCP broker 等不使用 `mcp__` 前缀的动态工具仍以 toolset 判定。
+            return entry.toolset == "mcp" || self.is_toolset_enabled(&entry.toolset);
         }
         let toolset = home::tool_name_to_toolset(name);
         self.is_toolset_enabled(toolset)
@@ -150,7 +319,10 @@ impl ToolRegistry {
 
     /// 注册或覆盖一个工具条目（以 `entry.name` 为键）。
     pub fn register(&mut self, entry: ToolEntry) {
-        self.tools.insert(entry.name.clone(), entry);
+        let name = entry.name.clone();
+        // 元数据被替换后，旧 runtime 不得继续与新 schema 组合。
+        self.runtimes.remove(&name);
+        self.tools.insert(name, entry);
     }
 
     /// 移除指定 toolset 下的全部条目。
@@ -165,13 +337,14 @@ impl ToolRegistry {
             .collect();
         for name in &removed {
             self.tools.remove(name);
-            self.dynamic_handlers.remove(name);
+            self.runtimes.remove(name);
         }
     }
 
     /// 按名称移除单个工具（不存在则 no-op）。
     pub fn unregister(&mut self, name: &str) {
         self.tools.remove(name);
+        self.runtimes.remove(name);
     }
 
     /// 检查是否已注册指定名称的工具。
@@ -216,75 +389,135 @@ impl ToolRegistry {
     pub fn available_tools(&self) -> Vec<&ToolEntry> {
         self.tools
             .values()
-            .filter(|e| {
-                // MCP 门控只在 attach 时过滤，不走 tools-enabled.json
-                if e.toolset == "mcp" {
-                    return true;
-                }
-                self.is_toolset_enabled(&e.toolset)
-            })
-            .filter(|e| e.check_fn.as_ref().map(|f| f()).unwrap_or(true))
+            .filter(|entry| self.is_entry_available(entry))
             .collect()
     }
 
-    /// 将可用工具序列化为 OpenAI 风格的 `tools` / `functions` API 载荷。
+    /// 返回当前可搜索但尚未注入模型的工具。
+    pub fn searchable_deferred_tools(&self) -> Vec<&ToolEntry> {
+        self.tools
+            .values()
+            .filter(|entry| entry.exposure.is_deferred() && !is_code_mode_control(&entry.name))
+            .filter(|entry| self.is_entry_available(entry))
+            .collect()
+    }
+
+    /// 将可用工具序列化为 Responses API 原生工具载荷。
     ///
     /// 每个条目的 `parameters` 会经 [`crate::schema::sanitize_tool_schema`] 清理，
     /// 确保不含 `$ref`、`$defs` 等厂商不友好结构。
     ///
-    /// **非 Direct 工具不包含在返回列表中**，仅在 `tool_search`
-    /// 发现后通过 `activate_deferred` 标记为 Direct 才会出现在后续调用中。
+    /// **非 Direct 工具不包含在返回列表中**。Deferred 工具由
+    /// `tool_search` 以原生 output 形式返回，不改写注册表中的 exposure。
     pub fn schemas_for_api(&self) -> Vec<serde_json::Value> {
-        self.available_tools()
-            .iter()
-            .filter(|e| e.exposure.is_direct()) // 仅注入 Direct 工具
-            .map(|e| {
-                let mut func = serde_json::json!({
-                    "name": e.name,
-                    "description": e.description,
-                    "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
-                });
-                if !e.namespace.is_empty() {
-                    func.as_object_mut()
-                        .unwrap()
-                        .insert("namespace".to_string(), serde_json::json!(e.namespace));
-                }
-                serde_json::json!({
-                    "type": "function",
-                    "function": func,
-                })
-            })
-            .collect()
+        self.schemas_for_api_with_mode(types::ToolMode::Direct)
+            .expect("Direct 模式不依赖 Code Mode 运行时")
     }
 
-    /// 返回全部工具的 API schema（包括 Deferred 但排除 Hidden），供 `tool_search` 等搜索使用。
-    pub fn all_tool_schemas_including_deferred(&self) -> Vec<serde_json::Value> {
-        self.available_tools()
-            .iter()
-            .filter(|e| !e.exposure.is_hidden())
-            .map(|e| {
-                serde_json::json!({
-                    "type": "function",
-                    "function": {
-                        "name": e.name,
-                        "description": e.description,
-                        "parameters": crate::schema::sanitize_tool_schema(e.schema.clone()),
-                    }
-                })
-            })
-            .collect()
+    /// 解析 Code Mode 可用性，并应用仅允许混合模式降级的规则。
+    pub fn effective_tool_mode(
+        &self,
+        requested: types::ToolMode,
+    ) -> anyhow::Result<types::ToolMode> {
+        let controls_available = ["exec", "wait"].into_iter().all(|name| {
+            self.tools
+                .get(name)
+                .is_some_and(|entry| self.is_entry_available(entry))
+        });
+        match (requested, controls_available) {
+            (types::ToolMode::CodeMode, false) => Ok(types::ToolMode::Direct),
+            (types::ToolMode::CodeModeOnly, false) => {
+                anyhow::bail!(
+                    "CodeModeOnly requested but the embedded Code Mode runtime is unavailable"
+                )
+            }
+            _ => Ok(requested),
+        }
     }
 
-    /// 激活指定的延迟加载工具，使其在后续 `schemas_for_api` 中可见。
+    /// 按模型选择的工具模式生成模型可见 schema。
+    pub fn schemas_for_api_with_mode(
+        &self,
+        requested: types::ToolMode,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        let mode = self.effective_tool_mode(requested)?;
+        Ok(api_specs(
+            self.tools
+                .values()
+                .filter(|entry| entry.exposure.is_direct())
+                .filter(|entry| self.is_entry_available(entry))
+                .filter(|entry| match mode {
+                    types::ToolMode::Direct => !is_code_mode_control(&entry.name),
+                    types::ToolMode::CodeMode => true,
+                    types::ToolMode::CodeModeOnly => is_code_mode_control(&entry.name),
+                }),
+        ))
+    }
+
+    /// 一次性构建当前 Step 的模型可见 schema 与额外可路由 Deferred schema。
     ///
-    /// 工具分发（`dispatch_named_tool`）不受 `exposure` 标记影响——已注册的工具
-    /// 始终可调用；此方法仅控制是否向 LLM 暴露 schema。
-    pub fn activate_deferred(&mut self, name: &str) {
-        if let Some(entry) = self.tools.get_mut(name) {
-            if entry.exposure == types::ToolExposure::Deferred {
-                entry.exposure = types::ToolExposure::Direct;
+    /// Deferred 工具只有已经出现在可信 `tool_search_output` 中时才进入路由，
+    /// 防止模型仅凭猜测名称绕过发现流程。单次扫描也避免重复运行工具的
+    /// `check_fn`，其中浏览器等探测可能涉及文件系统查询。
+    pub fn schemas_for_step(
+        &self,
+        discovered_deferred: &HashSet<types::ToolName>,
+    ) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+        let (visible, callable, _) = self
+            .schemas_for_step_with_mode(types::ToolMode::Direct, discovered_deferred)
+            .expect("Direct 模式不依赖 Code Mode 运行时");
+        (visible, callable)
+    }
+
+    /// 构建某个工具模式下的模型可见、模型额外可调用和 Code Mode 嵌套路由。
+    ///
+    /// 第三个返回值只供 `exec` 内部使用，不能并入模型直接调用集合，否则模型可
+    /// 通过猜测名称绕过 `CodeModeOnly` 或 Deferred 发现边界。
+    pub fn schemas_for_step_with_mode(
+        &self,
+        requested: types::ToolMode,
+        discovered_deferred: &HashSet<types::ToolName>,
+    ) -> anyhow::Result<(
+        Vec<serde_json::Value>,
+        Vec<serde_json::Value>,
+        Vec<serde_json::Value>,
+    )> {
+        let mode = self.effective_tool_mode(requested)?;
+        let mut direct = Vec::new();
+        let mut discovered = Vec::new();
+        let mut nested = Vec::new();
+        for entry in self.tools.values() {
+            let is_control = is_code_mode_control(&entry.name);
+            let is_direct = entry.exposure.is_direct()
+                && match mode {
+                    types::ToolMode::Direct => !is_control,
+                    types::ToolMode::CodeMode => true,
+                    types::ToolMode::CodeModeOnly => is_control,
+                };
+            let is_discovered = mode != types::ToolMode::CodeModeOnly
+                && !is_control
+                && entry.exposure.is_deferred()
+                && discovered_deferred.contains(&entry.tool_name());
+            let is_nested = mode != types::ToolMode::Direct
+                && !is_control
+                && entry.name != "tool_search"
+                && !entry.exposure.is_hidden()
+                && (!entry.exposure.is_deferred()
+                    || entry.allow_eager_fallback
+                    || discovered_deferred.contains(&entry.tool_name()));
+            if (!is_direct && !is_discovered && !is_nested) || !self.is_entry_available(entry) {
+                continue;
+            }
+            if is_direct {
+                direct.push(entry);
+            } else if is_discovered {
+                discovered.push(entry);
+            }
+            if is_nested {
+                nested.push(entry);
             }
         }
+        Ok((api_specs(direct), api_specs(discovered), api_specs(nested)))
     }
 }
 
@@ -304,12 +537,57 @@ mod tests {
     fn schema_names(reg: &ToolRegistry) -> Vec<String> {
         reg.schemas_for_api()
             .iter()
-            .filter_map(|s| {
-                s.pointer("/function/name")
-                    .and_then(|n| n.as_str())
-                    .map(str::to_string)
+            .flat_map(|schema| {
+                if schema.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                    let namespace = schema
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    return schema
+                        .get("tools")
+                        .and_then(serde_json::Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
+                        .map(|name| format!("{namespace}.{name}"))
+                        .collect::<Vec<_>>();
+                }
+                let name = if schema.get("type").and_then(serde_json::Value::as_str)
+                    == Some("tool_search")
+                {
+                    Some("tool_search")
+                } else {
+                    schema
+                        .get("name")
+                        .or_else(|| schema.pointer("/function/name"))
+                        .and_then(serde_json::Value::as_str)
+                };
+                name.map(str::to_string).into_iter().collect()
             })
             .collect()
+    }
+
+    fn assert_vendor_safe_parameters(schema: &serde_json::Value) {
+        if let Some(children) = schema.get("tools").and_then(serde_json::Value::as_array) {
+            for child in children {
+                assert_vendor_safe_parameters(child);
+            }
+            return;
+        }
+        let Some(params) = schema
+            .get("parameters")
+            .or_else(|| schema.pointer("/function/parameters"))
+        else {
+            return;
+        };
+        assert_eq!(
+            params.get("type").and_then(|value| value.as_str()),
+            Some("object"),
+            "tool parameters 应为 object: {params}"
+        );
+        if let Some(hazard) = crate::schema::schema_has_vendor_hazards(params) {
+            panic!("tool parameters 仍含厂商不友好结构 `{hazard}`: {params}");
+        }
     }
 
     /// 断言所有内置工具（含 deferred）的 parameters schema 不含厂商不友好结构。
@@ -317,24 +595,16 @@ mod tests {
     fn all_registered_tools_have_vendor_safe_parameters() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
-        let schemas = reg.all_tool_schemas_including_deferred();
+        let discovered = reg
+            .searchable_deferred_tools()
+            .into_iter()
+            .map(ToolEntry::tool_name)
+            .collect();
+        let (mut schemas, deferred) = reg.schemas_for_step(&discovered);
+        schemas.extend(deferred);
         assert!(!schemas.is_empty());
         for s in schemas {
-            let name = s
-                .pointer("/function/name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("?");
-            let params = s
-                .pointer("/function/parameters")
-                .expect("missing parameters");
-            assert_eq!(
-                params.get("type").and_then(|t| t.as_str()),
-                Some("object"),
-                "tool `{name}` type 应为 object: {params}"
-            );
-            if let Some(hazard) = crate::schema::schema_has_vendor_hazards(params) {
-                panic!("tool `{name}` 仍含厂商不友好结构 `{hazard}`: {params}");
-            }
+            assert_vendor_safe_parameters(&s);
         }
     }
 
@@ -441,18 +711,132 @@ mod tests {
     }
 
     #[test]
+    fn extension_toolsets_are_replaceable_at_turn_boundary() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "image_gen".into(),
+            toolset: "image_gen".into(),
+            description: "generate".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "palette",
+            ..ToolEntry::lifecycle_defaults().deferred()
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("image_gen".into(), false);
+        reg.set_enabled_map(enabled);
+
+        reg.set_extension_toolsets(&["image_gen".into()]);
+        assert!(reg.is_tool_allowed("image_gen"));
+        assert_eq!(reg.extension_toolsets(), vec!["image_gen".to_string()]);
+
+        reg.set_extension_toolsets(&[]);
+        assert!(!reg.is_tool_allowed("image_gen"));
+        assert!(reg.extension_toolsets().is_empty());
+    }
+
+    #[test]
+    fn skill_activation_only_relaxes_the_toolset_gate() {
+        let mut reg = ToolRegistry::new();
+        reg.register(ToolEntry {
+            name: "image_gen".into(),
+            toolset: "image_gen".into(),
+            description: "generate an image".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            check_fn: None,
+            icon: "palette",
+            ..ToolEntry::lifecycle_defaults().deferred()
+        });
+        let mut enabled = HashMap::new();
+        enabled.insert("image_gen".into(), false);
+        reg.set_enabled_map(enabled);
+
+        assert!(!schema_names(&reg).iter().any(|name| name == "image_gen"));
+        reg.activate_skill_toolsets(&["image_gen".into()]);
+
+        assert!(reg.is_tool_allowed("image_gen"));
+        assert!(!schema_names(&reg).iter().any(|name| name == "image_gen"));
+        let discovered = HashSet::from([types::ToolName::plain("image_gen")]);
+        assert!(reg
+            .schemas_for_step(&discovered)
+            .1
+            .iter()
+            .any(|spec| spec["name"] == "image_gen"));
+    }
+
+    #[test]
+    fn step_schema_snapshot_only_routes_discovered_deferred_tools_and_checks_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let checks = Arc::new(AtomicUsize::new(0));
+        let mut reg = ToolRegistry::new();
+        for (name, deferred) in [("direct", false), ("found", true), ("unseen", true)] {
+            let checks = Arc::clone(&checks);
+            let mut entry = ToolEntry {
+                name: name.into(),
+                toolset: "core".into(),
+                check_fn: Some(Arc::new(move || {
+                    checks.fetch_add(1, Ordering::Relaxed);
+                    true
+                })),
+                ..ToolEntry::lifecycle_defaults()
+            };
+            if deferred {
+                entry = entry.deferred();
+            }
+            reg.register(entry);
+        }
+
+        let discovered = HashSet::from([types::ToolName::plain("found")]);
+        let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
+        let names = |specs: &[serde_json::Value]| {
+            specs
+                .iter()
+                .filter_map(|spec| spec.get("name").and_then(serde_json::Value::as_str))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(names(&visible), vec!["direct".to_string()]);
+        assert_eq!(names(&routable_deferred), vec!["found".to_string()]);
+        assert_eq!(checks.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn removed_code_mode_controls_cannot_reenter_through_deferred_search() {
+        let mut reg = ToolRegistry::new();
+        for name in ["exec", "wait"] {
+            reg.register(ToolEntry {
+                name: name.into(),
+                toolset: "plugin".into(),
+                ..ToolEntry::lifecycle_defaults().deferred()
+            });
+        }
+
+        assert!(reg.searchable_deferred_tools().is_empty());
+        let discovered = HashSet::from([
+            types::ToolName::plain("exec"),
+            types::ToolName::plain("wait"),
+        ]);
+        let (visible, routable_deferred) = reg.schemas_for_step(&discovered);
+        assert!(visible.is_empty());
+        assert!(routable_deferred.is_empty());
+    }
+
+    #[test]
     fn registered_builtins_mark_exclusive_tools() {
         let mut reg = ToolRegistry::new();
         crate::register_all(&mut reg);
         assert!(reg.any_exclusive_access(&["memory", "spawn_agent", "pin_context"]));
         assert!(!reg.any_exclusive_access(&["web_search"]));
-        assert!(reg.get("persona_create").unwrap().exclusive_access);
+        assert!(reg.get("persona_create").is_none());
         assert!(reg.get("context_search").is_some());
         assert!(reg.get("pin_context").unwrap().exclusive_access);
     }
 
-    #[tokio::test]
-    async fn dynamic_handler_snapshot_survives_registry_reload() {
+    #[test]
+    fn dynamic_runtime_snapshot_survives_registry_reload() {
         let mut reg = ToolRegistry::new();
         reg.register_dynamic(
             ToolEntry {
@@ -469,10 +853,35 @@ mod tests {
             }),
         );
 
-        let handler = reg.dynamic_handler("dynamic").expect("handler snapshot");
+        let snapshot = reg.clone();
         reg.unregister_toolset("mcp");
 
-        let output = handler("dynamic", &serde_json::json!({})).await.unwrap();
-        assert_eq!(output.text(), "snapshot");
+        assert!(reg.runtime("dynamic").is_none());
+        let runtime = snapshot.runtime("dynamic").expect("runtime snapshot");
+        assert_eq!(runtime.tool_name(), types::ToolName::plain("dynamic"));
+    }
+
+    #[test]
+    fn replacing_metadata_invalidates_the_previous_runtime() {
+        let mut reg = ToolRegistry::new();
+        reg.register_dynamic(
+            ToolEntry {
+                name: "dynamic".into(),
+                toolset: "mcp".into(),
+                description: "old".into(),
+                ..ToolEntry::lifecycle_defaults()
+            },
+            Arc::new(|_name, _args| Box::pin(async { Ok(types::ToolOutput::from("old")) })),
+        );
+        assert!(reg.runtime("dynamic").is_some());
+
+        reg.register(ToolEntry {
+            name: "dynamic".into(),
+            toolset: "mcp".into(),
+            description: "new metadata without runtime".into(),
+            ..ToolEntry::lifecycle_defaults()
+        });
+
+        assert!(reg.runtime("dynamic").is_none());
     }
 }

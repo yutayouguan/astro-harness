@@ -12,17 +12,17 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// Card kind for `present`.
+/// `present` 的卡片类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PresentKind {
-    /// Info card: title/body/image_url or raw operations[].
+    /// 信息卡：title/body/image_url 或原始 operations[]。
     Ui,
-    /// Callout with variant warn|info.
+    /// 提示卡，variant 为 warn|info。
     Callout,
-    /// Metrics list.
+    /// 指标列表。
     Metrics,
-    /// Result with status badge.
+    /// 带状态徽章的结果卡。
     Result,
 }
 
@@ -34,10 +34,10 @@ pub struct MetricItem {
     pub hint: Option<String>,
 }
 
-/// Arguments for the unified `present` tool.
+/// 统一 `present` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PresentArgs {
-    /// `ui` | `callout` | `metrics` | `result`. Omit to infer from fields.
+    /// `ui` | `callout` | `metrics` | `result`。省略则从字段推断。
     #[serde(default)]
     pub kind: Option<PresentKind>,
     #[serde(default)]
@@ -46,16 +46,16 @@ pub struct PresentArgs {
     pub body: Option<String>,
     #[serde(default)]
     pub image_url: Option<String>,
-    /// Full A2UI operations (ui kind).
+    /// 完整 A2UI operations（ui 类型）。
     #[serde(default)]
     pub operations: Option<Value>,
-    /// Callout variant: warn|info.
+    /// Callout 变体：warn|info。
     #[serde(default)]
     pub variant: Option<String>,
-    /// Result status: success|warn|danger|info.
+    /// 结果状态：success|warn|danger|info。
     #[serde(default)]
     pub status: Option<String>,
-    /// Metrics rows (metrics kind).
+    /// 指标行（metrics 类型）。
     #[serde(default)]
     pub metrics: Vec<MetricItem>,
 }
@@ -108,7 +108,7 @@ fn resolve_kind(parsed: &PresentArgs) -> anyhow::Result<PresentKind> {
     {
         return Ok(PresentKind::Callout);
     }
-    // Default shortcut card
+    // 默认快捷卡片
     Ok(PresentKind::Ui)
 }
 

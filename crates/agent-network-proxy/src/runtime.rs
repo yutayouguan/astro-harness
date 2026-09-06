@@ -122,6 +122,7 @@ pub struct NetworkProxyState {
     allow_set: GlobSet,
     deny_set: GlobSet,
     allow_local_binding: bool,
+    header_injections: Vec<types::NetworkHeaderInjection>,
     blocked_requests: Mutex<VecDeque<BlockedRequest>>,
 }
 
@@ -145,6 +146,7 @@ impl NetworkProxyState {
             deny_set: compile_denylist_globset(&denied_domains)?,
             allowed_domains,
             allow_local_binding: policy.allow_local_binding,
+            header_injections: policy.header_injections,
             blocked_requests: Mutex::new(VecDeque::new()),
         })
     }
@@ -182,6 +184,13 @@ impl NetworkProxyState {
 
     pub fn allow_local_binding(&self) -> bool {
         self.allow_local_binding
+    }
+
+    /// Requirements retained for a future transport that can observe HTTP
+    /// request metadata. The current CONNECT tunnel cannot inspect encrypted
+    /// method/path data and therefore never applies these values itself.
+    pub fn header_injections(&self) -> &[types::NetworkHeaderInjection] {
+        &self.header_injections
     }
 
     pub(crate) fn record_blocked_request(&self, request: BlockedRequest) {

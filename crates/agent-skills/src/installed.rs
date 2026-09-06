@@ -1,7 +1,7 @@
 //! 本机 Skill 扫描、启用状态与按名称加载。
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -85,7 +85,10 @@ fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> 
 }
 
 /// Astro 管理范围：`~/.astro/skills` + 当前 Agent 工作区 skills
-fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
+fn astro_skill_roots_for_workspace(
+    agent_id: Option<&str>,
+    workspace_override: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let astro = memory_dir().join("skills");
     let _ = fs::create_dir_all(&astro);
@@ -96,7 +99,7 @@ fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));
-    } else if let Some(ws) = crate::workspace_override() {
+    } else if let Some(ws) = workspace_override {
         roots.push(ws.join("skills"));
         roots.push(ws.join(".agents/skills"));
         roots.push(ws.join(".cursor/skills"));
@@ -110,14 +113,41 @@ fn astro_skill_roots(agent_id: Option<&str>) -> Vec<PathBuf> {
     roots
 }
 
-/// 本机其它技能目录（Codex / Claude / Cursor 等），不含 Astro 数据根
+fn machine_skill_root_priority(path: &Path) -> u8 {
+    let normalized = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    [
+        ".agents/skills",
+        ".codex/skills",
+        ".claude/skills",
+        ".cursor/skills",
+        ".astro/skills",
+    ]
+    .iter()
+    .position(|suffix| {
+        normalized
+            .strip_suffix(suffix)
+            .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
+    })
+    .map_or(u8::MAX, |index| index as u8)
+}
+
+/// 本机其它技能目录（Agents / Claude / Cursor 等），不含 Astro 数据根。
+/// 同名 Skill 冲突时，开放标准 `.agents/skills` 的优先级最高。
 fn machine_skill_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let mem = memory_dir();
 
     if let Ok(mut dir) = std::env::current_dir() {
         for _ in 0..8 {
-            for sub in [".agents/skills", ".cursor/skills"] {
+            for sub in [
+                ".agents/skills",
+                ".codex/skills",
+                ".claude/skills",
+                ".cursor/skills",
+            ] {
                 let p = dir.join(sub);
                 if !p.starts_with(&mem) {
                     roots.push(p);
@@ -133,6 +163,7 @@ fn machine_skill_roots() -> Vec<PathBuf> {
         let home = PathBuf::from(home);
         for sub in [
             ".agents/skills",
+            ".codex/skills",
             ".cursor/skills",
             ".claude/skills",
             ".astro/skills",
@@ -143,9 +174,45 @@ fn machine_skill_roots() -> Vec<PathBuf> {
             }
         }
     }
-    roots.sort();
+    roots.sort_by(|left, right| {
+        machine_skill_root_priority(left)
+            .cmp(&machine_skill_root_priority(right))
+            .then_with(|| left.cmp(right))
+    });
     roots.dedup();
     roots
+}
+
+fn machine_skill_identity_keys(skill: &InstalledSkill) -> Vec<String> {
+    let mut keys = Vec::with_capacity(2);
+    if let Some(folder) = Path::new(&skill.path)
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        keys.push(format!("folder:{}", folder.to_ascii_lowercase()));
+    }
+    let name = skill.name.trim();
+    if !name.is_empty() {
+        keys.push(format!("name:{}", name.to_ascii_lowercase()));
+    }
+    keys
+}
+
+fn dedupe_machine_skills(skills: Vec<InstalledSkill>) -> Vec<InstalledSkill> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::with_capacity(skills.len());
+    for skill in skills {
+        let keys = machine_skill_identity_keys(&skill);
+        if keys.iter().any(|key| seen.contains(key)) {
+            continue;
+        }
+        seen.extend(keys);
+        unique.push(skill);
+    }
+    unique
 }
 
 /// 解析 SKILL.md YAML frontmatter 为元数据。
@@ -294,6 +361,16 @@ fn scan_roots(
                 enabled,
                 scope: scope.to_string(),
                 linked,
+                provenance: match scope {
+                    "project" => "project".to_string(),
+                    "machine" => "external".to_string(),
+                    _ if source_dir == memory_dir().join("skills").to_string_lossy() => {
+                        "user".to_string()
+                    }
+                    _ => "agent".to_string(),
+                },
+                editable: scope != "machine",
+                shadowed_by: None,
             });
         }
     }
@@ -308,6 +385,55 @@ fn scan_roots(
     out
 }
 
+/// 编译进应用的只读 Skills。磁盘路径仅用于复用现有预览器，不作为来源事实。
+fn scan_builtin() -> Vec<InstalledSkill> {
+    let global_root = memory_dir().join("skills");
+    let mut out = crate::seed::BUNDLED_SKILLS
+        .iter()
+        .map(|(folder, body)| {
+            let (mut name, description) = parse_skill_frontmatter(body);
+            if name.is_empty() {
+                name = (*folder).to_string();
+            }
+            let disk_path = global_root.join(folder).join("SKILL.md");
+            InstalledSkill {
+                id: format!("builtin:{folder}"),
+                name,
+                description,
+                path: disk_path.to_string_lossy().to_string(),
+                source_dir: "builtin".to_string(),
+                enabled: true,
+                scope: "builtin".to_string(),
+                linked: false,
+                provenance: "packaged".to_string(),
+                editable: false,
+                shadowed_by: None,
+            }
+        })
+        .collect::<Vec<_>>();
+    out.sort_by_key(|skill| skill.name.to_lowercase());
+    out
+}
+
+fn scan_project(agent_id: Option<&str>, project_root: Option<&Path>) -> Vec<InstalledSkill> {
+    let Some(root) = project_root else {
+        return Vec::new();
+    };
+    let roots = [
+        root.join(".astro/skills"),
+        root.join(".agents/skills"),
+        root.join(".cursor/skills"),
+    ];
+    let mut state = load_enabled_state(agent_id);
+    let mut dirty = false;
+    let mut out = scan_roots(&roots, agent_id, "project", &mut state, &mut dirty, true);
+    if dirty {
+        let _ = save_enabled_state(agent_id, &state);
+    }
+    out.sort_by_key(|skill| skill.name.to_lowercase());
+    out
+}
+
 /// 技能 id 是否落在指定根路径之下。
 fn id_belongs_to_roots(id: &str, roots: &[PathBuf]) -> bool {
     roots.iter().any(|r| {
@@ -318,10 +444,17 @@ fn id_belongs_to_roots(id: &str, roots: &[PathBuf]) -> bool {
 
 /// 扫描 Astro 管理的技能根。
 fn scan_astro(agent_id: Option<&str>) -> Vec<InstalledSkill> {
+    scan_astro_for_workspace(agent_id, crate::workspace_override().as_deref())
+}
+
+fn scan_astro_for_workspace(
+    agent_id: Option<&str>,
+    workspace_override: Option<&Path>,
+) -> Vec<InstalledSkill> {
     let mut state = load_enabled_state(agent_id);
     let mut dirty = false;
-    let roots = astro_skill_roots(agent_id);
-    let mut out = scan_roots(&roots, agent_id, "astro", &mut state, &mut dirty, true);
+    let roots = astro_skill_roots_for_workspace(agent_id, workspace_override);
+    let mut out = scan_roots(&roots, agent_id, "global", &mut state, &mut dirty, true);
 
     let seen: std::collections::HashSet<_> = out.iter().map(|s| s.id.clone()).collect();
     let before = state.len();
@@ -350,6 +483,13 @@ fn scan_machine(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     let mut state = HashMap::new();
     let mut dirty = false;
     let mut out = scan_roots(&roots, agent_id, "machine", &mut state, &mut dirty, false);
+    out.sort_by(|left, right| {
+        machine_skill_root_priority(Path::new(&left.source_dir))
+            .cmp(&machine_skill_root_priority(Path::new(&right.source_dir)))
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    out = dedupe_machine_skills(out);
     out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
@@ -364,14 +504,28 @@ pub fn list_installed_for_agent(
     agent_id: Option<&str>,
     scope: Option<&str>,
 ) -> Vec<InstalledSkill> {
-    match scope.unwrap_or("astro") {
+    list_installed_scoped_for_agent(agent_id, scope, crate::workspace_override().as_deref())
+}
+
+/// 按真实作用域列出 Skills；项目层由调用方显式提供项目根。
+pub fn list_installed_scoped_for_agent(
+    agent_id: Option<&str>,
+    scope: Option<&str>,
+    project_root: Option<&Path>,
+) -> Vec<InstalledSkill> {
+    match scope.unwrap_or("global") {
+        "builtin" => scan_builtin(),
+        "project" => scan_project(agent_id, project_root),
         "machine" => scan_machine(agent_id),
         "all" => {
-            let mut all = scan_astro(agent_id);
+            let mut all = scan_builtin();
+            all.extend(scan_astro(agent_id));
+            all.extend(scan_project(agent_id, project_root));
             all.extend(scan_machine(agent_id));
-            all.sort_by_key(|a| a.name.to_lowercase());
+            all.sort_by_key(|skill| skill.name.to_lowercase());
             all
         }
+        "astro" | "global" => scan_astro(agent_id),
         _ => scan_astro(agent_id),
     }
 }
@@ -425,11 +579,27 @@ fn configured_skill(path: &Path, enabled: bool) -> Result<(LoadedSkill, bool)> {
 /// Apply a child-session `[[skills.config]]` layer without mutating the
 /// parent's persisted enable state. Later entries win for the same path.
 pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(String, String)> {
-    if config.is_empty() {
-        return list_enabled_for_prompt();
-    }
-    let mut out = Vec::new();
     let installed = list_installed();
+    enabled_for_prompt_from_installed(installed, config)
+}
+
+/// 构建 prompt Skill 索引，并为无显式 Agent workspace 的调用固定工作目录。
+///
+/// 与进程级 [`crate::set_workspace_override`] 不同，该函数不会影响并发 session。
+pub fn list_enabled_for_prompt_with_config_in_workspace(
+    workspace: &Path,
+    config: &[(PathBuf, bool)],
+) -> Vec<(String, String)> {
+    let agent_id = active_agent_id();
+    let installed = scan_astro_for_workspace(agent_id.as_deref(), Some(workspace));
+    enabled_for_prompt_from_installed(installed, config)
+}
+
+fn enabled_for_prompt_from_installed(
+    installed: Vec<InstalledSkill>,
+    config: &[(PathBuf, bool)],
+) -> Vec<(String, String)> {
+    let mut out = Vec::new();
     for skill in installed {
         let skill_path = Path::new(&skill.path);
         let enabled = config
@@ -441,7 +611,12 @@ pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(S
             out.push((skill.name, skill.description));
         }
     }
-    for (path, enabled) in config {
+    for (index, (path, enabled)) in config.iter().enumerate() {
+        if config[index + 1..].iter().any(|(later, _)| {
+            same_skill_path(&configured_skill_md(later), &configured_skill_md(path))
+        }) {
+            continue;
+        }
         if !enabled {
             continue;
         }
@@ -458,7 +633,7 @@ pub fn list_enabled_for_prompt_with_config(config: &[(PathBuf, bool)]) -> Vec<(S
             }
         }
     }
-    out.sort_by(|left, right| left.0.to_lowercase().cmp(&right.0.to_lowercase()));
+    out.sort_by_key(|left| left.0.to_lowercase());
     out
 }
 
@@ -1034,6 +1209,61 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
+    fn machine_skill(source_dir: &str, folder: &str, name: &str) -> InstalledSkill {
+        InstalledSkill {
+            id: format!("{source_dir}/{folder}"),
+            name: name.to_string(),
+            description: String::new(),
+            path: format!("{source_dir}/{folder}/SKILL.md"),
+            source_dir: source_dir.to_string(),
+            enabled: false,
+            scope: "machine".to_string(),
+            linked: false,
+            provenance: "external".to_string(),
+            editable: false,
+            shadowed_by: None,
+        }
+    }
+
+    #[test]
+    fn machine_skills_dedupe_prefers_agents_directory() {
+        let mut skills = vec![
+            machine_skill("/home/test/.cursor/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.claude/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.codex/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.agents/skills", "shared", "Shared Skill"),
+            machine_skill("/home/test/.cursor/skills", "unique", "Unique Skill"),
+        ];
+        skills.sort_by(|left, right| {
+            machine_skill_root_priority(Path::new(&left.source_dir))
+                .cmp(&machine_skill_root_priority(Path::new(&right.source_dir)))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        let unique = dedupe_machine_skills(skills);
+
+        assert_eq!(unique.len(), 2);
+        let shared = unique
+            .iter()
+            .find(|skill| skill.name == "Shared Skill")
+            .expect("shared skill");
+        assert_eq!(shared.source_dir, "/home/test/.agents/skills");
+    }
+
+    #[test]
+    fn machine_skills_dedupe_matches_folder_or_declared_name_case_insensitively() {
+        let skills = vec![
+            machine_skill("/home/test/.agents/skills", "canonical", "Shared Skill"),
+            machine_skill("/home/test/.codex/skills", "canonical", "Renamed Skill"),
+            machine_skill("/home/test/.claude/skills", "other-folder", "shared skill"),
+        ];
+
+        let unique = dedupe_machine_skills(skills);
+
+        assert_eq!(unique.len(), 1);
+        assert_eq!(unique[0].source_dir, "/home/test/.agents/skills");
+    }
+
     #[test]
     fn configured_skill_layer_is_ephemeral_and_enforced() {
         let _guard = ENV_TEST_LOCK.blocking_lock();
@@ -1060,6 +1290,53 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("禁用"));
+    }
+
+    #[test]
+    fn later_config_entry_can_disable_an_external_skill() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        std::env::remove_var("ASTRO_WORKSPACE");
+        let skill_dir = dir.path().join("external/reviewer");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: configured-reviewer\ndescription: child only\n---\n",
+        )
+        .unwrap();
+
+        let config = vec![(skill_dir.clone(), true), (skill_dir, false)];
+
+        assert!(list_enabled_for_prompt_with_config(&config)
+            .iter()
+            .all(|(name, _)| name != "configured-reviewer"));
+    }
+
+    #[test]
+    fn prompt_index_workspace_does_not_mutate_process_override() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        let existing_workspace = dir.path().join("existing-workspace");
+        let snapshot_workspace = dir.path().join("snapshot-workspace");
+        fs::create_dir_all(&existing_workspace).unwrap();
+        let skill_dir = snapshot_workspace.join("skills/snapshot-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: snapshot-skill\ndescription: isolated workspace\n---\n",
+        )
+        .unwrap();
+        crate::set_workspace_override(&existing_workspace);
+
+        let index = list_enabled_for_prompt_with_config_in_workspace(&snapshot_workspace, &[]);
+
+        assert!(index.iter().any(|(name, _)| name == "snapshot-skill"));
+        assert_eq!(
+            crate::workspace_override().as_deref(),
+            Some(existing_workspace.as_path())
+        );
     }
 
     #[test]
@@ -1191,10 +1468,10 @@ mod tests {
     #[test]
     fn parse_astro_tools_list_and_inline() {
         let block =
-            "---\nname: t\ndescription: d\nastro_tools:\n  - terminal\n  - file_ops\n---\nbody\n";
+            "---\nname: t\ndescription: d\nastro_tools:\n  - exec_command\n  - apply_patch\n---\nbody\n";
         let m = parse_skill_frontmatter_full(block);
         assert_eq!(m.name, "t");
-        assert_eq!(m.astro_tools, vec!["terminal", "file_ops"]);
+        assert_eq!(m.astro_tools, vec!["exec_command", "apply_patch"]);
 
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);
@@ -1209,7 +1486,7 @@ mod tests {
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(
             skill_dir.join("SKILL.md"),
-            "---\nname: recent-skill\ndescription: d\nastro_tools: [terminal, web_search]\n---\nbody\n",
+            "---\nname: recent-skill\ndescription: d\nastro_tools: [exec_command, web_search]\n---\nbody\n",
         )
         .unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -1222,11 +1499,31 @@ mod tests {
 
         assert!(recent_astro_tools("recent-skill").is_none());
         let loaded = load_skill_by_name("recent-skill").unwrap();
-        assert_eq!(loaded.metadata.astro_tools, vec!["terminal", "web_search"]);
+        assert_eq!(
+            loaded.metadata.astro_tools,
+            vec!["exec_command", "web_search"]
+        );
         assert_eq!(
             recent_astro_tools("recent-skill"),
-            Some(vec!["terminal".to_string(), "web_search".to_string()])
+            Some(vec!["exec_command".to_string(), "web_search".to_string()])
         );
         assert!(recent_astro_tools("other-skill").is_none());
+    }
+
+    #[test]
+    fn bundled_skills_are_reported_as_read_only() {
+        let _guard = ENV_TEST_LOCK.blocking_lock();
+        let dir = tempdir().unwrap();
+        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+
+        let bundled = list_installed_scoped_for_agent(None, Some("builtin"), None);
+
+        assert!(!bundled.is_empty());
+        assert!(bundled.iter().all(|skill| {
+            skill.scope == "builtin"
+                && skill.provenance == "packaged"
+                && !skill.editable
+                && skill.id.starts_with("builtin:")
+        }));
     }
 }

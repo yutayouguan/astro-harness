@@ -33,7 +33,9 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
   const [runMode, setRunMode] = useState<"reflect" | "search" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<EvolutionRunReport | null>(null);
-  const [lastSearch, setLastSearch] = useState<EvolutionSearchReport | null>(null);
+  const [lastSearch, setLastSearch] = useState<EvolutionSearchReport | null>(
+    null,
+  );
   const [proposals, setProposals] = useState<EvolutionProposalDto[]>([]);
 
   const reload = useCallback(async () => {
@@ -41,7 +43,9 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     setLoading(true);
     setError(null);
     try {
-      const next = await invoke<EvolutionProposalDto[]>("list_evolution_proposals");
+      const next = await invoke<EvolutionProposalDto[]>(
+        "list_evolution_proposals",
+      );
       setProposals(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -76,9 +80,12 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
       setRunMode("search");
       setError(null);
       try {
-        const report = await invoke<EvolutionSearchReport>("run_evolution_search", {
-          skillId: skillId?.trim() || null,
-        });
+        const report = await invoke<EvolutionSearchReport>(
+          "run_evolution_search",
+          {
+            skillId: skillId?.trim() || null,
+          },
+        );
         setLastSearch(report);
         await reload();
       } catch (err) {
@@ -109,17 +116,23 @@ export function useEvolutionProposals(active = true): UseEvolutionProposals {
     }
   }, []);
 
-  const approveToBranch = useCallback(async (id: string): Promise<string | null> => {
-    setError(null);
-    try {
-      const msg = await invoke<string>("approve_evolution_proposal_to_branch", { id });
-      setProposals((prev) => prev.filter((p) => p.id !== id));
-      return msg;
-    } catch (err) {
-      setError(errorMessage(err));
-      return null;
-    }
-  }, []);
+  const approveToBranch = useCallback(
+    async (id: string): Promise<string | null> => {
+      setError(null);
+      try {
+        const msg = await invoke<string>(
+          "approve_evolution_proposal_to_branch",
+          { id },
+        );
+        setProposals((prev) => prev.filter((p) => p.id !== id));
+        return msg;
+      } catch (err) {
+        setError(errorMessage(err));
+        return null;
+      }
+    },
+    [],
+  );
 
   const reject = useCallback(async (id: string) => {
     setError(null);

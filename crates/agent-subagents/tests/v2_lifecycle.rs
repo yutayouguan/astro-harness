@@ -15,6 +15,7 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
             ScriptedTurn::Pending,
         ],
     )
+    .await
     .unwrap();
 
     let research = app
@@ -39,7 +40,12 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     assert!(queued.queued);
     assert!(!queued.turn_triggered);
     assert!(!app.is_running(&citations.thread_id));
-    assert_eq!(app.pending_mailbox("/root/research/citations").unwrap(), 1);
+    assert_eq!(
+        app.pending_mailbox("/root/research/citations")
+            .await
+            .unwrap(),
+        1
+    );
 
     let followup = app
         .followup("/root/research/citations", "continue")
@@ -55,8 +61,16 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
         interrupted.thread.status.kind(),
         AgentStatusKind::Interrupted
     );
-    assert_eq!(app.pending_mailbox("/root/research/citations").unwrap(), 0);
-    let before_restart = app.session_contents("/root/research/citations").unwrap();
+    assert_eq!(
+        app.pending_mailbox("/root/research/citations")
+            .await
+            .unwrap(),
+        0
+    );
+    let before_restart = app
+        .session_contents("/root/research/citations")
+        .await
+        .unwrap();
     assert!(before_restart
         .iter()
         .any(|text| text.contains("queued context")));
@@ -93,13 +107,15 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
         .await
         .unwrap();
     assert_eq!(
-        app.status("/root/research/citations").unwrap().kind(),
+        app.status("/root/research/citations").await.unwrap().kind(),
         AgentStatusKind::Interrupted
     );
     assert!(!app.is_running(&citations.thread_id));
     assert!(!app.has_runtime_handle(&citations.thread_id).unwrap());
     assert_eq!(
-        app.session_contents("/root/research/citations").unwrap(),
+        app.session_contents("/root/research/citations")
+            .await
+            .unwrap(),
         before_restart
     );
 
@@ -109,7 +125,10 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     app.wait_for_status("/root/research/citations", AgentStatusKind::Completed)
         .await
         .unwrap();
-    let history = app.session_contents("/root/research/citations").unwrap();
+    let history = app
+        .session_contents("/root/research/citations")
+        .await
+        .unwrap();
     assert!(history
         .iter()
         .any(|text| text.contains("resume after restart")));
@@ -137,7 +156,7 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     let second = app.close_subtree("/root/research").await.unwrap();
     assert_eq!(first.threads, second.threads);
     for path in ["/root/research", "/root/research/citations"] {
-        assert_eq!(app.status(path).unwrap(), AgentStatusV2::Shutdown);
+        assert_eq!(app.status(path).await.unwrap(), AgentStatusV2::Shutdown);
     }
 
     // The root is not charged against the descendant identity quota.
@@ -147,7 +166,7 @@ async fn nested_agent_tree_survives_interrupt_restart_resume_and_recursive_close
     assert_eq!(app.runtime_request_count(), 0);
     assert!(!app.has_runtime_handle(&research.thread_id).unwrap());
     assert!(!app.has_runtime_handle(&citations.thread_id).unwrap());
-    let session_ids = app.session_ids().unwrap();
+    let session_ids = app.session_ids().await.unwrap();
     assert_eq!(session_ids.len(), 3, "session ids: {session_ids:?}");
     assert_eq!(
         old_process_hooks.lock().unwrap().clone(),

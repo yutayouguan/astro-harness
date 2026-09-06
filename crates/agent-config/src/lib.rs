@@ -1,8 +1,7 @@
-//! Canonical layered configuration primitives for Astro.
+//! Astro 分层配置的基本原语。
 //!
-//! This crate deliberately contains no product-specific configuration fields
-//! and performs no filesystem discovery. Loaders contribute ordered layers;
-//! consumers receive one effective TOML value plus exact per-key provenance.
+//! 本 crate 刻意不包含任何产品特有的配置字段，也不执行文件系统发现。
+//! 加载器提供有序层；消费者获得一个生效的 TOML 值以及精确的逐键来源追溯。
 
 pub mod loader;
 
@@ -16,11 +15,10 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use toml::Value as TomlValue;
 
-/// Provenance for one configuration layer.
+/// 单个配置层的来源信息。
 ///
-/// Higher precedence values override lower ones. Equal-precedence layers keep
-/// insertion order, which lets project loaders append directories from the
-/// repository root down to the current working directory (closest wins).
+/// 高优先级值覆盖低优先级值。相同优先级的层保持插入顺序，
+/// 这使得项目加载器可以从仓库根目录向下追加目录直到当前工作目录（最近的优先）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConfigLayerSource {
@@ -53,8 +51,8 @@ impl ConfigLayerSource {
     }
 }
 
-/// A lossless configuration key path. Segments are not joined internally, so
-/// a literal key containing `.` cannot collide with a nested table path.
+/// 无损的配置键路径。段不在内部拼接，因此包含 `.` 的字面键
+/// 不会与嵌套表路径冲突。
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ConfigKeyPath(Vec<String>);
 
@@ -104,18 +102,17 @@ pub struct ConfigOrigin {
     pub version: String,
 }
 
-/// One enabled layer captured in an immutable effective-config snapshot.
+/// 不可变生效配置快照中记录的单个已启用层。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EffectiveConfigLayer {
     pub source: ConfigLayerSource,
     pub version: String,
 }
 
-/// Immutable result of resolving a configuration layer stack.
+/// 解析配置层栈后的不可变结果。
 ///
-/// Consumers should keep this snapshot for the lifetime of one request or
-/// turn. That prevents configuration files from being re-read midway through
-/// an operation and makes the exact effective version observable.
+/// 消费者应在单个请求或 turn 的生命周期内持有此快照。
+/// 这样可以防止在操作中途重新读取配置文件，并使精确的生效版本可观测。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EffectiveConfig {
     config: TomlValue,
@@ -154,19 +151,18 @@ impl EffectiveConfig {
         &self.layers_low_to_high
     }
 
-    /// Stable fingerprint of the canonical effective value.
+    /// 规范化生效值的稳定指纹。
     ///
-    /// Formatting changes and overridden lower-layer values do not change the
-    /// version; a behaviorally different effective value does.
+    /// 格式变化和被覆盖的低层值不会改变版本号；
+    /// 只有行为上不同的生效值才会改变。
     pub fn version(&self) -> &str {
         &self.version
     }
 
-    /// Decode this snapshot into a consumer-owned strong schema.
+    /// 将此快照解码为消费者自有的强类型 schema。
     ///
-    /// Consumers can opt into strict field validation with
-    /// `#[serde(deny_unknown_fields)]` without coupling this crate to every
-    /// domain-specific configuration type.
+    /// 消费者可通过 `#[serde(deny_unknown_fields)]` 启用严格字段校验，
+    /// 而无需将本 crate 与每个领域特有的配置类型耦合。
     pub fn decode<T>(&self) -> Result<T, EffectiveConfigError>
     where
         T: DeserializeOwned,
@@ -191,7 +187,7 @@ pub enum EffectiveConfigError {
     },
 }
 
-/// One parsed layer plus its stable raw-content fingerprint.
+/// 单个已解析的层及其稳定的原始内容指纹。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfigLayerEntry {
     pub source: ConfigLayerSource,
@@ -246,7 +242,7 @@ pub enum ConfigLayerError {
     },
 }
 
-/// Materialized layers ordered from lowest to highest precedence.
+/// 按优先级从低到高排列的物化层集合。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ConfigLayerStack {
     layers: Vec<ConfigLayerEntry>,
@@ -254,8 +250,8 @@ pub struct ConfigLayerStack {
 
 impl ConfigLayerStack {
     pub fn new(mut layers: Vec<ConfigLayerEntry>) -> Self {
-        // `sort_by_key` is stable: equal-precedence project layers retain the
-        // root-to-cwd ordering supplied by discovery.
+        // `sort_by_key` 是稳定排序：相同优先级的项目层保持发现时
+        // 从根目录到工作目录的顺序。
         layers.sort_by_key(|layer| layer.source.precedence());
         Self { layers }
     }
@@ -281,7 +277,7 @@ impl ConfigLayerStack {
         self.resolve().origins
     }
 
-    /// Resolve all enabled layers once into an immutable snapshot.
+    /// 将所有已启用的层一次性解析为不可变快照。
     pub fn resolve(&self) -> EffectiveConfig {
         let (config, origins) = self.materialize();
         let version = fingerprint(&canonical_toml_bytes(&config));
@@ -335,8 +331,8 @@ impl ConfigLayerStack {
     }
 }
 
-/// Recursively merges `overlay` into `base`. Tables merge by key; scalars and
-/// arrays replace the lower-precedence value.
+/// 递归地将 `overlay` 合并到 `base` 中。表按键合并；标量和数组
+/// 替换低优先级的值。
 pub fn merge_toml_values(base: &mut TomlValue, overlay: &TomlValue) {
     if let (Some(base), Some(overlay)) = (base.as_table_mut(), overlay.as_table()) {
         for (key, value) in overlay {

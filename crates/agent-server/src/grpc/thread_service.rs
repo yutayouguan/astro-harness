@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use agent_protocol::{Op, TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission};
+use agent_protocol::{TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission};
 use futures::Stream;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -84,6 +84,10 @@ fn snapshot_to_proto(snapshot: ThreadSnapshot) -> proto::ThreadSnapshot {
     proto::ThreadSnapshot {
         thread_id: snapshot.thread_id,
         status: snapshot.status,
+        provider_id: snapshot.provider_id,
+        backend_id: snapshot.backend_id,
+        model: snapshot.model,
+        reasoning_effort: snapshot.reasoning_effort,
         turns: snapshot.turns.into_iter().map(turn_to_proto).collect(),
         has_active_turn: active_turn.is_some(),
         active_turn,
@@ -139,7 +143,7 @@ fn item_type(item: &agent_protocol::TurnItem) -> &'static str {
     }
 }
 
-async fn resume(
+pub(crate) async fn resume(
     managed: &crate::ManagedThread,
     subscription: crate::transport::ConnectionGenerationKey,
     include_turns: bool,
@@ -153,9 +157,24 @@ async fn resume(
             reply,
         })
         .map_err(|_| Status::unavailable("thread listener stopped"))?;
-    receive
+    let mut snapshot = receive
         .await
-        .map_err(|_| Status::unavailable("thread listener stopped"))
+        .map_err(|_| Status::unavailable("thread listener stopped"))?;
+    let session = managed.runtime.session();
+    if let Some(target) = session.model_targets().first() {
+        if snapshot.provider_id.is_none() && !target.provider_id.trim().is_empty() {
+            snapshot.provider_id = Some(target.provider_id.clone());
+        }
+        snapshot
+            .backend_id
+            .get_or_insert_with(|| target.backend_id.clone());
+        snapshot.model.get_or_insert_with(|| target.model.clone());
+    }
+    snapshot.reasoning_effort = snapshot.model.as_ref().and_then(|_| {
+        let effort = session.thread_provider_options().reasoning_effort;
+        (!effort.trim().is_empty()).then_some(effort)
+    });
+    Ok(snapshot)
 }
 
 fn submit_turn_response(
@@ -184,7 +203,7 @@ pub(crate) async fn subscribe_thread_events(
     let registry = service.connections.clone();
     let thread_states = service.thread_states.clone();
     let cleanup_subscription = generation.key().clone();
-    // Keep one slot reserved for the single terminal slow-consumer status.
+    // 预留一个槽位用于单个终端慢消费者状态。
     let (outbound, stream_rx) = tokio::sync::mpsc::channel(crate::transport::CHANNEL_CAPACITY + 1);
     tokio::spawn(async move {
         let mut receiver = receiver;
@@ -233,12 +252,27 @@ pub(crate) async fn submit_turn(
     }
     let mode = validate_turn_mode(&req.mode, &req.expected_turn_id)?;
     let explicit_steer = matches!(&mode, TurnInputMode::Steer { .. });
-    let validated = validate_chat_request(&chat)?;
+    let mut validated = validate_chat_request(&chat)?;
     let subscription = service
         .connections
         .current_generation_key(&connection_id)
         .await
         .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+    let request_hook_runtime = service.hook_runtime_for_project(&chat.project_root);
+    if let Some(turn_request) = validated.turn_request.as_mut() {
+        let input = turn_request
+            .input
+            .first_mut()
+            .expect("validated non-resume chat must contain one input");
+        if let Some(reason) =
+            apply_pre_gateway_hook(&request_hook_runtime, thread_id, &chat.project_root, input)?
+        {
+            return Ok(submit_turn_response(
+                String::new(),
+                TurnInputSubmission::NotSubmitted { reason },
+            ));
+        }
+    }
     if let Some(prepared) =
         prepare_resume_before_side_effects(service, thread_id, &validated.resume_items).await?
     {
@@ -260,34 +294,22 @@ pub(crate) async fn submit_turn(
     let managed = service.get_or_create_thread(thread_id).await?;
     resume(&managed, subscription.clone(), false).await?;
     let submit = async {
-        service
-            .configure_thread_from_chat(&managed.runtime, &chat)
+        let thread_settings = service
+            .prepare_thread_settings_from_chat_with_hooks(
+                &managed.runtime,
+                &chat,
+                std::sync::Arc::clone(&request_hook_runtime),
+            )
             .await?;
         debug_assert_eq!(
-            managed.runtime.session().interaction_mode().await,
-            validated.interaction_mode
+            thread_settings.interaction_mode,
+            Some(validated.interaction_mode)
         );
-        managed
-            .runtime
-            .submit(Op::ThreadSettings {
-                settings: serde_json::json!({
-                    "provider": chat.provider,
-                    "model": chat.model,
-                    "interaction_mode": chat.interaction_mode,
-                    "project_root": chat.project_root,
-                }),
-            })
-            .await
-            .map_err(|error| Status::unavailable(error.to_string()))?;
-        let submitted = managed
-            .runtime
-            .submit_turn(
-                validated
-                    .turn_request
-                    .expect("non-resume validation must produce turn input"),
-                mode,
-            )
-            .await;
+        let mut turn_request = validated
+            .turn_request
+            .expect("non-resume validation must produce turn input");
+        turn_request.thread_settings = thread_settings;
+        let submitted = managed.runtime.submit_turn(turn_request, mode).await;
         match submitted {
             Ok(submitted) => Ok(submitted),
             Err(error) if explicit_steer => {
@@ -311,6 +333,45 @@ pub(crate) async fn submit_turn(
     match submit {
         Ok((submission_id, submission)) => Ok(submit_turn_response(submission_id, submission)),
         Err(error) => Err(error),
+    }
+}
+
+fn apply_pre_gateway_hook(
+    runtime: &::hooks::HookRuntime,
+    session_id: &str,
+    cwd: &str,
+    input: &mut TurnInput,
+) -> Result<Option<String>, Status> {
+    let outcome = runtime.dispatch(
+        ::hooks::PRE_GATEWAY_DISPATCH,
+        &::hooks::HookPayload {
+            session_id: session_id.to_string(),
+            cwd: cwd.to_string(),
+            prompt: Some(input.content.clone()),
+            detail: "chat ingress".into(),
+            ..Default::default()
+        },
+    );
+    let skipped = apply_pre_gateway_outcome(input, outcome);
+    if skipped.is_none() && input.content.trim().is_empty() && input.image_data_urls.is_empty() {
+        return Err(Status::invalid_argument(
+            "PreGatewayDispatch produced an empty chat input",
+        ));
+    }
+    Ok(skipped)
+}
+
+fn apply_pre_gateway_outcome(
+    input: &mut TurnInput,
+    outcome: ::hooks::HookOutcome,
+) -> Option<String> {
+    match outcome {
+        ::hooks::HookOutcome::Rewrite(content) => {
+            input.content = content;
+            None
+        }
+        ::hooks::HookOutcome::Skip(reason) | ::hooks::HookOutcome::Block(reason) => Some(reason),
+        _ => None,
     }
 }
 
@@ -426,6 +487,8 @@ fn turn_request_from_chat_with_requirement(
             client_message_id: (!chat.client_message_id.trim().is_empty())
                 .then(|| chat.client_message_id.trim().to_string()),
         }],
+        rollback_keep_chat_bubbles: chat.rollback_keep_chat_bubbles,
+        thread_settings: Default::default(),
     })
 }
 
@@ -441,16 +504,13 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
             "use_memory=false is not supported by the Thread runtime",
         ));
     }
-    let interaction_mode = match chat.interaction_mode.trim().to_ascii_lowercase().as_str() {
-        "" | "agent" => types::InteractionMode::Agent,
-        "plan" => types::InteractionMode::Plan,
-        "ask" => types::InteractionMode::Ask,
-        other => {
-            return Err(Status::invalid_argument(format!(
-                "unsupported interaction_mode: {other}"
-            )))
-        }
-    };
+    let interaction_mode =
+        types::InteractionMode::parse(&chat.interaction_mode).ok_or_else(|| {
+            Status::invalid_argument(format!(
+                "unsupported interaction_mode: {}",
+                chat.interaction_mode.trim().to_ascii_lowercase()
+            ))
+        })?;
     if let Some(temperature) = chat.temperature {
         if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
             return Err(Status::invalid_argument(
@@ -469,12 +529,22 @@ fn validate_chat_request(chat: &proto::ChatRequest) -> Result<ValidatedChatReque
             ));
         }
     }
+    if !chat.model_profile_json.trim().is_empty() {
+        serde_json::from_str::<types::ModelProfile>(&chat.model_profile_json).map_err(|error| {
+            Status::invalid_argument(format!("invalid model_profile_json: {error}"))
+        })?;
+    }
     let resume_items = if chat.resume_json.trim().is_empty() {
         Vec::new()
     } else {
         super::interrupt_store::parse_resume_items_json(&chat.resume_json)
             .map_err(Status::invalid_argument)?
     };
+    if !resume_items.is_empty() && chat.rollback_keep_chat_bubbles.is_some() {
+        return Err(Status::invalid_argument(
+            "history rollback cannot be combined with interrupt resume",
+        ));
+    }
     let turn_request = if resume_items.is_empty() {
         Some(turn_request_from_chat(chat)?)
     } else {
@@ -533,21 +603,87 @@ async fn prepare_resume_before_side_effects(
 
 #[cfg(test)]
 mod tests {
+    use agent_protocol::Op;
     use futures::StreamExt;
     use tempfile::TempDir;
 
     use super::*;
 
     #[test]
+    fn pre_gateway_rewrite_updates_the_validated_input() {
+        let runtime = ::hooks::HookRuntime::new();
+        runtime
+            .plugin
+            .register(::hooks::PRE_GATEWAY_DISPATCH, |payload| {
+                assert_eq!(payload.session_id, "session-1");
+                assert_eq!(payload.cwd, "/workspace");
+                assert_eq!(payload.prompt.as_deref(), Some("original"));
+                ::hooks::HookOutcome::Rewrite("rewritten".into())
+            });
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let skipped =
+            apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input).unwrap();
+
+        assert_eq!(input.content, "rewritten");
+        assert_eq!(skipped, None);
+    }
+
+    #[test]
+    fn pre_gateway_skip_returns_not_submitted_reason() {
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let skipped =
+            apply_pre_gateway_outcome(&mut input, ::hooks::HookOutcome::Skip("policy".into()));
+
+        assert_eq!(input.content, "original");
+        assert_eq!(skipped.as_deref(), Some("policy"));
+    }
+
+    #[test]
+    fn pre_gateway_rewrite_cannot_create_an_empty_input() {
+        let runtime = ::hooks::HookRuntime::new();
+        runtime.plugin.register(::hooks::PRE_GATEWAY_DISPATCH, |_| {
+            ::hooks::HookOutcome::Rewrite(String::new())
+        });
+        let mut input = TurnInput {
+            content: "original".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        };
+
+        let error = apply_pre_gateway_hook(&runtime, "session-1", "/workspace", &mut input)
+            .expect_err("empty rewritten input must be rejected");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[test]
     fn snapshot_proto_preserves_authoritative_pending_background_turns() {
         let mapped = snapshot_to_proto(ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: Some("provider-profile".into()),
+            backend_id: Some("openai".into()),
+            model: Some("gpt-5.6".into()),
+            reasoning_effort: Some("high".into()),
             turns: vec![],
             active_turn: None,
             pending_background_turn_ids: vec!["turn-1".into(), "turn-2".into()],
         });
         assert_eq!(mapped.pending_background_turn_ids, vec!["turn-1", "turn-2"]);
+        assert_eq!(mapped.model.as_deref(), Some("gpt-5.6"));
+        assert_eq!(mapped.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(mapped.provider_id.as_deref(), Some("provider-profile"));
+        assert_eq!(mapped.backend_id.as_deref(), Some("openai"));
     }
 
     fn valid_chat_request() -> proto::ChatRequest {
@@ -560,22 +696,385 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn configure_thread_keeps_only_responses_capable_targets() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("api-mode-thread")
+            .await
+            .expect("thread");
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "api-mode-thread".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    reasoning_effort: "max".into(),
+                    tool_mode: "code_mode_only".into(),
+                    model_profile_json: serde_json::to_string(&types::ModelProfile {
+                        supports_search_tool: false,
+                        effective_context_window_percent: 95,
+                        ..types::ModelProfile::default()
+                    })
+                    .unwrap(),
+                    chat_fallbacks: vec![
+                        proto::ChatFallbackTarget {
+                            provider: "openai".into(),
+                            model: "gpt-5.6".into(),
+                            ..Default::default()
+                        },
+                        proto::ChatFallbackTarget {
+                            provider: "ollama".into(),
+                            model: "qwen3".into(),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("configure thread");
+
+        let targets = managed.runtime.session().model_targets();
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].backend_id, "deepseek");
+        assert_eq!(targets[1].backend_id, "openai");
+        assert_eq!(
+            managed.runtime.session().model_spec().unwrap().tool_mode,
+            Some(types::ToolMode::CodeModeOnly)
+        );
+        assert!(
+            !managed
+                .runtime
+                .session()
+                .model_spec()
+                .unwrap()
+                .profile
+                .supports_search_tool
+        );
+        let (_rx, _cancel, generation) = service
+            .connections
+            .register("metadata-connection".into())
+            .await;
+        let snapshot = resume(&managed, generation.key().clone(), false)
+            .await
+            .expect("resume metadata snapshot");
+        assert_eq!(snapshot.model.as_deref(), Some("deepseek-v4-flash"));
+        assert_eq!(snapshot.reasoning_effort.as_deref(), Some("max"));
+        assert_eq!(snapshot.provider_id, None);
+        assert_eq!(snapshot.backend_id.as_deref(), Some("deepseek"));
+        service.connections.remove_generation(&generation).await;
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn persistent_reasoning_requires_openai_catalog_instructions() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("persistent-thread")
+            .await
+            .expect("thread");
+
+        let missing = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("missing instructions must fail");
+        assert_eq!(missing.code(), tonic::Code::InvalidArgument);
+
+        let unsupported = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("non-OpenAI provider must reject persistent reasoning");
+        assert_eq!(unsupported.code(), tonic::Code::InvalidArgument);
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "persistent".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("persistent configuration");
+        assert_eq!(
+            managed.runtime.session().additional_params()["astro_persistent_instructions"],
+            "continue autonomously"
+        );
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn active_turn_persistent_reasoning_requires_stored_instructions() {
+        use proto::astro_service_server::AstroService;
+
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("persistent-switch-thread")
+            .await
+            .expect("thread");
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-switch-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "high".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("base configuration");
+        let missing = AstroService::update_turn_settings(
+            &service,
+            Request::new(proto::UpdateTurnSettingsRequest {
+                session_id: "persistent-switch-thread".into(),
+                turn_id: "turn-1".into(),
+                reasoning_effort: Some("persistent".into()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect_err("missing active-turn instructions must fail");
+        assert_eq!(missing.code(), tonic::Code::InvalidArgument);
+
+        service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "persistent-switch-thread".into(),
+                    provider: "openai".into(),
+                    model: "gpt-test".into(),
+                    reasoning_effort: "high".into(),
+                    persistent_instructions: "continue autonomously".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("catalog-backed configuration");
+        let response = AstroService::update_turn_settings(
+            &service,
+            Request::new(proto::UpdateTurnSettingsRequest {
+                session_id: "persistent-switch-thread".into(),
+                turn_id: "turn-1".into(),
+                reasoning_effort: Some("persistent".into()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("stored instructions pass persistent validation")
+        .into_inner();
+        assert_eq!(response.status, "rejected");
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn configure_thread_rejects_non_responses_primary() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("unsupported-agent-provider")
+            .await
+            .expect("thread");
+
+        let error = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "unsupported-agent-provider".into(),
+                    provider: "ollama".into(),
+                    model: "qwen3".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("Agent must reject providers without Responses support");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(error.message().contains("Responses API"));
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn first_load_seeds_an_empty_rollout_from_native_sqlite_history() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let thread_id = "legacy-sqlite-history";
+        let store = session::SessionStore::open_sessions_dir(&home::data_dir(dir.path()))
+            .await
+            .expect("session store");
+        store
+            .ensure_session(thread_id, "legacy")
+            .await
+            .expect("session");
+        let item = session::ResponseItem::user_text("persisted user message");
+        store
+            .append_response_item(session::NewResponseItem::new(thread_id, &item))
+            .await
+            .expect("message");
+        drop(store);
+
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        let empty_rollout_path =
+            agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now());
+        let empty_rollout = agent_rollout::RolloutRecorder::open(empty_rollout_path)
+            .await
+            .expect("empty rollout");
+        empty_rollout.flush().await.expect("flush empty rollout");
+        empty_rollout.shutdown().await.expect("close empty rollout");
+
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread(thread_id)
+            .await
+            .expect("thread");
+        assert_eq!(
+            managed
+                .runtime
+                .session()
+                .clone_response_history()
+                .await
+                .len(),
+            1
+        );
+
+        let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
+            .expect("find rollout")
+            .expect("migrated rollout");
+        let items = agent_rollout::read_rollout(&rollout_path)
+            .await
+            .expect("read rollout");
+        assert!(items.iter().any(|item| matches!(
+            item,
+            agent_rollout::RolloutItem::ResponseItem(
+                agent_protocol::ResponseItem::Message { role, .. }
+            ) if role == "user"
+        )));
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
+    #[tokio::test]
+    async fn configure_thread_rejects_removed_ask_mode_without_mutating_session() {
+        let dir = TempDir::new().expect("tempdir");
+        memory::ensure_workspace(dir.path()).expect("workspace");
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        let managed = service
+            .get_or_create_thread("removed-ask-mode")
+            .await
+            .expect("thread");
+        let session = managed.runtime.session();
+        let initial_temperature = session.temperature();
+        let initial_targets = session.model_targets();
+
+        let error = service
+            .configure_thread_from_chat(
+                &managed.runtime,
+                &proto::ChatRequest {
+                    session_id: "removed-ask-mode".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-v4-flash".into(),
+                    interaction_mode: "ask".into(),
+                    temperature: Some(0.2),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("removed ask mode must fail");
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert_eq!(session.temperature(), initial_temperature);
+        assert_eq!(session.model_targets(), initial_targets);
+
+        managed
+            .runtime
+            .submit(agent_protocol::Op::Shutdown)
+            .await
+            .expect("shutdown");
+        managed.runtime.wait_terminated().await;
+    }
+
     #[test]
     fn turn_request_preserves_client_message_identity() {
         let mut chat = valid_chat_request();
         chat.client_message_id = "queued-message-7".into();
+        chat.rollback_keep_chat_bubbles = Some(4);
         let request = turn_request_from_chat(&chat).expect("valid turn input");
         assert_eq!(request.input.len(), 1);
         assert_eq!(
             request.input[0].client_message_id.as_deref(),
             Some("queued-message-7")
         );
+        assert_eq!(request.rollback_keep_chat_bubbles, Some(4));
     }
 
     #[test]
     fn chat_contract_rejects_tool_name_override() {
         let mut chat = valid_chat_request();
-        chat.tool_names = vec!["terminal".into()];
+        chat.tool_names = vec!["exec_command".into()];
         assert_eq!(
             validate_chat_request(&chat)
                 .expect_err("tool override must fail")
@@ -610,6 +1109,14 @@ mod tests {
         let validated = validate_chat_request(&chat).expect("valid resume payload");
         assert_eq!(validated.resume_items.len(), 1);
         assert_eq!(validated.resume_items[0].interrupt_id, "request-1");
+
+        chat.rollback_keep_chat_bubbles = Some(2);
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("resume cannot also rewrite history")
+                .code(),
+            tonic::Code::InvalidArgument
+        );
     }
 
     #[test]
@@ -628,6 +1135,13 @@ mod tests {
                 .expect("known mode")
                 .interaction_mode,
             types::InteractionMode::Plan
+        );
+        chat.interaction_mode = "ask".into();
+        assert_eq!(
+            validate_chat_request(&chat)
+                .expect_err("removed ask mode must fail")
+                .code(),
+            tonic::Code::InvalidArgument
         );
     }
 

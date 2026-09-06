@@ -1,10 +1,7 @@
-//! 工具调用解析：从 LLM 回复中提取结构化 tool call。
+//! 原生 function calling 工具调用解析。
 //!
-//! 支持两种协议：
-//! - **原生 function calling**：流式 `delta.tool_calls` 片段由 [`ToolCallAccumulator`] 累积。
-//! - **XML 兼容协议**：`<tool_call>{"name":...,"arguments":...}</tool_call>` 由 [`extract_tool_calls`] 解析。
-//!
-//! [`resolve_tool_calls`] 合并两者，原生结果优先于 XML 回退。
+//! 流式 `delta.tool_calls` 片段由 [`ToolCallAccumulator`] 累积。自由文本不参与
+//! 工具识别，与结构化响应边界保持一致。
 
 use std::collections::BTreeMap;
 
@@ -13,9 +10,12 @@ use serde_json::Value;
 /// 解析完成的单次工具调用。
 #[derive(Debug, Clone)]
 pub struct ParsedToolCall {
+    pub item_id: Option<String>,
     pub id: String,
     pub name: String,
+    pub namespace: Option<String>,
     pub arguments: Value,
+    pub encrypted_arguments: Option<Vec<String>>,
     pub args_parse_error: bool,
     pub signature: Option<String>,
 }
@@ -23,9 +23,12 @@ pub struct ParsedToolCall {
 impl ParsedToolCall {
     pub fn new(name: impl Into<String>, arguments: Value) -> Self {
         Self {
+            item_id: None,
             id: uuid::Uuid::new_v4().to_string(),
             name: name.into(),
+            namespace: None,
             arguments,
+            encrypted_arguments: None,
             args_parse_error: false,
             signature: None,
         }
@@ -33,37 +36,26 @@ impl ParsedToolCall {
 
     pub fn with_id(id: impl Into<String>, name: impl Into<String>, arguments: Value) -> Self {
         Self {
+            item_id: None,
             id: id.into(),
             name: name.into(),
+            namespace: None,
             arguments,
+            encrypted_arguments: None,
             args_parse_error: false,
             signature: None,
         }
     }
-}
 
-/// 从助手纯文本回复中提取 `<tool_call>...</tool_call>` 块。
-pub fn extract_tool_calls(text: &str) -> Vec<ParsedToolCall> {
-    let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("<tool_call>") {
-        let after = &rest[start + "<tool_call>".len()..];
-        let Some(end) = after.find("</tool_call>") else {
-            break;
-        };
-        let json_str = after[..end].trim();
-        if let Ok(v) = serde_json::from_str::<Value>(json_str) {
-            if let Some(name) = v.get("name").and_then(|n| n.as_str()) {
-                let arguments = v
-                    .get("arguments")
-                    .cloned()
-                    .unwrap_or_else(|| serde_json::json!({}));
-                out.push(ParsedToolCall::new(name, arguments));
-            }
-        }
-        rest = &after[end + "</tool_call>".len()..];
+    /// Responses API 原生工具身份；namespace 与子工具名始终分开保存。
+    pub fn tool_name(&self) -> crate::ToolName {
+        crate::ToolName::new(self.namespace.as_deref(), self.name.clone())
     }
-    out
+
+    /// 仅供日志、UI 和旧的字符串边界使用。
+    pub fn display_name(&self) -> String {
+        self.tool_name().wire_name()
+    }
 }
 
 /// 流式原生 function calling 的单个增量片段。
@@ -154,12 +146,15 @@ impl ToolCallAccumulator {
                             format!("工具参数 JSON 无效（请检查引号与转义）: {err}")
                         };
                         ParsedToolCall {
+                            item_id: None,
                             id,
                             name: s.name,
+                            namespace: None,
                             arguments: serde_json::json!({
                                 "_parse_error": detail,
                                 "_raw": trimmed,
                             }),
+                            encrypted_arguments: None,
                             args_parse_error: true,
                             signature: s.signature,
                         }
@@ -179,32 +174,9 @@ fn looks_like_complete_json(s: &str) -> bool {
     (t.starts_with('{') && t.ends_with('}')) || (t.starts_with('[') && t.ends_with(']'))
 }
 
-/// 合并原生 tool_calls 与 XML 解析结果。原生非空时忽略 XML。
-pub fn resolve_tool_calls(
-    native: Vec<ParsedToolCall>,
-    assistant_text: &str,
-) -> Vec<ParsedToolCall> {
-    if !native.is_empty() {
-        return native;
-    }
-    extract_tool_calls(assistant_text)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn extracts_xml_tool_call() {
-        let text = r#"
-before
-<tool_call>{"name":"file_ops","arguments":{"path":"a.txt","operation":"read"}}</tool_call>
-"#;
-        let calls = extract_tool_calls(text);
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].name, "file_ops");
-        assert_eq!(calls[0].arguments["path"], "a.txt");
-    }
 
     #[test]
     fn accumulates_streaming_tool_calls() {
@@ -212,7 +184,7 @@ before
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("call_1".into()),
-            name: Some("file_ops".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":".into()),
             signature: None,
         });
@@ -226,7 +198,7 @@ before
         let calls = acc.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].id, "call_1");
-        assert_eq!(calls[0].name, "file_ops");
+        assert_eq!(calls[0].name, "exec_command");
         assert_eq!(calls[0].arguments["operation"], "read");
         assert!(!calls[0].args_parse_error);
     }
@@ -237,7 +209,7 @@ before
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("x".into()),
-            name: Some("file_ops".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":".into()),
             signature: None,
         });
@@ -252,7 +224,7 @@ before
         acc.push(&ToolCallDelta {
             index: 0,
             id: Some("g".into()),
-            name: Some("file_ops".into()),
+            name: Some("exec_command".into()),
             arguments: Some("{\"path\":\"a\"}".into()),
             signature: None,
         });
@@ -279,5 +251,19 @@ before
         });
         let calls = acc.finish();
         assert_eq!(calls[0].signature.as_deref(), Some("sig_abc"));
+    }
+
+    #[test]
+    fn preserves_native_tool_name_exactly() {
+        let mut acc = ToolCallAccumulator::new();
+        acc.push(&ToolCallDelta {
+            index: 0,
+            id: Some("call_namespaced".into()),
+            name: Some("default_api:terminal".into()),
+            arguments: Some(r#"{"operation":"list"}"#.into()),
+            signature: None,
+        });
+        let calls = acc.finish();
+        assert_eq!(calls[0].name, "default_api:terminal");
     }
 }

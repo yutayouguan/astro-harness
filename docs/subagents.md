@@ -15,6 +15,14 @@ Astro 只有一套 Subagent 运行时契约：持久化的 Agent Thread 树。�
 
 `send_message`、`followup_task` 和 `interrupt_agent` 的 `target` 均接受相对 task name、canonical task path 或 `spawn_agent` 对应的 thread ID。`send_message` 可向当前 agent 自身排队；`followup_task` 不得目标 root，`interrupt_agent` 不得目标 root 或当前 agent。
 
+Root turn 的 `service_tier` 由 root-scoped `AgentControl` 共享。`spawn_agent`、嵌套
+spawn 和后续启动的 Subagent turn 都从该快照继承 tier；只有 OpenAI/Codex
+backend 会将它写入 Provider 参数，其他 backend 不透传不支持的字段。模型、
+reasoning effort 和 sandbox 的现有继承/收窄规则不变。`AgentTreeSnapshotV2` 同时
+携带 nullable `root_service_tier`，Desktop 在 Agent Tree 摘要中展示实际根级值；
+增量状态事件与 mark-read 投影不会清除它。详见
+[Agent Tree 状态投影详细设计](04-详细设计阶段/01-核心引擎层/15-Agent-Tree状态投影详细设计.md)。
+
 模型可见输出保持 Codex V2 紧凑形状：`spawn_agent` 默认只返回 canonical `task_name`，`list_agents` 只返回 `agent_name` 和 `agent_status`，不泄露内部 thread/session ID。完整身份只在运行时与 Desktop 控制面中使用。
 
 `read` 和递归 `close` 仅属于桌面管理控制面。Tauri 命令 `read_subagent_thread` 读取真实 Session 时间线，`close_subagent_thread` 按叶子优先终止目标子树。它们不是模型工具，也不经过模型 dispatch trait。
@@ -70,7 +78,7 @@ interrupt_message = true
 
 ## 持久化边界
 
-- `~/.astro/subagents-v2.db`：V2 Agent Graph、spawn edge、mailbox、状态事件和恢复元数据。
-- `~/.astro/sessions/state.db`：每个 Agent Thread 的真实消息、reasoning、tool call/result 时间线。
+- `~/.astro/data/subagents-v2.db`：V2 Agent Graph、spawn edge、mailbox、状态事件和恢复元数据。
+- `~/.astro/data/state.db`：每个 Agent Thread 的真实消息、reasoning、tool call/result 时间线。
 
 旧 V1 schema 只能被一次性迁移器识别：原 thread/message 表被改名为只读历史归档，不会恢复为可执行 runtime，也不提供旧模型 API。

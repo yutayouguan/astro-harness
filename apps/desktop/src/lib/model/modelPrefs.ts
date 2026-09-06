@@ -15,7 +15,8 @@ export type ModelEffort =
   | "medium"
   | "high"
   | "xhigh"
-  | "max";
+  | "max"
+  | "persistent";
 
 export type ModelRuntimePrefs = {
   thinking: boolean;
@@ -55,7 +56,10 @@ export function loadAllModelPrefs(): Record<string, ModelRuntimePrefs> {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, Partial<ModelRuntimePrefs>>;
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      Partial<ModelRuntimePrefs>
+    >;
     const out: Record<string, ModelRuntimePrefs> = {};
     for (const [k, v] of Object.entries(parsed)) {
       out[k] = normalizePrefs(v);
@@ -83,9 +87,15 @@ export function loadModelPrefs(
 }
 
 /** 是否已有用户保存过的该模型偏好 */
-export function hasSavedModelPrefs(providerId: string, modelId: string): boolean {
+export function hasSavedModelPrefs(
+  providerId: string,
+  modelId: string,
+): boolean {
   const all = loadAllModelPrefs();
-  return Object.prototype.hasOwnProperty.call(all, modelPrefsKey(providerId, modelId));
+  return Object.prototype.hasOwnProperty.call(
+    all,
+    modelPrefsKey(providerId, modelId),
+  );
 }
 
 /** 用 OpenRouter reasoning 元数据生成默认偏好（仅无已保存偏好时） */
@@ -106,7 +116,10 @@ export function upsertModelPrefs(
 ): ModelRuntimePrefs {
   const all = loadAllModelPrefs();
   const key = modelPrefsKey(providerId, modelId);
-  const next = normalizePrefs({ ...(all[key] ?? DEFAULT_MODEL_PREFS), ...patch });
+  const next = normalizePrefs({
+    ...(all[key] ?? DEFAULT_MODEL_PREFS),
+    ...patch,
+  });
   all[key] = next;
   saveAllModelPrefs(all);
   return next;
@@ -137,7 +150,9 @@ export function savePickerGlobals(g: ModelPickerGlobals) {
 }
 
 /** MAX Mode 已下线：仅规范化 globals，不再写回 maxMode。 */
-export function syncMaxModeWithThinkingLevel(_level: ThinkingLevel): ModelPickerGlobals {
+export function syncMaxModeWithThinkingLevel(
+  _level: ThinkingLevel,
+): ModelPickerGlobals {
   return loadPickerGlobals();
 }
 
@@ -147,7 +162,9 @@ function normalizeEffort(v: unknown): ModelEffort {
   return "high";
 }
 
-function normalizePrefs(v: Partial<ModelRuntimePrefs> & { effort?: string }): ModelRuntimePrefs {
+function normalizePrefs(
+  v: Partial<ModelRuntimePrefs> & { effort?: string },
+): ModelRuntimePrefs {
   const context: ModelContextSize =
     v.context === "300k" || v.context === "1m" || v.context === "default"
       ? v.context
@@ -206,7 +223,10 @@ export function modelSupportsReasoning(
   if (!meta) return false;
   if (meta.mandatory) return true;
   if (meta.default_enabled === true) return true;
-  return (meta.supported_efforts ?? []).some((e) => Boolean(parseEffortLevel(e)));
+  if (meta.persistent_instructions?.trim()) return true;
+  return (meta.supported_efforts ?? []).some((e) =>
+    Boolean(parseEffortLevel(e)),
+  );
 }
 
 /**
@@ -220,11 +240,25 @@ export function effortChoicesFromMeta(
   if (!modelSupportsReasoning(capsReasoning, meta)) return [];
   const raw = (meta?.supported_efforts ?? [])
     .map((e) => parseEffortLevel(e))
-    .filter((e): e is ThinkingLevel => e != null && e !== "off");
+    .filter(
+      (e): e is ThinkingLevel =>
+        e != null &&
+        e !== "off" &&
+        (e !== "persistent" || Boolean(meta?.persistent_instructions?.trim())),
+    );
   if (raw.length > 0) {
-    return EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
+    const efforts = EFFORT_ORDER_FOR_PICKER.filter((e) => raw.includes(e));
+    if (
+      meta?.persistent_instructions?.trim() &&
+      !efforts.includes("persistent")
+    ) {
+      efforts.push("persistent");
+    }
+    return efforts;
   }
-  return ["low", "high", "max"];
+  const efforts: ModelEffort[] = ["low", "high", "max"];
+  if (meta?.persistent_instructions?.trim()) efforts.push("persistent");
+  return efforts;
 }
 
 const EFFORT_ORDER_FOR_PICKER: ModelEffort[] = [
@@ -235,6 +269,7 @@ const EFFORT_ORDER_FOR_PICKER: ModelEffort[] = [
   "high",
   "xhigh",
   "max",
+  "persistent",
 ];
 
 /**

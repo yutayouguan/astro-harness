@@ -1,33 +1,29 @@
-/** 调度表达式编辑器。 */
+/** 定时表达式编辑器。 */
+import { type ComponentType, type ReactNode } from "react";
 import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentType,
-} from "react";
-import { createPortal } from "react-dom";
-import {
+  BriefcaseBusiness,
   CalendarClock,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
+  CalendarRange,
   Clock,
   Minus,
   Plus,
+  SlidersHorizontal,
   Timer,
   type LucideProps,
 } from "lucide-react";
-import type { ScheduleDraft, ScheduleMode, Weekday } from "../../lib/cron/cronSchedule";
+import type {
+  CustomFrequency,
+  ScheduleDraft,
+  ScheduleMode,
+  Weekday,
+} from "../../lib/cron/cronSchedule";
 import { UI_WEEKDAYS } from "../../lib/cron/cronSchedule";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { SelectMenu } from "../ui/SelectMenu";
-import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
+import { GlassTimePicker } from "./GlassTimePicker";
 
-/** 调度表达式编辑器入参 */
 type Props = {
   value: ScheduleDraft;
   onChange: (next: ScheduleDraft) => void;
@@ -36,78 +32,69 @@ type Props = {
 type ModeIcon = ComponentType<LucideProps>;
 
 const MODES: { mode: ScheduleMode; labelKey: MessageKey; Icon: ModeIcon }[] = [
-  { mode: "daily", labelKey: "cron.mode.daily", Icon: CalendarDays },
   { mode: "interval", labelKey: "cron.mode.interval", Icon: Timer },
-  { mode: "once", labelKey: "cron.mode.once", Icon: CalendarClock },
+  { mode: "daily", labelKey: "cron.mode.daily", Icon: CalendarDays },
+  { mode: "weekly", labelKey: "cron.mode.weekly", Icon: CalendarRange },
+  { mode: "weekdays", labelKey: "cron.mode.weekdays", Icon: BriefcaseBusiness },
+  { mode: "custom", labelKey: "cron.mode.custom", Icon: SlidersHorizontal },
 ];
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
+const WORKDAYS: Weekday[] = [1, 2, 3, 4, 5];
+const CUSTOM_FREQUENCIES: {
+  value: CustomFrequency;
+  labelKey: MessageKey;
+}[] = [
+  { value: "hourly", labelKey: "cron.custom.hourly" },
+  { value: "daily", labelKey: "cron.custom.daily" },
+  { value: "weekly", labelKey: "cron.custom.weekly" },
+  { value: "monthly", labelKey: "cron.custom.monthly" },
+  { value: "yearly", labelKey: "cron.custom.yearly" },
+];
 
-/** 解析 datetime-local / ISO 为本地年月日时分 */
-function parseOnceParts(onceAt?: string): {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-} {
-  const d = onceAt ? new Date(onceAt) : new Date();
-  const base = Number.isNaN(d.getTime()) ? new Date() : d;
+function normalizedDraft(
+  value: ScheduleDraft,
+  mode: ScheduleMode,
+): ScheduleDraft {
+  if (mode === "daily") return { ...value, mode, weekdays: [] };
+  if (mode === "weekdays") return { ...value, mode, weekdays: WORKDAYS };
+  if (mode === "weekly") {
+    return { ...value, mode, weekdays: [value.weekdays[0] ?? 1] };
+  }
+  if (mode === "custom") {
+    return {
+      ...value,
+      mode,
+      customFrequency: value.customFrequency ?? "weekly",
+      customInterval: value.customInterval ?? 1,
+      month: value.month ?? 1,
+      monthDay: value.monthDay ?? 1,
+      minute: value.minute ?? 0,
+      weekdays: value.weekdays.length > 0 ? value.weekdays : [1],
+      start: undefined,
+    };
+  }
   return {
-    year: base.getFullYear(),
-    month: base.getMonth() + 1,
-    day: base.getDate(),
-    hour: base.getHours(),
-    minute: base.getMinutes(),
+    ...value,
+    mode,
+    weekdays: [],
+    intervalValue: value.intervalValue ?? 1,
+    intervalUnit: value.intervalUnit ?? "h",
   };
 }
 
-function toOnceLocal(parts: {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-}): string {
-  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}T${pad2(parts.hour)}:${pad2(parts.minute)}`;
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate();
-}
-
-/** 周一为周首的格子（null = 空白） */
-function buildMonthCells(year: number, month: number): (number | null)[] {
-  const first = new Date(year, month - 1, 1);
-  const startPad = (first.getDay() + 6) % 7;
-  const total = daysInMonth(year, month);
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < startPad; i++) cells.push(null);
-  for (let d = 1; d <= total; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
-}
-
-/** 可视化编辑 daily / interval / once 调度 */
 export function ScheduleEditor({ value, onChange }: Props) {
   const { t } = useI18n();
+  const intervalValue = value.intervalValue ?? 1;
 
   const setMode = (mode: ScheduleMode) => {
-    if (mode === value.mode) return;
-    onChange({ ...value, mode });
+    if (mode !== value.mode) onChange(normalizedDraft(value, mode));
   };
 
-  const toggleWeekday = (day: Weekday) => {
-    const has = value.weekdays.includes(day);
-    const weekdays = has
-      ? value.weekdays.filter((d) => d !== day)
-      : [...value.weekdays, day];
-    onChange({ ...value, weekdays });
+  const chooseWeeklyDay = (day: Weekday) => {
+    onChange({ ...value, weekdays: [day] });
   };
 
-  const intervalValue = value.intervalValue ?? 1;
+  const showTime = value.mode !== "interval" && value.mode !== "custom";
 
   return (
     <div className="cron-sched">
@@ -116,7 +103,11 @@ export function ScheduleEditor({ value, onChange }: Props) {
         <span>{t("cron.field.schedule")}</span>
       </div>
 
-      <div className="cron-sched-modes" role="tablist" aria-label={t("cron.field.schedule")}>
+      <div
+        className="cron-sched-modes"
+        role="tablist"
+        aria-label={t("cron.field.schedule")}
+      >
         {MODES.map(({ mode, labelKey, Icon }) => (
           <button
             key={mode}
@@ -132,35 +123,21 @@ export function ScheduleEditor({ value, onChange }: Props) {
         ))}
       </div>
 
-      {value.mode === "daily" && (
-        <div className="cron-sched-body">
-          <div className="cron-sched-row">
-            <label className="cron-sched-field-shell cron-sched-field-shell--time">
-              <input
-                type="time"
-                className="cron-sched-input cron-sched-input--bare"
-                value={value.time ?? "09:00"}
-                onChange={(e) => onChange({ ...value, time: e.target.value })}
-              />
-            </label>
-          </div>
-          <WeekdayChips
-            selected={value.weekdays}
-            onToggle={toggleWeekday}
-            t={t}
-          />
-        </div>
-      )}
-
       {value.mode === "interval" && (
         <div className="cron-sched-body">
           <div className="cron-sched-row cron-sched-interval">
-            <span className="cron-sched-interval-label">{t("cron.interval.every")}</span>
-            <div className="cron-sched-stepper" role="group" aria-label={t("cron.interval.every")}>
+            <span className="cron-sched-interval-label">
+              {t("cron.interval.every")}
+            </span>
+            <div
+              className="cron-sched-stepper"
+              role="group"
+              aria-label={t("cron.interval.every")}
+            >
               <button
                 type="button"
                 className="cron-sched-stepper-btn"
-                aria-label="-"
+                aria-label={t("cron.interval.decrease")}
                 onClick={() =>
                   onChange({
                     ...value,
@@ -175,23 +152,21 @@ export function ScheduleEditor({ value, onChange }: Props) {
                 min={1}
                 className="cron-sched-input cron-sched-input--num cron-sched-input--bare"
                 value={intervalValue}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
+                onChange={(event) => {
+                  const next = Number(event.target.value);
                   onChange({
                     ...value,
-                    intervalValue: Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1,
+                    intervalValue:
+                      Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1,
                   });
                 }}
               />
               <button
                 type="button"
                 className="cron-sched-stepper-btn"
-                aria-label="+"
+                aria-label={t("cron.interval.increase")}
                 onClick={() =>
-                  onChange({
-                    ...value,
-                    intervalValue: intervalValue + 1,
-                  })
+                  onChange({ ...value, intervalValue: intervalValue + 1 })
                 }
               >
                 <Plus size={14} strokeWidth={2.4} aria-hidden />
@@ -200,41 +175,56 @@ export function ScheduleEditor({ value, onChange }: Props) {
             <SelectMenu
               className="cron-sched-unit-menu"
               size="sm"
-              value={value.intervalUnit ?? "m"}
+              value={value.intervalUnit ?? "h"}
               onChange={(unit) =>
                 onChange({
                   ...value,
-                  intervalUnit: unit === "h" ? "h" : "m",
+                  intervalUnit: unit === "d" ? "d" : unit === "h" ? "h" : "m",
                 })
               }
-              aria-label={t("cron.field.schedule")}
+              aria-label={t("cron.interval.unit")}
               options={[
                 {
                   value: "m",
                   label: t("cron.interval.m"),
-                  icon: <Timer size={13} strokeWidth={2.2} aria-hidden />,
+                  icon: <Timer size={13} aria-hidden />,
                 },
                 {
                   value: "h",
                   label: t("cron.interval.h"),
-                  icon: <Clock size={13} strokeWidth={2.2} aria-hidden />,
+                  icon: <Clock size={13} aria-hidden />,
+                },
+                {
+                  value: "d",
+                  label: t("cron.interval.d"),
+                  icon: <CalendarDays size={13} aria-hidden />,
                 },
               ]}
             />
           </div>
-          <WeekdayChips
-            selected={value.weekdays}
-            onToggle={toggleWeekday}
-            t={t}
-          />
         </div>
       )}
 
-      {value.mode === "once" && (
+      {value.mode === "custom" && (
+        <CustomScheduleFields value={value} onChange={onChange} />
+      )}
+
+      {showTime && (
         <div className="cron-sched-body">
-          <OnceDateTimePicker
-            value={value.onceAt}
-            onChange={(onceAt) => onChange({ ...value, onceAt })}
+          {value.mode === "weekdays" && (
+            <p className="cron-sched-summary">{t("cron.weekdays.summary")}</p>
+          )}
+          {value.mode === "weekly" && (
+            <WeekdayChips
+              selected={value.weekdays}
+              onToggle={chooseWeeklyDay}
+              t={t}
+            />
+          )}
+          <GlassTimePicker
+            value={value.time ?? "09:00"}
+            onChange={(time) => onChange({ ...value, time })}
+            aria-label={t("cron.time")}
           />
         </div>
       )}
@@ -242,254 +232,232 @@ export function ScheduleEditor({ value, onChange }: Props) {
   );
 }
 
-/** 玻璃拟态单次日期时间选择 */
-function OnceDateTimePicker({
-  value,
-  onChange,
-}: {
-  value?: string;
-  onChange: (next: string) => void;
-}) {
+function CustomScheduleFields({ value, onChange }: Props) {
   const { t, locale } = useI18n();
-  const parts = useMemo(() => parseOnceParts(value), [value]);
-  const [open, setOpen] = useState(false);
-  const [viewYear, setViewYear] = useState(parts.year);
-  const [viewMonth, setViewMonth] = useState(parts.month);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const listId = useId();
+  const frequency = value.customFrequency ?? "weekly";
+  const interval = Math.max(1, value.customInterval ?? 1);
+  const month = Math.min(12, Math.max(1, value.month ?? 1));
+  const maxDay = daysInMonth(month);
+  const monthDay = Math.min(maxDay, Math.max(1, value.monthDay ?? 1));
+  const unitKey = `cron.custom.unit.${frequency}` as MessageKey;
 
-  const pos = useAnchoredMenu({
-    open,
-    anchorRef: triggerRef,
-    menuRef: popRef,
-    fixedWidth: 248,
-    preferAlign: "start",
-    placement: "auto",
-    gap: 8,
-    maxHeightCap: 292,
-    maxHeightRatio: 1,
-    minMaxHeight: 120,
-  });
-
-  const closePop = (restoreFocus = false) => {
-    setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    setViewYear(parts.year);
-    setViewMonth(parts.month);
-  }, [open, parts.year, parts.month]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (popRef.current?.contains(target)) return;
-      closePop();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closePop(true);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const label = useMemo(() => {
-    const d = new Date(toOnceLocal(parts));
-    if (Number.isNaN(d.getTime())) return t("cron.field.schedule");
-    return d.toLocaleString(locale === "zh" ? "zh-CN" : "en-US", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
+  const updateFrequency = (next: string) => {
+    const customFrequency = CUSTOM_FREQUENCIES.some(
+      ({ value }) => value === next,
+    )
+      ? (next as CustomFrequency)
+      : "weekly";
+    onChange({
+      ...value,
+      customFrequency,
+      customInterval: interval,
+      month,
+      monthDay,
+      minute: value.minute ?? 0,
+      weekdays: value.weekdays.length > 0 ? value.weekdays : [1],
+      time: value.time ?? "09:00",
+      start: undefined,
     });
-  }, [parts, locale, t]);
-
-  const cells = useMemo(
-    () => buildMonthCells(viewYear, viewMonth),
-    [viewYear, viewMonth],
-  );
-
-  const weekdays =
-    locale === "zh"
-      ? ["一", "二", "三", "四", "五", "六", "日"]
-      : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-
-  const monthTitle =
-    locale === "zh"
-      ? `${viewYear}年${viewMonth}月`
-      : new Date(viewYear, viewMonth - 1, 1).toLocaleDateString("en-US", {
-          month: "long",
-          year: "numeric",
-        });
-
-  const shiftMonth = (delta: number) => {
-    let m = viewMonth + delta;
-    let y = viewYear;
-    if (m < 1) {
-      m = 12;
-      y -= 1;
-    } else if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-    setViewYear(y);
-    setViewMonth(m);
   };
-
-  const pickDay = (day: number) => {
-    onChange(
-      toOnceLocal({
-        ...parts,
-        year: viewYear,
-        month: viewMonth,
-        day,
-      }),
-    );
-  };
-
-  const toneStyle = open ? toneStyleFromElement(triggerRef.current) : {};
-
-  const pop =
-    open
-      ? createPortal(
-          <div
-            ref={popRef}
-            id={listId}
-            className="cron-dt-pop"
-            role="dialog"
-            aria-label={t("cron.mode.once")}
-            style={
-              pos
-                ? {
-                    top: pos.top,
-                    left: pos.left,
-                    width: pos.width,
-                    maxHeight: pos.maxHeight,
-                    ...toneStyle,
-                  }
-                : { visibility: "hidden", width: 248, ...toneStyle }
-            }
-          >
-            <div className="cron-dt-pop-head">
-              <button
-                type="button"
-                className="cron-dt-nav"
-                onClick={() => shiftMonth(-1)}
-                aria-label="prev"
-              >
-                <ChevronLeft size={16} strokeWidth={2.2} aria-hidden />
-              </button>
-              <div className="cron-dt-month">{monthTitle}</div>
-              <button
-                type="button"
-                className="cron-dt-nav"
-                onClick={() => shiftMonth(1)}
-                aria-label="next"
-              >
-                <ChevronRight size={16} strokeWidth={2.2} aria-hidden />
-              </button>
-            </div>
-            <div className="cron-dt-weekdays">
-              {weekdays.map((w) => (
-                <span key={w}>{w}</span>
-              ))}
-            </div>
-            <div className="cron-dt-grid">
-              {cells.map((day, i) =>
-                day == null ? (
-                  <span key={`e-${i}`} className="cron-dt-day is-empty" />
-                ) : (
-                  <button
-                    key={`${viewYear}-${viewMonth}-${day}`}
-                    type="button"
-                    className={[
-                      "cron-dt-day",
-                      day === parts.day &&
-                      viewMonth === parts.month &&
-                      viewYear === parts.year
-                        ? "is-selected"
-                        : "",
-                      day === new Date().getDate() &&
-                      viewMonth === new Date().getMonth() + 1 &&
-                      viewYear === new Date().getFullYear()
-                        ? "is-today"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => pickDay(day)}
-                  >
-                    {day}
-                  </button>
-                ),
-              )}
-            </div>
-            <div className="cron-dt-time">
-              <Clock size={14} strokeWidth={2.1} aria-hidden />
-              <input
-                type="number"
-                min={0}
-                max={23}
-                className="cron-dt-time-input"
-                value={parts.hour}
-                onChange={(e) => {
-                  const hour = Math.min(23, Math.max(0, Number(e.target.value) || 0));
-                  onChange(toOnceLocal({ ...parts, hour }));
-                }}
-                aria-label="hour"
-              />
-              <span className="cron-dt-time-sep">:</span>
-              <input
-                type="number"
-                min={0}
-                max={59}
-                className="cron-dt-time-input"
-                value={parts.minute}
-                onChange={(e) => {
-                  const minute = Math.min(59, Math.max(0, Number(e.target.value) || 0));
-                  onChange(toOnceLocal({ ...parts, minute }));
-                }}
-                aria-label="minute"
-              />
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
 
   return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`cron-sched-field-shell cron-sched-field-shell--datetime${open ? " is-open" : ""}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="cron-sched-datetime-label">{label}</span>
-      </button>
-      {pop}
-    </>
+    <div className="cron-sched-body cron-custom-fields">
+      <ScheduleFieldRow label={t("cron.custom.repeat")}>
+        <SelectMenu
+          className="cron-custom-select"
+          value={frequency}
+          onChange={updateFrequency}
+          aria-label={t("cron.custom.repeat")}
+          options={CUSTOM_FREQUENCIES.map((option) => ({
+            value: option.value,
+            label: t(option.labelKey),
+          }))}
+        />
+      </ScheduleFieldRow>
+
+      <ScheduleFieldRow label={t("cron.custom.every")}>
+        <div className="cron-custom-interval-control">
+          <NumberStepper
+            value={interval}
+            label={t("cron.custom.every")}
+            onChange={(customInterval) =>
+              onChange({ ...value, customInterval })
+            }
+          />
+          <span className="cron-custom-unit">{t(unitKey)}</span>
+        </div>
+      </ScheduleFieldRow>
+
+      {frequency === "hourly" && (
+        <ScheduleFieldRow label={t("cron.custom.atMinute")}>
+          <SelectMenu
+            className="cron-custom-select cron-custom-select--compact"
+            value={String(value.minute ?? 0)}
+            onChange={(minute) =>
+              onChange({ ...value, minute: Number(minute) })
+            }
+            aria-label={t("cron.custom.atMinute")}
+            options={Array.from({ length: 60 }, (_, minute) => ({
+              value: String(minute),
+              label: String(minute).padStart(2, "0"),
+            }))}
+            menuMaxHeight={280}
+          />
+        </ScheduleFieldRow>
+      )}
+
+      {frequency === "yearly" && (
+        <ScheduleFieldRow label={t("cron.custom.inMonth")}>
+          <SelectMenu
+            className="cron-custom-select"
+            value={String(month)}
+            onChange={(rawMonth) => {
+              const nextMonth = Number(rawMonth);
+              onChange({
+                ...value,
+                month: nextMonth,
+                monthDay: Math.min(value.monthDay ?? 1, daysInMonth(nextMonth)),
+              });
+            }}
+            aria-label={t("cron.custom.inMonth")}
+            options={Array.from({ length: 12 }, (_, index) => {
+              const value = index + 1;
+              return {
+                value: String(value),
+                label: new Intl.DateTimeFormat(
+                  locale === "zh" ? "zh-CN" : "en-US",
+                  {
+                    month: "long",
+                  },
+                ).format(new Date(2024, index, 1)),
+              };
+            })}
+          />
+        </ScheduleFieldRow>
+      )}
+
+      {(frequency === "monthly" || frequency === "yearly") && (
+        <ScheduleFieldRow label={t("cron.custom.onDay")}>
+          <SelectMenu
+            className="cron-custom-select cron-custom-select--compact"
+            value={String(monthDay)}
+            onChange={(day) => onChange({ ...value, monthDay: Number(day) })}
+            aria-label={t("cron.custom.onDay")}
+            options={Array.from(
+              { length: frequency === "yearly" ? maxDay : 31 },
+              (_, index) => ({
+                value: String(index + 1),
+                label: String(index + 1),
+              }),
+            )}
+            menuMaxHeight={280}
+          />
+        </ScheduleFieldRow>
+      )}
+
+      {frequency === "weekly" && (
+        <div className="cron-custom-weekday-field">
+          <span className="cron-custom-row-label">
+            {t("cron.custom.onWeekdays")}
+          </span>
+          <WeekdayChips
+            selected={value.weekdays.length > 0 ? value.weekdays : [1]}
+            onToggle={(day) => {
+              const selected: Weekday[] =
+                value.weekdays.length > 0 ? value.weekdays : [1];
+              const has = selected.includes(day);
+              if (has && selected.length === 1) return;
+              onChange({
+                ...value,
+                weekdays: has
+                  ? selected.filter((candidate) => candidate !== day)
+                  : [...selected, day],
+              });
+            }}
+            t={t}
+          />
+        </div>
+      )}
+
+      {frequency !== "hourly" && (
+        <ScheduleFieldRow label={t("cron.time")}>
+          <GlassTimePicker
+            value={value.time ?? "09:00"}
+            onChange={(time) => onChange({ ...value, time })}
+            aria-label={t("cron.time")}
+          />
+        </ScheduleFieldRow>
+      )}
+    </div>
   );
 }
 
-/** 星期多选芯片 */
+function ScheduleFieldRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="cron-custom-row">
+      <span className="cron-custom-row-label">{label}</span>
+      <div className="cron-custom-row-control">{children}</div>
+    </div>
+  );
+}
+
+function NumberStepper({
+  value,
+  label,
+  onChange,
+}: {
+  value: number;
+  label: string;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="cron-sched-stepper" role="group" aria-label={label}>
+      <button
+        type="button"
+        className="cron-sched-stepper-btn"
+        aria-label={`${label} -`}
+        onClick={() => onChange(Math.max(1, value - 1))}
+      >
+        <Minus size={14} strokeWidth={2.4} aria-hidden />
+      </button>
+      <input
+        type="number"
+        min={1}
+        max={999}
+        className="cron-sched-input cron-sched-input--num cron-sched-input--bare"
+        value={value}
+        aria-label={label}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          onChange(
+            Number.isFinite(next) && next >= 1
+              ? Math.min(999, Math.floor(next))
+              : 1,
+          );
+        }}
+      />
+      <button
+        type="button"
+        className="cron-sched-stepper-btn"
+        aria-label={`${label} +`}
+        onClick={() => onChange(Math.min(999, value + 1))}
+      >
+        <Plus size={14} strokeWidth={2.4} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function daysInMonth(month: number): number {
+  return new Date(2024, month, 0).getDate();
+}
+
 function WeekdayChips({
   selected,
   onToggle,
@@ -500,7 +468,10 @@ function WeekdayChips({
   t: (key: MessageKey) => string;
 }) {
   return (
-    <div className="cron-sched-weekdays">
+    <div
+      className="cron-sched-weekdays"
+      aria-label={t("cron.custom.chooseDays")}
+    >
       {UI_WEEKDAYS.map(({ labelKey, value }) => {
         const active = selected.includes(value);
         return (

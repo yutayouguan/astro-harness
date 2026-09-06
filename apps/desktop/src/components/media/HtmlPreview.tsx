@@ -81,7 +81,9 @@ export default function HtmlPreview({
           setDoc(null);
           const msg = String(err ?? "");
           setError(
-            msg.includes("not found") || msg.includes("No such file") || msg.includes("不存在")
+            msg.includes("not found") ||
+              msg.includes("No such file") ||
+              msg.includes("不存在")
               ? "not-found"
               : "load-error",
           );

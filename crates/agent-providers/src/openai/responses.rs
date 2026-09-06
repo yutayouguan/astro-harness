@@ -1,123 +1,92 @@
 //! OpenAI Responses API — 消息转换与 SSE 解析。
 //!
-//! 供 [`crate::compat::OpenAIResponsesModel`] 和 [`crate::custom::ConfigDrivenCompletionModel`] 使用。
+//! 供 [`crate::compat::OpenAIResponsesModel`] 和 [`crate::custom::ConfigDrivenResponsesModel`] 使用。
 
-use serde_json::{json, Value};
+use serde_json::Value;
+
+#[cfg(test)]
+use serde_json::json;
 
 use crate::compat::parse_openai_usage;
-use crate::types::message::{AssistantContent, Message, ToolCall, UserContent};
 use crate::types::stream::StreamChunk;
 
-// ---------------------------------------------------------------------------
-// 消息转换
-// ---------------------------------------------------------------------------
-
-/// 将 [`Message`] 转为 Responses API `input` 数组。
-pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
-    let mut input = Vec::with_capacity(messages.len());
-    for m in messages {
-        match m {
-            Message::Tool {
-                tool_call_id,
-                content,
-                ..
-            } => {
-                let call_id = if tool_call_id.trim().is_empty() {
-                    ""
-                } else {
-                    tool_call_id.as_str()
-                };
-                input.push(json!({
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": content,
-                }));
-            }
-
-            Message::Assistant { content } => {
-                let mut has_tool_calls = false;
-                for part in content {
-                    if let AssistantContent::ToolCall(ToolCall {
-                        id,
-                        name,
-                        arguments,
-                        ..
-                    }) = part
+/// Serialize the Agent's canonical Responses history without passing through
+/// a chat-completions message model. Local-only metadata is removed at the
+/// wire boundary; a compressed tool view may replace `output` without
+/// destroying the persisted raw value.
+pub fn to_native_responses_input(
+    items: &[agent_protocol::ResponseItem],
+) -> serde_json::Result<Vec<Value>> {
+    items
+        .iter()
+        .map(|item| {
+            let mut value = serde_json::to_value(item)?;
+            if let Some(object) = value.as_object_mut() {
+                let metadata = object.remove("internal_chat_message_metadata_passthrough");
+                if matches!(
+                    object.get("type").and_then(Value::as_str),
+                    Some("function_call_output" | "custom_tool_call_output")
+                ) {
+                    if let Some(compressed) = metadata
+                        .as_ref()
+                        .and_then(|value| value.get("astro_compressed_output"))
+                        .cloned()
                     {
-                        has_tool_calls = true;
-                        let args = match arguments {
-                            Value::String(s) => s.clone(),
-                            other => other.to_string(),
-                        };
-                        input.push(json!({
-                            "type": "function_call",
-                            "id": id,
-                            "call_id": id,
-                            "name": name,
-                            "arguments": args,
-                        }));
+                        object.insert("output".into(), compressed);
                     }
                 }
-                let text = m.text_content();
-                if has_tool_calls && text.is_empty() {
-                    continue;
-                }
-                input.push(json!({
-                    "role": "assistant",
-                    "content": json!(text),
-                }));
             }
-
-            Message::User { content } => {
-                let json_content = build_content_from_user(content);
-                input.push(json!({
-                    "role": "user",
-                    "content": json_content,
-                }));
-            }
-
-            Message::System { .. } => {
-                // 跳过：由调用方通过顶层 `instructions` 字段发送
-            }
-        }
-    }
-    input
+            Ok(value)
+        })
+        .collect()
 }
 
-fn build_content_from_user(parts: &[UserContent]) -> Value {
-    if parts.len() == 1 {
-        if let UserContent::Text { text } = &parts[0] {
-            return json!(text);
-        }
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+
+    #[test]
+    fn native_input_preserves_distinct_item_and_call_ids() {
+        let input = to_native_responses_input(&[agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_1".into()),
+            name: "lookup".into(),
+            namespace: Some("mcp".into()),
+            arguments: "{}".into(),
+            encrypted_function_args: Some(vec!["opaque".into()]),
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: Some(json!({"local": true})),
+        }])
+        .unwrap();
+
+        assert_eq!(input[0]["id"], "item_1");
+        assert_eq!(input[0]["call_id"], "call_1");
+        assert_eq!(input[0]["namespace"], "mcp");
+        assert_eq!(input[0]["encrypted_function_args"][0], "opaque");
+        assert!(input[0]
+            .get("internal_chat_message_metadata_passthrough")
+            .is_none());
     }
-    let arr: Vec<Value> = parts
-        .iter()
-        .map(|p| match p {
-            UserContent::Text { text } => {
-                json!({ "type": "input_text", "text": text })
-            }
-            UserContent::Image { url } => json!({
-                "type": "input_image",
-                "image_url": url,
-            }),
-            UserContent::Audio { url, .. } => json!({
-                "type": "input_audio",
-                "data": url,
-            }),
-            UserContent::Video { url, .. } => json!({
-                "type": "input_file",
-                "file_url": url,
-            }),
-            UserContent::Document { url, .. } => json!({
-                "type": "input_file",
-                "file_url": url,
-            }),
-            UserContent::ToolResult { .. } => {
-                json!({ "type": "input_text", "text": "[tool result]" })
-            }
-        })
-        .collect();
-    Value::Array(arr)
+
+    #[test]
+    fn native_input_uses_compressed_tool_view_only_on_wire() {
+        let raw = agent_protocol::ResponseItem::FunctionCallOutput {
+            id: Some("out_1".into()),
+            call_id: Some("call_1".into()),
+            name: Some("lookup".into()),
+            namespace: None,
+            output: agent_protocol::FunctionCallOutputPayload::from_text("raw output".into()),
+            internal_chat_message_metadata_passthrough: Some(json!({
+                "astro_compressed_output": "short view"
+            })),
+        };
+        let input = to_native_responses_input(std::slice::from_ref(&raw)).unwrap();
+        assert_eq!(input[0]["output"], "short view");
+        assert!(matches!(
+            raw,
+            agent_protocol::ResponseItem::FunctionCallOutput { output, .. }
+                if output.text_content() == Some("raw output")
+        ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +108,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
     }
 
     match event_type {
-        "response.output_text.delta" => {
+        "response.output_text.delta" | "response.content_part.delta" => {
             if let Some(delta) = v
                 .get("delta")
                 .and_then(|d| d.as_str())
@@ -149,7 +118,9 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
             }
         }
 
-        "response.reasoning_summary_text.delta" => {
+        "response.reasoning_summary_text.delta"
+        | "response.reasoning.delta"
+        | "response.reasoning_text.delta" => {
             if let Some(delta) = v
                 .get("delta")
                 .and_then(|d| d.as_str())
@@ -171,38 +142,80 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.output_item.added" => {
             if let Some(item) = v.get("item") {
-                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                let item_type = item.get("type").and_then(|t| t.as_str());
+                if matches!(
+                    item_type,
+                    Some("function_call" | "custom_tool_call" | "tool_search_call")
+                ) {
                     let id = item
                         .get("call_id")
                         .or_else(|| item.get("id"))
                         .and_then(|s| s.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let name = item
-                        .get("name")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
+                    let name = if item_type == Some("tool_search_call") {
+                        "tool_search".to_string()
+                    } else {
+                        item.get("name")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("")
+                            .to_string()
+                    };
                     let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    one!(StreamChunk::ToolCallStart { index, id, name });
+                    let mut chunks = vec![StreamChunk::ToolCallStart {
+                        index,
+                        id,
+                        name,
+                        signature: None,
+                    }];
+                    if item_type == Some("tool_search_call") {
+                        if let Some(arguments) = item.get("arguments") {
+                            chunks.push(StreamChunk::ToolCallDelta {
+                                index,
+                                arguments: arguments.to_string(),
+                            });
+                        }
+                    }
+                    return chunks;
                 }
             }
         }
 
         "response.output_item.done" => {
             if let Some(item) = v.get("item") {
-                if item.get("type").and_then(|t| t.as_str()) == Some("function_call") {
+                let native_item =
+                    serde_json::from_value::<agent_protocol::ResponseItem>(item.clone())
+                        .ok()
+                        .map(StreamChunk::ResponseItemDone);
+                let item_type = item.get("type").and_then(|t| t.as_str());
+                if matches!(
+                    item_type,
+                    Some("function_call" | "custom_tool_call" | "tool_search_call")
+                ) {
                     let index = v.get("output_index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    if let Some(args) = item
-                        .get("arguments")
-                        .and_then(|a| a.as_str())
-                        .filter(|s| !s.is_empty())
-                    {
-                        one!(StreamChunk::ToolCallDelta {
-                            index,
-                            arguments: args.to_string()
-                        });
+                    let arguments = match item_type {
+                        Some("custom_tool_call") => item
+                            .get("input")
+                            .and_then(Value::as_str)
+                            .filter(|input| !input.is_empty())
+                            .and_then(|input| serde_json::to_string(input).ok()),
+                        Some("tool_search_call") => item.get("arguments").map(Value::to_string),
+                        _ => item
+                            .get("arguments")
+                            .and_then(Value::as_str)
+                            .filter(|args| !args.is_empty())
+                            .map(str::to_string),
+                    };
+                    if let Some(arguments) = arguments {
+                        let mut chunks = vec![StreamChunk::ToolCallDelta { index, arguments }];
+                        if let Some(native_item) = native_item {
+                            chunks.push(native_item);
+                        }
+                        return chunks;
                     }
+                }
+                if let Some(native_item) = native_item {
+                    one!(native_item);
                 }
             }
         }
@@ -219,7 +232,7 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 
         "response.function_call_arguments.done" => {}
 
-        "response.completed" => {
+        "response.completed" | "response.done" => {
             let resp = v.get("response");
             let usage = resp.and_then(parse_openai_usage);
             let has_tool_calls = resp
@@ -227,7 +240,10 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
                 .and_then(|o| o.as_array())
                 .map(|arr| {
                     arr.iter().any(|item| {
-                        item.get("type").and_then(|t| t.as_str()) == Some("function_call")
+                        matches!(
+                            item.get("type").and_then(|t| t.as_str()),
+                            Some("function_call" | "custom_tool_call" | "tool_search_call")
+                        )
                     })
                 })
                 .unwrap_or(false);
@@ -278,99 +294,25 @@ pub fn extract_responses_chunks(data: &str) -> Vec<StreamChunk> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::message::{AssistantContent, Message, ToolCall, UserContent};
-
-    // ── 消息转换 ──
 
     #[test]
-    fn to_responses_input_user_and_assistant() {
-        let msgs = vec![
-            Message::user_text("hello"),
-            Message::assistant_text("hi there"),
-        ];
-        let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 2);
-        assert_eq!(input[0]["role"], "user");
-        assert_eq!(input[0]["content"], "hello");
-        assert_eq!(input[1]["role"], "assistant");
-    }
-
-    #[test]
-    fn to_responses_input_tool_result() {
-        let msgs = vec![Message::tool_result("call_abc", r#"{"result": 42}"#, false)];
-        let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 1);
-        assert_eq!(input[0]["type"], "function_call_output");
-        assert_eq!(input[0]["call_id"], "call_abc");
-    }
-
-    #[test]
-    fn to_responses_input_assistant_tool_calls() {
-        let msgs = vec![Message::assistant(vec![AssistantContent::ToolCall(
-            ToolCall {
-                id: "call_123".into(),
-                name: "get_weather".into(),
-                arguments: json!({"location": "Paris"}),
-                signature: None,
-            },
-        )])];
-        let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 1);
-        assert_eq!(input[0]["type"], "function_call");
-        assert_eq!(input[0]["name"], "get_weather");
-        assert_eq!(input[0]["call_id"], "call_123");
-    }
-
-    // ── 内容构建 ──
-
-    #[test]
-    fn build_content_document_as_input_file() {
-        let parts = vec![
-            UserContent::Text {
-                text: "what is in this file?".into(),
-            },
-            UserContent::Document {
-                url: "https://example.com/doc.pdf".into(),
-                mime_type: "application/pdf".into(),
-            },
-        ];
-        let content = build_content_from_user(&parts);
-        let arr = content.as_array().unwrap();
-        assert_eq!(arr[0]["type"], "input_text");
-        assert_eq!(arr[1]["type"], "input_file");
-        assert_eq!(arr[1]["file_url"], "https://example.com/doc.pdf");
-    }
-
-    #[test]
-    fn build_content_audio_as_input_audio() {
-        let parts = vec![UserContent::Audio {
-            url: "data:audio/mp3;base64,AAAA".into(),
-            mime_type: "audio/mp3".into(),
-        }];
-        let content = build_content_from_user(&parts);
-        let arr = content.as_array().unwrap();
-        assert_eq!(arr[0]["type"], "input_audio");
-    }
-
-    #[test]
-    fn build_content_image_as_input_image() {
-        let parts = vec![UserContent::Image {
-            url: "https://example.com/img.jpg".into(),
-        }];
-        let content = build_content_from_user(&parts);
-        let arr = content.as_array().unwrap();
-        assert_eq!(arr[0]["type"], "input_image");
-    }
-
-    #[test]
-    fn system_message_skipped() {
-        let msgs = vec![
-            Message::system("You are helpful"),
-            Message::user_text("hello"),
-        ];
-        let input = to_responses_input(&msgs);
-        assert_eq!(input.len(), 1);
-        assert_eq!(input[0]["role"], "user");
+    fn output_item_done_emits_native_response_item() {
+        let chunks = extract_responses_chunks(
+            r#"{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"lookup","namespace":"mcp","arguments":"{}","encrypted_function_args":["opaque"],"status":"completed"}}"#,
+        );
+        assert!(chunks.iter().any(|chunk| matches!(
+            chunk,
+            StreamChunk::ResponseItemDone(agent_protocol::ResponseItem::FunctionCall {
+                id: Some(id),
+                call_id,
+                namespace: Some(namespace),
+                encrypted_function_args: Some(encrypted),
+                ..
+            }) if id == "item_1"
+                && call_id == "call_1"
+                && namespace == "mcp"
+                && encrypted == &["opaque"]
+        )));
     }
 
     // ── SSE 解析 ──
@@ -384,8 +326,32 @@ mod tests {
     }
 
     #[test]
+    fn extract_openrouter_content_part_delta() {
+        let data = r#"{"type":"response.content_part.delta","delta":"Hello"}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Text(t) if t == "Hello"));
+    }
+
+    #[test]
     fn extract_reasoning_delta() {
         let data = r#"{"type":"response.reasoning_summary_text.delta","delta":"Let me think..."}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
+    }
+
+    #[test]
+    fn extract_openrouter_reasoning_delta() {
+        let data = r#"{"type":"response.reasoning.delta","delta":"Let me think..."}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 1);
+        assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
+    }
+
+    #[test]
+    fn extract_deepseek_reasoning_text_delta() {
+        let data = r#"{"type":"response.reasoning_text.delta","delta":"Let me think..."}"#;
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 1);
         assert!(matches!(&chunks[0], StreamChunk::Thinking(t) if t == "Let me think..."));
@@ -403,7 +369,7 @@ mod tests {
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 1);
         assert!(
-            matches!(&chunks[0], StreamChunk::ToolCallStart { index: 0, ref id, ref name } if id == "call_1" && name == "search")
+            matches!(&chunks[0], StreamChunk::ToolCallStart { index: 0, ref id, ref name, .. } if id == "call_1" && name == "search")
         );
     }
 
@@ -418,8 +384,46 @@ mod tests {
     }
 
     #[test]
+    fn extract_custom_tool_call_done_as_string_argument() {
+        let data = r#"{"type":"response.output_item.done","output_index":2,"item":{"type":"custom_tool_call","call_id":"patch_1","name":"apply_patch","input":"*** Begin Patch\n*** End Patch"}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert!(matches!(
+            &chunks[0],
+            StreamChunk::ToolCallDelta { index: 2, arguments }
+                if serde_json::from_str::<String>(arguments).unwrap().starts_with("*** Begin Patch")
+        ));
+    }
+
+    #[test]
+    fn extract_tool_search_call_with_arguments() {
+        let data = r#"{"type":"response.output_item.added","output_index":1,"item":{"type":"tool_search_call","call_id":"search_1","execution":"client","arguments":{"query":"calendar","limit":2}}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert!(matches!(
+            &chunks[0],
+            StreamChunk::ToolCallStart { index: 1, id, name, .. }
+                if id == "search_1" && name == "tool_search"
+        ));
+        assert!(matches!(
+            &chunks[1],
+            StreamChunk::ToolCallDelta { index: 1, arguments }
+                if serde_json::from_str::<Value>(arguments).unwrap()["query"] == "calendar"
+        ));
+    }
+
+    #[test]
     fn extract_completed_returns_usage_and_done() {
         let data = r#"{"type":"response.completed","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
+        let chunks = extract_responses_chunks(data);
+        assert_eq!(chunks.len(), 2);
+        assert!(matches!(&chunks[0], StreamChunk::Usage(_)));
+        assert!(
+            matches!(&chunks[1], StreamChunk::Done { ref finish_reason } if finish_reason == "stop")
+        );
+    }
+
+    #[test]
+    fn extract_openrouter_done_returns_usage_and_done() {
+        let data = r#"{"type":"response.done","response":{"output":[{"type":"message"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#;
         let chunks = extract_responses_chunks(data);
         assert_eq!(chunks.len(), 2);
         assert!(matches!(&chunks[0], StreamChunk::Usage(_)));

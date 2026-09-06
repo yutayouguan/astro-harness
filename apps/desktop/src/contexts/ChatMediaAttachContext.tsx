@@ -1,9 +1,10 @@
-/** 聊天区：将媒体路径引用为输入框附件（供消息内图片工具栏使用）。 */
+/** 聊天区：将媒体或文件路径引用到输入框（供消息内文件工具栏使用）。 */
 import { createContext, useContext, type ReactNode } from "react";
+import type { MediaActionKind } from "../lib/media/mediaActions";
 
 export type ChatMediaAttachApi = {
-  /** 把本地媒体路径挂到当前输入附件，并聚焦输入框 */
-  attachMediaPath: (path: string) => Promise<void>;
+  /** 把路径挂到当前输入附件或文件上下文，并聚焦输入框 */
+  attachMediaPath: (path: string, kind: MediaActionKind) => Promise<void>;
 };
 
 const ChatMediaAttachContext = createContext<ChatMediaAttachApi | null>(null);

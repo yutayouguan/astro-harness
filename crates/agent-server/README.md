@@ -9,6 +9,7 @@ Astro 独立 gRPC 后端：承载 `AstroServiceImpl`，管理 Durable Thread 生
 3. **连接与订阅传输** — `ConnectionRegistry` 提供有界、独立背压的 per-connection 事件通道，支持同 ID 重连覆盖、慢消费者自动驱逐和精确 generation 清理。
 4. **Cron 定时任务** — 在独立 `current_thread` 运行时（因 `AgentLoop` 非 Send）每 30s 认领到期任务，解析 `providers.json` 凭据后调用 `agent::exec::cron` 执行。
 5. **Workflow 定时触发与 Webhook** — 每 30s 扫描 `ScheduledTrigger` 工作流并到期执行；Webhook HTTP 服务器接收 `POST /webhook/{workflow_id}` 触发工作流执行。
+6. **Extension reconcile 控制面** — `ReconcileExtensions` 只生成下一 turn 的 pending snapshot，返回 changed extension IDs 与 MCP/Skills/Hooks/toolsets 刷新标志，不替换 active turn。
 
 ## 模块结构
 
@@ -54,7 +55,7 @@ pub struct ThreadStateManager;              // thread_id -> ThreadState 全局�
 pub struct ThreadHistoryBuilder;            // Turn/Item 增量跟踪器
 pub struct ItemSnapshot;                    // 单个 Item 快照
 pub struct TurnSnapshot;                    // 单个 Turn 快照
-pub struct ThreadSnapshot;                  // Thread 完整快照（含活跃 Turn 和后台 Turn）
+pub struct ThreadSnapshot;                  // Thread 完整快照（含 provider/backend/model/reasoning、活跃 Turn 和后台 Turn）
 pub struct ThreadActivity;                  // 状态 + 是否有订阅者
 pub enum ListenerCommand;                   // 事件监听器命令枚举
 
@@ -64,18 +65,23 @@ pub struct ConnectionGeneration;            // 精确的连接 generation 标识
 pub struct ConnectionGenerationKey;         // generation 键（connection_id + uuid）
 ```
 
+listener 从 durable `ThreadSettingsApplied` 事件恢复 `provider_id`、`backend_id`、
+`model` 和 `reasoning_effort`。unloaded Thread 使用最后持久设置，loaded Session 使用当前
+运行设置补齐/覆盖，因此 start/resume/fork/list/history 共享同一权威投影。Server 同时校验
+`persistent` reasoning 的 OpenAI backend 与目录指令，防止绕过 Desktop 门禁。
+
 ## 与其他 crate 的关系
 
 - **`agent`（agent-core）** — 调用 `AgentBuilder` / `Session` / `AstroThread` 构建和运行 Agent 循环
 - **`subagents`** — Agent Thread V2 控制面：`AgentControl` 活动观察和 watcher 管理
-- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 14+ RPC）
+- **`proto`** — Protobuf gRPC 服务契约（`AstroService` 31 RPC，含 Extension reconcile）
 - **`providers`** — 读取环境 API Key（`read_env_api_key`）和默认模型
 - **`session`** — `SessionStore` 打开会话存储
 - **`memory`** — `ensure_workspace` 初始化工作区、`MemoryManager` 记忆 review
 - **`home`** — 路径约定（`default_memory_dir`、`logs_dir`、`active_agent_id`）
 - **`cron`** — `CronStore` 认领任务、`compute_next_run` 计算下次运行时间
 - **`workflow`** — `WorkflowStore` / `WorkflowRunDb` / `execute_workflow` 工作流执行
-- **`hooks`** — `HookRuntime` 三总线钩子系统
+- **`hooks`** — typed Plugin/Command/MCP/Gateway/Shell 生命周期钩子系统
 - **`tools`** — 图像生成目标解析（`image_gen_targets_from_parts`）
 - **`agent-protocol`** — Thread 事件协议类型（`Event`、`EventMsg`、`Op`）
 - **`agent-rollout`** — Rollout 持久化记录器

@@ -3,6 +3,7 @@ pub mod executor;
 pub mod variables;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::Local;
@@ -15,6 +16,7 @@ use crate::run_db::WorkflowRunDb;
 use crate::store::WorkflowStore;
 use dag::resolve_dag;
 use executor::NodeResult;
+pub use variables::RuntimeProviderConfig;
 use variables::VariableContext;
 
 macro_rules! log_db_err {
@@ -37,6 +39,13 @@ pub struct WorkflowRunResult {
 
 const WORKFLOW_TIMEOUT_SECS: u64 = 30 * 60; // 30 分钟
 
+#[derive(Clone, Default)]
+struct WorkflowExecutionOptions {
+    human_approval_granted: bool,
+    owner_session_id: String,
+    workflow_snapshots: Option<Arc<HashMap<String, Workflow>>>,
+}
+
 /// 执行一条工作流
 pub async fn execute_workflow(
     workflow: &Workflow,
@@ -44,16 +53,177 @@ pub async fn execute_workflow(
     trigger_type: &str,
     run_db: &WorkflowRunDb,
 ) -> Result<WorkflowRunResult> {
+    execute_workflow_with_provider_configs(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        environment_provider_configs(),
+    )
+    .await
+}
+
+#[derive(serde::Deserialize)]
+struct StoredProviders {
+    #[serde(default)]
+    providers: Vec<StoredProvider>,
+}
+
+#[derive(serde::Deserialize)]
+struct StoredProvider {
+    id: String,
+    kind: String,
+    endpoint: String,
+    model: String,
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    image_model: String,
+    #[serde(default)]
+    video_model: String,
+    #[serde(default)]
+    tts_model: String,
+    #[serde(default)]
+    music_model: String,
+}
+
+/// Headless workflow runs cannot access the desktop keyring. They still resolve
+/// persisted provider IDs to backend IDs/endpoints and obtain credentials from
+/// the provider's documented environment variables.
+fn environment_provider_configs() -> HashMap<String, RuntimeProviderConfig> {
+    let path = home::default_memory_dir().join("providers.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return HashMap::new();
+    };
+    let Ok(stored) = serde_json::from_str::<StoredProviders>(&raw) else {
+        return HashMap::new();
+    };
+    let mut configs = HashMap::new();
+    for provider in stored
+        .providers
+        .into_iter()
+        .filter(|provider| provider.enabled)
+    {
+        let backend_id = providers::profile::normalize_provider_id(&provider.kind).to_string();
+        let requires_key =
+            providers::AuthKind::for_provider(&backend_id) != providers::AuthKind::None;
+        let api_key = providers::profile::read_env_api_key(&backend_id).unwrap_or_default();
+        if requires_key && api_key.is_empty() {
+            continue;
+        }
+        let runtime = RuntimeProviderConfig {
+            backend_id: backend_id.clone(),
+            config: providers::ProviderConfig {
+                api_key,
+                base_url: (!provider.endpoint.trim().is_empty()).then_some(provider.endpoint),
+                model: provider.model,
+                ..providers::ProviderConfig::default()
+            },
+            image_model: provider.image_model,
+            video_model: provider.video_model,
+            tts_model: provider.tts_model,
+            music_model: provider.music_model,
+        };
+        configs.insert(backend_id, runtime.clone());
+        configs.insert(provider.id, runtime);
+    }
+    configs
+}
+
+/// 执行工作流，并传入只存在于本次运行内存中的 Provider 凭据。
+///
+/// 密钥不写回 Workflow JSON，也不进入节点输出或日志。
+pub async fn execute_workflow_with_provider_configs(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+) -> Result<WorkflowRunResult> {
     let run_id = uuid::Uuid::new_v4().to_string();
+    execute_workflow_with_provider_configs_and_run_id(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        provider_configs,
+        run_id,
+    )
+    .await
+}
+
+/// 使用调用方预先分配的 run id 执行工作流。
+///
+/// Agent 工具适配器依靠该入口在转入后台运行前就向模型返回可查询的 id。
+pub async fn execute_workflow_with_provider_configs_and_run_id(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+) -> Result<WorkflowRunResult> {
+    execute_workflow_with_options(
+        workflow,
+        trigger_input,
+        trigger_type,
+        run_db,
+        provider_configs,
+        run_id,
+        WorkflowExecutionOptions::default(),
+    )
+    .await
+}
+
+/// Agent 工具调用入口：调用已经过 Harness 审批链，因此内部
+/// HumanApproval 节点可消费这一次性授权，无需二次 park。
+pub async fn execute_workflow_as_agent_tool(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+    owner_session_id: &str,
+    workflow_snapshots: Arc<HashMap<String, Workflow>>,
+) -> Result<WorkflowRunResult> {
+    execute_workflow_with_options(
+        workflow,
+        trigger_input,
+        "agent_tool",
+        run_db,
+        provider_configs,
+        run_id,
+        WorkflowExecutionOptions {
+            human_approval_granted: true,
+            owner_session_id: owner_session_id.to_string(),
+            workflow_snapshots: Some(workflow_snapshots),
+        },
+    )
+    .await
+}
+
+async fn execute_workflow_with_options(
+    workflow: &Workflow,
+    trigger_input: serde_json::Value,
+    trigger_type: &str,
+    run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    run_id: String,
+    options: WorkflowExecutionOptions,
+) -> Result<WorkflowRunResult> {
+    anyhow::ensure!(!run_id.trim().is_empty(), "workflow run id 不能为空");
     let started_at = Local::now().to_rfc3339();
 
-    run_db.insert_run(
-        &run_id,
-        &workflow.id,
-        &workflow.name,
-        trigger_type,
-        &started_at,
-    )?;
+    run_db
+        .insert_run_owned(
+            &run_id,
+            &workflow.id,
+            &workflow.name,
+            trigger_type,
+            &started_at,
+            &options.owner_session_id,
+        )
+        .await?;
 
     let timeout_secs = workflow
         .variables
@@ -63,7 +233,14 @@ pub async fn execute_workflow(
 
     let result = match tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        execute_inner(workflow, trigger_input, &run_id, run_db),
+        execute_inner(
+            workflow,
+            trigger_input,
+            &run_id,
+            run_db,
+            provider_configs,
+            options,
+        ),
     )
     .await
     {
@@ -78,29 +255,33 @@ pub async fn execute_workflow(
                 let s = serde_json::to_string(v).unwrap_or_default();
                 truncate_utf8_safe(&s, 512_000)
             });
-            run_db.finish_run(
-                &run_id,
-                "success",
-                &finished_at,
-                None,
-                output_str.as_deref(),
-                res.steps_executed as i64,
-            )?;
+            run_db
+                .finish_run(
+                    &run_id,
+                    &res.status,
+                    &finished_at,
+                    None,
+                    output_str.as_deref(),
+                    res.steps_executed as i64,
+                )
+                .await?;
         }
         Err(e) => {
-            run_db.finish_run(
-                &run_id,
-                "failure",
-                &finished_at,
-                Some(&e.to_string()),
-                None,
-                0,
-            )?;
+            run_db
+                .finish_run(
+                    &run_id,
+                    "failure",
+                    &finished_at,
+                    Some(&e.to_string()),
+                    None,
+                    0,
+                )
+                .await?;
         }
     }
 
     // 自动清理旧记录（保留最近 500 条）
-    if let Err(e) = run_db.prune_old_runs(500) {
+    if let Err(e) = run_db.prune_old_runs(500).await {
         tracing::warn!("清理旧运行记录失败: {e}");
     }
 
@@ -115,8 +296,19 @@ async fn execute_inner(
     trigger_input: serde_json::Value,
     run_id: &str,
     run_db: &WorkflowRunDb,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    options: WorkflowExecutionOptions,
 ) -> Result<WorkflowRunResult> {
-    execute_inner_with_depth(workflow, trigger_input, run_id, run_db, 0).await
+    execute_inner_with_depth(
+        workflow,
+        trigger_input,
+        run_id,
+        run_db,
+        0,
+        provider_configs,
+        options,
+    )
+    .await
 }
 
 async fn execute_inner_with_depth(
@@ -125,12 +317,17 @@ async fn execute_inner_with_depth(
     run_id: &str,
     run_db: &WorkflowRunDb,
     depth: u32,
+    provider_configs: HashMap<String, RuntimeProviderConfig>,
+    options: WorkflowExecutionOptions,
 ) -> Result<WorkflowRunResult> {
     let plan = resolve_dag(&workflow.nodes, &workflow.edges)?;
 
     let executors = nodes::executor_registry();
 
-    let mut ctx = VariableContext::new(workflow.variables.clone());
+    let mut ctx = VariableContext::new(workflow.variables.clone())
+        .with_provider_configs(provider_configs)
+        .with_human_approval_granted(options.human_approval_granted)
+        .with_workflow_snapshots(options.workflow_snapshots);
 
     // 将 trigger_input 注入全局变量
     if let serde_json::Value::Object(map) = trigger_input {
@@ -169,14 +366,18 @@ async fn execute_inner_with_depth(
             }
             let step_id = uuid::Uuid::new_v4().to_string();
             let step_started = Local::now().to_rfc3339();
-            log_db_err!(run_db.insert_step_log(
-                step_id.as_str(),
-                run_id,
-                node_id,
-                &format!("{:?}", node.node_type),
-                &node.label,
-                &step_started,
-            ));
+            log_db_err!(
+                run_db
+                    .insert_step_log(
+                        step_id.as_str(),
+                        run_id,
+                        node_id,
+                        &format!("{:?}", node.node_type),
+                        &node.label,
+                        &step_started,
+                    )
+                    .await
+            );
             if matches!(
                 node.node_type,
                 NodeType::RunLoop | NodeType::CustomLoop | NodeType::Loop
@@ -241,13 +442,17 @@ async fn execute_inner_with_depth(
                             final_output = Some(output.clone());
                         }
                         let out_str = serde_json::to_string(&output).ok();
-                        log_db_err!(run_db.finish_step_log(
-                            step_id,
-                            "success",
-                            &step_finished,
-                            out_str.as_deref(),
-                            None
-                        ));
+                        log_db_err!(
+                            run_db
+                                .finish_step_log(
+                                    step_id,
+                                    "success",
+                                    &step_finished,
+                                    out_str.as_deref(),
+                                    None
+                                )
+                                .await
+                        );
                     }
                     Ok(NodeResult::Branch(active_handles)) => {
                         ctx.set_node_output(
@@ -260,45 +465,61 @@ async fn execute_inner_with_depth(
                             &workflow.edges,
                             &mut skipped,
                         );
-                        log_db_err!(run_db.finish_step_log(
-                            step_id,
-                            "success",
-                            &step_finished,
-                            Some(&format!("branches: {:?}", active_handles)),
-                            None
-                        ));
+                        log_db_err!(
+                            run_db
+                                .finish_step_log(
+                                    step_id,
+                                    "success",
+                                    &step_finished,
+                                    Some(&format!("branches: {:?}", active_handles)),
+                                    None
+                                )
+                                .await
+                        );
                     }
                     Ok(NodeResult::Filtered) => {
                         mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                        log_db_err!(run_db.finish_step_log(
-                            step_id,
-                            "skipped",
-                            &step_finished,
-                            Some("filtered"),
-                            None
-                        ));
+                        log_db_err!(
+                            run_db
+                                .finish_step_log(
+                                    step_id,
+                                    "skipped",
+                                    &step_finished,
+                                    Some("filtered"),
+                                    None
+                                )
+                                .await
+                        );
                     }
                     Ok(NodeResult::Approved) => {
                         ctx.set_node_output(node_id, serde_json::json!({ "approved": true }));
-                        log_db_err!(run_db.finish_step_log(
-                            step_id,
-                            "success",
-                            &step_finished,
-                            Some("approved"),
-                            None
-                        ));
+                        log_db_err!(
+                            run_db
+                                .finish_step_log(
+                                    step_id,
+                                    "success",
+                                    &step_finished,
+                                    Some("approved"),
+                                    None
+                                )
+                                .await
+                        );
                     }
                     Ok(NodeResult::PendingApproval { prompt }) => {
-                        log_db_err!(run_db.finish_step_log(
-                            step_id,
-                            "pending_approval",
-                            &step_finished,
-                            Some(
-                                &serde_json::json!({"prompt": prompt, "node_id": node_id})
-                                    .to_string()
-                            ),
-                            None
-                        ));
+                        log_db_err!(
+                            run_db
+                                .finish_step_log(
+                                    step_id,
+                                    "pending_approval",
+                                    &step_finished,
+                                    Some(
+                                        &serde_json::json!({"prompt": prompt, "node_id": node_id})
+                                            .to_string()
+                                    ),
+                                    None
+                                )
+                                .await
+                        );
                         return Ok(WorkflowRunResult {
                             run_id: run_id.to_string(),
                             status: "pending_approval".to_string(),
@@ -319,34 +540,46 @@ async fn execute_inner_with_depth(
                                     &node_map,
                                     &mut skipped,
                                 );
-                                log_db_err!(run_db.finish_step_log(
-                                    step_id,
-                                    "skipped",
-                                    &step_finished,
-                                    None,
-                                    Some(&err_msg)
-                                ));
+                                log_db_err!(
+                                    run_db
+                                        .finish_step_log(
+                                            step_id,
+                                            "skipped",
+                                            &step_finished,
+                                            None,
+                                            Some(&err_msg)
+                                        )
+                                        .await
+                                );
                             }
                             "fallback" => {
                                 let fb = fallback_value.unwrap_or(serde_json::json!(null));
                                 ctx.set_node_output(node_id, fb.clone());
                                 let fb_str = serde_json::to_string(&fb).ok();
-                                log_db_err!(run_db.finish_step_log(
-                                    step_id,
-                                    "fallback",
-                                    &step_finished,
-                                    fb_str.as_deref(),
-                                    Some(&err_msg)
-                                ));
+                                log_db_err!(
+                                    run_db
+                                        .finish_step_log(
+                                            step_id,
+                                            "fallback",
+                                            &step_finished,
+                                            fb_str.as_deref(),
+                                            Some(&err_msg)
+                                        )
+                                        .await
+                                );
                             }
                             _ => {
-                                log_db_err!(run_db.finish_step_log(
-                                    step_id,
-                                    "failure",
-                                    &step_finished,
-                                    None,
-                                    Some(&err_msg)
-                                ));
+                                log_db_err!(
+                                    run_db
+                                        .finish_step_log(
+                                            step_id,
+                                            "failure",
+                                            &step_finished,
+                                            None,
+                                            Some(&err_msg)
+                                        )
+                                        .await
+                                );
                                 return Err(WorkflowError::NodeExecFailed {
                                     node_id: node_id.to_string(),
                                     label: node.label.clone(),
@@ -402,13 +635,17 @@ async fn execute_inner_with_depth(
                         final_output = Some(output.clone());
                     }
                     let out_str = serde_json::to_string(&output).ok();
-                    log_db_err!(run_db.finish_step_log(
-                        step_id,
-                        "success",
-                        &step_finished,
-                        out_str.as_deref(),
-                        None
-                    ));
+                    log_db_err!(
+                        run_db
+                            .finish_step_log(
+                                step_id,
+                                "success",
+                                &step_finished,
+                                out_str.as_deref(),
+                                None
+                            )
+                            .await
+                    );
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
@@ -420,13 +657,17 @@ async fn execute_inner_with_depth(
                     match on_error {
                         "skip" => {
                             mark_all_downstream(node_id, &workflow.edges, &node_map, &mut skipped);
-                            log_db_err!(run_db.finish_step_log(
-                                step_id,
-                                "skipped",
-                                &step_finished,
-                                None,
-                                Some(&err_msg)
-                            ));
+                            log_db_err!(
+                                run_db
+                                    .finish_step_log(
+                                        step_id,
+                                        "skipped",
+                                        &step_finished,
+                                        None,
+                                        Some(&err_msg)
+                                    )
+                                    .await
+                            );
                         }
                         "fallback" => {
                             let fb = node
@@ -436,22 +677,30 @@ async fn execute_inner_with_depth(
                                 .unwrap_or(serde_json::json!(null));
                             ctx.set_node_output(node_id, fb.clone());
                             let fb_str = serde_json::to_string(&fb).ok();
-                            log_db_err!(run_db.finish_step_log(
-                                step_id,
-                                "fallback",
-                                &step_finished,
-                                fb_str.as_deref(),
-                                Some(&err_msg)
-                            ));
+                            log_db_err!(
+                                run_db
+                                    .finish_step_log(
+                                        step_id,
+                                        "fallback",
+                                        &step_finished,
+                                        fb_str.as_deref(),
+                                        Some(&err_msg)
+                                    )
+                                    .await
+                            );
                         }
                         _ => {
-                            log_db_err!(run_db.finish_step_log(
-                                step_id,
-                                "failure",
-                                &step_finished,
-                                None,
-                                Some(&err_msg)
-                            ));
+                            log_db_err!(
+                                run_db
+                                    .finish_step_log(
+                                        step_id,
+                                        "failure",
+                                        &step_finished,
+                                        None,
+                                        Some(&err_msg)
+                                    )
+                                    .await
+                            );
                             return Err(WorkflowError::NodeExecFailed {
                                 node_id: node_id.to_string(),
                                 label: node.label.clone(),
@@ -462,13 +711,17 @@ async fn execute_inner_with_depth(
                     }
                 }
                 other => {
-                    log_db_err!(run_db.finish_step_log(
-                        step_id,
-                        "success",
-                        &step_finished,
-                        Some(&format!("{:?}", other)),
-                        None
-                    ));
+                    log_db_err!(
+                        run_db
+                            .finish_step_log(
+                                step_id,
+                                "success",
+                                &step_finished,
+                                Some(&format!("{:?}", other)),
+                                None
+                            )
+                            .await
+                    );
                 }
             }
         }
@@ -509,25 +762,45 @@ fn execute_sub_workflow<'a>(
             }
             .into());
         }
-        let store = WorkflowStore::open_default()?;
-        let sub_wf = store
-            .get(workflow_id)?
-            .ok_or_else(|| WorkflowError::SubWorkflowNotFound {
-                workflow_id: workflow_id.to_string(),
-            })?;
+        let sub_wf = if let Some(snapshot) = ctx.workflow_snapshot(workflow_id) {
+            snapshot.clone()
+        } else {
+            WorkflowStore::open_default()?
+                .get(workflow_id)?
+                .ok_or_else(|| WorkflowError::SubWorkflowNotFound {
+                    workflow_id: workflow_id.to_string(),
+                })?
+        };
 
         let input = ctx.snapshot_outputs();
         let sub_run_id = uuid::Uuid::new_v4().to_string();
         let started_at = Local::now().to_rfc3339();
-        log_db_err!(run_db.insert_run(
-            &sub_run_id,
-            &sub_wf.id,
-            &sub_wf.name,
-            "sub_workflow",
-            &started_at
-        ));
+        log_db_err!(
+            run_db
+                .insert_run(
+                    &sub_run_id,
+                    &sub_wf.id,
+                    &sub_wf.name,
+                    "sub_workflow",
+                    &started_at
+                )
+                .await
+        );
 
-        let result = execute_inner_with_depth(&sub_wf, input, &sub_run_id, run_db, depth + 1).await;
+        let result = execute_inner_with_depth(
+            &sub_wf,
+            input,
+            &sub_run_id,
+            run_db,
+            depth + 1,
+            ctx.provider_configs(),
+            WorkflowExecutionOptions {
+                human_approval_granted: ctx.human_approval_granted(),
+                owner_session_id: String::new(),
+                workflow_snapshots: ctx.workflow_snapshots(),
+            },
+        )
+        .await;
 
         let finished_at = Local::now().to_rfc3339();
         match &result {
@@ -536,28 +809,36 @@ fn execute_sub_workflow<'a>(
                     .output
                     .as_ref()
                     .map(|v| serde_json::to_string(v).unwrap_or_default());
-                log_db_err!(run_db.finish_run(
-                    &sub_run_id,
-                    "success",
-                    &finished_at,
-                    None,
-                    out_str.as_deref(),
-                    res.steps_executed as i64
-                ));
+                log_db_err!(
+                    run_db
+                        .finish_run(
+                            &sub_run_id,
+                            "success",
+                            &finished_at,
+                            None,
+                            out_str.as_deref(),
+                            res.steps_executed as i64
+                        )
+                        .await
+                );
                 Ok(NodeResult::Success(res.output.clone().unwrap_or(
                     serde_json::json!({"sub_workflow": workflow_id}),
                 )))
             }
             Err(e) => {
                 let err_msg = e.to_string();
-                log_db_err!(run_db.finish_run(
-                    &sub_run_id,
-                    "failure",
-                    &finished_at,
-                    Some(&err_msg),
-                    None,
-                    0
-                ));
+                log_db_err!(
+                    run_db
+                        .finish_run(
+                            &sub_run_id,
+                            "failure",
+                            &finished_at,
+                            Some(&err_msg),
+                            None,
+                            0
+                        )
+                        .await
+                );
                 Err(WorkflowError::NodeExecFailed {
                     node_id: workflow_id.to_string(),
                     label: format!("子工作流 {}", workflow_id),
@@ -629,14 +910,18 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
 
             let step_id = uuid::Uuid::new_v4().to_string();
             let step_started = Local::now().to_rfc3339();
-            log_db_err!(lc.run_db.insert_step_log(
-                step_id.as_str(),
-                lc.run_id,
-                body_id,
-                &format!("{:?}", body_node.node_type),
-                &body_node.label,
-                &step_started
-            ));
+            log_db_err!(
+                lc.run_db
+                    .insert_step_log(
+                        step_id.as_str(),
+                        lc.run_id,
+                        body_id,
+                        &format!("{:?}", body_node.node_type),
+                        &body_node.label,
+                        &step_started
+                    )
+                    .await
+            );
 
             let result = executor.execute(body_node, lc.ctx).await;
             let step_finished = Local::now().to_rfc3339();
@@ -646,31 +931,43 @@ async fn execute_loop_body(loop_node: &WorkflowNode, lc: &mut LoopContext<'_>) -
                 Ok(NodeResult::Success(output)) => {
                     lc.ctx.set_node_output(body_id, output.clone());
                     let out_str = serde_json::to_string(&output).ok();
-                    log_db_err!(lc.run_db.finish_step_log(
-                        step_id.as_str(),
-                        "success",
-                        &step_finished,
-                        out_str.as_deref(),
-                        None
-                    ));
+                    log_db_err!(
+                        lc.run_db
+                            .finish_step_log(
+                                step_id.as_str(),
+                                "success",
+                                &step_finished,
+                                out_str.as_deref(),
+                                None
+                            )
+                            .await
+                    );
                 }
                 Ok(other) => {
-                    log_db_err!(lc.run_db.finish_step_log(
-                        step_id.as_str(),
-                        "success",
-                        &step_finished,
-                        Some(&format!("{:?}", other)),
-                        None
-                    ));
+                    log_db_err!(
+                        lc.run_db
+                            .finish_step_log(
+                                step_id.as_str(),
+                                "success",
+                                &step_finished,
+                                Some(&format!("{:?}", other)),
+                                None
+                            )
+                            .await
+                    );
                 }
                 Err(e) => {
-                    log_db_err!(lc.run_db.finish_step_log(
-                        step_id.as_str(),
-                        "failure",
-                        &step_finished,
-                        None,
-                        Some(&e.to_string())
-                    ));
+                    log_db_err!(
+                        lc.run_db
+                            .finish_step_log(
+                                step_id.as_str(),
+                                "failure",
+                                &step_finished,
+                                None,
+                                Some(&e.to_string())
+                            )
+                            .await
+                    );
                     return Err(WorkflowError::NodeExecFailed {
                         node_id: body_id.to_string(),
                         label: body_node.label.clone(),
@@ -820,4 +1117,176 @@ fn truncate_utf8_safe(s: &str, max_bytes: usize) -> String {
         end -= 1;
     }
     s[..end].to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Position, WorkflowAgentTool};
+
+    fn workflow_with_middle(node_type: NodeType) -> Workflow {
+        Workflow {
+            id: "workflow-test".into(),
+            name: "Workflow Test".into(),
+            description: String::new(),
+            enabled: true,
+            agent_tool: WorkflowAgentTool::deferred(),
+            nodes: vec![
+                WorkflowNode {
+                    id: "trigger".into(),
+                    node_type: NodeType::ManualTrigger,
+                    label: "trigger".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    config: serde_json::json!({}),
+                    disabled: false,
+                },
+                WorkflowNode {
+                    id: "middle".into(),
+                    node_type,
+                    label: "middle".into(),
+                    position: Position { x: 1.0, y: 0.0 },
+                    config: serde_json::json!({"prompt_template": "approve"}),
+                    disabled: false,
+                },
+                WorkflowNode {
+                    id: "output".into(),
+                    node_type: NodeType::Output,
+                    label: "output".into(),
+                    position: Position { x: 2.0, y: 0.0 },
+                    config: serde_json::json!({
+                        "output_fields": [{"name": "trigger_input.question"}]
+                    }),
+                    disabled: false,
+                },
+            ],
+            edges: vec![
+                WorkflowEdge {
+                    id: "a".into(),
+                    source: "trigger".into(),
+                    source_handle: None,
+                    target: "middle".into(),
+                    target_handle: None,
+                },
+                WorkflowEdge {
+                    id: "b".into(),
+                    source: "middle".into(),
+                    source_handle: None,
+                    target: "output".into(),
+                    target_handle: None,
+                },
+            ],
+            variables: HashMap::new(),
+            created_at: "now".into(),
+            updated_at: "now".into(),
+            icon: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_run_id_and_agent_approval_flow_through_execution() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .unwrap();
+        let workflow = workflow_with_middle(NodeType::HumanApproval);
+        let result = execute_workflow_as_agent_tool(
+            &workflow,
+            serde_json::json!({"question": "hello"}),
+            &db,
+            HashMap::new(),
+            "known-run-id".into(),
+            "session-1",
+            Arc::new(HashMap::new()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.run_id, "known-run-id");
+        assert_eq!(result.status, "success");
+        assert_eq!(
+            result.output.unwrap()["trigger_input.question"],
+            serde_json::json!("hello")
+        );
+        assert_eq!(
+            db.get_run("known-run-id").await.unwrap().unwrap().status,
+            "success"
+        );
+        assert_eq!(
+            db.get_run("known-run-id")
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_session_id,
+            "session-1"
+        );
+    }
+
+    #[tokio::test]
+    async fn pending_approval_is_persisted_as_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .unwrap();
+        let workflow = workflow_with_middle(NodeType::HumanApproval);
+        let result = execute_workflow_with_provider_configs_and_run_id(
+            &workflow,
+            serde_json::json!({"question": "hello"}),
+            "manual",
+            &db,
+            HashMap::new(),
+            "pending-run-id".into(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.status, "pending_approval");
+        assert_eq!(
+            db.get_run("pending-run-id").await.unwrap().unwrap().status,
+            "pending_approval"
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_sub_workflow_uses_the_frozen_snapshot() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = WorkflowRunDb::new(dir.path().join("workflow.db"))
+            .await
+            .expect("workflow db");
+        let child = Workflow {
+            id: "frozen-child".into(),
+            name: "Frozen child".into(),
+            description: String::new(),
+            enabled: true,
+            agent_tool: WorkflowAgentTool::default(),
+            nodes: vec![WorkflowNode {
+                id: "child-trigger".into(),
+                node_type: NodeType::ManualTrigger,
+                label: "trigger".into(),
+                position: Position { x: 0.0, y: 0.0 },
+                config: serde_json::json!({}),
+                disabled: false,
+            }],
+            edges: Vec::new(),
+            variables: HashMap::new(),
+            created_at: "now".into(),
+            updated_at: "now".into(),
+            icon: None,
+        };
+        let mut parent = workflow_with_middle(NodeType::CustomLoop);
+        parent.nodes[1].config = serde_json::json!({"workflow_id": child.id.clone()});
+        let snapshots = Arc::new(HashMap::from([(child.id.clone(), child)]));
+
+        let result = execute_workflow_as_agent_tool(
+            &parent,
+            serde_json::json!({}),
+            &db,
+            HashMap::new(),
+            "frozen-run".into(),
+            "session-1",
+            snapshots,
+        )
+        .await
+        .expect("frozen child executes without reading the default store");
+        assert_eq!(result.status, "success");
+    }
 }

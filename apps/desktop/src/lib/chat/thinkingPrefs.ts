@@ -13,7 +13,8 @@ export type ThinkingLevel =
   | "medium"
   | "high"
   | "xhigh"
-  | "max";
+  | "max"
+  | "persistent";
 
 /** 聊天思考偏好 */
 export type ChatThinkingPrefs = {
@@ -28,12 +29,15 @@ const EFFORT_ORDER: ThinkingLevel[] = [
   "high",
   "xhigh",
   "max",
+  "persistent",
 ];
 
 const DEFAULT_EFFORTS: ThinkingLevel[] = ["low", "high", "max"];
 
 /** 是否为合法 ThinkingLevel（不含 off） */
-export function parseEffortLevel(raw: string | null | undefined): ThinkingLevel | null {
+export function parseEffortLevel(
+  raw: string | null | undefined,
+): ThinkingLevel | null {
   const s = (raw ?? "").trim().toLowerCase();
   if (
     s === "none" ||
@@ -42,7 +46,8 @@ export function parseEffortLevel(raw: string | null | undefined): ThinkingLevel 
     s === "medium" ||
     s === "high" ||
     s === "xhigh" ||
-    s === "max"
+    s === "max" ||
+    s === "persistent"
   ) {
     return s;
   }
@@ -56,11 +61,22 @@ export function thinkingLevelsFromMeta(
   const mandatory = Boolean(meta?.mandatory);
   const raw = (meta?.supported_efforts ?? [])
     .map((e) => parseEffortLevel(e))
-    .filter((e): e is ThinkingLevel => e != null && e !== "off");
+    .filter(
+      (e): e is ThinkingLevel =>
+        e != null &&
+        e !== "off" &&
+        (e !== "persistent" || Boolean(meta?.persistent_instructions?.trim())),
+    );
   const efforts =
     raw.length > 0
       ? EFFORT_ORDER.filter((e) => raw.includes(e))
       : [...DEFAULT_EFFORTS];
+  if (
+    meta?.persistent_instructions?.trim() &&
+    !efforts.includes("persistent")
+  ) {
+    efforts.push("persistent");
+  }
   return mandatory ? efforts : (["off", ...efforts] as ThinkingLevel[]);
 }
 
@@ -77,7 +93,7 @@ export function defaultThinkingLevelFromMeta(
     );
   }
   if (meta?.default_enabled === false) {
-    return levels.includes("off") ? "off" : levels[0] ?? "off";
+    return levels.includes("off") ? "off" : (levels[0] ?? "off");
   }
   const preferred = parseEffortLevel(meta?.default_effort);
   if (preferred && levels.includes(preferred)) return preferred;

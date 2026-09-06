@@ -45,7 +45,7 @@
 - 显式 `Run` / `Session` / 事件模型：run 有清晰状态机与事件流。
 
 ### Astro 现状
-- ToolRegistry + MCP 桥接（`mcp__server__tool`），有 hooks（`InjectContext` 等）。
+- ToolRegistry + MCP 桥接（模型侧为 `namespace=mcp__server` + 子工具，Hub 内部键为 `mcp__server__tool`），有 hooks（`InjectContext` 等）。
 - 有 session、streaming provider，但缺显式「Run 状态机 / requirements」一等模型。
 
 ### 可借鉴
@@ -57,7 +57,7 @@
 - `ToolEntry.needs_confirmation` / `stop_after_tool_call`：对齐 Agno Function 元数据；HITL 工具默认 `needs_confirmation`
 - `ToolRegistry::any_needs_confirmation` / `any_stop_after`：`multi_turn` 串行门控与「执行后结束 run」
 - `agent::streaming::run_state::{RunPhase, RunRequirements, RunState}`：派生 `RunFinished.outcome_type`（含 HITL）
-- `prompt::sanitize::sanitize_tool_pairs`：发送 Provider / hydrate session 前清理悬挂 tool_calls 与孤儿 tool 消息
+- `prompt::sanitize::sanitized_response_items`：保持原生 call/output item 序列，发送 Provider 前仅清理悬挂的工具对
 - `is_interactive_tool` 已 deprecated；串行门控以 `needs_confirmation` 为准（§三）
 - **未做**：工具级 hooks 仍走现有 hooks crate（刻意保留）
 
@@ -241,7 +241,7 @@ messages 中 tool 结果超阈值
 4. Skills 当作「打包好的 knowledge 包」，KB 管「用户文档」。
 
 ### 已落地（本轮）
-- `artifacts::KnowledgeDb`（`sessions/knowledge.db`）：`contents` 表 + FTS5 `contents_fts`
+- `artifacts::KnowledgeDb`（`data/knowledge.db`）：`contents` 表 + FTS5 `contents_fts`
 - API：`register` / `list` / `search` / `delete`（删登记+FTS）
 - **未做**：embedding / rerank / agentic filter
 
@@ -276,7 +276,7 @@ messages 中 tool 结果超阈值
 - `MCPTools` / `MultiMCPTools`，挂到 `Agent.tools`。
 
 ### Astro（已更完整）
-- 独立 `mcp` crate：多服务器 Hub、按 Agent 配置持久化、工具发现缓存、`mcp__server__tool` 限定名桥接。
+- 独立 `mcp` crate：多服务器 Hub、按 Agent 配置持久化、工具发现缓存、Responses 原生 MCP namespace 与 Hub qualified key 桥接。
 - 传输：stdio + streamable HTTP。
 
 关键路径：`mcp/src/hub.rs`、`mcp/src/config.rs`、`mcp/src/names.rs`

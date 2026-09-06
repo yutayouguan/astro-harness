@@ -10,5 +10,7 @@
 		<string>zh_CN</string>
 		<string>zh-Hans</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Astro uses the microphone only while you are in a realtime voice conversation.</string>
 </dict>
 </plist>

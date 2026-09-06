@@ -46,11 +46,11 @@ fn build_interactions_client() -> anyhow::Result<reqwest::Client> {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct VideoUnderstandArgs {
-    /// Workspace-relative path, http(s) direct link, or public YouTube URL.
+    /// 工作区相对路径、http(s) 直链或公开 YouTube URL。
     pub video_url: String,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// `qa` | `summarize` | `timeline`; default `qa`.
+    /// `qa` | `summarize` | `timeline`；默认 `qa`。
     #[serde(default)]
     pub mode: Option<String>,
 }
@@ -458,8 +458,8 @@ mod path_tests {
     use memory::MemoryManager;
     use tempfile::TempDir;
 
-    #[test]
-    fn resolve_workspace_file_rejects_escape() {
+    #[tokio::test]
+    async fn resolve_workspace_file_rejects_escape() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         let outside = dir.path().join("outside");
@@ -468,8 +468,9 @@ mod path_tests {
         std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -479,11 +480,13 @@ mod path_tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -491,10 +494,10 @@ mod path_tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.mp4").unwrap_err();

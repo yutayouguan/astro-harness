@@ -15,7 +15,13 @@ const CHANNEL_OPTIONS = [
   { value: "webhook", label: "Webhook" },
 ];
 
-export default function SendNotificationConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function SendNotificationConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   const channel = cfgStr(config, "channel", "system");
   return (

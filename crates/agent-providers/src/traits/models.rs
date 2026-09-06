@@ -4,14 +4,20 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::types::{
-    CompletionRequest, CompletionStream, Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo,
-    ImageGenConfig, MusicGenConfig, TTSConfig, VideoGenConfig,
+    ChatCompletionRequest, CompletionStream, Embedding, GeneratedAudio, GeneratedImage,
+    GeneratedVideo, ImageGenConfig, MusicGenConfig, ResponsesRequest, TTSConfig, VideoGenConfig,
 };
 
-/// 聊天补全模型。
+/// Agent 原生 Responses 模型。
 #[async_trait]
-pub trait CompletionModel: Send + Sync {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream>;
+pub trait ResponsesModel: Send + Sync {
+    async fn stream(&self, prompt: ResponsesRequest) -> Result<CompletionStream>;
+}
+
+/// 非 Agent Chat/Anthropic/Gemini 兼容模型。
+#[async_trait]
+pub trait ChatCompletionModel: Send + Sync {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream>;
 }
 
 /// 嵌入模型。

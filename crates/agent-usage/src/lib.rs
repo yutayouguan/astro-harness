@@ -1,6 +1,6 @@
 //! 用量事件库、按 Agent 统计与费用估算。
 //!
-//! - [`db`]：`~/.astro/usage.db` 事件写入与洞察聚合
+//! - [`db`]：`~/.astro/data/usage.db` 事件写入与洞察聚合
 //! - [`stats`]：`usage-stats.json` 工具集/技能计数
 //! - [`pricing`]：路由感知费用估算
 //! - [`trace_insights`]：按 session 聚合调用链（可读 `session` 库）

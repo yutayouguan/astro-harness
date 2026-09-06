@@ -1,0 +1,326 @@
+/* Codex-style 临时侧聊：外壳独立，内部完整复用主 ChatView。 */
+
+.side-chat-dock {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--chat-dock-inset) 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    flex-basis 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 300ms;
+}
+
+.side-chat-dock.is-open {
+  flex-basis: min(var(--side-chat-width, 384px), 46%);
+  width: min(var(--side-chat-width, 384px), 46%);
+  margin: var(--chat-dock-inset);
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.side-chat-panel {
+  --side-tone: var(--tone, var(--accent, #2563eb));
+  --side-line: color-mix(
+    in srgb,
+    var(--side-tone) 18%,
+    var(--glass-edge, rgba(15, 23, 42, 0.1))
+  );
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 0 0 auto;
+  width: min(var(--side-chat-width, 384px), 46%);
+  min-width: 0;
+  min-height: 0;
+  margin: var(--chat-dock-inset);
+  padding-top: var(--chat-header-overlay-height, 50px);
+  overflow: hidden;
+  isolation: isolate;
+  border: var(--chat-dock-surface-border);
+  border-radius: var(--chat-dock-radius);
+  background: var(--chat-dock-surface-background);
+  box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
+  will-change: transform, opacity;
+}
+
+.side-chat-dock > .side-chat-panel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.side-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 9px 10px 9px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--side-line) 70%, transparent);
+}
+
+.side-chat-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--side-tone) 92%, #fff),
+    var(--side-tone)
+  );
+  box-shadow:
+    0 4px 10px color-mix(in srgb, var(--side-tone) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36);
+}
+
+.side-chat-title {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.side-chat-title strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.side-chat-title span {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.side-chat-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  color: var(--ink-mute);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.side-chat-close:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--side-tone) 12%, transparent);
+}
+
+.side-chat-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--side-tone) 55%, transparent);
+  outline-offset: 1px;
+}
+
+/* 主聊天整体嵌入 Side 容器；只改变窄宽度下的密度。 */
+.side-chat-body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.side-chat-body > .chat-pane {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.side-chat-body .message-list {
+  padding: 16px 12px calc(var(--composer-overlay-height, 112px) + 20px);
+}
+
+.side-chat-body .msg-row {
+  width: 100%;
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+.side-chat-body .msg-row.assistant .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+}
+
+.side-chat-body .msg-row.assistant .msg-stack {
+  max-width: calc(100% - 37px);
+}
+
+.side-chat-body .msg-row.user .msg-stack {
+  max-width: 84%;
+}
+
+.side-chat-body .bubble.assistant {
+  padding: 13px 13px 12px;
+  border-radius: 14px;
+}
+
+.side-chat-body .bubble.assistant .msg-timeline-step {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.side-chat-body .bubble.assistant .msg-timeline-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+}
+
+.side-chat-body .composer-shell {
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  max-width: none;
+}
+
+.side-chat-body .composer {
+  margin: 0;
+  border-radius: 18px;
+}
+
+.side-chat-body .composer-mode-pill {
+  max-width: 150px;
+}
+
+.side-chat-body .composer-mode-pill-label,
+.side-chat-body .composer-policy-approval {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 主聊天区顶栏：当前会话本身就是临时 Side 时的提示。 */
+.chat-side-banner {
+  --side-tone: var(--tone, var(--accent, #2563eb));
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  margin: calc(var(--chat-header-overlay-height, 0px) + 8px) 12px 0;
+  padding: 7px 9px 7px 10px;
+  border: 1px dashed
+    color-mix(in srgb, var(--side-tone) 32%, var(--glass-edge, transparent));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--side-tone) 7%, transparent);
+}
+
+.chat-side-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: var(--side-tone);
+  background: color-mix(in srgb, var(--side-tone) 12%, transparent);
+}
+
+.chat-side-banner > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.chat-side-banner strong {
+  color: color-mix(in srgb, var(--side-tone) 78%, var(--ink));
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.chat-side-banner > div > span {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-side-banner button {
+  display: inline-flex;
+  align-items: center;
+  height: 27px;
+  flex: 0 0 auto;
+  gap: 5px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid
+    color-mix(in srgb, var(--side-tone) 26%, var(--glass-edge, transparent));
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--side-tone) 76%, var(--ink));
+  background: rgba(255, 255, 255, 0.32);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+html[data-theme="dark"] .chat-side-banner button {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-side-banner button:hover {
+  border-color: color-mix(in srgb, var(--side-tone) 42%, transparent);
+  background: color-mix(in srgb, var(--side-tone) 14%, transparent);
+}
+
+.chat-side-banner button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--side-tone) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* 窄屏改为覆盖式，避免挤压主任务。 */
+@media (max-width: 900px) {
+  .side-chat-dock {
+    position: absolute;
+    z-index: 22;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 0;
+    max-width: calc(100% - 24px);
+    margin: var(--chat-dock-inset) 0;
+  }
+
+  .side-chat-dock.is-open {
+    width: min(88vw, 400px);
+    margin: var(--chat-dock-inset);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-chat-dock {
+    transition: none;
+  }
+
+  .side-chat-panel .msg-row {
+    animation-duration: 0.1s;
+  }
+}

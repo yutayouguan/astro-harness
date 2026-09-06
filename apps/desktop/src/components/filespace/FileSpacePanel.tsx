@@ -1,5 +1,12 @@
 /** 文件空间：沙箱目录浏览、多选与批量操作。 */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ExternalLink,
@@ -33,7 +40,7 @@ import {
   IconWsViewGrid,
   IconWsViewList,
 } from "../workspace/WorkspaceIcons";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
 import FileContextMenu, { type FileMenuAction } from "./FileContextMenu";
 import FileGlyph from "./FileGlyph";
@@ -54,7 +61,10 @@ type Props = {
   onOpenSession: (sessionId: string, messageId?: string | null) => void;
   onClose?: () => void;
   /** 将选中产物作为附件挂到聊天 */
-  onAttachFiles?: (files: ArtifactDto[], mode: AttachMode) => void | Promise<void>;
+  onAttachFiles?: (
+    files: ArtifactDto[],
+    mode: AttachMode,
+  ) => void | Promise<void>;
   /** 在工作区（浏览模式）中打开该产物的绝对路径 */
   onOpenInWorkspace?: (path: string) => void;
 };
@@ -84,10 +94,7 @@ const CAT_KEYS: Record<ArtifactCategory, MessageKey> = {
   other: "filespace.cat.other",
 };
 
-const CAT_ICONS: Record<
-  ArtifactCategory,
-  typeof IconWsFile
-> = {
+const CAT_ICONS: Record<ArtifactCategory, typeof IconWsFile> = {
   all: IconWsLayers,
   doc: IconWsFileText,
   sheet: IconWsFileSheet,
@@ -224,7 +231,8 @@ export default function FileSpacePanel({
       // 静默失败；预览区仍显示 unsupported
     }
   };
-  const totalCount = counts.all ?? groups.reduce((n, g) => n + g.files.length, 0);
+  const totalCount =
+    counts.all ?? groups.reduce((n, g) => n + g.files.length, 0);
 
   const flatFiles = useMemo(
     () => groups.flatMap((g) => g.files.map((f) => ({ group: g, file: f }))),
@@ -250,7 +258,6 @@ export default function FileSpacePanel({
       .map((id) => map.get(id))
       .filter((f): f is ArtifactDto => !!f);
   }, [flatFiles, visibleIds, selection.selectedIds]);
-
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -401,7 +408,10 @@ export default function FileSpacePanel({
     }
   };
 
-  const dispatchAction = async (action: FileMenuAction, files: ArtifactDto[]) => {
+  const dispatchAction = async (
+    action: FileMenuAction,
+    files: ArtifactDto[],
+  ) => {
     switch (action) {
       case "open":
         await runOpen(files);
@@ -543,7 +553,10 @@ export default function FileSpacePanel({
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const openContinue = (sessionId: string | null, messageId?: string | null) => {
+  const openContinue = (
+    sessionId: string | null,
+    messageId?: string | null,
+  ) => {
     if (!sessionId) return;
     onOpenSession(sessionId, messageId);
   };
@@ -662,182 +675,213 @@ export default function FileSpacePanel({
         />
 
         <div className="fs-body">
-          <AnimatedSwitch
+          <MotionSwitch
             switchKey={recentOnly ? "recent" : "all"}
             className="anim-switch--fill"
           >
-          <div className="fs-list-pane" data-selected-count={selectedFiles.length}>
-            {loading && <div className="fs-status">{t("filespace.search")}…</div>}
-            {error && <div className="fs-error">{error}</div>}
-            {!loading && !error && groups.length === 0 && (
-              <EmptyIllustration
-                scene="files"
-                className="fs-empty-illust"
-                title={t("filespace.empty")}
-              />
-            )}
+            <div
+              className="fs-list-pane"
+              data-selected-count={selectedFiles.length}
+            >
+              {loading && (
+                <div className="fs-status">{t("filespace.search")}…</div>
+              )}
+              {error && <div className="fs-error">{error}</div>}
+              {!loading && !error && groups.length === 0 && (
+                <EmptyIllustration
+                  scene="files"
+                  className="fs-empty-illust"
+                  title={t("filespace.empty")}
+                />
+              )}
 
-            {layout === "grid" ? (
-              <div className="fs-grid">
-                {flatFiles.map(({ file }) => (
-                  <div
-                    key={file.id}
-                    className={`fs-grid-card ${selected?.id === file.id ? "is-selected" : ""} ${selection.selectedIds.has(file.id) ? "is-checked" : ""} ${file.missing ? "is-missing" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="fs-check"
-                      checked={selection.selectedIds.has(file.id)}
-                      onChange={() => selection.onCheckboxToggle(file.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={file.name}
-                    />
-                    <button
-                      type="button"
-                      className="fs-file-main"
-                      style={gridMainStyle}
-                      onClick={(e) => {
-                        selection.onItemClick(file.id, e);
-                        setSelected(file);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        openMenuAt(file.id, e.clientX, e.clientY);
-                      }}
+              {layout === "grid" ? (
+                <div className="fs-grid">
+                  {flatFiles.map(({ file }) => (
+                    <div
+                      key={file.id}
+                      className={`fs-grid-card ${selected?.id === file.id ? "is-selected" : ""} ${selection.selectedIds.has(file.id) ? "is-checked" : ""} ${file.missing ? "is-missing" : ""}`}
                     >
-                      <FileGlyph name={file.name} className="fs-file-glyph" />
-                      <span className="fs-grid-name" title={file.name}>
-                        {file.name}
-                      </span>
-                      <span className="fs-grid-meta">{formatSize(file.size)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="fs-more-btn"
-                      aria-label={t("filespace.menu.more")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const r = e.currentTarget.getBoundingClientRect();
-                        openMenuAt(file.id, r.left, r.bottom);
-                      }}
-                    >
-                      <MoreHorizontal size={16} strokeWidth={2.25} aria-hidden />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="fs-groups">
-                {groups.map((g) => {
-                  const key = g.session_id ?? "__unlinked__";
-                  const open = expanded[key] !== false;
-                  const linked = !!g.session_id;
-                  return (
-                    <section key={key} className="fs-group">
-                      <div className="fs-group-head">
-                        <button
-                          type="button"
-                          className="fs-group-toggle"
-                          onClick={() => toggleGroup(key)}
-                          aria-expanded={open}
-                        >
-                          <span className={`fs-chevron ${open ? "is-open" : ""}`}>
-                            ▸
-                          </span>
-                          <span className="fs-group-title">
-                            {linked ? g.session_title : t("filespace.unlinked")}
-                          </span>
-                          <span className="fs-group-count">{g.files.length}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="fs-continue-btn"
-                          disabled={!linked}
-                          onClick={() => openContinue(g.session_id)}
-                          title={
-                            linked ? t("filespace.continue") : t("filespace.unlinked")
-                          }
-                        >
-                          {t("filespace.continue")}
-                        </button>
-                      </div>
-                      {open && (
-                        <ul className="fs-file-list">
-                          {g.files.map((file) => (
-                            <li key={file.id}>
-                              <div
-                                className={`fs-file-row ${selected?.id === file.id ? "is-selected" : ""} ${selection.selectedIds.has(file.id) ? "is-checked" : ""} ${file.missing ? "is-missing" : ""}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="fs-check"
-                                  checked={selection.selectedIds.has(file.id)}
-                                  onChange={() => selection.onCheckboxToggle(file.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  aria-label={file.name}
-                                />
-                                <button
-                                  type="button"
-                                  className="fs-file-main"
-                                  style={listMainStyle}
-                                  onClick={(e) => {
-                                    selection.onItemClick(file.id, e);
-                                    setSelected(file);
-                                  }}
-                                  onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    openMenuAt(file.id, e.clientX, e.clientY);
-                                  }}
+                      <input
+                        type="checkbox"
+                        className="fs-check"
+                        checked={selection.selectedIds.has(file.id)}
+                        onChange={() => selection.onCheckboxToggle(file.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={file.name}
+                      />
+                      <button
+                        type="button"
+                        className="fs-file-main"
+                        style={gridMainStyle}
+                        onClick={(e) => {
+                          selection.onItemClick(file.id, e);
+                          setSelected(file);
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          openMenuAt(file.id, e.clientX, e.clientY);
+                        }}
+                      >
+                        <FileGlyph name={file.name} className="fs-file-glyph" />
+                        <span className="fs-grid-name" title={file.name}>
+                          {file.name}
+                        </span>
+                        <span className="fs-grid-meta">
+                          {formatSize(file.size)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="fs-more-btn"
+                        aria-label={t("filespace.menu.more")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          openMenuAt(file.id, r.left, r.bottom);
+                        }}
+                      >
+                        <MoreHorizontal
+                          size={16}
+                          strokeWidth={2.25}
+                          aria-hidden
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="fs-groups">
+                  {groups.map((g) => {
+                    const key = g.session_id ?? "__unlinked__";
+                    const open = expanded[key] !== false;
+                    const linked = !!g.session_id;
+                    return (
+                      <section key={key} className="fs-group">
+                        <div className="fs-group-head">
+                          <button
+                            type="button"
+                            className="fs-group-toggle"
+                            onClick={() => toggleGroup(key)}
+                            aria-expanded={open}
+                          >
+                            <span
+                              className={`fs-chevron ${open ? "is-open" : ""}`}
+                            >
+                              ▸
+                            </span>
+                            <span className="fs-group-title">
+                              {linked
+                                ? g.session_title
+                                : t("filespace.unlinked")}
+                            </span>
+                            <span className="fs-group-count">
+                              {g.files.length}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="fs-continue-btn"
+                            disabled={!linked}
+                            onClick={() => openContinue(g.session_id)}
+                            title={
+                              linked
+                                ? t("filespace.continue")
+                                : t("filespace.unlinked")
+                            }
+                          >
+                            {t("filespace.continue")}
+                          </button>
+                        </div>
+                        {open && (
+                          <ul className="fs-file-list">
+                            {g.files.map((file) => (
+                              <li key={file.id}>
+                                <div
+                                  className={`fs-file-row ${selected?.id === file.id ? "is-selected" : ""} ${selection.selectedIds.has(file.id) ? "is-checked" : ""} ${file.missing ? "is-missing" : ""}`}
                                 >
-                                  <FileGlyph
-                                    name={file.name}
-                                    className="fs-file-glyph"
+                                  <input
+                                    type="checkbox"
+                                    className="fs-check"
+                                    checked={selection.selectedIds.has(file.id)}
+                                    onChange={() =>
+                                      selection.onCheckboxToggle(file.id)
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label={file.name}
                                   />
-                                  <span className="fs-file-meta">
-                                    <span className="fs-file-name">{file.name}</span>
-                                    <span className="fs-file-sub">
-                                      {formatSize(file.size)} · {formatDate(file.created_at)}
-                                      {file.missing ? ` · ${t("filespace.missing")}` : ""}
+                                  <button
+                                    type="button"
+                                    className="fs-file-main"
+                                    style={listMainStyle}
+                                    onClick={(e) => {
+                                      selection.onItemClick(file.id, e);
+                                      setSelected(file);
+                                    }}
+                                    onContextMenu={(e) => {
+                                      e.preventDefault();
+                                      openMenuAt(file.id, e.clientX, e.clientY);
+                                    }}
+                                  >
+                                    <FileGlyph
+                                      name={file.name}
+                                      className="fs-file-glyph"
+                                    />
+                                    <span className="fs-file-meta">
+                                      <span className="fs-file-name">
+                                        {file.name}
+                                      </span>
+                                      <span className="fs-file-sub">
+                                        {formatSize(file.size)} ·{" "}
+                                        {formatDate(file.created_at)}
+                                        {file.missing
+                                          ? ` · ${t("filespace.missing")}`
+                                          : ""}
+                                      </span>
                                     </span>
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="fs-more-btn"
-                                  aria-label={t("filespace.menu.more")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const r = e.currentTarget.getBoundingClientRect();
-                                    openMenuAt(file.id, r.left, r.bottom);
-                                  }}
-                                >
-                                  <MoreHorizontal size={16} strokeWidth={2.25} aria-hidden />
-                                </button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-            )}
-            {menu && (
-              <FileContextMenu
-                className="fs-glass-ctx"
-                x={menu.x}
-                y={menu.y}
-                items={menuItems}
-                onAction={(a) => void handleAction(a)}
-                onClose={() => {
-                  setMenu(null);
-                  setMenuFiles([]);
-                }}
-              />
-            )}
-          </div>
-          </AnimatedSwitch>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fs-more-btn"
+                                    aria-label={t("filespace.menu.more")}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const r =
+                                        e.currentTarget.getBoundingClientRect();
+                                      openMenuAt(file.id, r.left, r.bottom);
+                                    }}
+                                  >
+                                    <MoreHorizontal
+                                      size={16}
+                                      strokeWidth={2.25}
+                                      aria-hidden
+                                    />
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+              {menu && (
+                <FileContextMenu
+                  className="fs-glass-ctx"
+                  x={menu.x}
+                  y={menu.y}
+                  items={menuItems}
+                  onAction={(a) => void handleAction(a)}
+                  onClose={() => {
+                    setMenu(null);
+                    setMenuFiles([]);
+                  }}
+                />
+              )}
+            </div>
+          </MotionSwitch>
 
           <aside className="fs-preview" aria-label={t("filespace.preview")}>
             {!selected ? (

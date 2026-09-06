@@ -1,7 +1,8 @@
 //! AgentLoop system prompt 构建：静态/动态上下文组装与分层占用估算。
 
 use crate::prompt::context::{DynamicContext, StaticContext};
-use crate::prompt::prompt_builder::PromptBuilder;
+use std::ffi::OsStr;
+use std::path::Path;
 
 use super::AgentLoop;
 
@@ -31,6 +32,94 @@ fn render_mcp_instructions(entries: &[mcp::McpServerInstructions]) -> String {
     )
 }
 
+fn load_agent_instructions(
+    project_root: Option<&std::path::Path>,
+    global_workspace: &std::path::Path,
+) -> Option<String> {
+    project_root
+        .and_then(|root| std::fs::read_to_string(root.join(".astro/AGENT.md")).ok())
+        .filter(|content| !content.trim().is_empty())
+        .or_else(|| std::fs::read_to_string(global_workspace.join("AGENTS.md")).ok())
+}
+
+const RTK_RUNTIME_GUIDANCE: &str = r#"## Astro 检测到的可选工具：RTK
+
+当前进程的 PATH 中存在可执行的 `rtk`。执行受支持且输出较大的只读、搜索、构建或测试 Shell 命令时，优先添加 `rtk` 前缀以减少模型上下文占用。
+
+- 适合：测试、编译检查、lint、搜索，以及 `git status` / `git diff` / `git log` 等查看命令。
+- 不适合：需要精确或机器可读输出、JSON、补丁、管道或重定向、交互式命令，以及 RTK 不支持的命令。
+- 不得自行安装、升级、初始化或修改 RTK 配置。
+- RTK 拒绝或执行失败时，在安全且无需额外授权的前提下改用原始命令。"#;
+
+fn executable_file(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+fn command_available_in_path(
+    command: &str,
+    path_value: Option<&OsStr>,
+    path_ext_value: Option<&OsStr>,
+) -> bool {
+    let Some(path_value) = path_value else {
+        return false;
+    };
+
+    std::env::split_paths(path_value).any(|dir| {
+        #[cfg(windows)]
+        {
+            let command_path = Path::new(command);
+            if command_path.extension().is_some() {
+                return executable_file(&dir.join(command));
+            }
+            let path_ext = path_ext_value
+                .and_then(OsStr::to_str)
+                .unwrap_or(".COM;.EXE;.BAT;.CMD");
+            path_ext
+                .split(';')
+                .filter(|ext| !ext.is_empty())
+                .any(|ext| executable_file(&dir.join(format!("{command}{ext}"))))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path_ext_value;
+            executable_file(&dir.join(command))
+        }
+    })
+}
+
+fn rtk_available() -> bool {
+    command_available_in_path(
+        "rtk",
+        std::env::var_os("PATH").as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+    )
+}
+
+fn render_tools_context(workspace: &Path, has_rtk: bool) -> String {
+    let mut content = std::fs::read_to_string(workspace.join("TOOLS.md")).unwrap_or_default();
+    if has_rtk {
+        if !content.trim().is_empty() {
+            content.push_str("\n\n");
+        }
+        content.push_str(RTK_RUNTIME_GUIDANCE);
+    }
+    content
+}
+
 impl AgentLoop {
     /// 与 `build_system_prompt` 同源加载静态/动态上下文与技能列表（不含 env 副作用）。
     async fn system_prompt_parts(&self) -> (StaticContext, DynamicContext, Vec<(String, String)>) {
@@ -43,8 +132,17 @@ impl AgentLoop {
         };
         let (project_memory, user_profile, daily) = self.memory().prompt_snapshot_with_daily();
         let skill_pairs = if self.tool_registry().await.is_toolset_enabled("skills") {
-            let skill_config_overrides = self.skill_config_overrides();
-            skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
+            match self
+                .current_turn_context()
+                .await
+                .and_then(|turn| turn.extension_snapshot())
+            {
+                Some(snapshot) => snapshot.skill_index().to_vec(),
+                None => {
+                    let skill_config_overrides = self.skill_config_overrides();
+                    skills::list_enabled_for_prompt_with_config(&skill_config_overrides)
+                }
+            }
         } else {
             Vec::new()
         };
@@ -59,12 +157,16 @@ impl AgentLoop {
                 &daily,
             )
         };
-        if static_ctx.agent_md.is_empty() {
-            let ws = self.resolve_workspace_dir();
-            if let Ok(content) = std::fs::read_to_string(ws.join("AGENTS.md")) {
-                static_ctx.agent_md = content;
-            }
+        // 项目行为准则只取主 cwd；无项目文件时回退全局 default 工作区。
+        let project_root = match self.current_turn_context().await {
+            Some(context) => context.project_root().map(ToOwned::to_owned),
+            None => self.project_root(),
+        };
+        let ws = self.resolve_workspace_dir();
+        if let Some(content) = load_agent_instructions(project_root.as_deref(), &ws) {
+            static_ctx.agent_md = content;
         }
+        static_ctx.tools_md = render_tools_context(&ws, rtk_available());
         let dynamic_ctx = {
             let mut dyn_ctx =
                 DynamicContext::from_recalled(self.config.dynamic_max_items, &recalled_context);
@@ -81,38 +183,48 @@ impl AgentLoop {
         (static_ctx, dynamic_ctx, skill_pairs)
     }
 
-    /// 组装完整 system prompt：静态上下文 + 动态召回 + 技能索引 + 工具指引 + 时间戳。
+    /// 兼容性平铺视图；真实采样使用 [`Self::build_prompt_contract`] 保留角色边界。
     ///
     /// MEMORY / USER 仅注入 **snapshot**（同会话冻结）；日记读盘后截断注入。
-    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算（优先 static）。
+    /// 各层经 [`crate::prompt::ContextSource`] 共享字符预算；优先级独立于消息角色顺序，
+    /// 关键项目上下文优先于可选 Skills/MCP 说明。
     ///
     /// `pending_inject_context` 仍走 [`Self::take_inject_context`] 的消息侧注入；初始
     /// SessionStart/UserPromptSubmit admission context 由内部带预算入口单独传入。
     ///
     /// 副作用：设置 workspace 目录覆盖供 skills 发现使用。
     pub async fn build_system_prompt(&self) -> String {
-        self.build_system_prompt_with_inject(None).await
+        self.build_prompt_contract().await.flattened()
     }
 
-    pub(crate) async fn build_system_prompt_with_inject(&self, inject: Option<&str>) -> String {
-        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
+    /// 构造三层契约：稳定基础指令、带角色动态上下文、外置原生工具 schema。
+    pub async fn build_prompt_contract(&self) -> crate::prompt::PromptContract {
+        self.build_prompt_contract_with_inject(None).await
+    }
+
+    pub(crate) async fn build_prompt_contract_with_inject(
+        &self,
+        inject: Option<&str>,
+    ) -> crate::prompt::PromptContract {
         skills::set_workspace_override(&self.workspace_dir());
+        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
         let skill_index: Vec<(&str, &str)> = skill_pairs
             .iter()
             .map(|(name, desc)| (name.as_str(), desc.as_str()))
             .collect();
 
-        let (guidance, timestamp) = self.system_prompt_guidance_timestamp().await;
+        let (developer_guidance, timestamp) = self.system_prompt_runtime_context().await;
         let mcp_instructions = render_mcp_instructions(&self.lock_state().mcp_instructions.clone());
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
-        crate::prompt::assemble_system_layers(
+        crate::prompt::contract::assemble_prompt_contract(
             &mut budget,
             &static_ctx,
             inject,
             &skill_index,
             &dynamic_ctx,
-            crate::prompt::context_source::RuntimeSystemLayers {
-                guidance: &guidance,
+            crate::prompt::contract::RuntimePromptLayers {
+                base_guidance: crate::prompt::prompt_builder::TOOL_GUIDANCE,
+                developer_guidance,
                 timestamp: &timestamp,
                 mcp_instructions: &mcp_instructions,
             },
@@ -131,115 +243,145 @@ impl AgentLoop {
         )
     }
 
-    /// 分层占用明细（含 system / memory / skills 子项），供 `context_usage` 快照。
+    /// 分层占用明细，基于最终预算化的 [`crate::prompt::PromptContract`]。
     pub async fn system_prompt_layer_breakdown(
         &self,
     ) -> crate::prompt::context_usage::LayerBreakdown {
-        use crate::prompt::context_usage::{estimate_tokens, LayerBreakdown, NamedChars};
-
-        let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
-        let skill_index: Vec<(&str, &str)> = skill_pairs
-            .iter()
-            .map(|(name, desc)| (name.as_str(), desc.as_str()))
-            .collect();
-
-        let (guidance, timestamp) = self.system_prompt_guidance_timestamp().await;
-        let mcp_instructions = render_mcp_instructions(&self.lock_state().mcp_instructions.clone());
-        let interaction_mode = self.interaction_mode().await;
-        let mode_guidance = interaction_mode.system_guidance();
-        let tool_guidance = crate::prompt::prompt_builder::TOOL_GUIDANCE;
-
-        let mut system_items: Vec<NamedChars> = Vec::new();
-        let mut push_sys = |id: &str, label: &str, content: &str| {
-            let n = content.trim().len();
-            if n > 0 {
-                system_items.push((id.to_string(), label.to_string(), n));
-            }
-        };
-        push_sys("soul", "SOUL.md", &static_ctx.soul);
-        push_sys("identity", "身份", &static_ctx.identity);
-        push_sys("agents", "AGENTS.md", &static_ctx.agent_md);
-        push_sys("mode", "交互模式引导", mode_guidance);
-        push_sys("tool_guidance", "工具指引", tool_guidance);
-        push_sys("timestamp", "当前时间", &timestamp);
-
-        let system_chars = static_ctx.soul.trim().len()
-            + static_ctx.identity.trim().len()
-            + static_ctx.agent_md.trim().len()
-            + guidance.len()
-            + timestamp.len();
-
-        let mut memory_items: Vec<NamedChars> = Vec::new();
-        let mut push_mem = |id: &str, label: &str, content: &str| {
-            let n = content.trim().len();
-            if n > 0 {
-                memory_items.push((id.to_string(), label.to_string(), n));
-            }
-        };
-        push_mem("memory", "MEMORY.md", &static_ctx.memory);
-        push_mem("user", "USER.md", &static_ctx.user_profile);
-        push_mem("daily", "今日记忆", &static_ctx.daily);
-        let memory_chars: usize = memory_items.iter().map(|(_, _, n)| *n).sum();
-
-        let skills_chars = PromptBuilder::new()
-            .with_skills_index(&skill_index)
-            .build()
-            .len();
-        let skill_items: Vec<NamedChars> = skill_pairs
-            .iter()
-            .map(|(name, desc)| {
-                let line = format!("- **{}**: {}", name, desc);
-                (name.clone(), name.clone(), line.len())
-            })
-            .filter(|(_, _, n)| estimate_tokens(*n) > 0)
-            .collect();
-
-        let recall_chars = dynamic_ctx.render().len();
-        let mcp_instruction_chars = mcp_instructions.len();
-        let mcp_instruction_items: Vec<NamedChars> = self
-            .lock_state()
-            .mcp_instructions
-            .clone()
-            .iter()
-            .map(|entry| {
-                (
-                    format!("instructions:{}", entry.server_id),
-                    format!("{} instructions", entry.server_name),
-                    render_mcp_instruction_record(entry).len(),
-                )
-            })
-            .collect();
-
-        LayerBreakdown {
-            system_chars,
-            memory_chars,
-            skills_chars,
-            recall_chars,
-            mcp_instruction_chars,
-            system_items,
-            memory_items,
-            skill_items,
-            mcp_instruction_items,
-        }
+        let prompt = self.build_prompt_contract().await;
+        Self::prompt_contract_layer_breakdown(&prompt)
     }
 
-    /// guidance（mode 在前，便于预算截断时保留）+ timestamp，与 `assemble_system_layers` 顺序一致。
-    async fn system_prompt_guidance_timestamp(&self) -> (String, String) {
-        // mode 置于 TOOL_GUIDANCE 之前：guidance 层被 take_chars 截断时优先保留模式说明。
-        let guidance = format!(
-            "{}\n\n{}",
-            self.interaction_mode().await.system_guidance(),
-            crate::prompt::prompt_builder::TOOL_GUIDANCE,
-        );
+    pub(crate) fn prompt_contract_layer_breakdown(
+        prompt: &crate::prompt::PromptContract,
+    ) -> crate::prompt::context_usage::LayerBreakdown {
+        use crate::prompt::context_usage::{LayerBreakdown, NamedChars};
+
+        let mut layers = LayerBreakdown::default();
+        let add = |items: &mut Vec<NamedChars>, id: &str, label: &str, chars: usize| {
+            items.push((id.to_string(), label.to_string(), chars));
+        };
+
+        for item in &prompt.usage.base {
+            layers.system_chars += item.chars;
+            let label = match item.id.as_str() {
+                "soul" => "SOUL.md",
+                "identity" => "身份",
+                "tool_guidance" => "固定工具规则",
+                _ => item.id.as_str(),
+            };
+            add(&mut layers.system_items, &item.id, label, item.chars);
+        }
+        for item in &prompt.usage.developer {
+            match item.id.as_str() {
+                "skills" => {
+                    layers.skills_chars += item.chars;
+                    add(&mut layers.skill_items, &item.id, "Skills 索引", item.chars);
+                }
+                "mcp" => {
+                    layers.mcp_instruction_chars += item.chars;
+                    add(
+                        &mut layers.mcp_instruction_items,
+                        &item.id,
+                        "MCP Server Instructions",
+                        item.chars,
+                    );
+                }
+                _ => {
+                    layers.developer_chars += item.chars;
+                    add(
+                        &mut layers.developer_items,
+                        &item.id,
+                        "交互模式引导",
+                        item.chars,
+                    );
+                }
+            }
+        }
+        for item in &prompt.usage.user {
+            match item.id.as_str() {
+                "user_profile" | "memory" | "daily" => {
+                    layers.memory_chars += item.chars;
+                    let label = match item.id.as_str() {
+                        "user_profile" => "USER.md",
+                        "memory" => "MEMORY.md",
+                        "daily" => "今日记忆",
+                        _ => unreachable!(),
+                    };
+                    add(&mut layers.memory_items, &item.id, label, item.chars);
+                }
+                "dynamic" => layers.recall_chars += item.chars,
+                _ => {
+                    layers.user_context_chars += item.chars;
+                    let label = match item.id.as_str() {
+                        "agents" => "AGENTS.md",
+                        "tools" => "TOOLS.md",
+                        "hook" => "Hook context",
+                        "timestamp" => "当前时间",
+                        _ => item.id.as_str(),
+                    };
+                    add(&mut layers.user_context_items, &item.id, label, item.chars);
+                }
+            }
+        }
+        layers
+    }
+
+    /// 随 Turn 变化的开发者策略与上下文时间戳。
+    async fn system_prompt_runtime_context(&self) -> (&'static str, String) {
+        let interaction_mode = self
+            .current_turn_context()
+            .await
+            .map(|context| context.mode())
+            .unwrap_or_else(|| self.lock_state().interaction_mode);
+        let developer_guidance = interaction_mode.system_guidance();
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
-        (guidance, timestamp)
+        (developer_guidance, timestamp)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tools_context_only_advertises_rtk_when_available() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("TOOLS.md"), "LOCAL TOOL NOTES").unwrap();
+
+        let without_rtk = render_tools_context(dir.path(), false);
+        assert_eq!(without_rtk, "LOCAL TOOL NOTES");
+        assert!(!without_rtk.contains("RTK"));
+
+        let with_rtk = render_tools_context(dir.path(), true);
+        assert!(with_rtk.contains("LOCAL TOOL NOTES"));
+        assert!(with_rtk.contains("当前进程的 PATH 中存在可执行的 `rtk`"));
+        assert!(with_rtk.contains("不得自行安装、升级、初始化或修改 RTK 配置"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_probe_requires_an_executable_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let rtk = dir.path().join("rtk");
+        std::fs::write(&rtk, "#!/bin/sh\n").unwrap();
+
+        assert!(!command_available_in_path(
+            "rtk",
+            Some(dir.path().as_os_str()),
+            None,
+        ));
+        let mut permissions = std::fs::metadata(&rtk).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&rtk, permissions).unwrap();
+        assert!(command_available_in_path(
+            "rtk",
+            Some(dir.path().as_os_str()),
+            None,
+        ));
+    }
 
     #[test]
     fn mcp_instructions_are_wrapped_as_untrusted_jsonl() {
@@ -270,5 +412,73 @@ mod tests {
     #[test]
     fn no_mcp_instructions_produces_no_prompt_layer() {
         assert!(render_mcp_instructions(&[]).is_empty());
+    }
+
+    #[test]
+    fn prompt_breakdown_uses_budgeted_contract_roles() {
+        use crate::prompt::contract::{PromptContractUsage, PromptSourceUsage};
+
+        let prompt = crate::prompt::PromptContract {
+            base_instructions: "base".into(),
+            context: Vec::new(),
+            context_sections: Vec::new(),
+            usage: PromptContractUsage {
+                base: vec![PromptSourceUsage {
+                    id: "tool_guidance".into(),
+                    chars: 40,
+                }],
+                developer: vec![
+                    PromptSourceUsage {
+                        id: "mode".into(),
+                        chars: 20,
+                    },
+                    PromptSourceUsage {
+                        id: "skills".into(),
+                        chars: 12,
+                    },
+                ],
+                user: vec![
+                    PromptSourceUsage {
+                        id: "agents".into(),
+                        chars: 30,
+                    },
+                    PromptSourceUsage {
+                        id: "memory".into(),
+                        chars: 16,
+                    },
+                    PromptSourceUsage {
+                        id: "dynamic".into(),
+                        chars: 8,
+                    },
+                ],
+            },
+        };
+
+        let layers = AgentLoop::prompt_contract_layer_breakdown(&prompt);
+        assert_eq!(layers.system_chars, 40);
+        assert_eq!(layers.developer_chars, 20);
+        assert_eq!(layers.user_context_chars, 30);
+        assert_eq!(layers.skills_chars, 12);
+        assert_eq!(layers.memory_chars, 16);
+        assert_eq!(layers.recall_chars, 8);
+    }
+
+    #[test]
+    fn project_agent_md_overrides_global_agents_md_with_fallback() {
+        let global = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(global.path().join("AGENTS.md"), "global rules").unwrap();
+
+        assert_eq!(
+            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
+            Some("global rules")
+        );
+
+        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
+        std::fs::write(project.path().join(".astro/AGENT.md"), "project rules").unwrap();
+        assert_eq!(
+            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
+            Some("project rules")
+        );
     }
 }

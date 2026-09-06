@@ -1,4 +1,4 @@
-//! Strict Codex V2 Agent Thread execution boundary.
+//! V2 Agent Thread 严格执行边界。
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -10,18 +10,20 @@ use subagents::{
     WaitAgentV2Request, WaitAgentV2Result,
 };
 
-/// Non-serializable parent runtime material accompanying model-visible Agent
-/// Thread requests. Credentials and process-local dependencies must never
-/// enter the tool schema or durable graph.
+/// 伴随模型可见的 Agent Thread 请求的不可序列化父运行时材料。
+/// 凭证和进程局部依赖绝不能进入工具 schema 或持久化图。
 #[derive(Clone)]
 pub struct ParentRuntimeMaterial {
     pub memory_dir: PathBuf,
     pub parent_agent_id: String,
     pub parent_model: Option<String>,
+    pub root_service_tier: Option<String>,
     pub parent_sandbox_mode: String,
     pub inherited_skill_config: Vec<(PathBuf, bool)>,
-    pub chat_targets: Vec<types::ChatTarget>,
+    pub model_targets: Vec<types::ModelTarget>,
+    pub model_spec: Option<types::ModelSpec>,
     pub project_root: Option<PathBuf>,
+    pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
 }
@@ -35,8 +37,8 @@ pub struct SpawnAgentDispatchRequest {
 #[derive(Clone)]
 pub struct FollowupAgentDispatchRequest {
     pub request: MessageAgentV2Request,
-    /// Desktop callers do not own the active parent model credentials. They
-    /// may use a process-local registered runtime, but cannot cold-recover it.
+    /// 桌面调用方不拥有活跃的父模型凭证。
+    /// 可使用进程局部注册的运行时，但无法冷恢复。
     pub runtime: Option<ParentRuntimeMaterial>,
 }
 
@@ -49,8 +51,8 @@ impl From<MessageAgentV2Request> for FollowupAgentDispatchRequest {
     }
 }
 
-/// The six model-visible Codex V2 Agent Thread operations.
-/// Desktop reads and recursive closes deliberately live outside this trait.
+/// 六个模型可见的 V2 Agent Thread 操作。
+/// 桌面端读取和递归关闭操作刻意不在此 trait 中。
 #[async_trait]
 pub trait AgentThreadDispatch: Send + Sync {
     async fn spawn_agent(
@@ -66,8 +68,7 @@ pub trait AgentThreadDispatch: Send + Sync {
         request: MessageAgentV2Request,
     ) -> anyhow::Result<MessageAgentV2Result>;
 
-    /// The serialized model request is paired with process-local runtime
-    /// material at the tool boundary; credentials never enter the schema.
+    /// 序列化的模型请求在工具边界与进程局部运行时材料配对；凭证绝不进入 schema。
     async fn followup_task(
         &self,
         request: FollowupAgentDispatchRequest,

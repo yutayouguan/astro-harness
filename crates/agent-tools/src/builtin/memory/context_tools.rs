@@ -17,59 +17,59 @@ const PINNED_FILE: &str = "pinned-context.json";
 const MAX_PIN_CHARS: usize = 8 * 1024;
 const MAX_PINS: usize = 20;
 
-/// `search` search scope.
+/// `search` 搜索范围。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum SearchScope {
-    /// Session history FTS.
+    /// 会话历史 FTS。
     Session,
-    /// MEMORY.md + USER.md substring search.
+    /// MEMORY.md + USER.md 子串搜索。
     Memory,
-    /// Knowledge Content DB.
+    /// Knowledge Content DB 知识库。
     Knowledge,
-    /// All of the above (default).
+    /// 以上全部（默认）。
     #[default]
     All,
 }
 
-/// Arguments for `search`.
+/// `search` 的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SearchArgs {
     pub query: String,
-    /// Scope; default `all`.
+    /// 搜索范围；默认 `all`。
     #[serde(default)]
     pub scope: SearchScope,
-    /// Max results per source; default 5, max 10.
+    /// 每个来源最大结果数；默认 5，上限 10。
     #[serde(default)]
     pub limit: Option<u32>,
 }
 
-/// `pin_context` actions.
+/// `pin_context` 操作类型。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PinAction {
-    /// Append a pinned snippet.
+    /// 追加一条固定片段。
     Pin,
-    /// List current pinned snippets.
+    /// 列出当前固定片段。
     List,
-    /// Remove by id.
+    /// 按 id 移除。
     Unpin,
-    /// Clear all.
+    /// 清空全部。
     Clear,
 }
 
-/// Arguments for `pin_context`.
+/// `pin_context` 的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PinContextArgs {
     pub action: PinAction,
-    /// Body text for `pin`.
+    /// `pin` 操作的正文内容。
     #[serde(default)]
     pub content: Option<String>,
-    /// Snippet id for `unpin`.
+    /// `unpin` 操作的片段 id。
     #[serde(default)]
     pub id: Option<String>,
-    /// Optional short title (shown in lists).
+    /// 可选的简短标题（在列表中显示）。
     #[serde(default)]
     pub title: Option<String>,
 }
@@ -112,13 +112,13 @@ pub fn register(registry: &mut ToolRegistry) {
 }
 
 /// 分发 `search` / `pin_context`。
-pub fn dispatch(
+pub async fn dispatch(
     ctx: &ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
 ) -> anyhow::Result<String> {
     match name {
-        "context_search" => dispatch_search(ctx, args),
+        "context_search" => dispatch_search(ctx, args).await,
         "pin_context" => dispatch_pin(ctx, args),
         other => anyhow::bail!("未知上下文工具: {other}"),
     }
@@ -127,10 +127,13 @@ pub fn dispatch(
 crate::submit_builtin_tool! {
     register: register,
     names: ["context_search", "pin_context"],
-    sync_named: dispatch,
+    async_named: dispatch,
 }
 
-fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+async fn dispatch_search(
+    ctx: &ToolContext<'_>,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
     let parsed: SearchArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("search 参数无效: {e}"))?;
     let query = parsed.query.trim();
@@ -148,6 +151,7 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
         let hits = ctx
             .sessions
             .search_messages(query, None, None, limit as i64)
+            .await
             .unwrap_or_default();
         if hits.is_empty() {
             sections.push("## session\n（无匹配）".to_string());
@@ -187,9 +191,9 @@ fn dispatch_search(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::R
     }
 
     if want_knowledge {
-        match artifacts::KnowledgeDb::open_default() {
+        match artifacts::KnowledgeDb::open_default().await {
             Ok(db) => {
-                let rows = db.search(query, limit).unwrap_or_default();
+                let rows = db.search(query, limit).await.unwrap_or_default();
                 if rows.is_empty() {
                     sections.push("## knowledge\n（无匹配）".to_string());
                 } else {

@@ -55,7 +55,7 @@ impl PluginHookBus {
         HookOutcome::Continue
     }
 
-    /// Codex `PermissionRequest` aggregation: any deny wins, otherwise an
+    /// `PermissionRequest` aggregation: any deny wins, otherwise an
     /// explicit allow wins, otherwise the normal approval flow continues.
     pub fn fire_permission_request(&self, payload: &HookPayload) -> PermissionRequestDecision {
         let payload = payload.for_event(crate::PERMISSION_REQUEST);
@@ -72,7 +72,7 @@ impl PluginHookBus {
         decision
     }
 
-    /// Codex `PostToolUse` aggregation. Tool side effects have already
+    /// `PostToolUse` aggregation. Tool side effects have already
     /// happened, so block affects only the model-visible result.
     pub fn fire_post_tool_use(&self, payload: &HookPayload) -> PostToolUseDecision {
         let payload = payload.for_event(crate::POST_TOOL_USE);
@@ -96,7 +96,7 @@ impl PluginHookBus {
         decision
     }
 
-    /// Codex `SubagentStart` is context-injection-only. Stop/block outcomes
+    /// `SubagentStart` is context-injection-only. Stop/block outcomes
     /// are deliberately ignored, while context from every handler is kept.
     pub fn fire_subagent_start(&self, payload: &HookPayload) -> Option<String> {
         let payload = payload.for_event(crate::SUBAGENT_START);
@@ -113,7 +113,7 @@ impl PluginHookBus {
         (!contexts.is_empty()).then(|| contexts.join("\n\n"))
     }
 
-    /// Codex `SubagentStop` evaluates every handler and combines all
+    /// `SubagentStop` evaluates every handler and combines all
     /// continuation prompts for the same terminal candidate.
     pub fn fire_subagent_stop(&self, payload: &HookPayload) -> HookOutcome {
         let payload = payload.for_event(crate::SUBAGENT_STOP);

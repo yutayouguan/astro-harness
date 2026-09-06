@@ -11,56 +11,58 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import {
-  AtSign,
   Bot,
-  ChartPie,
   Check,
   ChevronDown,
   CornerDownRight,
-  Copy,
   ArrowDown,
   ArrowUp,
-  Eye,
   ExternalLink,
   File,
   FileVideo,
+  FolderOpen,
   GitBranch,
   Hand,
   Image,
   Infinity as InfinityIcon,
-  Lightbulb,
   ListX,
   ListTree,
-  MessageCircle,
+  Mic,
   Music2,
-  Paperclip,
-  Pause,
   Pencil,
-  Play,
+  Plus,
   RefreshCw,
   SendHorizontal,
   ShieldAlert,
   ShieldCheck,
-  Slash,
+  Sparkles,
   Square,
+  PhoneOff,
   Trash2,
-  Volume2,
-  Loader2,
-  Mic,
-  MicOff,
+  X,
   MoreHorizontal,
 } from "lucide-react";
 import {
+  Check as CheckData,
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+  Copy as CopyData,
+  Pause as PauseData,
+  Play as PlayData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
+import {
   isActivityVisible,
+  type ChatAnswerLayout,
   type ChatDisplayPrefs,
 } from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   findSlotAt,
-  firstSlotValue,
   listTemplateSegments,
   nextEmptySlot,
   prepareAgentCreateSend,
@@ -68,15 +70,30 @@ import {
 } from "../../lib/agent/agentCreateTemplate";
 import {
   CHAT_MODES,
-  MODE_SWITCH_COUNTDOWN_SEC,
   type ChatWorkMode,
   type ModeSwitchRequest,
 } from "../../lib/chat/chatMode";
+import {
+  findPromptTemplateSlotAt,
+  listPromptTemplateSegments,
+  nextEmptyPromptTemplateSlot,
+  preparePromptTemplateSend,
+  prevEmptyPromptTemplateSlot,
+} from "../../lib/chat/promptTemplate";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
-import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
+import {
+  countRunningParallel,
+  countSettledByStatus,
+  isParallelTaskActive,
+} from "../../lib/chat/parallelTasks";
+import { projectCanonicalTimelineSegments } from "../../lib/chat/chatTimeline";
+import { pendingAsyncQuestionsAt } from "../../lib/chat/asyncAgentUpdate";
+import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
+import ClarifyWizard from "../../a2ui/ClarifyWizard";
+import TaskCompletionCelebration from "./TaskCompletionCelebration";
 import {
   attachmentsFromOsClipboard,
   filesFromClipboardRead,
@@ -85,16 +102,25 @@ import {
   pathsFromDataTransfer,
   pathsToAttachments,
 } from "../../lib/chat/chatPaste";
-import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
-import { thinkingLevelsFromMeta } from "../../lib/chat/thinkingPrefs";
+import type { MediaActionKind } from "../../lib/media/mediaActions";
+import type {
+  ChatThinkingPrefs,
+  ThinkingLevel,
+} from "../../lib/chat/thinkingPrefs";
+import { groupAssistantAnswer } from "../../lib/chat/groupAssistantAnswer";
+import {
+  assistantAnswerPlainText,
+  assistantProcessMarkdown,
+} from "../../lib/chat/assistantTurnClipboard";
 import type {
   ChatActivity,
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
-  ChatMessage,
+  ResponseItemHistoryDto,
+  ConversationEntry,
   InstalledSkill,
-  MessageTokenUsage,
+  TurnTokenUsage,
   ModelCapabilities,
   ModelPricingMeta,
   ModelReasoningMeta,
@@ -108,9 +134,8 @@ import {
 } from "../../lib/model/modelCaps";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useConfirm } from "../../hooks/ui/DialogContext";
-import { AgentCreateGuide } from "../agents/AgentCreateGuide";
 import AgentAvatar from "../agents/AgentAvatar";
-import ChatMessageNav from "./ChatMessageNav";
+import TurnNavigator from "./TurnNavigator";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
 import {
@@ -118,54 +143,105 @@ import {
   type PaletteItem,
   type PaletteKind,
 } from "./ComposerPalette";
-import ComposerMcpMenu from "./ComposerMcpMenu";
+import ComposerPlusMenu from "./ComposerPlusMenu";
+import ComposerContextPreview, {
+  type ComposerPreviewTarget,
+} from "./ComposerContextPreview";
 import ContextUsagePopover from "./ContextUsagePopover";
 import McpIcon from "../icons/McpIcon";
 import { ModelBrandIcon } from "../icons/ProviderIcons";
 import MsgActivity from "./MsgActivity";
-import MsgDissolveOverlay from "./MsgDissolveOverlay";
+import MsgActivityGroup from "./MsgActivityGroup";
 import MsgCitations from "./MsgCitations";
 import MsgReasoning from "./MsgReasoning";
 import MsgStreamLoader from "./MsgStreamLoader";
-import { MsgTimeline, MsgTimelineStep, type MsgTimelineKind } from "./MsgTimeline";
+import {
+  MsgTimeline,
+  MsgTimelineStep,
+  type MsgTimelineKind,
+} from "./MsgTimeline";
+import AssistantTurnContextMenu, {
+  type AssistantTurnMenuAction,
+} from "./AssistantTurnContextMenu";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
+import { useRealtimeConversation } from "../../hooks/chat/useRealtimeConversation";
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
+import ComposerClarifySurface from "./ComposerClarifySurface";
 import TodoProgress from "./TodoProgress";
-import SubagentActivityBar from "./SubagentActivityBar";
-import SubagentsPanel from "./SubagentsPanel";
-import { useSubagentThreads } from "../../hooks/chat/useSubagentThreads";
-import { formatElapsedSec } from "../../lib/chat/elapsedSec";
-import { coalesceReasoningSegments } from "../../lib/chat/chatTimeline";
+import TurnChangeSummaryCard from "./TurnChangeSummaryCard";
+import {
+  isTodoActivity,
+  isTodoOnlyActivityMessage,
+  type FileChangeItem,
+} from "../../lib/chat/taskProgress";
+import BrowserPreviewFloat from "./BrowserPreviewFloat";
+import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
+import {
+  CronRunFloatingCard,
+  CronTaskDetailDrawer,
+  CronRunDetailDrawer,
+  cronRunStatusKind,
+  type CronJobDto,
+  type CronRunDto,
+} from "../schedule/CronRunDetailDrawer";
+import {
+  CreateCronDialog,
+  type ProviderOpt,
+} from "../schedule/CreateCronDialog";
+import {
+  formatCompactTurnTokens,
+  formatExactTurnTokens,
+  formatTurnDuration,
+} from "../../lib/chat/turnUsageDisplay";
+import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
+import {
+  groupConsecutiveActivities,
+  isConsecutiveActivityGroup,
+} from "../../lib/chat/groupActivities";
+import { findLastUserEntryId } from "../../lib/chat/turnEditing";
 import { isLocationRequiredSurface } from "../../lib/chat/locationSurface";
 import {
-  isAgentIconSrc,
-  type AgentIconInfo,
-} from "../../lib/agent/agentIcons";
+  findComposerClarifySurface,
+  isClarifySurface,
+} from "../../lib/chat/composerClarify";
+import { isAgentIconSrc, type AgentIconInfo } from "../../lib/agent/agentIcons";
 import {
   buildMentionCandidates,
   buildSlashPaletteEntries,
   parseSlashInput,
   type SlashAction,
 } from "../../lib/chat/composerCommands";
+import {
+  addComposerContextToken,
+  createFileComposerContextToken,
+  removeTriggerText,
+  serializeComposerContext,
+  type ComposerContextToken,
+} from "../../lib/chat/composerContext";
+
+const CHECK_ICON = CheckData;
+const COPY_ICON = CopyData;
+const PAUSE_ICON = PauseData;
+const PLAY_ICON = PlayData;
 
 /** 格式化 token/s 展示（整数不带小数） */
 function formatTokenSpeed(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-/** 单条消息底部的 token 用量、回合耗时与生成速度 */
-function MessageTokenStats({
+/** 单条消息底部的易读摘要与可展开用量详情。 */
+export function MessageTokenStats({
   usage,
   tokensPerSec,
   generationDurationSec,
 }: {
-  usage?: MessageTokenUsage;
+  usage?: TurnTokenUsage;
   tokensPerSec?: number;
   generationDurationSec?: number;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const hasUsage = Boolean(
     usage &&
       (usage.totalTokens || usage.promptTokens || usage.completionTokens),
@@ -177,54 +253,122 @@ function MessageTokenStats({
     tokensPerSec != null && tokensPerSec > 0
       ? formatTokenSpeed(tokensPerSec)
       : null;
-  const label = hasUsage
-    ? t("chat.tokenStats", {
-        total: String(usage!.totalTokens),
-        prompt: String(usage!.promptTokens),
-        completion: String(usage!.completionTokens),
-      })
+  const total = hasUsage
+    ? formatCompactTurnTokens(usage!.totalTokens, locale)
     : null;
   const durationLabel = hasDuration
     ? t("chat.generationDuration", {
-        s: formatElapsedSec(generationDurationSec!),
+        s: formatTurnDuration(generationDurationSec!, locale),
       })
     : null;
+  const cacheHit =
+    usage?.cacheReadReported && usage.promptTokens > 0
+      ? Math.min(
+          100,
+          Math.round((usage.cacheReadTokens / usage.promptTokens) * 100),
+        )
+      : null;
   const aria = t("chat.tokenStatsAria", {
-    total: String(usage?.totalTokens ?? 0),
-    prompt: String(usage?.promptTokens ?? 0),
-    completion: String(usage?.completionTokens ?? 0),
-    speed: speed ?? "—",
+    total: formatExactTurnTokens(usage?.totalTokens ?? 0, locale),
+    prompt: formatExactTurnTokens(usage?.promptTokens ?? 0, locale),
+    completion: formatExactTurnTokens(usage?.completionTokens ?? 0, locale),
   });
 
-  return (
-    <div className="msg-token-stats" aria-label={aria}>
-      {durationLabel ? (
+  if (!hasUsage) {
+    return (
+      <div className="msg-token-stats is-static">
         <span className="msg-token-stats-duration">{durationLabel}</span>
-      ) : null}
-      {label ? <span className="msg-token-stats-usage">{label}</span> : null}
-      {speed != null ? (
-        <span className="msg-token-stats-speed">
-          {t("chat.tokenSpeed", { n: speed })}
+      </div>
+    );
+  }
+
+  return (
+    <details className="msg-token-stats" aria-label={aria}>
+      <summary
+        className="msg-token-stats-summary"
+        title={t("chat.tokenDetails")}
+      >
+        {durationLabel ? (
+          <span className="msg-token-stats-duration">{durationLabel}</span>
+        ) : null}
+        <span className="msg-token-stats-usage">
+          {t("chat.tokenSummary", { total: total ?? "0" })}
         </span>
-      ) : null}
-    </div>
+        {cacheHit != null ? (
+          <span className="msg-token-stats-cache">
+            {t("chat.tokenCacheSummary", { pct: String(cacheHit) })}
+          </span>
+        ) : null}
+        <ChevronDown
+          className="msg-token-stats-chevron"
+          size={12}
+          strokeWidth={2}
+          aria-hidden
+        />
+      </summary>
+      <div className="msg-token-stats-details">
+        <span>
+          {t("chat.tokenInput", {
+            tokens: formatCompactTurnTokens(usage!.promptTokens, locale),
+          })}
+        </span>
+        <span>
+          {t("chat.tokenOutput", {
+            tokens: formatCompactTurnTokens(usage!.completionTokens, locale),
+          })}
+        </span>
+        {cacheHit != null ? (
+          <span>
+            {t("chat.tokenCacheHit", {
+              tokens: formatCompactTurnTokens(usage!.cacheReadTokens, locale),
+              pct: String(cacheHit),
+            })}
+          </span>
+        ) : null}
+        {usage?.reasoningReported ? (
+          <span>
+            {t("chat.tokenReasoning", {
+              tokens: formatCompactTurnTokens(usage.reasoningTokens, locale),
+            })}
+          </span>
+        ) : null}
+        {speed != null ? (
+          <span>{t("chat.tokenSpeed", { n: speed })}</span>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
 /** ChatView 入参：消息列表、输入态与流式控制回调 */
 type Props = {
+  projectId?: string | null;
   /** 当前父会话 id，用于展示其 Agent Threads。 */
   sessionId?: string | null;
   /** 当前会话消息（含欢迎占位） */
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
+  /** 项目文件打开时替换消息滚动区；输入框与任务条仍保留。 */
+  workspaceContent?: ReactNode;
+  /** 内容专注态下将输入框收束为底部悬浮胶囊。 */
+  composerPresentation?: "default" | "capsule";
+  /** 同步悬浮输入区高度，用于为原生 WebView 预留可交互空间。 */
+  onComposerHeightChange?: (height: number) => void;
+  /** 同步胶囊上方的浮层状态，避免原生 WebView 遮挡菜单。 */
+  onComposerOverlayOpenChange?: (open: boolean) => void;
   /** 输入框文本 */
   input: string;
+  /** 从其它页面带入输入框的结构化上下文标签。 */
+  composerContextPrefill?: ComposerContextToken | null;
+  /** 上下文标签被输入框接收后清空父级暂存。 */
+  onComposerContextPrefillConsumed?: () => void;
   /** 待发送附件 */
   attachments: ChatAttachment[];
   /** 是否正在流式生成 */
   streaming: boolean;
   /** 主会话整轮未结束（含 HITL）；用于软边界入队 */
   turnInFlight?: boolean;
+  /** 成功任务完成序号；递增时播放内容区庆祝动画。 */
+  completionCelebrationId?: number;
   /** 流是否已暂停 */
   streamPaused?: boolean;
   /** 禁止发送（压实中 / 只读会话等） */
@@ -233,8 +377,12 @@ type Props = {
   sendBlockedReason?: string;
   /** 聊天展示偏好（详细度等） */
   displayPrefs: ChatDisplayPrefs;
+  /** 将单条回答的布局提升为全局默认。 */
+  onDefaultAnswerLayoutChange?: (layout: ChatAnswerLayout) => void;
   /** 空状态模式：欢迎 / 创建 Agent / 正常 */
   emptyMode: ChatEmptyMode;
+  /** 消息滚入顶部标题栏下方时，切换标题栏的可读性保护层。 */
+  onHeaderUnderlayChange?: (hasUnderlay: boolean) => void;
   /** 需要滚入视口的消息 id（用后应调用 onFocusConsumed） */
   focusMessageId?: string | null;
   /** 焦点滚动完成后由父组件清空 focusMessageId */
@@ -243,7 +391,7 @@ type Props = {
   onAttachmentsChange: (next: ChatAttachment[]) => void;
   /** 发送当前输入 */
   onSend: (opts?: { text?: string }) => void;
-  /** Agent/Plan/Ask 流式中的 follow-up 队列 */
+  /** Agent/Plan 流式中的 follow-up 队列 */
   queuedFollowUps?: QueuedFollowUp[];
   onRemoveQueuedFollowUp?: (id: string) => void;
   onUpdateQueuedFollowUpText?: (id: string, text: string) => void;
@@ -274,7 +422,6 @@ type Props = {
   /** 新建空白会话 */
   onNewChat: () => void;
   /** 跳过创建 Agent 引导 */
-  onSkipAgentCreate: () => void;
   /** 点击欢迎页示例 Prompt */
   onPickWelcomePrompt: (prompt: string) => void;
   /** DeepSeek 等支持 thinking 时显示输入框控件 */
@@ -288,31 +435,37 @@ type Props = {
   agentId?: string | null;
   /** 当前聊天模型 id：助手无自定义头像时用作品牌图标 */
   modelId?: string | null;
+  /** Realtime 凭据解析所需的 provider 条目与 backend id。 */
+  realtimeProviderId?: string | null;
+  realtimeBackendId?: string | null;
+  realtimeAvailable?: boolean;
+  /** 当前任务绑定浏览器的悬浮预览。 */
+  browserPreview?: BrowserPreview | null;
+  onCloseBrowserPreview?: () => void;
+  /** 定时任务编辑器使用的供应商列表。 */
+  cronProviders?: ProviderOpt[];
+  cronActiveProviderId?: string | null;
   /** 当前模型输入能力（附件门禁） */
   modelCapabilities?: ModelCapabilities | null;
   /** 当前模型单价（估费预览） */
   modelPricing?: ModelPricingMeta | null;
   /** 打开 Tools 面板 MCP tab */
   onOpenMcpSettings?: () => void;
-  /** Agent / Plan / Ask 工作模式 */
+  /** Agent / Plan 工作模式 */
   chatMode: ChatWorkMode;
   onChatModeChange: (mode: ChatWorkMode) => void;
   /** 打开右侧上下文面板 */
   onOpenContext: () => void;
+  /** 点击任务进度中的文件改动，打开工作区审查面板。 */
+  onOpenFileReview?: (file: FileChangeItem, files: FileChangeItem[]) => void;
   /** 简易上下文占用 0–100，用于按钮提示 */
   contextUsagePercent?: number | null;
   /** 本轮上下文分层占用快照；无则浮层空态 */
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口（tokens），默认 128K */
   contextWindow?: number;
-  /** 重新生成该条 assistant 回复（基于前一条 user） */
-  onRegenerateMessage?: (messageId: string) => void;
-  /** 编辑用户消息并重发（内容填回输入框，截断该条及之后） */
-  onEditUserMessage?: (messageId: string) => void;
-  /** 正在粒子消散的消息 id（编辑截断中） */
-  dissolvingIds?: string[];
-  /** 删除该条消息 */
-  onDeleteMessage?: (messageId: string) => void;
+  /** 原位修改最后一条用户消息，并截断旧回答后重新执行 */
+  onEditUserMessage?: (messageId: string, content: string) => Promise<boolean>;
   /** 从该条消息分支新会话（复制历史到新 session） */
   onBranchMessage?: (messageId: string) => void;
   /** Hermes 风格斜杠命令执行（不含 insert_skill / help 本地处理） */
@@ -354,20 +507,33 @@ function detectTrigger(text: string, caret: number): TriggerState | null {
 const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+const HEADER_UNDERLAY_ENTER_SCROLL_TOP = 12;
+const HEADER_UNDERLAY_EXIT_SCROLL_TOP = 2;
+const COMPOSER_LAYOUT_TRANSITION = {
+  type: "spring",
+  bounce: 0,
+  duration: 0.4,
+} as const;
+const COMPOSER_REDUCED_MOTION_TRANSITION = { duration: 0 } as const;
 
-type PermissionPreset = "ask_for_approval" | "approve_for_me" | "read_only" | "full_access";
+type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
 type PermissionSettings = {
   preset: string | null;
-  sandboxHealth: { backend: string; status: "available" | "unavailable"; detail: string };
+  sandboxHealth: {
+    backend: string;
+    status: "available" | "unavailable";
+    detail: string;
+  };
 };
 const PERMISSION_PRESETS: PermissionPreset[] = [
   "ask_for_approval",
   "approve_for_me",
-  "read_only",
   "full_access",
 ];
 
-function normalizePermissionPreset(value: string | null | undefined): PermissionPreset {
+function normalizePermissionPreset(
+  value: string | null | undefined,
+): PermissionPreset {
   return PERMISSION_PRESETS.includes(value as PermissionPreset)
     ? (value as PermissionPreset)
     : "ask_for_approval";
@@ -379,7 +545,9 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) {
+  if (
+    ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)
+  ) {
     return "image";
   }
   if (["mp4", "webm", "mov", "mkv", "avi"].includes(ext)) return "video";
@@ -413,7 +581,9 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   const kind = kindFromMime(file.type || "", file.name);
   const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const previewUrl =
-    kind === "image" || kind === "video" ? URL.createObjectURL(file) : undefined;
+    kind === "image" || kind === "video" || kind === "audio"
+      ? URL.createObjectURL(file)
+      : undefined;
 
   let dataBase64: string | undefined;
   const shouldInline =
@@ -446,6 +616,9 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 
 /** 附件种类对应小图标 */
 function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
+  if (kind === "folder") {
+    return <FolderOpen size={16} strokeWidth={2} aria-hidden />;
+  }
   if (kind === "image") {
     return <Image size={16} strokeWidth={2} aria-hidden />;
   }
@@ -458,17 +631,38 @@ function AttachmentGlyph({ kind }: { kind: ChatAttachmentKind }) {
   return <File size={16} strokeWidth={2} aria-hidden />;
 }
 
+function ComposerContextGlyph({
+  kind,
+}: {
+  kind: ComposerContextToken["kind"];
+}) {
+  if (kind === "skill")
+    return <Sparkles size={15} strokeWidth={2} aria-hidden />;
+  if (kind === "mcp") return <McpIcon size={15} />;
+  if (kind === "file") return <File size={15} strokeWidth={2} aria-hidden />;
+  return <Bot size={15} strokeWidth={2} aria-hidden />;
+}
+
 /** 消息内附件缩略图条 */
 function MessageAttachments({ items }: { items: ChatAttachment[] }) {
+  const { t } = useI18n();
   if (!items.length) return null;
   return (
     <div className="msg-attachments">
       {items.map((att) => (
         <div key={att.id} className="msg-attachment" data-kind={att.kind}>
           {att.kind === "image" && att.previewUrl ? (
-            <img src={att.previewUrl} alt={att.name} className="msg-attachment-thumb" />
+            <img
+              src={att.previewUrl}
+              alt={att.name}
+              className="msg-attachment-thumb"
+            />
           ) : att.kind === "video" && att.previewUrl ? (
-            <video src={att.previewUrl} className="msg-attachment-thumb" muted />
+            <video
+              src={att.previewUrl}
+              className="msg-attachment-thumb"
+              muted
+            />
           ) : (
             <span className="msg-attachment-icon" data-kind={att.kind}>
               <AttachmentGlyph kind={att.kind} />
@@ -476,7 +670,11 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
           )}
           <div className="msg-attachment-meta">
             <span className="msg-attachment-name">{att.name}</span>
-            <span className="msg-attachment-size">{formatSize(att.size)}</span>
+            <span className="msg-attachment-size">
+              {att.kind === "folder"
+                ? t("chat.plusMenuFolder")
+                : formatSize(att.size)}
+            </span>
           </div>
         </div>
       ))}
@@ -484,31 +682,26 @@ function MessageAttachments({ items }: { items: ChatAttachment[] }) {
   );
 }
 
-/** 消息悬停操作（复制/再生/删除/分支） */
-/** 消息悬停操作（复制 / 再生或编辑 / 删除 / 分支） */
-function MessageActions({
+/** 消息悬停操作：AI 为复制/分支，最后一条用户消息为复制/编辑。 */
+export function MessageActions({
   messageId,
   content,
   role,
   disabled,
-  onRegenerate,
   onEdit,
-  onDelete,
   onBranch,
+  onOpenMenu,
 }: {
   messageId: string;
   content: string;
   role: "user" | "assistant";
   disabled?: boolean;
-  onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
-  onDelete?: (messageId: string) => void;
   onBranch?: (messageId: string) => void;
+  onOpenMenu?: (anchor: HTMLButtonElement) => void;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">("idle");
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const onCopy = async () => {
     if (!content) return;
@@ -521,32 +714,12 @@ function MessageActions({
     }
   };
 
-  const onReadAloud = async () => {
-    if (ttsState === "playing") {
-      ttsAudioRef.current?.pause();
-      setTtsState("idle");
-      return;
-    }
-    if (!content.trim()) return;
-    setTtsState("loading");
-    try {
-      const result = await invoke<{ path: string }>("tts_synthesize", {
-        text: content.slice(0, 4000),
-      });
-      const url = convertFileSrc(result.path);
-      const audio = new Audio(url);
-      ttsAudioRef.current = audio;
-      audio.onended = () => setTtsState("idle");
-      audio.onerror = () => setTtsState("idle");
-      audio.play();
-      setTtsState("playing");
-    } catch {
-      setTtsState("idle");
-    }
-  };
-
   return (
-    <div className="msg-actions" role="toolbar" aria-label={t("chat.messageActions")}>
+    <div
+      className="msg-actions"
+      role="toolbar"
+      aria-label={t("chat.messageActions")}
+    >
       <button
         type="button"
         className={`msg-action-btn ${copied ? "is-copied" : ""}`}
@@ -555,87 +728,158 @@ function MessageActions({
         aria-label={copied ? t("chat.copied") : t("chat.copy")}
         title={copied ? t("chat.copied") : t("chat.copy")}
       >
-        {copied ? (
-          <Check size={14} strokeWidth={2.4} aria-hidden />
-        ) : (
-          <Copy size={14} strokeWidth={2} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={copied}
+          activeIcon={CHECK_ICON}
+          inactiveIcon={COPY_ICON}
+          size={14}
+          strokeWidth={copied ? 2.4 : 2}
+          aria-hidden
+        />
       </button>
-      {role === "assistant" && (
-        <button
-          type="button"
-          className={`msg-action-btn ${ttsState === "playing" ? "is-active" : ""}`}
-          disabled={disabled || !content || ttsState === "loading"}
-          onClick={() => void onReadAloud()}
-          aria-label={t("chat.readAloud")}
-          title={t("chat.readAloud")}
-        >
-          {ttsState === "loading" ? (
-            <Loader2 size={14} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} aria-hidden />
-          ) : (
-            <Volume2 size={14} strokeWidth={2} aria-hidden />
-          )}
-        </button>
-      )}
       {role === "assistant" ? (
-        <button
-          type="button"
-          className="msg-action-btn"
-          disabled={disabled || !onRegenerate}
-          onClick={() => onRegenerate?.(messageId)}
-          aria-label={t("chat.regenerate")}
-          title={t("chat.regenerate")}
-        >
-          <RefreshCw size={14} strokeWidth={2} aria-hidden />
-        </button>
+        <>
+          <button
+            type="button"
+            className="msg-action-btn"
+            disabled={disabled || !onBranch}
+            onClick={() => onBranch?.(messageId)}
+            aria-label={t("chat.branch")}
+            title={t("chat.branchHint")}
+          >
+            <GitBranch size={14} strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="msg-action-btn"
+            disabled={disabled || !onOpenMenu}
+            onClick={(event) => onOpenMenu?.(event.currentTarget)}
+            aria-label={t("chat.messageMenu.title")}
+            title={t("chat.messageMenu.title")}
+            aria-haspopup="menu"
+          >
+            <MoreHorizontal size={14} strokeWidth={2} aria-hidden />
+          </button>
+        </>
       ) : (
         <button
           type="button"
           className="msg-action-btn"
           disabled={disabled || !onEdit}
           onClick={() => onEdit?.(messageId)}
-          aria-label={t("chat.editResend")}
-          title={t("chat.editResend")}
+          aria-label={t("chat.editQuestion")}
+          title={t("chat.editQuestion")}
         >
           <Pencil size={14} strokeWidth={2} aria-hidden />
         </button>
       )}
-      <button
-        type="button"
-        className="msg-action-btn msg-action-btn--danger"
-        disabled={disabled || !onDelete}
-        onClick={() => onDelete?.(messageId)}
-        aria-label={t("chat.delete")}
-        title={t("chat.delete")}
-      >
-        <Trash2 size={14} strokeWidth={2} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className="msg-action-btn"
-        disabled={disabled || !onBranch}
-        onClick={() => onBranch?.(messageId)}
-        aria-label={t("chat.branch")}
-        title={t("chat.branchHint")}
-      >
-        <GitBranch size={14} strokeWidth={2} aria-hidden />
-      </button>
+    </div>
+  );
+}
+
+function InlineUserMessageEditor({
+  value,
+  originalValue,
+  disabled,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  value: string;
+  originalValue: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useI18n();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const canSubmit =
+    !disabled &&
+    value.trim().length > 0 &&
+    value.trim() !== originalValue.trim();
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.select();
+  }, []);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`;
+  }, [value]);
+
+  return (
+    <div className="user-message-editor">
+      <textarea
+        ref={textareaRef}
+        className="user-message-editor-input"
+        value={value}
+        disabled={disabled}
+        aria-label={t("chat.editQuestion")}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+            return;
+          }
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            if (canSubmit) onSubmit();
+          }
+        }}
+      />
+      <div className="user-message-editor-actions">
+        <button
+          type="button"
+          className="user-message-editor-btn is-cancel"
+          disabled={disabled}
+          onClick={onCancel}
+        >
+          <X size={14} strokeWidth={2} aria-hidden />
+          {t("chat.editCancel")}
+        </button>
+        <button
+          type="button"
+          className="user-message-editor-btn is-submit"
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          <RefreshCw size={14} strokeWidth={2} aria-hidden />
+          {t("chat.editSubmit")}
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function ChatView({
+  projectId = null,
   sessionId = null,
   messages,
+  workspaceContent = null,
+  composerPresentation = "default",
+  onComposerHeightChange,
+  onComposerOverlayOpenChange,
   input,
+  composerContextPrefill = null,
+  onComposerContextPrefillConsumed,
   attachments,
   streaming,
   turnInFlight = false,
+  completionCelebrationId = 0,
   streamPaused = false,
   sendBlocked = false,
   sendBlockedReason,
   displayPrefs,
+  onDefaultAnswerLayoutChange,
   emptyMode,
+  onHeaderUnderlayChange,
   focusMessageId,
   onFocusConsumed,
   onInputChange,
@@ -661,74 +905,95 @@ export default function ChatView({
   onResumeStream,
   onStopStream,
   onNewChat,
-  onSkipAgentCreate,
   onPickWelcomePrompt,
-  showThinkingControls = false,
-  reasoningMeta = null,
-  thinkingPrefs,
-  onToggleThinking: _onToggleThinking,
-  onThinkingLevelChange,
   agentId = null,
   modelId = null,
+  realtimeProviderId = null,
+  realtimeBackendId = null,
+  realtimeAvailable = false,
+  browserPreview = null,
+  onCloseBrowserPreview,
+  cronProviders = [],
+  cronActiveProviderId = null,
   modelCapabilities = null,
   modelPricing = null,
   onOpenMcpSettings,
   chatMode,
   onChatModeChange,
   onOpenContext,
+  onOpenFileReview,
   contextUsagePercent = null,
   contextUsage = null,
   contextWindow = 0,
-  onRegenerateMessage,
   onEditUserMessage,
-  dissolvingIds = [],
-  onDeleteMessage,
   onBranchMessage,
   onSlashAction,
 }: Props) {
   const { t } = useI18n();
+  const reduceComposerMotion = useReducedMotion();
   const { showToast, toastHost } = useTransientToast();
+  const realtime = useRealtimeConversation({
+    sessionId,
+    providerId: realtimeProviderId,
+    backendId: realtimeBackendId,
+  });
+  const realtimeErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!realtime.error || realtime.error === realtimeErrorRef.current) return;
+    realtimeErrorRef.current = realtime.error;
+    showToast(realtime.error, { error: true });
+  }, [realtime.error, showToast]);
   const confirm = useConfirm();
-  const dissolvingSet = useMemo(() => new Set(dissolvingIds), [dissolvingIds]);
+  const lastUserMessageId = useMemo(
+    () => findLastUserEntryId(messages),
+    [messages],
+  );
+  const [editingUserMessageId, setEditingUserMessageId] = useState<
+    string | null
+  >(null);
+  const [editingUserDraft, setEditingUserDraft] = useState("");
+  const [submittingUserEdit, setSubmittingUserEdit] = useState(false);
+  const [assistantMenu, setAssistantMenu] = useState<{
+    messageId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const assistantMenuReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const [messageLayoutOverrides, setMessageLayoutOverrides] = useState<
+    Record<string, ChatAnswerLayout>
+  >({});
+  const [messageProcessExpanded, setMessageProcessExpanded] = useState<
+    Record<string, boolean>
+  >({});
+  const chatPaneRef = useRef<HTMLElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const headerUnderlayRef = useRef(false);
+  const composerShellRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typedHintRef = useRef<HTMLSpanElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuPanelRef = useRef<HTMLDivElement>(null);
-  const approvalMenuRef = useRef<HTMLDivElement>(null);
-  const approvalMenuPanelRef = useRef<HTMLDivElement>(null);
   const queueMenuRef = useRef<HTMLDivElement>(null);
   const approvalRequestIdRef = useRef(0);
-  const mcpWrapRef = useRef<HTMLDivElement>(null);
+  const plusWrapRef = useRef<HTMLDivElement>(null);
   const contextWrapRef = useRef<HTMLDivElement>(null);
+  const contextCloseTimerRef = useRef<number | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
-  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
-  const [approvalMode, setApprovalMode] = useState<PermissionPreset>("ask_for_approval");
-  const [sandboxHealth, setSandboxHealth] = useState<PermissionSettings["sandboxHealth"] | null>(null);
+  const [isScrolledFromBottom, setIsScrolledFromBottom] = useState(false);
+  const [approvalMode, setApprovalMode] =
+    useState<PermissionPreset>("ask_for_approval");
+  const [sandboxHealth, setSandboxHealth] = useState<
+    PermissionSettings["sandboxHealth"] | null
+  >(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
-  const [modeSwitchSecLeft, setModeSwitchSecLeft] = useState(MODE_SWITCH_COUNTDOWN_SEC);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
-  const [mcpOpen, setMcpOpen] = useState(false);
-  const [subagentsOpen, setSubagentsOpen] = useState(false);
-  const [selectedSubagentPath, setSelectedSubagentPath] = useState<string | null>(null);
-  const {
-    threads: subagentThreads,
-    roots: subagentRoots,
-    error: subagentError,
-    loading: subagentsLoading,
-    initialized: subagentsInitialized,
-    refresh: refreshSubagentThreads,
-    markRead: markSubagentRead,
-  } = useSubagentThreads(sessionId);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [plusOpen, setPlusOpen] = useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -736,13 +1001,318 @@ export default function ChatView({
   const [agents, setAgents] = useState<AgentIconInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [skills, setSkills] = useState<InstalledSkill[]>([]);
+  const [composerContexts, setComposerContexts] = useState<
+    ComposerContextToken[]
+  >([]);
+  const [previewTarget, setPreviewTarget] =
+    useState<ComposerPreviewTarget | null>(null);
   const [mediaBaseDir, setMediaBaseDir] = useState<string | null>(null);
+  const [cronRun, setCronRun] = useState<CronRunDto | null>(null);
+  const [cronJob, setCronJob] = useState<CronJobDto | null>(null);
+  const [cronJobRuns, setCronJobRuns] = useState<CronRunDto[]>([]);
+  const [cronJobRunsLoading, setCronJobRunsLoading] = useState(false);
+  const [cronTaskOpen, setCronTaskOpen] = useState(false);
+  const [cronEditOpen, setCronEditOpen] = useState(false);
+  const [cronBusy, setCronBusy] = useState(false);
+  const [selectedCronRun, setSelectedCronRun] = useState<CronRunDto | null>(
+    null,
+  );
+  const [selectedCronMessages, setSelectedCronMessages] = useState<
+    ConversationEntry[]
+  >([]);
+  const [selectedCronTraceLoading, setSelectedCronTraceLoading] =
+    useState(false);
   /** 创建 Agent：发送校验失败时高亮的必填槽 index */
   const [agentCreateMissing, setAgentCreateMissing] = useState<number[]>([]);
+  /** 欢迎页示例：当前模板的未填占位文案。 */
+  const [welcomeTemplateHints, setWelcomeTemplateHints] = useState<
+    string[] | null
+  >(null);
+  const [welcomeTemplateMissing, setWelcomeTemplateMissing] = useState<
+    number[]
+  >([]);
   const { servers: mcpServers } = useMcpTools(agentId);
   const mcpHasEnabled = mcpServers.some((s) => s.enabled);
 
+  const addComposerContext = useCallback((token: ComposerContextToken) => {
+    setComposerContexts((current) => addComposerContextToken(current, token));
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
+
+  const removeComposerContext = useCallback((token: ComposerContextToken) => {
+    setComposerContexts((current) =>
+      current.filter(
+        (item) => !(item.kind === token.kind && item.id === token.id),
+      ),
+    );
+    setPreviewTarget((current) =>
+      current?.type === "context" &&
+      current.item.kind === token.kind &&
+      current.item.id === token.id
+        ? null
+        : current,
+    );
+  }, []);
+
+  useEffect(() => {
+    setComposerContexts([]);
+    setPreviewTarget(null);
+    setAssistantMenu(null);
+    assistantMenuReturnFocusRef.current = null;
+    setMessageLayoutOverrides({});
+    setMessageProcessExpanded({});
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!composerContextPrefill) return;
+    setComposerContexts((current) =>
+      addComposerContextToken(current, composerContextPrefill),
+    );
+    onComposerContextPrefillConsumed?.();
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [composerContextPrefill, onComposerContextPrefillConsumed]);
+
+  const loadCronTask = useCallback(
+    async (jobId: string) => {
+      setCronJobRunsLoading(true);
+      try {
+        const [jobs, runs] = await Promise.all([
+          invoke<CronJobDto[]>("list_cron_jobs"),
+          invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId }),
+        ]);
+        setCronJob(jobs.find((job) => job.id === jobId) ?? null);
+        setCronJobRuns(runs);
+      } catch (error) {
+        setCronJob(null);
+        setCronJobRuns([]);
+        showToast(String(error));
+      } finally {
+        setCronJobRunsLoading(false);
+      }
+    },
+    [showToast],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    setCronRun(null);
+    setCronJob(null);
+    setCronJobRuns([]);
+    setCronTaskOpen(false);
+    setCronEditOpen(false);
+    setSelectedCronRun(null);
+    setSelectedCronMessages([]);
+    if (!sessionId) return;
+
+    const refresh = async () => {
+      try {
+        const run = await invoke<CronRunDto | null>("get_cron_run_by_session", {
+          sessionId,
+        });
+        if (cancelled) return;
+        setCronRun(run);
+        if (run) {
+          setCronJobRuns((current) => {
+            const next = current.filter((item) => item.id !== run.id);
+            return [run, ...next];
+          });
+        }
+        if (run && cronRunStatusKind(run.status) === "running") {
+          timer = window.setTimeout(() => void refresh(), 1500);
+        }
+      } catch {
+        if (!cancelled) setCronRun(null);
+      }
+    };
+
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!cronRun?.job_id) return;
+    void loadCronTask(cronRun.job_id);
+  }, [cronRun?.job_id, loadCronTask]);
+
+  useEffect(() => {
+    if (!selectedCronRun) return;
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const refresh = async () => {
+      try {
+        const latest = await invoke<CronRunDto | null>("get_cron_run", {
+          id: selectedCronRun.id,
+        });
+        if (cancelled) return;
+        const resolved = latest ?? selectedCronRun;
+        setSelectedCronRun(resolved);
+        setCronJobRuns((current) =>
+          current.map((run) => (run.id === resolved.id ? resolved : run)),
+        );
+
+        if (resolved.session_id && resolved.session_id !== sessionId) {
+          setSelectedCronTraceLoading(true);
+          const history = await invoke<ResponseItemHistoryDto>(
+            "get_chat_history",
+            {
+              sessionId: resolved.session_id,
+              limit: 200,
+            },
+          );
+          if (cancelled) return;
+          setSelectedCronMessages(
+            projectResponseItemsToEntries(history.items ?? []),
+          );
+        }
+
+        if (cronRunStatusKind(resolved.status) === "running") {
+          timer = window.setTimeout(() => void refresh(), 1500);
+        }
+      } catch (error) {
+        if (!cancelled) showToast(String(error));
+      } finally {
+        if (!cancelled) setSelectedCronTraceLoading(false);
+      }
+    };
+
+    setSelectedCronMessages([]);
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [selectedCronRun?.id, sessionId, showToast]);
+
+  const deleteSelectedCronRun = useCallback(async () => {
+    if (!selectedCronRun) return;
+    const approved = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.history.deleteRunConfirm"),
+      confirmLabel: t("cron.history.deleteRun"),
+      variant: "danger",
+    });
+    if (!approved) return;
+    try {
+      await invoke("delete_cron_run", { id: selectedCronRun.id });
+      setCronJobRuns((current) =>
+        current.filter((run) => run.id !== selectedCronRun.id),
+      );
+      setSelectedCronRun(null);
+      setSelectedCronMessages([]);
+    } catch (error) {
+      showToast(String(error));
+    }
+  }, [confirm, selectedCronRun, showToast, t]);
+
+  const toggleCronJob = useCallback(async () => {
+    if (!cronJob || cronBusy) return;
+    const previous = cronJob;
+    const next = { ...cronJob, enabled: !cronJob.enabled };
+    setCronJob(next);
+    setCronBusy(true);
+    try {
+      const updated = await invoke<boolean>("set_cron_job_enabled", {
+        id: cronJob.id,
+        enabled: next.enabled,
+      });
+      if (!updated) throw new Error(t("cron.error"));
+    } catch (error) {
+      setCronJob(previous);
+      showToast(String(error));
+    } finally {
+      setCronBusy(false);
+    }
+  }, [cronBusy, cronJob, showToast, t]);
+
+  const runCronJobNow = useCallback(async () => {
+    if (!cronJob || cronBusy) return;
+    setCronBusy(true);
+    try {
+      const run = await invoke<CronRunDto>("run_cron_job_now", {
+        id: cronJob.id,
+      });
+      setCronJobRuns((current) => [
+        run,
+        ...current.filter((item) => item.id !== run.id),
+      ]);
+      await loadCronTask(cronJob.id);
+    } catch (error) {
+      showToast(String(error));
+    } finally {
+      setCronBusy(false);
+    }
+  }, [cronBusy, cronJob, loadCronTask, showToast]);
+
+  const cancelContextPopoverClose = useCallback(() => {
+    if (contextCloseTimerRef.current == null) return;
+    window.clearTimeout(contextCloseTimerRef.current);
+    contextCloseTimerRef.current = null;
+  }, []);
+
+  const openContextPopover = useCallback(() => {
+    cancelContextPopoverClose();
+    setModeMenuOpen(false);
+    setPlusOpen(false);
+    setPaletteKind(null);
+    setContextPopoverOpen(true);
+  }, [cancelContextPopoverClose]);
+
+  const closeContextPopover = useCallback(() => {
+    cancelContextPopoverClose();
+    setContextPopoverOpen(false);
+  }, [cancelContextPopoverClose]);
+
+  const scheduleContextPopoverClose = useCallback(() => {
+    cancelContextPopoverClose();
+    contextCloseTimerRef.current = window.setTimeout(() => {
+      contextCloseTimerRef.current = null;
+      setContextPopoverOpen(false);
+    }, 160);
+  }, [cancelContextPopoverClose]);
+
+  useEffect(() => cancelContextPopoverClose, [cancelContextPopoverClose]);
+
+  useEffect(() => {
+    const pane = chatPaneRef.current;
+    const composer = composerShellRef.current;
+    if (!pane || !composer) return;
+
+    const syncComposerOverlayHeight = () => {
+      const height = Math.ceil(composer.getBoundingClientRect().height);
+      pane.style.setProperty("--composer-overlay-height", `${height}px`);
+      onComposerHeightChange?.(height);
+    };
+
+    syncComposerOverlayHeight();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(syncComposerOverlayHeight);
+    observer?.observe(composer);
+    window.addEventListener("resize", syncComposerOverlayHeight);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncComposerOverlayHeight);
+      pane.style.removeProperty("--composer-overlay-height");
+    };
+  }, [onComposerHeightChange]);
+
   const loadMentionSources = useCallback(async () => {
+    // 媒体预览只依赖本地工作区路径，不应被较重的 Agent 配置加载失败连带清空。
+    // 该命令不依赖 backend 会话，应用刚启动时也能先让 generated/... 可解析。
+    try {
+      const workspace = await invoke<string>("get_default_workspace_path");
+      const normalized = workspace.trim();
+      if (normalized) setMediaBaseDir(normalized);
+    } catch {
+      // 保留已有路径；后续 get_config 成功时仍会刷新。
+    }
     try {
       const cfg = await invoke<{
         workspace_dir: string;
@@ -753,11 +1323,13 @@ export default function ChatView({
       setActiveAgentId(cfg.active_agent_id ?? null);
       const scopedId = agentId ?? cfg.active_agent_id;
       const scoped = cfg.agents?.find((a) => a.id === scopedId);
-      setMediaBaseDir(scoped?.path?.trim() || cfg.workspace_dir || null);
+      const configuredWorkspace =
+        scoped?.path?.trim() || cfg.workspace_dir?.trim();
+      if (configuredWorkspace) setMediaBaseDir(configuredWorkspace);
     } catch {
       setAgents([]);
       setActiveAgentId(null);
-      setMediaBaseDir(null);
+      // Agent 列表失败不影响已经解析出的媒体工作区。
     }
     try {
       const list = await invoke<InstalledSkill[]>("list_installed_skills");
@@ -788,7 +1360,9 @@ export default function ChatView({
   const refreshApprovalMode = useCallback(async () => {
     const requestId = ++approvalRequestIdRef.current;
     try {
-      const settings = await invoke<PermissionSettings>("get_permission_settings");
+      const settings = await invoke<PermissionSettings>(
+        "get_permission_settings",
+      );
       if (requestId === approvalRequestIdRef.current) {
         setApprovalMode(normalizePermissionPreset(settings.preset));
         setSandboxHealth(settings.sandboxHealth);
@@ -801,28 +1375,6 @@ export default function ChatView({
   useEffect(() => {
     void refreshApprovalMode();
   }, [refreshApprovalMode]);
-
-  useEffect(() => {
-    if (!modeSwitchPrompt) {
-      setModeSwitchSecLeft(MODE_SWITCH_COUNTDOWN_SEC);
-      return;
-    }
-    setModeSwitchSecLeft(MODE_SWITCH_COUNTDOWN_SEC);
-    const startedAt = Date.now();
-    const timer = window.setInterval(() => {
-      const left =
-        MODE_SWITCH_COUNTDOWN_SEC -
-        Math.floor((Date.now() - startedAt) / 1000);
-      if (left <= 0) {
-        window.clearInterval(timer);
-        setModeSwitchSecLeft(0);
-        onApproveModeSwitch?.();
-        return;
-      }
-      setModeSwitchSecLeft(left);
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, [modeSwitchPrompt, onApproveModeSwitch]);
 
   const welcomeHints = useMemo(
     () => [
@@ -839,11 +1391,13 @@ export default function ChatView({
     !streaming &&
     pendingInterrupts.length === 0 &&
     input.length === 0 &&
-    attachments.length === 0;
+    attachments.length === 0 &&
+    composerContexts.length === 0;
   useTypingPlaceholder(welcomeHints, typingPlaceholderEnabled, typedHintRef);
 
   useEffect(() => {
     if (!modeMenuOpen) return;
+    void refreshApprovalMode();
     const onDoc = (ev: MouseEvent) => {
       const target = ev.target as Node;
       if (modeMenuRef.current?.contains(target)) return;
@@ -852,20 +1406,7 @@ export default function ChatView({
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [modeMenuOpen]);
-
-  useEffect(() => {
-    if (!approvalMenuOpen) return;
-    void refreshApprovalMode();
-    const onDoc = (ev: MouseEvent) => {
-      const target = ev.target as Node;
-      if (approvalMenuRef.current?.contains(target)) return;
-      if (approvalMenuPanelRef.current?.contains(target)) return;
-      setApprovalMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [approvalMenuOpen, refreshApprovalMode]);
+  }, [modeMenuOpen, refreshApprovalMode]);
 
   useEffect(() => {
     if (!queueMenuId) return;
@@ -894,20 +1435,7 @@ export default function ChatView({
     gap: 8,
     maxHeightCap: 320,
     minMaxHeight: 96,
-    sizeKey: chatMode,
-  });
-
-  const approvalMenuStyle = useClampPopover({
-    open: approvalMenuOpen,
-    anchorRef: approvalMenuRef,
-    popoverRef: approvalMenuPanelRef,
-    mode: "fixed",
-    preferAlign: "start",
-    placement: "above",
-    gap: 8,
-    maxHeightCap: 320,
-    minMaxHeight: 96,
-    sizeKey: approvalMode,
+    sizeKey: `${chatMode}:${approvalMode}`,
   });
 
   const modeMeta = useMemo(() => {
@@ -925,141 +1453,95 @@ export default function ChatView({
         desc: t("chat.mode.desc.plan"),
         Icon: ListTree,
       },
-      ask: {
-        label: t("chat.modeAsk"),
-        desc: t("chat.mode.desc.ask"),
-        Icon: MessageCircle,
-      },
     };
     return map;
   }, [t]);
 
-  const approvalMeta = useMemo(() => ({
-    ask_for_approval: {
-      label: t("chat.approval.askForApproval"),
-      desc: t("chat.approval.desc.askForApproval"),
-      Icon: Hand,
-    },
-    approve_for_me: {
-      label: t("chat.approval.approveForMe"),
-      desc: t("chat.approval.desc.approveForMe"),
-      Icon: ShieldCheck,
-    },
-    read_only: {
-      label: t("chat.approval.readOnly"),
-      desc: t("chat.approval.desc.readOnly"),
-      Icon: Eye,
-    },
-    full_access: {
-      label: t("chat.approval.fullAccess"),
-      desc: t("chat.approval.desc.fullAccess"),
-      Icon: ShieldAlert,
-    },
-  }), [t]);
+  const approvalMeta = useMemo(
+    () => ({
+      ask_for_approval: {
+        label: t("chat.approval.askForApproval"),
+        desc: t("chat.approval.desc.askForApproval"),
+        Icon: Hand,
+      },
+      approve_for_me: {
+        label: t("chat.approval.approveForMe"),
+        desc: t("chat.approval.desc.approveForMe"),
+        Icon: ShieldCheck,
+      },
+      full_access: {
+        label: t("chat.approval.fullAccess"),
+        desc: t("chat.approval.desc.fullAccess"),
+        Icon: ShieldAlert,
+      },
+    }),
+    [t],
+  );
 
-  const changeApprovalMode = useCallback(async (next: PermissionPreset) => {
-    if (approvalBusy || next === approvalMode) {
-      setApprovalMenuOpen(false);
-      return;
-    }
-    setApprovalMenuOpen(false);
-    let confirmed = false;
-    if (next === "full_access") {
-      const approved = await confirm({
-        title: t("chat.approval.fullAccessConfirmTitle"),
-        message: t("chat.approval.fullAccessConfirmMessage"),
-        confirmLabel: t("chat.approval.enableFullAccess"),
-        variant: "danger",
-      });
-      if (!approved) return;
-      confirmed = true;
-    }
-    setApprovalBusy(true);
-    const requestId = ++approvalRequestIdRef.current;
-    try {
-      const settings = await invoke<PermissionSettings>("set_permission_preset", {
-        preset: next,
-        confirmed,
-      });
-      if (requestId === approvalRequestIdRef.current) {
-        setApprovalMode(normalizePermissionPreset(settings.preset));
-        setSandboxHealth(settings.sandboxHealth);
+  const changeApprovalMode = useCallback(
+    async (next: PermissionPreset) => {
+      if (approvalBusy || next === approvalMode) {
+        setModeMenuOpen(false);
+        return;
       }
-    } catch (error) {
-      showToast(t("chat.approval.updateFailed", { error: String(error) }), {
-        tone: "error",
-      });
-    } finally {
-      setApprovalBusy(false);
-    }
-  }, [approvalBusy, approvalMode, confirm, showToast, t]);
-
-  const thinkingItems: PaletteItem[] = useMemo(() => {
-    const levels = thinkingLevelsFromMeta(reasoningMeta);
-    const label = (level: ThinkingLevel): { title: string; description: string } => {
-      switch (level) {
-        case "off":
-          return {
-            title: t("chat.thinkLevelOff"),
-            description: t("chat.thinkLevelOffDesc"),
-          };
-        case "none":
-          return {
-            title: t("chat.thinkLevelNone"),
-            description: t("chat.thinkLevelNoneDesc"),
-          };
-        case "minimal":
-          return {
-            title: t("chat.thinkLevelMinimal"),
-            description: t("chat.thinkLevelMinimalDesc"),
-          };
-        case "low":
-          return {
-            title: t("chat.thinkLevelLow"),
-            description: t("chat.thinkLevelLowDesc"),
-          };
-        case "medium":
-          return {
-            title: t("chat.thinkLevelMedium"),
-            description: t("chat.thinkLevelMediumDesc"),
-          };
-        case "high":
-          return {
-            title: t("chat.thinkLevelHigh"),
-            description: t("chat.thinkLevelHighDesc"),
-          };
-        case "xhigh":
-          return {
-            title: t("chat.thinkLevelXhigh"),
-            description: t("chat.thinkLevelXhighDesc"),
-          };
-        case "max":
-          return {
-            title: t("chat.thinkLevelMax"),
-            description: t("chat.thinkLevelMaxDesc"),
-          };
+      setModeMenuOpen(false);
+      let confirmed = false;
+      if (next === "full_access") {
+        const approved = await confirm({
+          title: t("chat.approval.fullAccessConfirmTitle"),
+          message: t("chat.approval.fullAccessConfirmMessage"),
+          confirmLabel: t("chat.approval.enableFullAccess"),
+          variant: "danger",
+        });
+        if (!approved) return;
+        confirmed = true;
       }
-    };
-    return levels.map((level) => {
-      const { title, description } = label(level);
-      return { id: level, level, title, description };
-    });
-  }, [t, reasoningMeta]);
+      setApprovalBusy(true);
+      const requestId = ++approvalRequestIdRef.current;
+      try {
+        const settings = await invoke<PermissionSettings>(
+          "set_permission_preset",
+          { preset: next, confirmed },
+        );
+        if (requestId === approvalRequestIdRef.current) {
+          setApprovalMode(normalizePermissionPreset(settings.preset));
+          setSandboxHealth(settings.sandboxHealth);
+        }
+      } catch (error) {
+        showToast(t("chat.approval.updateFailed", { error: String(error) }), {
+          tone: "error",
+        });
+      } finally {
+        setApprovalBusy(false);
+      }
+    },
+    [approvalBusy, approvalMode, confirm, showToast, t],
+  );
 
   const slashItems: PaletteItem[] = useMemo(() => {
-    return buildSlashPaletteEntries(skills).map((e) => ({
-      id: e.id,
-      title: e.title,
-      description: e.description ?? t(e.descKey),
-      action: e.action,
-      icon: e.icon,
-      skillName: e.skillName,
-      // Hermes：技能斜杠插入 /name，发送时再注入 SKILL.md
-      insert:
+    return buildSlashPaletteEntries(skills).map((e) => {
+      const skill =
         e.action === "insert_skill" && e.skillName
-          ? `/${e.skillName} `
+          ? skills.find((item) => item.name === e.skillName)
+          : undefined;
+      return {
+        id: e.id,
+        title: e.title,
+        description: e.description ?? t(e.descKey),
+        action: e.action,
+        icon: e.icon,
+        skillName: e.skillName,
+        contextToken: skill
+          ? {
+              id: skill.id,
+              kind: "skill" as const,
+              name: skill.name,
+              description: skill.description,
+              path: skill.path,
+            }
           : undefined,
-    }));
+      };
+    });
   }, [skills, t]);
 
   const mentionItems: PaletteItem[] = useMemo(() => {
@@ -1088,23 +1570,30 @@ export default function ChatView({
         id: `mention-${c.kind}-${c.id}`,
         title: `@${c.name}`,
         description: c.description || t(descKey),
-        insert: `@${c.name} `,
         icon,
         mentionKind: c.kind,
         action: "insert" as const,
+        contextToken: {
+          id: c.id,
+          kind: c.kind,
+          name: c.name,
+          description: c.description,
+          path:
+            c.kind === "skill"
+              ? skills.find((skill) => skill.id === c.id)?.path
+              : undefined,
+        },
       };
     });
   }, [agents, skills, mcpServers, t]);
 
   const activePaletteItems = useMemo(() => {
-    if (paletteKind === "thinking") return thinkingItems;
     if (paletteKind === "slash") return slashItems;
     if (paletteKind === "mention") return mentionItems;
     return [];
-  }, [paletteKind, thinkingItems, slashItems, mentionItems]);
+  }, [paletteKind, slashItems, mentionItems]);
 
   const filteredPaletteItems = useMemo(() => {
-    if (paletteKind === "thinking") return activePaletteItems;
     const q = paletteQuery.trim().toLowerCase();
     if (!q) return activePaletteItems;
     return activePaletteItems.filter(
@@ -1120,21 +1609,6 @@ export default function ChatView({
     setPaletteQuery("");
     setPaletteIndex(0);
   }, []);
-
-  const openThinkingPalette = useCallback(() => {
-    setMcpOpen(false);
-    setModeMenuOpen(false);
-    setApprovalMenuOpen(false);
-    setContextPopoverOpen(false);
-    setPaletteKind((k) => (k === "thinking" ? null : "thinking"));
-    setPaletteQuery("");
-    setPaletteIndex(
-      Math.max(
-        0,
-        thinkingItems.findIndex((it) => it.level === thinkingPrefs.level),
-      ),
-    );
-  }, [thinkingItems, thinkingPrefs.level]);
 
   const insertAtTrigger = useCallback(
     (insert: string, start: number, end: number) => {
@@ -1176,6 +1650,8 @@ export default function ChatView({
       }
       if (action === "new_chat") {
         closePalette();
+        setComposerContexts([]);
+        setPreviewTarget(null);
         onNewChat();
         return;
       }
@@ -1219,8 +1695,10 @@ export default function ChatView({
 
   const applyPaletteItem = useCallback(
     (item: PaletteItem) => {
-      if (paletteKind === "thinking" && item.level) {
-        onThinkingLevelChange(item.level);
+      if (item.contextToken) {
+        const end = textareaRef.current?.selectionStart ?? input.length;
+        onInputChange(removeTriggerText(input, triggerStart, end));
+        addComposerContext(item.contextToken);
         closePalette();
         return;
       }
@@ -1238,8 +1716,9 @@ export default function ChatView({
     },
     [
       paletteKind,
-      onThinkingLevelChange,
       closePalette,
+      onInputChange,
+      addComposerContext,
       runSlashAction,
       insertAtTrigger,
       triggerStart,
@@ -1249,10 +1728,10 @@ export default function ChatView({
 
   const syncTriggerFromCaret = useCallback(
     (text: string, caret: number) => {
-      if (paletteKind === "thinking") return;
       const hit = detectTrigger(text, caret);
       if (!hit) {
-        if (paletteKind === "slash" || paletteKind === "mention") closePalette();
+        if (paletteKind === "slash" || paletteKind === "mention")
+          closePalette();
         return;
       }
       setPaletteKind(hit.kind);
@@ -1273,13 +1752,16 @@ export default function ChatView({
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setPaletteIndex(
-          (i) => (i - 1 + filteredPaletteItems.length) % filteredPaletteItems.length,
+          (i) =>
+            (i - 1 + filteredPaletteItems.length) % filteredPaletteItems.length,
         );
         return;
       }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        applyPaletteItem(filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0]);
+        applyPaletteItem(
+          filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0],
+        );
         return;
       }
       if (e.key === "Escape") {
@@ -1289,18 +1771,34 @@ export default function ChatView({
       }
       if (e.key === "Tab") {
         e.preventDefault();
-        applyPaletteItem(filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0]);
+        applyPaletteItem(
+          filteredPaletteItems[paletteIndex] ?? filteredPaletteItems[0],
+        );
         return;
       }
     }
 
-    if (e.key === "Tab" && emptyMode === "agent") {
+    const welcomeTemplateActive =
+      emptyMode === "chat" && Boolean(welcomeTemplateHints?.length);
+    if (e.key === "Tab" && (emptyMode === "agent" || welcomeTemplateActive)) {
       const el = textareaRef.current;
       if (!el) return;
       const caret = el.selectionStart ?? 0;
-      const slot = e.shiftKey
-        ? prevEmptySlot(input, caret)
-        : nextEmptySlot(input, caret);
+      const slot = welcomeTemplateActive
+        ? e.shiftKey
+          ? prevEmptyPromptTemplateSlot(
+              input,
+              caret,
+              welcomeTemplateHints ?? [],
+            )
+          : nextEmptyPromptTemplateSlot(
+              input,
+              caret,
+              welcomeTemplateHints ?? [],
+            )
+        : e.shiftKey
+          ? prevEmptySlot(input, caret)
+          : nextEmptySlot(input, caret);
       if (slot) {
         e.preventDefault();
         requestAnimationFrame(() => {
@@ -1312,14 +1810,55 @@ export default function ChatView({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (tryHandleSlashSubmit()) return;
+      if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
       trySubmitComposer();
     }
   };
 
+  const notifyHeaderUnderlay = useCallback(
+    (hasUnderlay: boolean) => {
+      if (headerUnderlayRef.current === hasUnderlay) return;
+      headerUnderlayRef.current = hasUnderlay;
+      onHeaderUnderlayChange?.(hasUnderlay);
+    },
+    [onHeaderUnderlayChange],
+  );
+
+  const updateConversationScrollState = useCallback(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const hasHeaderUnderlay = headerUnderlayRef.current
+      ? list.scrollTop > HEADER_UNDERLAY_EXIT_SCROLL_TOP
+      : list.scrollTop > HEADER_UNDERLAY_ENTER_SCROLL_TOP;
+    notifyHeaderUnderlay(hasHeaderUnderlay);
+    const distanceFromBottom =
+      list.scrollHeight - list.scrollTop - list.clientHeight;
+    const awayFromBottom = distanceFromBottom > 56;
+    followLatestRef.current = !awayFromBottom;
+    setIsScrolledFromBottom((current) =>
+      current === awayFromBottom ? current : awayFromBottom,
+    );
+  }, [notifyHeaderUnderlay]);
+
+  const scrollConversationToBottom = useCallback(() => {
+    followLatestRef.current = true;
+    const list = messageListRef.current;
+    list?.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    followLatestRef.current = true;
+    setIsScrolledFromBottom(false);
+    headerUnderlayRef.current = false;
+    onHeaderUnderlayChange?.(false);
+  }, [emptyMode, onHeaderUnderlayChange, sessionId]);
+
   useEffect(() => {
     if (focusMessageId) return;
-    bottomRef.current?.scrollIntoView({
+    if (!followLatestRef.current) return;
+    const list = messageListRef.current;
+    list?.scrollTo({
+      top: list.scrollHeight,
       behavior: streaming ? "auto" : "smooth",
     });
   }, [messages, attachments, streaming, focusMessageId]);
@@ -1332,7 +1871,10 @@ export default function ChatView({
     const focusEl = (el: HTMLElement) => {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.classList.add("is-focus-flash");
-      timer = window.setTimeout(() => el.classList.remove("is-focus-flash"), 1600);
+      timer = window.setTimeout(
+        () => el.classList.remove("is-focus-flash"),
+        1600,
+      );
       onFocusConsumed?.();
     };
 
@@ -1380,7 +1922,8 @@ export default function ChatView({
   const estimateCostLabel = useMemo(() => {
     const inChars =
       input.length +
-      attachments.reduce((n, a) => n + (a.name?.length ?? 0) + 64, 0);
+      attachments.reduce((n, a) => n + (a.name?.length ?? 0) + 64, 0) +
+      composerContexts.reduce((n, item) => n + item.name.length + 2, 0);
     const outTokens = 1024;
     const usd = estimateTurnCostUsd({
       pricing: modelPricing,
@@ -1399,7 +1942,7 @@ export default function ChatView({
         out: String(outTokens),
       }),
     };
-  }, [attachments, input.length, modelPricing, t]);
+  }, [attachments, composerContexts, input.length, modelPricing, t]);
 
   // 切换模型后丢掉不再支持的附件
   useEffect(() => {
@@ -1429,7 +1972,9 @@ export default function ChatView({
       const room = MAX_ATTACHMENTS - attachments.length;
       if (room <= 0) return;
       const nextBatch = list.slice(0, room);
-      const created = await Promise.all(nextBatch.map((f) => fileToAttachment(f)));
+      const created = await Promise.all(
+        nextBatch.map((f) => fileToAttachment(f)),
+      );
       const allowed = created.filter((a) =>
         attachmentKindAllowed(a.kind, modelCapabilities),
       );
@@ -1472,6 +2017,41 @@ export default function ChatView({
     [attachments, modelCapabilities, onAttachmentsChange, showToast, t],
   );
 
+  const addFolder = useCallback(async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: t("chat.plusMenuFolder"),
+      });
+      if (!selected || typeof selected !== "string") return;
+      if (
+        attachments.some(
+          (attachment) =>
+            attachment.kind === "folder" && attachment.localPath === selected,
+        )
+      ) {
+        return;
+      }
+      const name = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
+      addAttachments([
+        {
+          id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name,
+          mime: "inode/directory",
+          kind: "folder",
+          size: 0,
+          localPath: selected,
+        },
+      ]);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), {
+        error: true,
+      });
+    }
+  }, [addAttachments, attachments, showToast, t]);
+
   const addPaths = useCallback(
     async (paths: string[]) => {
       if (!paths.length) return;
@@ -1482,7 +2062,29 @@ export default function ChatView({
   );
 
   const attachMediaPath = useCallback(
-    async (path: string) => {
+    async (path: string, kind: MediaActionKind) => {
+      if (kind === "code" || kind === "html" || kind === "document") {
+        const description =
+          kind === "code"
+            ? t("media.kind.code")
+            : kind === "html"
+              ? t("media.kind.html")
+              : t("chat.contextToken.file");
+        addComposerContext(createFileComposerContextToken(path, description));
+        if (!input.trim()) {
+          onInputChange(
+            t(
+              kind === "code"
+                ? "media.quoteCodePrompt"
+                : "media.quoteFilePrompt",
+            ),
+          );
+        }
+        window.requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+        return;
+      }
       const att = await pathToAttachment(path);
       addAttachments([att]);
       if (!input.trim()) {
@@ -1492,7 +2094,7 @@ export default function ChatView({
         textareaRef.current?.focus();
       });
     },
-    [addAttachments, input, onInputChange, t],
+    [addAttachments, addComposerContext, input, onInputChange, t],
   );
 
   const mediaAttachApi = useMemo(
@@ -1513,7 +2115,7 @@ export default function ChatView({
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent((event) => {
-                    const kind = event.payload.type;
+          const kind = event.payload.type;
           if (kind === "enter" || kind === "over") {
             setFileDragOver(true);
             return;
@@ -1548,6 +2150,9 @@ export default function ChatView({
   const removeAttachment = (id: string) => {
     const target = attachments.find((a) => a.id === id);
     if (target) revokePreview(target);
+    setPreviewTarget((current) =>
+      current?.type === "attachment" && current.item.id === id ? null : current,
+    );
     onAttachmentsChange(attachments.filter((a) => a.id !== id));
   };
 
@@ -1559,7 +2164,7 @@ export default function ChatView({
   const onDragEnter = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-        dragDepthRef.current += 1;
+    dragDepthRef.current += 1;
     if (e.dataTransfer?.types?.includes("Files")) {
       setFileDragOver(true);
     }
@@ -1577,7 +2182,7 @@ export default function ChatView({
     e.stopPropagation();
     dragDepthRef.current = 0;
     setFileDragOver(false);
-        // Tauri 原生 drop 已处理时跳过，避免重复添加
+    // Tauri 原生 drop 已处理时跳过，避免重复添加
     if (Date.now() - tauriDropAtRef.current < 500) return;
     if (e.dataTransfer.files?.length) {
       await addFiles(e.dataTransfer.files);
@@ -1591,7 +2196,7 @@ export default function ChatView({
     clipboardData: DataTransfer | null;
     preventDefault: () => void;
   }) => {
-        const list = e.clipboardData?.files;
+    const list = e.clipboardData?.files;
     if (list && list.length > 0) {
       e.preventDefault();
       await addFiles(list);
@@ -1654,56 +2259,76 @@ export default function ChatView({
   };
 
   const interruptBlocked = pendingInterrupts.length > 0;
-  const canQueueWhileBusy =
-    streaming || turnInFlight || interruptBlocked;
+  const composerClarify = useMemo(
+    () => findComposerClarifySurface(messages, pendingInterrupts),
+    [messages, pendingInterrupts],
+  );
+  const useCapsuleComposer =
+    composerPresentation === "capsule" || Boolean(workspaceContent);
+  const hasFloatingComposerOverlay =
+    modeMenuOpen || plusOpen || contextPopoverOpen;
+  const capsuleComposerHasRichContent =
+    attachments.length > 0 ||
+    composerContexts.length > 0 ||
+    Boolean(composerClarify) ||
+    Boolean(realtime.active && realtime.transcript) ||
+    agentCreateMissing.length > 0 ||
+    welcomeTemplateMissing.length > 0 ||
+    fileDragOver;
+  const composerLayoutState = useCapsuleComposer
+    ? capsuleComposerHasRichContent
+      ? "capsule-expanded"
+      : "capsule"
+    : "default";
+  const composerLayoutTransition = reduceComposerMotion
+    ? COMPOSER_REDUCED_MOTION_TRANSITION
+    : COMPOSER_LAYOUT_TRANSITION;
+
+  useEffect(() => {
+    onComposerOverlayOpenChange?.(
+      useCapsuleComposer && hasFloatingComposerOverlay,
+    );
+    return () => onComposerOverlayOpenChange?.(false);
+  }, [
+    hasFloatingComposerOverlay,
+    onComposerOverlayOpenChange,
+    useCapsuleComposer,
+  ]);
+  const canQueueWhileBusy = streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
-    (input.trim().length > 0 || attachments.length > 0) &&
+    !realtime.active &&
+    (input.trim().length > 0 ||
+      attachments.length > 0 ||
+      composerContexts.length > 0) &&
     (!streaming || canQueueWhileBusy);
   const parallelRunningCount = useMemo(
     () => countRunningParallel(parallelTasks),
     [parallelTasks],
   );
   /** 主会话流式或同一 turn 未收束时显示 Stop；独立任务在各自卡片停止。 */
-  const toggleMic = useCallback(async () => {
-    if (recording) {
-      mediaRecorderRef.current?.stop();
-      setRecording(false);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        if (blob.size < 100) return;
-        setTranscribing(true);
-        try {
-          const buf = await blob.arrayBuffer();
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-          const text = await invoke<string>("speech_to_text", { audioBase64: b64, filename: "recording.webm" });
-          if (text.trim()) onInputChange(input ? input + " " + text.trim() : text.trim());
-        } catch (e) {
-          console.error("STT failed:", e);
-        } finally {
-          setTranscribing(false);
-        }
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      // 用户拒绝麦克风权限
-    }
-  }, [recording, onInputChange, input]);
-
   const showStopControl = streaming || turnInFlight;
   const showPauseResume = streaming;
-  const showSendButton = !streaming;
-  const modeSwitchLocked = streaming || turnInFlight || interruptBlocked;
+  const showSendButton = !streaming && !composerClarify;
+  const modeSwitchLocked =
+    streaming || turnInFlight || interruptBlocked || realtime.active;
+  const contextProgress =
+    typeof contextUsagePercent === "number" &&
+    Number.isFinite(contextUsagePercent)
+      ? Math.min(100, Math.max(0, contextUsagePercent))
+      : null;
+  const contextProgressTone =
+    contextProgress == null
+      ? "is-unknown"
+      : contextProgress >= 90
+        ? "is-critical"
+        : contextProgress >= 70
+          ? "is-warning"
+          : "is-normal";
+  const contextUsageLabel =
+    contextProgress != null
+      ? `${t("chat.contextUsage")} · ${contextProgress}%`
+      : t("chat.contextUsageHint");
   const parallelRunningIds = useMemo(
     () =>
       new Set(
@@ -1715,13 +2340,28 @@ export default function ChatView({
   );
 
   const slotMirrorRef = useRef<HTMLDivElement>(null);
-  const agentTemplateSegments = useMemo(
-    () => (emptyMode === "agent" ? listTemplateSegments(input) : []),
-    [emptyMode, input],
+  const welcomeTemplateActive =
+    emptyMode === "chat" && Boolean(welcomeTemplateHints?.length);
+  const slotTemplateActive = emptyMode === "agent" || welcomeTemplateActive;
+  const templateSegments = useMemo(
+    () =>
+      emptyMode === "agent"
+        ? listTemplateSegments(input)
+        : welcomeTemplateActive
+          ? listPromptTemplateSegments(
+              input,
+              welcomeTemplateHints ?? [],
+              (welcomeTemplateHints ?? []).map((_, index) => index),
+            )
+          : [],
+    [emptyMode, input, welcomeTemplateActive, welcomeTemplateHints],
   );
-  const agentCreateMissingSet = useMemo(
-    () => new Set(agentCreateMissing),
-    [agentCreateMissing],
+  const templateMissingSet = useMemo(
+    () =>
+      new Set(
+        emptyMode === "agent" ? agentCreateMissing : welcomeTemplateMissing,
+      ),
+    [agentCreateMissing, emptyMode, welcomeTemplateMissing],
   );
 
   useEffect(() => {
@@ -1729,7 +2369,9 @@ export default function ChatView({
       if (emptyMode !== "agent" || prev.length === 0) {
         return prev.length === 0 ? prev : [];
       }
-      const still = prepareAgentCreateSend(input).missingRequired.map((s) => s.index);
+      const still = prepareAgentCreateSend(input).missingRequired.map(
+        (s) => s.index,
+      );
       if (
         still.length === prev.length &&
         still.every((idx, n) => idx === prev[n])
@@ -1739,6 +2381,37 @@ export default function ChatView({
       return still;
     });
   }, [emptyMode, input]);
+
+  useEffect(() => {
+    setWelcomeTemplateMissing((previous) => {
+      if (!welcomeTemplateActive || previous.length === 0) {
+        return previous.length === 0 ? previous : [];
+      }
+      const still = preparePromptTemplateSend(
+        input,
+        welcomeTemplateHints ?? [],
+      ).missing.map((slot) => slot.index);
+      if (
+        still.length === previous.length &&
+        still.every((index, position) => index === previous[position])
+      ) {
+        return previous;
+      }
+      return still;
+    });
+  }, [input, welcomeTemplateActive, welcomeTemplateHints]);
+
+  useEffect(() => {
+    setWelcomeTemplateHints(null);
+    setWelcomeTemplateMissing([]);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (welcomeTemplateActive && input.length === 0) {
+      setWelcomeTemplateHints(null);
+      setWelcomeTemplateMissing([]);
+    }
+  }, [input, welcomeTemplateActive]);
 
   const trySubmitComposer = () => {
     if (!canSend) return;
@@ -1757,10 +2430,46 @@ export default function ChatView({
         return;
       }
       setAgentCreateMissing([]);
-      onSend({ text: prep.sanitized });
+      onSend({
+        text: serializeComposerContext(composerContexts, prep.sanitized),
+      });
+      onInputChange("");
+      setComposerContexts([]);
+      setPreviewTarget(null);
       return;
     }
-    onSend();
+    if (welcomeTemplateActive) {
+      const prep = preparePromptTemplateSend(input, welcomeTemplateHints ?? []);
+      if (!prep.ok) {
+        setWelcomeTemplateMissing(prep.missing.map((slot) => slot.index));
+        const first = prep.missing[0];
+        const el = textareaRef.current;
+        if (first && el) {
+          requestAnimationFrame(() => {
+            el.focus();
+            el.setSelectionRange(first.innerStart, first.innerEnd);
+          });
+        }
+        return;
+      }
+      setWelcomeTemplateHints(null);
+      setWelcomeTemplateMissing([]);
+      onSend({
+        text: serializeComposerContext(composerContexts, prep.sanitized),
+      });
+      onInputChange("");
+      setComposerContexts([]);
+      setPreviewTarget(null);
+      return;
+    }
+    if (composerContexts.length > 0) {
+      onSend({ text: serializeComposerContext(composerContexts, input) });
+      onInputChange("");
+    } else {
+      onSend();
+    }
+    setComposerContexts([]);
+    setPreviewTarget(null);
   };
 
   useEffect(() => {
@@ -1777,6 +2486,30 @@ export default function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emptyMode]);
 
+  useEffect(() => {
+    if (!welcomeTemplateActive) return;
+    const el = textareaRef.current;
+    const slot = nextEmptyPromptTemplateSlot(
+      input,
+      -1,
+      welcomeTemplateHints ?? [],
+    );
+    if (!el || !slot) return;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(slot.innerStart, slot.innerEnd);
+    });
+  }, [welcomeTemplateActive, welcomeTemplateHints]);
+
+  const pickWelcomePrompt = useCallback(
+    (prompt: string, slotHints: string[]) => {
+      setWelcomeTemplateHints(slotHints);
+      setWelcomeTemplateMissing([]);
+      onPickWelcomePrompt(prompt);
+    },
+    [onPickWelcomePrompt],
+  );
+
   const syncSlotMirrorScroll = () => {
     const ta = textareaRef.current;
     const mirror = slotMirrorRef.current;
@@ -1791,418 +2524,992 @@ export default function ChatView({
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
         : emptyMode === "chat"
-            ? ""
-            : attachments.length
-              ? t("chat.placeholderWithAttach")
+          ? ""
+          : attachments.length
+            ? t("chat.placeholderWithAttach")
+            : workspaceContent
+              ? t("chat.placeholderFile")
               : chatMode === "plan"
                 ? t("chat.placeholderPlan")
-                : chatMode === "ask"
-                  ? t("chat.placeholderAsk")
-                  : t("chat.placeholder");
+                : t("chat.placeholder");
+
+  useEffect(() => {
+    if (
+      editingUserMessageId &&
+      (editingUserMessageId !== lastUserMessageId || !onEditUserMessage)
+    ) {
+      setEditingUserMessageId(null);
+      setEditingUserDraft("");
+      setSubmittingUserEdit(false);
+    }
+  }, [editingUserMessageId, lastUserMessageId, onEditUserMessage]);
+
+  const beginUserMessageEdit = useCallback(
+    (message: ConversationEntry) => {
+      if (
+        message.id !== lastUserMessageId ||
+        streaming ||
+        turnInFlight ||
+        sendBlocked ||
+        !onEditUserMessage
+      ) {
+        return;
+      }
+      setEditingUserMessageId(message.id);
+      setEditingUserDraft(message.content);
+    },
+    [
+      lastUserMessageId,
+      onEditUserMessage,
+      sendBlocked,
+      streaming,
+      turnInFlight,
+    ],
+  );
+
+  const cancelUserMessageEdit = useCallback(() => {
+    if (submittingUserEdit) return;
+    setEditingUserMessageId(null);
+    setEditingUserDraft("");
+  }, [submittingUserEdit]);
+
+  const submitUserMessageEdit = useCallback(async () => {
+    const messageId = editingUserMessageId;
+    const content = editingUserDraft.trim();
+    if (!messageId || !content || !onEditUserMessage || submittingUserEdit)
+      return;
+    setSubmittingUserEdit(true);
+    try {
+      const accepted = await onEditUserMessage(messageId, content);
+      if (!accepted) return;
+      setEditingUserMessageId(null);
+      setEditingUserDraft("");
+    } finally {
+      setSubmittingUserEdit(false);
+    }
+  }, [
+    editingUserDraft,
+    editingUserMessageId,
+    onEditUserMessage,
+    submittingUserEdit,
+  ]);
+
+  const contextMenuMessage = useMemo(
+    () =>
+      assistantMenu
+        ? (messages.find((message) => message.id === assistantMenu.messageId) ??
+          null)
+        : null,
+    [assistantMenu, messages],
+  );
+
+  const openAssistantTurnMenu = useCallback(
+    (
+      messageId: string,
+      x: number,
+      y: number,
+      respectTextSelection = true,
+      returnFocus: HTMLButtonElement | null = null,
+    ) => {
+      if (respectTextSelection) {
+        const selection = window.getSelection();
+        if (
+          selection &&
+          !selection.isCollapsed &&
+          selection.toString().trim()
+        ) {
+          return false;
+        }
+      }
+      assistantMenuReturnFocusRef.current = returnFocus;
+      setAssistantMenu({ messageId, x, y });
+      return true;
+    },
+    [],
+  );
+
+  const closeAssistantTurnMenu = useCallback((restoreFocus = false) => {
+    const returnFocus = assistantMenuReturnFocusRef.current;
+    assistantMenuReturnFocusRef.current = null;
+    setAssistantMenu(null);
+    if (restoreFocus && returnFocus?.isConnected) {
+      window.requestAnimationFrame(() => returnFocus.focus());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (
+      assistantMenu &&
+      !messages.some((message) => message.id === assistantMenu.messageId)
+    ) {
+      closeAssistantTurnMenu(false);
+    }
+  }, [assistantMenu, closeAssistantTurnMenu, messages]);
+
+  const copyAssistantTurnText = useCallback(
+    async (text: string) => {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(t("chat.copied"));
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error), {
+          tone: "error",
+        });
+      }
+    },
+    [showToast, t],
+  );
+
+  const handleAssistantTurnMenuAction = useCallback(
+    (action: AssistantTurnMenuAction) => {
+      const menu = assistantMenu;
+      if (!menu) return;
+      const message = messages.find(
+        (candidate) => candidate.id === menu.messageId,
+      );
+      if (!message || message.role !== "assistant") return;
+
+      if (action === "layout-default") {
+        setMessageLayoutOverrides((current) => {
+          const next = { ...current };
+          delete next[message.id];
+          return next;
+        });
+        return;
+      }
+      if (action === "layout-timeline" || action === "layout-grouped") {
+        const layout = action === "layout-grouped" ? "grouped" : "timeline";
+        setMessageLayoutOverrides((current) => ({
+          ...current,
+          [message.id]: layout,
+        }));
+        return;
+      }
+      if (action === "set-layout-default") {
+        const layout = messageLayoutOverrides[message.id];
+        if (!layout || !onDefaultAnswerLayoutChange) return;
+        onDefaultAnswerLayoutChange(layout);
+        setMessageLayoutOverrides((current) => {
+          const next = { ...current };
+          delete next[message.id];
+          return next;
+        });
+        return;
+      }
+      if (action === "toggle-process") {
+        setMessageProcessExpanded((current) => ({
+          ...current,
+          [message.id]: !current[message.id],
+        }));
+        return;
+      }
+      if (action === "copy-answer") {
+        void copyAssistantTurnText(assistantAnswerPlainText(message.content));
+        return;
+      }
+      if (action === "copy-markdown") {
+        void copyAssistantTurnText(message.content);
+        return;
+      }
+      if (action === "copy-process") {
+        void copyAssistantTurnText(assistantProcessMarkdown(message));
+        return;
+      }
+      onBranchMessage?.(message.id);
+    },
+    [
+      assistantMenu,
+      copyAssistantTurnText,
+      messageLayoutOverrides,
+      messages,
+      onBranchMessage,
+      onDefaultAnswerLayoutChange,
+    ],
+  );
 
   return (
     <ChatMediaAttachProvider value={mediaAttachApi}>
-    <section
-      className={`chat-pane ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onDrop={(e) => void onDrop(e)}
-    >
-      {toastHost}
-      {emptyMode === "chat" ? (
-        <ChatWelcome onPickCard={onPickWelcomePrompt} />
-      ) : emptyMode === "agent" ? (
-          <AgentCreateGuide
-            onSkip={onSkipAgentCreate}
-            previewName={firstSlotValue(input)}
+      <section
+        ref={chatPaneRef}
+        className={`chat-pane ${workspaceContent ? "has-project-file" : ""} ${
+          fileDragOver ? "is-file-dragover" : ""
+        } ${cronRun && !workspaceContent ? "has-cron-run" : ""}`.trim()}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => void onDrop(e)}
+      >
+        {toastHost}
+        <TaskCompletionCelebration trigger={completionCelebrationId} />
+        {assistantMenu && contextMenuMessage?.role === "assistant" ? (
+          <AssistantTurnContextMenu
+            x={assistantMenu.x}
+            y={assistantMenu.y}
+            defaultLayout={displayPrefs.answerLayout}
+            layoutOverride={messageLayoutOverrides[contextMenuMessage.id]}
+            processExpanded={Boolean(
+              messageProcessExpanded[contextMenuMessage.id],
+            )}
+            hasAnswer={Boolean(contextMenuMessage.content.trim())}
+            hasProcess={Boolean(
+              contextMenuMessage.reasoning?.trim() ||
+                contextMenuMessage.activities?.length,
+            )}
+            canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
+            canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
+            onAction={handleAssistantTurnMenuAction}
+            onClose={closeAssistantTurnMenu}
           />
-      ) : (
-        <div className="message-list-wrap">
-          <div className="message-list" ref={messageListRef}>
-            {messages.map((m, index) => {
-              const isStreamingBubble =
-                m.role === "assistant" &&
-                !m.error &&
-                (parallelRunningIds.has(m.id) ||
-                  (streaming && index === messages.length - 1));
-              const reasoningActive = Boolean(
-                isStreamingBubble && m.reasoning && !m.content,
-              );
-              const dissolving = dissolvingSet.has(m.id);
-              const dissolveStagger = dissolving
-                ? Math.max(0, dissolvingIds.indexOf(m.id))
-                : 0;
-              return (
-                <div
-                  key={m.id}
-                  id={`msg-${m.id}`}
-                  data-msg-id={m.id}
-                  className={`msg-row ${m.role === "user" ? "user" : "assistant"}${
-                    dissolving ? " is-dissolving" : ""
-                  }`}
-                >
-                  {dissolving ? (
-                    <MsgDissolveOverlay
-                      messageId={m.id}
-                      text={`${m.content || ""}${m.reasoning || ""}`}
-                      staggerIndex={dissolveStagger}
-                    />
-                  ) : null}
-                  {m.role === "assistant" && (
-                    <div
-                      className={`avatar ${m.error ? "error" : ""}${
-                        !m.error && !assistantHasCustomAvatar && modelId
-                          ? " is-model"
-                          : ""
-                      }`}
-                    >
-                      {m.error ? (
-                        "!"
-                      ) : assistantHasCustomAvatar && activeAgent ? (
-                        <AgentAvatar agent={activeAgent} size={20} />
-                      ) : modelId ? (
-                        <ModelBrandIcon modelId={modelId} size={16} />
-                      ) : (
-                        "AI"
-                      )}
-                    </div>
-                  )}
-                  <div className="msg-stack">
-                    <div
-                      className={`bubble ${m.role} ${m.error ? "error" : ""} ${
-                        !m.content &&
-                        !m.reasoning &&
-                        !m.attachments?.length &&
-                        !m.activities?.length &&
-                        !m.uiSurfaces?.length &&
-                        streaming
-                          ? "typing"
-                          : ""
-                      } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}`}
-                    >
-                      {m.attachments && m.attachments.length > 0 && (
-                        <MessageAttachments items={m.attachments} />
-                      )}
-                      {(() => {
-                        type Step = {
-                          key: string;
-                          kind: MsgTimelineKind;
-                          active?: boolean;
-                          node: ReactNode;
-                        };
-                        const steps: Step[] = [];
-                        const pushActivity = (act: ChatActivity) => {
-                          if (!isActivityVisible(act.kind, displayPrefs)) return;
-                          steps.push({
-                            key: `act-${act.id}`,
-                            kind: act.kind,
-                            active: act.status === "running",
-                            node: (
-                              <MsgActivity
-                                activity={act}
-                                defaultOpen={false}
-                                showTimestamp={displayPrefs.showTimestamps}
-                                mediaBaseDir={mediaBaseDir}
-                              />
-                            ),
-                          });
-                        };
-                        const pushSurface = (
-                          surface: NonNullable<ChatMessage["uiSurfaces"]>[number],
-                        ) => {
-                          steps.push({
-                            key: `surf-${surface.messageId}`,
-                            kind: "surface",
-                            active: surface.status === "active",
-                            node: isLocationRequiredSurface(surface) ? (
-                              <LocationA2UISurface
-                                operations={surface.operations}
-                                disabled={surface.status !== "active"}
-                                mediaBaseDir={mediaBaseDir}
-                                onAction={(name, context) =>
-                                  onUiAction?.(m.id, name, context)
-                                }
-                              />
-                            ) : (
-                              <A2UISurfaceCard
-                                surface={surface}
-                                mediaBaseDir={mediaBaseDir}
-                                onAction={(name, context) =>
-                                  onUiAction?.(m.id, name, context)
-                                }
-                              />
-                            ),
-                          });
-                        };
-
-                        if (m.segments && m.segments.length > 0) {
-                          const displaySegs =
-                            coalesceReasoningSegments(m.segments) ?? m.segments;
-                          for (const seg of displaySegs) {
-                            if (seg.type === "reasoning") {
-                              const openReasoning =
-                                seg.durationSec == null || seg.durationSec <= 0;
-                              const active = Boolean(
-                                isStreamingBubble && openReasoning,
-                              );
-                              steps.push({
-                                key: seg.id,
-                                kind: "reasoning",
-                                active,
-                                node: (
-                                  <MsgReasoning
-                                    reasoning={seg.text}
-                                    active={active}
-                                    durationSec={seg.durationSec}
-                                    startedAtMs={active ? seg.at : undefined}
-                                  />
-                                ),
-                              });
-                              continue;
-                            }
-                            if (seg.type === "activity") {
-                              const act = m.activities?.find(
-                                (a) => a.id === seg.id,
-                              );
-                              if (act) pushActivity(act);
-                              continue;
-                            }
-                            const surface = m.uiSurfaces?.find(
-                              (s) => s.messageId === seg.id,
-                            );
-                            if (surface) pushSurface(surface);
-                          }
-                        } else {
-                          if (m.reasoning) {
-                            steps.push({
-                              key: `r-${m.id}`,
-                              kind: "reasoning",
-                              active: reasoningActive,
-                              node: (
-                                <MsgReasoning
-                                  reasoning={m.reasoning}
-                                  active={reasoningActive}
-                                  durationSec={m.reasoningDurationSec}
-                                />
-                              ),
-                            });
-                          }
-                          for (const act of m.activities ?? []) {
-                            pushActivity(act);
-                          }
-                          for (const surface of m.uiSurfaces ?? []) {
-                            pushSurface(surface);
-                          }
-                          if (m.citations?.length) {
-                            steps.push({
-                              key: `cite-${m.id}`,
-                              kind: "reasoning" as MsgTimelineKind,
-                              active: false,
-                              node: <MsgCitations citations={m.citations} />,
-                            });
-                          }
-                        }
-
-                        const showLoaderAlone =
-                          isStreamingBubble &&
+        ) : null}
+        {cronRun && !workspaceContent ? (
+          <aside className="chat-cron-run-float">
+            <CronRunFloatingCard
+              run={cronRun}
+              onOpen={() => setCronTaskOpen(true)}
+            />
+          </aside>
+        ) : null}
+        {browserPreview && !workspaceContent ? (
+          <BrowserPreviewFloat
+            preview={browserPreview}
+            onClose={() => onCloseBrowserPreview?.()}
+          />
+        ) : null}
+        {workspaceContent ? (
+          workspaceContent
+        ) : emptyMode === "chat" || emptyMode === "agent" ? (
+          <ChatWelcome
+            onPickCard={pickWelcomePrompt}
+            onActivate={() => textareaRef.current?.focus()}
+          />
+        ) : (
+          <div className="message-list-wrap">
+            <div
+              className="message-list"
+              ref={messageListRef}
+              onScroll={updateConversationScrollState}
+            >
+              {messages.map((m, index) => {
+                const pendingAsyncQuestions = pendingAsyncQuestionsAt(
+                  messages,
+                  index,
+                );
+                const isStreamingBubble =
+                  m.role === "assistant" &&
+                  !m.error &&
+                  (parallelRunningIds.has(m.id) ||
+                    (streaming && index === messages.length - 1));
+                const reasoningActive = Boolean(
+                  isStreamingBubble && m.reasoning && !m.content,
+                );
+                const answerLayout =
+                  messageLayoutOverrides[m.id] ?? displayPrefs.answerLayout;
+                const forcedProcessOpen = messageProcessExpanded[m.id];
+                const isEditingUserMessage = editingUserMessageId === m.id;
+                const canEditUserMessage =
+                  m.role === "user" &&
+                  m.id === lastUserMessageId &&
+                  !streaming &&
+                  !turnInFlight &&
+                  !sendBlocked &&
+                  Boolean(onEditUserMessage);
+                if (isTodoOnlyActivityMessage(m)) return null;
+                return (
+                  <div
+                    key={m.id}
+                    id={`msg-${m.id}`}
+                    data-msg-id={m.id}
+                    className={`msg-row ${m.role === "user" ? "user" : "assistant"}`}
+                  >
+                    {m.role === "assistant" && (
+                      <div
+                        className={`avatar ${m.error ? "error" : ""}${
+                          !m.error && !assistantHasCustomAvatar && modelId
+                            ? " is-model"
+                            : ""
+                        }`}
+                      >
+                        {m.error ? (
+                          "!"
+                        ) : assistantHasCustomAvatar && activeAgent ? (
+                          <AgentAvatar agent={activeAgent} size={20} />
+                        ) : modelId ? (
+                          <ModelBrandIcon modelId={modelId} size={16} />
+                        ) : (
+                          "AI"
+                        )}
+                      </div>
+                    )}
+                    <div className="msg-stack">
+                      <div
+                        className={`bubble ${m.role} ${m.error ? "error" : ""} ${
                           !m.content &&
                           !m.reasoning &&
                           !m.attachments?.length &&
+                          !m.activities?.length &&
                           !m.uiSurfaces?.length &&
-                          !(
-                            m.activities?.length &&
-                            displayPrefs.verbosity !== "compact"
+                          streaming
+                            ? "typing"
+                            : ""
+                        } ${isStreamingBubble && (m.content || m.reasoning) ? "is-streaming" : ""}${
+                          isEditingUserMessage ? " is-editing" : ""
+                        }`}
+                        data-allow-context-menu={
+                          m.role === "assistant" ? "true" : undefined
+                        }
+                        onContextMenu={(event) => {
+                          if (m.role !== "assistant" || isStreamingBubble)
+                            return;
+                          const opened = openAssistantTurnMenu(
+                            m.id,
+                            event.clientX,
+                            event.clientY,
                           );
-                        const hasProcess = steps.length > 0;
+                          if (!opened) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                      >
+                        {m.attachments && m.attachments.length > 0 && (
+                          <MessageAttachments items={m.attachments} />
+                        )}
+                        {isEditingUserMessage ? (
+                          <InlineUserMessageEditor
+                            value={editingUserDraft}
+                            originalValue={m.content}
+                            disabled={submittingUserEdit}
+                            onChange={setEditingUserDraft}
+                            onCancel={cancelUserMessageEdit}
+                            onSubmit={() => void submitUserMessageEdit()}
+                          />
+                        ) : (
+                          (() => {
+                            type Step = {
+                              key: string;
+                              kind: MsgTimelineKind;
+                              active?: boolean;
+                              activity?: ChatActivity;
+                              node: ReactNode;
+                            };
+                            const steps: Step[] = [];
+                            if (pendingAsyncQuestions) {
+                              steps.push({
+                                key: `async-questions-${m.id}`,
+                                kind: "surface",
+                                active: true,
+                                node: (
+                                  <ClarifyWizard
+                                    steps={pendingAsyncQuestions.map(
+                                      (question, questionIndex) => ({
+                                        id: `${m.id}-q${questionIndex}`,
+                                        question: question.title,
+                                        options: question.options ?? [],
+                                      }),
+                                    )}
+                                    disabled={sendBlocked}
+                                    onAction={(name, context) => {
+                                      if (
+                                        name === "choose" &&
+                                        typeof context.value === "string" &&
+                                        context.value.trim()
+                                      ) {
+                                        onSend({ text: context.value.trim() });
+                                      }
+                                    }}
+                                  />
+                                ),
+                              });
+                            }
+                            const pushActivity = (act: ChatActivity) => {
+                              if (isTodoActivity(act)) return;
+                              if (!isActivityVisible(act.kind, displayPrefs))
+                                return;
+                              steps.push({
+                                key: `act-${act.id}`,
+                                kind: act.kind,
+                                active: isLiveActivityStatus(act.status),
+                                activity: act,
+                                node: (
+                                  <MsgActivity
+                                    activity={act}
+                                    defaultOpen={forcedProcessOpen ?? false}
+                                    showTimestamp={displayPrefs.showTimestamps}
+                                    mediaBaseDir={mediaBaseDir}
+                                  />
+                                ),
+                              });
+                            };
+                            const pushSurface = (
+                              surface: NonNullable<
+                                ConversationEntry["uiSurfaces"]
+                              >[number],
+                            ) => {
+                              // Clarify is an input interaction: it belongs in the composer,
+                              // never inside the assistant answer timeline.
+                              if (isClarifySurface(surface)) return;
+                              steps.push({
+                                key: `surf-${surface.messageId}`,
+                                kind: "surface",
+                                active: surface.status === "active",
+                                node: isLocationRequiredSurface(surface) ? (
+                                  <LocationA2UISurface
+                                    operations={surface.operations}
+                                    disabled={surface.status !== "active"}
+                                    mediaBaseDir={mediaBaseDir}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ) : (
+                                  <A2UISurfaceCard
+                                    surface={surface}
+                                    mediaBaseDir={mediaBaseDir}
+                                    onAction={(name, context) =>
+                                      onUiAction?.(m.id, name, context)
+                                    }
+                                  />
+                                ),
+                              });
+                            };
+                            let hasTimelineText = Boolean(
+                              pendingAsyncQuestions,
+                            );
+                            const timelineSegments =
+                              answerLayout === "timeline"
+                                ? projectCanonicalTimelineSegments(m)
+                                : m.segments;
+                            const reasoningOutcome:
+                              | "done"
+                              | "error"
+                              | "interrupted" =
+                              m.turnStatus === "error" || m.error
+                                ? "error"
+                                : m.turnStatus === "interrupted"
+                                  ? "interrupted"
+                                  : "done";
+                            const lastReasoningSegmentId = timelineSegments
+                              ? [...timelineSegments]
+                                  .reverse()
+                                  .find(
+                                    (segment) => segment.type === "reasoning",
+                                  )?.id
+                              : undefined;
 
-                        if (m.content) {
-                          steps.push({
-                            key: `reply-${m.id}`,
-                            kind: "reply",
-                            node: (
-                              <>
-                                <ChatMarkdown
-                                  content={m.content}
-                                  streaming={isStreamingBubble}
-                                  compact={displayPrefs.verbosity === "compact"}
-                                  plain={Boolean(m.error)}
-                                  caret={false}
-                                  mediaBaseDir={mediaBaseDir}
-                                />
-                                <MsgStreamLoader visible={isStreamingBubble} />
-                              </>
-                            ),
-                          });
-                        } else if (isStreamingBubble && hasProcess) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader />,
-                          });
-                        } else if (showLoaderAlone) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader alone />,
-                          });
-                        } else if (isStreamingBubble && !hasProcess) {
-                          steps.push({
-                            key: `gen-${m.id}`,
-                            kind: "generating",
-                            active: true,
-                            node: <MsgStreamLoader />,
-                          });
-                        }
+                            if (
+                              timelineSegments &&
+                              timelineSegments.length > 0
+                            ) {
+                              for (const [
+                                segmentIndex,
+                                seg,
+                              ] of timelineSegments.entries()) {
+                                if (seg.type === "reasoning") {
+                                  const openReasoning =
+                                    seg.durationSec == null ||
+                                    seg.durationSec <= 0;
+                                  const active = Boolean(
+                                    isStreamingBubble && openReasoning,
+                                  );
+                                  steps.push({
+                                    key: seg.id,
+                                    kind: "reasoning",
+                                    active,
+                                    node: (
+                                      <MsgReasoning
+                                        reasoning={seg.text}
+                                        active={active}
+                                        outcome={
+                                          !active &&
+                                          seg.id === lastReasoningSegmentId
+                                            ? reasoningOutcome
+                                            : "done"
+                                        }
+                                        durationSec={seg.durationSec}
+                                        startedAtMs={
+                                          active ? seg.at : undefined
+                                        }
+                                        forcedOpen={forcedProcessOpen}
+                                      />
+                                    ),
+                                  });
+                                  continue;
+                                }
+                                if (seg.type === "text") {
+                                  hasTimelineText = true;
+                                  const active = Boolean(
+                                    isStreamingBubble &&
+                                      segmentIndex ===
+                                        timelineSegments.length - 1,
+                                  );
+                                  steps.push({
+                                    key: seg.id,
+                                    kind: "reply",
+                                    active,
+                                    node: (
+                                      <>
+                                        <ChatMarkdown
+                                          content={seg.text}
+                                          streaming={active}
+                                          compact={
+                                            displayPrefs.verbosity === "compact"
+                                          }
+                                          plain={Boolean(m.error)}
+                                          caret={false}
+                                          mediaBaseDir={mediaBaseDir}
+                                        />
+                                        <MsgStreamLoader visible={active} />
+                                      </>
+                                    ),
+                                  });
+                                  continue;
+                                }
+                                if (seg.type === "activity") {
+                                  const act = m.activities?.find(
+                                    (a) => a.id === seg.id,
+                                  );
+                                  if (act) pushActivity(act);
+                                  continue;
+                                }
+                                const surface = m.uiSurfaces?.find(
+                                  (s) => s.messageId === seg.id,
+                                );
+                                if (surface) pushSurface(surface);
+                              }
+                            } else {
+                              if (m.reasoning) {
+                                steps.push({
+                                  key: `r-${m.id}`,
+                                  kind: "reasoning",
+                                  active: reasoningActive,
+                                  node: (
+                                    <MsgReasoning
+                                      reasoning={m.reasoning}
+                                      active={reasoningActive}
+                                      outcome={reasoningOutcome}
+                                      durationSec={m.reasoningDurationSec}
+                                      forcedOpen={forcedProcessOpen}
+                                    />
+                                  ),
+                                });
+                              }
+                              for (const act of m.activities ?? []) {
+                                pushActivity(act);
+                              }
+                              for (const surface of m.uiSurfaces ?? []) {
+                                pushSurface(surface);
+                              }
+                              if (m.citations?.length) {
+                                steps.push({
+                                  key: `cite-${m.id}`,
+                                  kind: "reasoning" as MsgTimelineKind,
+                                  active: false,
+                                  node: (
+                                    <MsgCitations citations={m.citations} />
+                                  ),
+                                });
+                              }
+                            }
 
-                        if (steps.length === 0) return null;
+                            if (answerLayout === "grouped") {
+                              const groupedAnswer = groupAssistantAnswer(m);
+                              const groupedViewSteps: Step[] = [];
+                              const lastSegment =
+                                m.segments?.[m.segments.length - 1];
+                              const groupedReasoningActive = Boolean(
+                                isStreamingBubble &&
+                                  (lastSegment
+                                    ? lastSegment.type === "reasoning"
+                                    : reasoningActive),
+                              );
 
-                        if (!hasProcess) {
-                          return <>{steps.map((step) => (
-                            <div key={step.key}>{step.node}</div>
-                          ))}</>;
-                        }
+                              if (groupedAnswer.reasoning) {
+                                groupedViewSteps.push({
+                                  key: `grouped-reasoning-${m.id}`,
+                                  kind: "reasoning",
+                                  active: groupedReasoningActive,
+                                  node: (
+                                    <MsgReasoning
+                                      reasoning={groupedAnswer.reasoning}
+                                      active={groupedReasoningActive}
+                                      outcome={reasoningOutcome}
+                                      durationSec={
+                                        groupedAnswer.reasoningDurationSec
+                                      }
+                                      forcedOpen={forcedProcessOpen}
+                                    />
+                                  ),
+                                });
+                              }
 
-                        return (
-                          <MsgTimeline>
-                            {steps.map((step, i) => (
-                              <MsgTimelineStep
-                                key={step.key}
-                                kind={step.kind}
-                                active={step.active}
-                                isLast={i === steps.length - 1}
-                              >
-                                {step.node}
-                              </MsgTimelineStep>
-                            ))}
-                          </MsgTimeline>
-                        );
-                      })()}
-                      {displayPrefs.showTimestamps && m.createdAt ? (
-                        <div className="msg-timestamp">
-                          {new Date(m.createdAt).toLocaleTimeString()}
-                        </div>
-                      ) : null}
-                      {m.role === "assistant" &&
-                      !isStreamingBubble &&
-                      (m.usage || m.generationDurationSec) ? (
-                        <MessageTokenStats
-                          usage={m.usage}
-                          tokensPerSec={m.tokensPerSec}
-                          generationDurationSec={m.generationDurationSec}
+                              const visibleActivities = (
+                                m.activities ?? []
+                              ).filter(
+                                (activity) =>
+                                  !isTodoActivity(activity) &&
+                                  isActivityVisible(
+                                    activity.kind,
+                                    displayPrefs,
+                                  ),
+                              );
+                              if (visibleActivities.length > 0) {
+                                groupedViewSteps.push({
+                                  key: `grouped-activities-${m.id}`,
+                                  kind: visibleActivities[0]?.kind ?? "tool",
+                                  active: visibleActivities.some((activity) =>
+                                    isLiveActivityStatus(activity.status),
+                                  ),
+                                  node: (
+                                    <MsgActivityGroup
+                                      activities={visibleActivities}
+                                      forcedOpen={forcedProcessOpen}
+                                      showTimestamp={
+                                        displayPrefs.showTimestamps
+                                      }
+                                      mediaBaseDir={mediaBaseDir}
+                                    />
+                                  ),
+                                });
+                              }
+
+                              groupedViewSteps.push(
+                                ...steps.filter(
+                                  (step) => step.kind === "surface",
+                                ),
+                              );
+
+                              if (
+                                groupedAnswer.text &&
+                                !pendingAsyncQuestions
+                              ) {
+                                groupedViewSteps.push({
+                                  key: `grouped-reply-${m.id}`,
+                                  kind: "reply",
+                                  active: isStreamingBubble,
+                                  node: (
+                                    <>
+                                      <ChatMarkdown
+                                        content={groupedAnswer.text}
+                                        streaming={isStreamingBubble}
+                                        compact={
+                                          displayPrefs.verbosity === "compact"
+                                        }
+                                        plain={Boolean(m.error)}
+                                        caret={false}
+                                        mediaBaseDir={mediaBaseDir}
+                                      />
+                                      <MsgStreamLoader
+                                        visible={isStreamingBubble}
+                                      />
+                                    </>
+                                  ),
+                                });
+                              }
+
+                              if (m.citations?.length) {
+                                groupedViewSteps.push({
+                                  key: `grouped-citations-${m.id}`,
+                                  kind: "reasoning",
+                                  active: false,
+                                  node: (
+                                    <MsgCitations citations={m.citations} />
+                                  ),
+                                });
+                              }
+
+                              steps.splice(
+                                0,
+                                steps.length,
+                                ...groupedViewSteps,
+                              );
+                              hasTimelineText = Boolean(
+                                groupedAnswer.text || pendingAsyncQuestions,
+                              );
+                            }
+
+                            const showLoaderAlone =
+                              isStreamingBubble &&
+                              !m.content &&
+                              !m.reasoning &&
+                              !m.attachments?.length &&
+                              !m.uiSurfaces?.length &&
+                              !(
+                                m.activities?.length &&
+                                displayPrefs.verbosity !== "compact"
+                              );
+                            if (m.content && !hasTimelineText) {
+                              steps.push({
+                                key: `reply-${m.id}`,
+                                kind: "reply",
+                                node: (
+                                  <>
+                                    <ChatMarkdown
+                                      content={m.content}
+                                      streaming={isStreamingBubble}
+                                      compact={
+                                        displayPrefs.verbosity === "compact"
+                                      }
+                                      plain={Boolean(m.error)}
+                                      caret={false}
+                                      mediaBaseDir={mediaBaseDir}
+                                    />
+                                    <MsgStreamLoader
+                                      visible={isStreamingBubble}
+                                    />
+                                  </>
+                                ),
+                              });
+                            }
+
+                            const hasProcess = steps.some(
+                              (step) => step.kind !== "reply",
+                            );
+
+                            if (!m.content && isStreamingBubble && hasProcess) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader />,
+                              });
+                            } else if (!m.content && showLoaderAlone) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader alone />,
+                              });
+                            } else if (
+                              !m.content &&
+                              isStreamingBubble &&
+                              !hasProcess
+                            ) {
+                              steps.push({
+                                key: `gen-${m.id}`,
+                                kind: "generating",
+                                active: true,
+                                node: <MsgStreamLoader />,
+                              });
+                            }
+
+                            if (steps.length === 0) return null;
+
+                            const groupedSteps =
+                              groupConsecutiveActivities(steps);
+
+                            if (!hasProcess) {
+                              return (
+                                <>
+                                  {steps.map((step) => (
+                                    <div key={step.key}>{step.node}</div>
+                                  ))}
+                                </>
+                              );
+                            }
+
+                            return (
+                              <MsgTimeline>
+                                {groupedSteps.map((step, i) => {
+                                  const isLast = i === groupedSteps.length - 1;
+                                  if (isConsecutiveActivityGroup(step)) {
+                                    const activities = step.items.flatMap(
+                                      (item) =>
+                                        item.activity ? [item.activity] : [],
+                                    );
+                                    return (
+                                      <MsgTimelineStep
+                                        key={step.key}
+                                        kind={step.items[0]?.kind ?? "tool"}
+                                        active={activities.some(
+                                          (activity) =>
+                                            activity.status === "running",
+                                        )}
+                                        isLast={isLast}
+                                      >
+                                        <MsgActivityGroup
+                                          activities={activities}
+                                          forcedOpen={forcedProcessOpen}
+                                          showTimestamp={
+                                            displayPrefs.showTimestamps
+                                          }
+                                          mediaBaseDir={mediaBaseDir}
+                                        />
+                                      </MsgTimelineStep>
+                                    );
+                                  }
+                                  return (
+                                    <MsgTimelineStep
+                                      key={step.key}
+                                      kind={step.kind}
+                                      active={step.active}
+                                      isLast={isLast}
+                                    >
+                                      {step.node}
+                                    </MsgTimelineStep>
+                                  );
+                                })}
+                              </MsgTimeline>
+                            );
+                          })()
+                        )}
+                        {displayPrefs.showTimestamps && m.createdAt ? (
+                          <div className="msg-timestamp">
+                            {new Date(m.createdAt).toLocaleTimeString()}
+                          </div>
+                        ) : null}
+                        {m.role === "assistant" &&
+                        !isStreamingBubble &&
+                        m.id !== "welcome" ? (
+                          <div className="assistant-message-footer">
+                            <MessageActions
+                              messageId={m.id}
+                              content={m.content}
+                              role="assistant"
+                              disabled={streaming || turnInFlight}
+                              onBranch={onBranchMessage}
+                              onOpenMenu={(anchor) => {
+                                const rect = anchor.getBoundingClientRect();
+                                openAssistantTurnMenu(
+                                  m.id,
+                                  rect.right,
+                                  rect.bottom + 4,
+                                  false,
+                                  anchor,
+                                );
+                              }}
+                            />
+                            {m.usage || m.generationDurationSec ? (
+                              <MessageTokenStats
+                                usage={m.usage}
+                                tokensPerSec={m.tokensPerSec}
+                                generationDurationSec={m.generationDurationSec}
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {m.role === "assistant" &&
+                        !isStreamingBubble &&
+                        m.id !== "welcome" ? (
+                          <TurnChangeSummaryCard
+                            message={m}
+                            projectId={projectId}
+                            onReview={onOpenFileReview}
+                          />
+                        ) : null}
+                      </div>
+                      {!isStreamingBubble &&
+                      m.id !== "welcome" &&
+                      m.role === "user" &&
+                      canEditUserMessage &&
+                      !isEditingUserMessage ? (
+                        <MessageActions
+                          messageId={m.id}
+                          content={m.content}
+                          role="user"
+                          disabled={streaming}
+                          onEdit={() => beginUserMessageEdit(m)}
                         />
                       ) : null}
                     </div>
-                    {!isStreamingBubble &&
-                    !dissolving &&
-                    m.id !== "welcome" &&
-                    (m.role === "user" || m.role === "assistant") ? (
-                      <MessageActions
-                        messageId={m.id}
-                        content={m.content}
-                        role={m.role}
-                        disabled={streaming || dissolvingIds.length > 0}
-                        onRegenerate={
-                          m.role === "assistant" ? onRegenerateMessage : undefined
-                        }
-                        onEdit={
-                          m.role === "user" ? onEditUserMessage : undefined
-                        }
-                        onDelete={onDeleteMessage}
-                        onBranch={onBranchMessage}
-                      />
-                    ) : null}
                   </div>
-                </div>
-              );
-            })}
-            <div ref={bottomRef} />
-          </div>
-          <ChatMessageNav
-            messages={messages}
-            listRef={messageListRef}
-            bottomRef={bottomRef}
-          />
-        </div>
-      )}
-
-      <TodoProgress messages={messages} />
-
-      <form
-        className="composer-shell"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (tryHandleSlashSubmit()) return;
-          trySubmitComposer();
-        }}
-      >
-        <SubagentActivityBar
-          key={sessionId ?? "no-session"}
-          rootSessionId={sessionId}
-          roots={subagentRoots}
-          onRefresh={refreshSubagentThreads}
-          onOpenPanel={() => {
-            setSelectedSubagentPath(null);
-            setSubagentsOpen(true);
-          }}
-          onOpenThread={(canonicalPath) => {
-            markSubagentRead(canonicalPath);
-            setSelectedSubagentPath(canonicalPath);
-            setSubagentsOpen(true);
-          }}
-        />
-        {modeSwitchPrompt && (
-          <div
-            className="composer-queue composer-mode-switch"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="composer-mode-switch-body">
-              <span className="composer-mode-switch-title">
-                {t("chat.modeSwitch.title", {
-                  to:
-                    modeSwitchPrompt.to === "plan"
-                      ? t("chat.modePlan")
-                      : t("chat.modeAgent"),
-                })}
-              </span>
-              <span className="composer-mode-switch-reason">
-                {modeSwitchPrompt.reason}
-              </span>
-              <span className="composer-mode-switch-countdown">
-                {t("chat.modeSwitch.countdown", {
-                  sec: String(modeSwitchSecLeft),
-                })}
-              </span>
+                );
+              })}
+              <div ref={bottomRef} />
             </div>
-            <span className="composer-queue-actions">
-              <button
-                type="button"
-                className="composer-queue-btn"
-                onClick={() => onApproveModeSwitch?.()}
-              >
-                {t("chat.modeSwitch.now")}
-              </button>
-              <button
-                type="button"
-                className="composer-queue-btn"
-                onClick={() => onDismissModeSwitch?.()}
-              >
-                {t("chat.modeSwitch.cancel")}
-              </button>
-            </span>
+            <TurnNavigator
+              messages={messages}
+              listRef={messageListRef}
+              bottomRef={bottomRef}
+            />
           </div>
         )}
-        {queuedFollowUps.length > 0 && (
-          <div
-            className={`composer-queue ${queueMenuId ? "has-open-menu" : ""}`.trim()}
-            aria-label={t("chat.queue.title", { count: String(queuedFollowUps.length) })}
-          >
+
+        <motion.form
+          ref={composerShellRef}
+          className={`composer-shell${useCapsuleComposer ? " is-capsule" : ""}${
+            useCapsuleComposer && capsuleComposerHasRichContent
+              ? " is-capsule-expanded"
+              : ""
+          }`}
+          layout={!reduceComposerMotion}
+          layoutDependency={composerLayoutState}
+          transition={{ layout: composerLayoutTransition }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (composerContexts.length === 0 && tryHandleSlashSubmit()) return;
+            trySubmitComposer();
+          }}
+        >
+          {isScrolledFromBottom ? (
+            <button
+              type="button"
+              className={`chat-scroll-latest ${showStopControl ? "is-active" : ""}`.trim()}
+              title={t("chat.navScrollBottom")}
+              aria-label={t("chat.navScrollBottom")}
+              onClick={scrollConversationToBottom}
+            >
+              {showStopControl ? (
+                <span className="chat-scroll-latest-dots" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : (
+                <ArrowDown size={18} strokeWidth={2} aria-hidden />
+              )}
+            </button>
+          ) : null}
+          <TodoProgress
+            messages={messages}
+            onOpenFileReview={onOpenFileReview}
+          />
+          {modeSwitchPrompt?.to === "agent" && (
+            <div
+              className="composer-queue composer-mode-switch"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="composer-mode-switch-body">
+                <span className="composer-mode-switch-title">
+                  {t("chat.modeSwitch.title")}
+                </span>
+                <span className="composer-mode-switch-reason">
+                  {modeSwitchPrompt.reason}
+                </span>
+                {modeSwitchPrompt.summary ? (
+                  <span className="composer-mode-switch-summary">
+                    {modeSwitchPrompt.summary}
+                  </span>
+                ) : null}
+              </div>
+              <span className="composer-queue-actions">
+                <button
+                  type="button"
+                  className="composer-queue-btn"
+                  onClick={() => onApproveModeSwitch?.()}
+                >
+                  {t("chat.modeSwitch.execute")}
+                </button>
+                <button
+                  type="button"
+                  className="composer-queue-btn"
+                  onClick={() => onDismissModeSwitch?.()}
+                >
+                  {t("chat.modeSwitch.keepPlanning")}
+                </button>
+              </span>
+            </div>
+          )}
+          {queuedFollowUps.length > 0 && (
+            <div
+              className={`composer-queue ${queueMenuId ? "has-open-menu" : ""}`.trim()}
+              aria-label={t("chat.queue.title", {
+                count: String(queuedFollowUps.length),
+              })}
+            >
               {queuedFollowUps.map((item, index) => {
                 const isSteering = item.delivery === "steering";
                 return (
@@ -2252,7 +3559,9 @@ export default function ChatView({
                       >
                         <CornerDownRight size={13} strokeWidth={2.1} />
                         <span>
-                          {isSteering ? t("chat.queue.steering") : t("chat.queue.steer")}
+                          {isSteering
+                            ? t("chat.queue.steering")
+                            : t("chat.queue.steer")}
                         </span>
                       </button>
                       <button
@@ -2273,7 +3582,11 @@ export default function ChatView({
                         aria-haspopup="menu"
                         aria-expanded={queueMenuId === item.id}
                         disabled={isSteering}
-                        onClick={() => setQueueMenuId((current) => current === item.id ? null : item.id)}
+                        onClick={() =>
+                          setQueueMenuId((current) =>
+                            current === item.id ? null : item.id,
+                          )
+                        }
                       >
                         <MoreHorizontal size={14} strokeWidth={2} />
                       </button>
@@ -2330,12 +3643,16 @@ export default function ChatView({
                             <ArrowDown size={14} strokeWidth={2} />
                             <span>{t("chat.queue.moveDown")}</span>
                           </button>
-                          <span className="composer-queue-menu-separator" role="separator" />
+                          <span
+                            className="composer-queue-menu-separator"
+                            role="separator"
+                          />
                           <button
                             type="button"
                             role="menuitem"
                             onClick={() => {
-                              if (onCloseQueuedFollowUps?.()) setQueueMenuId(null);
+                              if (onCloseQueuedFollowUps?.())
+                                setQueueMenuId(null);
                             }}
                           >
                             <ListX size={14} strokeWidth={2} />
@@ -2347,703 +3664,797 @@ export default function ChatView({
                   </div>
                 );
               })}
-          </div>
-        )}
-
-        {parallelTasks.length > 0 && (
-          <div
-            className="composer-queue composer-tasks"
-            aria-label={t("chat.task.title", {
-              running: String(parallelRunningCount),
-              total: String(parallelTasks.length),
-            })}
-          >
-            <button
-              type="button"
-              className="composer-queue-toggle"
-              aria-expanded={tasksOpen}
-              onClick={() => setTasksOpen((o) => !o)}
-            >
-              <ChevronDown
-                size={14}
-                strokeWidth={2.2}
-                className={tasksOpen ? "is-open" : ""}
-                aria-hidden
-              />
-              <span>
-                {t("chat.task.title", {
-                  running: String(parallelRunningCount),
-                  total: String(parallelTasks.length),
-                })}
-              </span>
-            </button>
-            {tasksOpen && (
-              <ul className="composer-queue-list">
-                {parallelTasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className={`composer-queue-item is-task is-${task.status}`}
-                  >
-                    <span
-                      className={`composer-queue-dot is-${task.status}`}
-                      aria-hidden
-                    />
-                    <span className="composer-queue-text">
-                      <span className="composer-task-status">
-                        {task.status === "running"
-                          ? t("chat.task.status.running")
-                          : task.status === "waiting"
-                            ? t("chat.task.status.waiting")
-                            : task.status === "done"
-                              ? t("chat.task.status.done")
-                              : task.status === "error"
-                                ? t("chat.task.status.error")
-                                : t("chat.task.status.cancelled")}
-                      </span>
-                      {task.prompt.trim() || t("chat.queue.emptyText")}
-                      {task.worktree?.path ? (
-                        <span className="composer-task-worktree" title={task.worktree.path}>
-                          {task.worktree.path.split(/[/\\]/).slice(-2).join("/")}
-                        </span>
-                      ) : null}
-                    </span>
-                    {isParallelTaskActive(task.status) && (
-                      <span className="composer-queue-actions">
-                        <button
-                          type="button"
-                          className="composer-queue-btn"
-                          title={t("chat.task.cancel")}
-                          aria-label={t("chat.task.cancel")}
-                          onClick={() => onCancelParallelTask?.(task.id)}
-                        >
-                          <Square size={12} strokeWidth={2.4} />
-                        </button>
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {countRunningParallel(parallelTasks) === 0 &&
-              parallelTasks.length > 0 && (
-                <div className="composer-task-summary">
-                  {(() => {
-                    const s = countSettledByStatus(parallelTasks);
-                    return (
-                      <span className="composer-task-summary-text">
-                        {t("chat.task.summaryCounts", {
-                          done: String(s.done),
-                          error: String(s.error),
-                          cancelled: String(s.cancelled),
-                        })}
-                      </span>
-                    );
-                  })()}
-                  <span className="composer-queue-actions">
-                    <button
-                      type="button"
-                      className="composer-queue-btn"
-                      onClick={() => onWriteParallelSummary?.()}
-                    >
-                      {t("chat.task.writeSummary")}
-                    </button>
-                    <button
-                      type="button"
-                      className="composer-queue-btn"
-                      onClick={() => onClearSettledParallel?.()}
-                    >
-                      {t("chat.task.clearSettled")}
-                    </button>
-                  </span>
-                </div>
-              )}
-          </div>
-        )}
-
-        {attachments.length > 0 && (
-          <div className="composer-previews">
-            {attachments.map((att) => (
-              <div key={att.id} className="composer-preview" data-kind={att.kind}>
-                {att.kind === "image" && att.previewUrl ? (
-                  <img src={att.previewUrl} alt={att.name} />
-                ) : att.kind === "video" && att.previewUrl ? (
-                  <video src={att.previewUrl} muted />
-                ) : (
-                  <span className="composer-preview-icon" data-kind={att.kind}>
-                    <AttachmentGlyph kind={att.kind} />
-                  </span>
-                )}
-                <div className="composer-preview-meta">
-                  <span className="composer-preview-name">{att.name}</span>
-                  <span className="composer-preview-size">{formatSize(att.size)}</span>
-                </div>
-                <button
-                  type="button"
-                  className="composer-preview-remove"
-                  onClick={() => removeAttachment(att.id)}
-                  aria-label={t("chat.removeAttachment")}
-                  title={t("chat.removeAttachment")}
-                  disabled={streaming}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {paletteKind ? (
-          <ComposerPalette
-            kind={paletteKind}
-            items={activePaletteItems}
-            query={paletteQuery}
-            activeIndex={paletteIndex}
-            selectedId={
-              paletteKind === "thinking" ? thinkingPrefs.level : null
-            }
-            onHover={setPaletteIndex}
-            onSelect={applyPaletteItem}
-            onClose={closePalette}
-          />
-        ) : null}
-
-        <div
-          className={`composer composer--stacked ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="composer-file-input"
-            multiple
-            accept={fileAccept || undefined}
-            onChange={(e) => void onFileChange(e)}
-            disabled={
-              attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
-            }
-          />
-          {fileDragOver ? (
-            <div className="composer-drop-hint" aria-live="polite">
-              {t("chat.dropFilesHint")}
             </div>
-          ) : null}
-          {emptyMode === "agent" && agentCreateMissing.length > 0 ? (
-            <p className="composer-agent-validate-hint" role="alert">
-              {t("chat.agentCreateNeedRequired")}
-            </p>
-          ) : null}
-          <div className={`composer-input-wrap ${emptyMode === "agent" ? "is-agent-template" : ""}`.trim()}>
+          )}
+
+          {parallelTasks.length > 0 && (
             <div
-              className="composer-typed-hint"
-              hidden={!typingPlaceholderEnabled}
-              aria-hidden
+              className="composer-queue composer-tasks"
+              aria-label={t("chat.task.title", {
+                running: String(parallelRunningCount),
+                total: String(parallelTasks.length),
+              })}
             >
-              <span ref={typedHintRef} className="composer-typed-text" />
-              <span className="composer-typed-caret" />
-            </div>
-            {emptyMode === "agent" ? (
-              <div ref={slotMirrorRef} className="composer-slot-mirror" aria-hidden>
-                {agentTemplateSegments.map((seg, i) =>
-                  seg.type === "text" ? (
-                    <span key={`t-${i}`}>{seg.value}</span>
-                  ) : (
-                    <span
-                      key={`s-${i}`}
-                      className={[
-                        "composer-slot-chip",
-                        seg.empty ? "is-empty" : "is-filled",
-                        agentCreateMissingSet.has(seg.index) ? "is-invalid" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
+              <button
+                type="button"
+                className="composer-queue-toggle"
+                aria-expanded={tasksOpen}
+                onClick={() => setTasksOpen((o) => !o)}
+              >
+                <MorphToggleIcon
+                  active={tasksOpen}
+                  activeIcon={ChevronUpData}
+                  inactiveIcon={ChevronDownData}
+                  size={14}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+                <span>
+                  {t("chat.task.title", {
+                    running: String(parallelRunningCount),
+                    total: String(parallelTasks.length),
+                  })}
+                </span>
+              </button>
+              {tasksOpen && (
+                <ul className="composer-queue-list">
+                  {parallelTasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className={`composer-queue-item is-task is-${task.status}`}
                     >
-                      {seg.open}
-                      {seg.value || "\u00a0"}
-                      {seg.close}
+                      <span
+                        className={`composer-queue-dot is-${task.status}`}
+                        aria-hidden
+                      />
+                      <span className="composer-queue-text">
+                        <span className="composer-task-status">
+                          {task.status === "running"
+                            ? t("chat.task.status.running")
+                            : task.status === "waiting"
+                              ? t("chat.task.status.waiting")
+                              : task.status === "done"
+                                ? t("chat.task.status.done")
+                                : task.status === "error"
+                                  ? t("chat.task.status.error")
+                                  : t("chat.task.status.cancelled")}
+                        </span>
+                        {task.prompt.trim() || t("chat.queue.emptyText")}
+                        {task.worktree?.path ? (
+                          <span
+                            className="composer-task-worktree"
+                            title={task.worktree.path}
+                          >
+                            {task.worktree.path
+                              .split(/[/\\]/)
+                              .slice(-2)
+                              .join("/")}
+                          </span>
+                        ) : null}
+                      </span>
+                      {isParallelTaskActive(task.status) && (
+                        <span className="composer-queue-actions">
+                          <button
+                            type="button"
+                            className="composer-queue-btn"
+                            title={t("chat.task.cancel")}
+                            aria-label={t("chat.task.cancel")}
+                            onClick={() => onCancelParallelTask?.(task.id)}
+                          >
+                            <Square size={12} strokeWidth={2.4} />
+                          </button>
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {countRunningParallel(parallelTasks) === 0 &&
+                parallelTasks.length > 0 && (
+                  <div className="composer-task-summary">
+                    {(() => {
+                      const s = countSettledByStatus(parallelTasks);
+                      return (
+                        <span className="composer-task-summary-text">
+                          {t("chat.task.summaryCounts", {
+                            done: String(s.done),
+                            error: String(s.error),
+                            cancelled: String(s.cancelled),
+                          })}
+                        </span>
+                      );
+                    })()}
+                    <span className="composer-queue-actions">
+                      <button
+                        type="button"
+                        className="composer-queue-btn"
+                        onClick={() => onWriteParallelSummary?.()}
+                      >
+                        {t("chat.task.writeSummary")}
+                      </button>
+                      <button
+                        type="button"
+                        className="composer-queue-btn"
+                        onClick={() => onClearSettledParallel?.()}
+                      >
+                        {t("chat.task.clearSettled")}
+                      </button>
                     </span>
-                  ),
+                  </div>
                 )}
+            </div>
+          )}
+
+          {paletteKind ? (
+            <ComposerPalette
+              kind={paletteKind}
+              items={activePaletteItems}
+              query={paletteQuery}
+              activeIndex={paletteIndex}
+              onHover={setPaletteIndex}
+              onSelect={applyPaletteItem}
+              onClose={closePalette}
+            />
+          ) : null}
+
+          <motion.div
+            className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+            layout={!reduceComposerMotion}
+            layoutDependency={composerLayoutState}
+            transition={{ layout: composerLayoutTransition }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="composer-file-input"
+              multiple
+              accept={fileAccept || undefined}
+              onChange={(e) => void onFileChange(e)}
+              disabled={
+                attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
+              }
+            />
+            {fileDragOver ? (
+              <div className="composer-drop-hint" aria-live="polite">
+                {t("chat.dropFilesHint")}
               </div>
             ) : null}
-            <textarea
-              ref={textareaRef}
-              className={`composer-input ${emptyMode === "agent" ? "is-slot-highlight" : ""}`.trim()}
-              value={input}
-              rows={2}
-              onChange={(e) => {
-                const v = e.target.value;
-                onInputChange(v);
-                syncTriggerFromCaret(v, e.target.selectionStart ?? v.length);
-              }}
-              onScroll={syncSlotMirrorScroll}
-              onSelect={(e) => {
-                const el = e.currentTarget;
-                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-              }}
-              onPaste={(e) => void onPaste(e)}
-              onClick={() => {
-                const el = textareaRef.current;
-                if (!el) return;
-                if (emptyMode === "agent") {
-                  const caret = el.selectionStart ?? 0;
-                  const slot = findSlotAt(input, caret);
-                  if (slot) {
-                    el.setSelectionRange(slot.innerStart, slot.innerEnd);
-                    return;
-                  }
-                }
-                syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
-              }}
-              onKeyDown={onComposerKeyDown}
-              placeholder={composerPlaceholder}
-              aria-label={
-                emptyMode === "agent"
-                  ? t("chat.agentGuideComposerAria")
-                  : emptyMode === "chat"
-                    ? t("chat.welcomePlaceholder")
-                    : composerPlaceholder || t("chat.placeholder")
-              }
-              disabled={sendBlocked}
-              autoFocus
-            />
-          </div>
-          <div className="composer-bar">
-            <div className="composer-bar-left">
-              <div className="composer-mode" ref={modeMenuRef}>
-                <button
-                  type="button"
-                  className={`composer-mode-pill ${modeMenuOpen ? "is-open" : ""}`}
-                  disabled={modeSwitchLocked}
-                  aria-haspopup="listbox"
-                  aria-expanded={modeMenuOpen}
-                  aria-label={t("chat.modeMenu")}
-                  title={
-                    modeSwitchLocked
-                      ? t("chat.modeMenu")
-                      : `${modeMeta[chatMode].label} — ${modeMeta[chatMode].desc}`
-                  }
-                  onClick={() => {
-                    setMcpOpen(false);
-                    setContextPopoverOpen(false);
-                    setApprovalMenuOpen(false);
-                    setModeMenuOpen((o) => !o);
-                  }}
-                >
-                  {(() => {
-                    const Meta = modeMeta[chatMode];
-                    const Icon = Meta.Icon;
-                    return (
-                      <>
-                        <Icon size={15} strokeWidth={2.2} />
-                        <span>{Meta.label}</span>
-                        {(chatMode === "plan" || chatMode === "ask") && (
-                          <span className="composer-mode-readonly">
-                            {t("chat.mode.readonlyBadge")}
-                          </span>
-                        )}
-                        <ChevronDown size={14} strokeWidth={2} />
-                      </>
-                    );
-                  })()}
-                </button>
-                {modeMenuOpen && typeof document !== "undefined"
-                  ? createPortal(
-                      <div
-                        ref={modeMenuPanelRef}
-                        className="composer-mode-menu"
-                        role="listbox"
-                        style={modeMenuStyle ?? { visibility: "hidden" }}
-                      >
-                        {CHAT_MODES.map((mode) => {
-                          const Meta = modeMeta[mode];
-                          const Icon = Meta.Icon;
-                          const selected = mode === chatMode;
-                          return (
-                            <button
-                              key={mode}
-                              type="button"
-                              role="option"
-                              aria-selected={selected}
-                              className={`composer-mode-item ${selected ? "is-selected" : ""}`}
-                              onClick={() => {
-                                onChatModeChange(mode);
-                                setModeMenuOpen(false);
-                              }}
-                            >
-                              <Icon size={16} strokeWidth={2} />
-                              <span className="composer-mode-item-text">
-                                <span className="composer-mode-item-label">{Meta.label}</span>
-                                <span className="composer-mode-item-desc">{Meta.desc}</span>
-                              </span>
-                              {selected ? (
-                                <Check size={14} strokeWidth={2.4} />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-
-              <div className="composer-mode" ref={approvalMenuRef}>
-                <button
-                  type="button"
-                  className={`composer-mode-pill composer-approval-pill ${approvalMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
-                  disabled={approvalBusy}
-                  aria-haspopup="listbox"
-                  aria-expanded={approvalMenuOpen}
-                  aria-label={t("chat.approval.menu")}
-                  title={`${approvalMeta[approvalMode].label} — ${approvalMeta[approvalMode].desc}`}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setMcpOpen(false);
-                    setContextPopoverOpen(false);
-                    setPaletteKind(null);
-                    setApprovalMenuOpen((open) => !open);
-                  }}
-                >
-                  {(() => {
-                    const Meta = approvalMeta[approvalMode];
-                    const Icon = Meta.Icon;
-                    return (
-                      <>
-                        <Icon size={14} strokeWidth={2.1} />
-                        <span>{Meta.label}</span>
-                        <ChevronDown size={14} strokeWidth={2} />
-                      </>
-                    );
-                  })()}
-                </button>
-                {approvalMenuOpen && typeof document !== "undefined"
-                  ? createPortal(
-                      <div
-                        ref={approvalMenuPanelRef}
-                        className="composer-mode-menu composer-approval-menu"
-                        role="listbox"
-                        aria-label={t("chat.approval.menu")}
-                        style={approvalMenuStyle ?? { visibility: "hidden" }}
-                      >
-                        {PERMISSION_PRESETS.map((mode) => {
-                          const Meta = approvalMeta[mode];
-                          const Icon = Meta.Icon;
-                          const selected = mode === approvalMode;
-                          return (
-                            <button
-                              key={mode}
-                              type="button"
-                              role="option"
-                              aria-selected={selected}
-                              data-approval-mode={mode}
-                              className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
-                              onClick={() => void changeApprovalMode(mode)}
-                            >
-                              <Icon size={16} strokeWidth={2} />
-                              <span className="composer-mode-item-text">
-                                <span className="composer-mode-item-label">
-                                  {Meta.label}
-                                  {mode === "ask_for_approval" ? (
-                                    <span className="composer-approval-recommended">
-                                      {t("chat.approval.recommended")}
-                                    </span>
-                                  ) : null}
-                                </span>
-                                <span className="composer-mode-item-desc">{Meta.desc}</span>
-                              </span>
-                              {selected ? <Check size={14} strokeWidth={2.4} /> : null}
-                            </button>
-                          );
-                        })}
-                        <div className="composer-approval-health" data-status={sandboxHealth?.status ?? "unknown"}>
-                          <span className="composer-approval-health-dot" aria-hidden />
-                          <span>
-                            {sandboxHealth?.status === "available"
-                              ? t("chat.approval.sandboxAvailable")
-                              : t("chat.approval.sandboxUnavailable")}
-                          </span>
-                        </div>
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-
-              {showThinkingControls ? (
-                <button
-                  type="button"
-                  className={`composer-mode-pill composer-mode-pill--ghost ${thinkingPrefs.level !== "off" ? "is-on" : ""
-                    } ${paletteKind === "thinking" ? "is-open" : ""}`}
-                  onClick={openThinkingPalette}
-                  disabled={streaming}
-                  title={t("chat.thinkingLength")}
-                  aria-label={t("chat.thinkingLength")}
-                  aria-pressed={thinkingPrefs.level !== "off"}
-                >
-                  <Lightbulb size={14} strokeWidth={2} />
-                  <span>
-                    {thinkingPrefs.level === "off"
-                      ? t("chat.thinkLevelOff")
-                      : thinkingPrefs.level === "none"
-                        ? t("chat.thinkLevelNone")
-                        : thinkingPrefs.level === "minimal"
-                          ? t("chat.thinkLevelMinimal")
-                          : thinkingPrefs.level === "low"
-                            ? t("chat.thinkLevelLow")
-                            : thinkingPrefs.level === "medium"
-                              ? t("chat.thinkLevelMedium")
-                              : thinkingPrefs.level === "xhigh"
-                                ? t("chat.thinkLevelXhigh")
-                                : thinkingPrefs.level === "max"
-                                  ? t("chat.thinkLevelMax")
-                                  : t("chat.thinkLevelHigh")}
-                  </span>
-                  <ChevronDown size={13} strokeWidth={2} />
-                </button>
-              ) : null}
-
-              <button
-                type="button"
-                className={`composer-icon-btn ${subagentsOpen ? "is-open" : ""}`}
-                title={t("subagents.open")}
-                aria-label={t("subagents.open")}
-                aria-expanded={subagentsOpen}
-                onClick={() => {
-                  setMcpOpen(false);
-                  setApprovalMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  setPaletteKind(null);
-                  setSelectedSubagentPath(null);
-                  setSubagentsOpen(true);
-                }}
+            {attachments.length > 0 || composerContexts.length > 0 ? (
+              <div
+                className="composer-previews composer-context-strip"
+                aria-label={t("chat.contextStripLabel")}
               >
-                <Bot size={17} strokeWidth={2} />
-              </button>
-
-              <div className="composer-mcp-wrap" ref={mcpWrapRef}>
-                <button
-                  type="button"
-                  className={`composer-icon-btn ${mcpOpen ? "is-open" : ""} ${
-                    mcpHasEnabled ? "has-dot" : ""
-                  }`}
-                  disabled={streaming}
-                  title={t("chat.mcpMenu")}
-                  aria-label={t("chat.mcpMenu")}
-                  aria-expanded={mcpOpen}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setApprovalMenuOpen(false);
-                    setPaletteKind(null);
-                    setContextPopoverOpen(false);
-                    setMcpOpen((v) => !v);
-                  }}
-                >
-                  <McpIcon size={16} />
-                </button>
-                <ComposerMcpMenu
-                  open={mcpOpen}
-                  anchorRef={mcpWrapRef}
-                  agentId={agentId}
-                  onClose={() => setMcpOpen(false)}
-                  onOpenSettings={() => onOpenMcpSettings?.()}
-                />
-              </div>
-
-              <button
-                type="button"
-                className={`composer-icon-btn ${paletteKind === "mention" ? "is-open" : ""
-                  }`}
-                disabled={streaming}
-                title={t("chat.mentionTitle")}
-                aria-label={t("chat.mentionTitle")}
-                onClick={() => {
-                  setMcpOpen(false);
-                  setApprovalMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  const el = textareaRef.current;
-                  const caret = el?.selectionStart ?? input.length;
-                  const next = `${input.slice(0, caret)}@${input.slice(caret)}`;
-                  onInputChange(next);
-                  setTriggerStart(caret);
-                  setPaletteKind("mention");
-                  setPaletteQuery("");
-                  setPaletteIndex(0);
-                  requestAnimationFrame(() => {
-                    el?.focus();
-                    el?.setSelectionRange(caret + 1, caret + 1);
-                  });
-                }}
-              >
-                <AtSign size={17} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`composer-icon-btn ${paletteKind === "slash" ? "is-open" : ""
-                  }`}
-                disabled={streaming}
-                title={t("chat.slashTitle")}
-                aria-label={t("chat.slashTitle")}
-                onClick={() => {
-                  setMcpOpen(false);
-                  setApprovalMenuOpen(false);
-                  setContextPopoverOpen(false);
-                  const el = textareaRef.current;
-                  const caret = el?.selectionStart ?? input.length;
-                  const next = `${input.slice(0, caret)}/${input.slice(caret)}`;
-                  onInputChange(next);
-                  setTriggerStart(caret);
-                  setPaletteKind("slash");
-                  setPaletteQuery("");
-                  setPaletteIndex(0);
-                  requestAnimationFrame(() => {
-                    el?.focus();
-                    el?.setSelectionRange(caret + 1, caret + 1);
-                  });
-                }}
-              >
-                <Slash size={17} strokeWidth={2} />
-              </button>
-            </div>
-
-            <div className="composer-bar-right">
-              <div className="composer-context-wrap" ref={contextWrapRef}>
-                <button
-                  type="button"
-                  className={`composer-icon-btn composer-context-btn ${
-                    contextPopoverOpen ? "is-open" : ""
-                  }`}
-                  disabled={streaming}
-                  title={
-                    contextUsagePercent != null
-                      ? `${t("chat.contextUsage")} · ${contextUsagePercent}%`
-                      : t("chat.contextUsageHint")
-                  }
-                  aria-label={t("chat.contextUsage")}
-                  aria-expanded={contextPopoverOpen}
-                  onClick={() => {
-                    setModeMenuOpen(false);
-                    setApprovalMenuOpen(false);
-                    setMcpOpen(false);
-                    setPaletteKind(null);
-                    setContextPopoverOpen((v) => !v);
-                  }}
-                >
-                  <ChartPie size={17} strokeWidth={2} />
-                  {contextUsagePercent != null ? (
-                    <span className="composer-context-pct">
-                      {contextUsagePercent}%
-                    </span>
-                  ) : null}
-                </button>
-                <ContextUsagePopover
-                  open={contextPopoverOpen}
-                  snapshot={contextUsage}
-                  windowTokens={contextWindow}
-                  estimateCost={estimateCostLabel}
-                  containRef={contextWrapRef}
-                  onClose={() => setContextPopoverOpen(false)}
-                  onViewDetails={() => {
-                    onOpenContext();
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                className="composer-icon-btn"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={
-                  attachments.length >= MAX_ATTACHMENTS || fileAccept === ""
-                }
-                title={
-                  fileAccept === ""
-                    ? t("chat.attachmentUnsupported", { n: "—" })
-                    : t("chat.attach")
-                }
-                aria-label={t("chat.attach")}
-              >
-                <Paperclip size={17} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`composer-icon-btn${recording ? " is-recording" : ""}`}
-                disabled={transcribing}
-                onClick={() => void toggleMic()}
-                title={recording ? t("chat.micStop") : transcribing ? t("chat.micTranscribing") : t("chat.micStart")}
-                aria-label={recording ? t("chat.micStop") : t("chat.micStart")}
-              >
-                {transcribing ? (
-                  <Loader2 size={17} strokeWidth={2} style={{ animation: "msg-tts-spin 0.9s linear infinite" }} />
-                ) : recording ? (
-                  <MicOff size={17} strokeWidth={2} />
-                ) : (
-                  <Mic size={17} strokeWidth={2} />
-                )}
-              </button>
-              {showStopControl ? (
-                <>
-                  {showPauseResume ? (
-                    streamPaused ? (
+                {attachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="composer-preview"
+                    data-kind={att.kind}
+                  >
+                    <button
+                      type="button"
+                      className="composer-preview-open"
+                      onClick={() =>
+                        setPreviewTarget({ type: "attachment", item: att })
+                      }
+                      aria-label={t("chat.previewContext", { name: att.name })}
+                      title={t("chat.previewContext", { name: att.name })}
+                    >
+                      {att.kind === "image" && att.previewUrl ? (
+                        <img src={att.previewUrl} alt="" />
+                      ) : att.kind === "video" && att.previewUrl ? (
+                        <video src={att.previewUrl} muted />
+                      ) : (
+                        <span
+                          className="composer-preview-icon"
+                          data-kind={att.kind}
+                        >
+                          <AttachmentGlyph kind={att.kind} />
+                        </span>
+                      )}
+                      <span className="composer-preview-meta">
+                        <span className="composer-preview-name">
+                          {att.name}
+                        </span>
+                        <span className="composer-preview-size">
+                          {att.kind === "folder"
+                            ? t("chat.plusMenuFolder")
+                            : formatSize(att.size)}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-preview-remove"
+                      onClick={() => removeAttachment(att.id)}
+                      aria-label={t("chat.removeAttachment")}
+                      title={t("chat.removeAttachment")}
+                      disabled={streaming}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {composerContexts.map((token) => {
+                  const kindLabel = {
+                    agent: t("chat.contextToken.agent"),
+                    skill: t("chat.contextToken.skill"),
+                    mcp: t("chat.contextToken.mcp"),
+                    file: t("chat.contextToken.file"),
+                  }[token.kind];
+                  return (
+                    <div
+                      key={`${token.kind}:${token.id}`}
+                      className="composer-context-token"
+                      data-kind={token.kind}
+                    >
                       <button
                         type="button"
-                        className="composer-icon-btn"
-                        onClick={() => onResumeStream?.()}
-                        title={t("chat.streamResume")}
-                        aria-label={t("chat.streamResume")}
+                        className="composer-context-token-open"
+                        onClick={() =>
+                          setPreviewTarget({ type: "context", item: token })
+                        }
+                        aria-label={t("chat.previewContext", {
+                          name: token.name,
+                        })}
+                        title={t("chat.previewContext", { name: token.name })}
                       >
-                        <Play size={17} strokeWidth={2.2} />
+                        <span className="composer-context-token-icon">
+                          <ComposerContextGlyph kind={token.kind} />
+                        </span>
+                        <span className="composer-context-token-meta">
+                          <span className="composer-context-token-kind">
+                            {kindLabel}
+                          </span>
+                          <span className="composer-context-token-name">
+                            {token.name}
+                          </span>
+                        </span>
                       </button>
-                    ) : (
                       <button
                         type="button"
-                        className="composer-icon-btn"
-                        onClick={() => onPauseStream?.()}
-                        title={t("chat.streamPause")}
-                        aria-label={t("chat.streamPause")}
+                        className="composer-preview-remove"
+                        onClick={() => removeComposerContext(token)}
+                        aria-label={t("chat.removeContext", {
+                          name: token.name,
+                        })}
+                        title={t("chat.removeContext", { name: token.name })}
+                        disabled={streaming}
                       >
-                        <Pause size={17} strokeWidth={2.2} />
+                        ×
                       </button>
-                    )
-                  ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+            {!composerClarify &&
+            emptyMode === "agent" &&
+            agentCreateMissing.length > 0 ? (
+              <p className="composer-agent-validate-hint" role="alert">
+                {t("chat.agentCreateNeedRequired")}
+              </p>
+            ) : !composerClarify &&
+              welcomeTemplateActive &&
+              welcomeTemplateMissing.length > 0 ? (
+              <p className="composer-agent-validate-hint" role="alert">
+                {t("chat.welcomeTemplateNeedRequired")}
+              </p>
+            ) : null}
+            {composerClarify ? (
+              <ComposerClarifySurface
+                surface={composerClarify.surface}
+                mediaBaseDir={mediaBaseDir}
+                onAction={(name, context) =>
+                  onUiAction?.(composerClarify.messageId, name, context)
+                }
+              />
+            ) : (
+              <div
+                className={`composer-input-wrap ${slotTemplateActive ? "is-slot-template" : ""}`.trim()}
+              >
+                <div
+                  className="composer-typed-hint"
+                  hidden={!typingPlaceholderEnabled}
+                  aria-hidden
+                >
+                  <span ref={typedHintRef} className="composer-typed-text" />
+                  <span className="composer-typed-caret" />
+                </div>
+                {slotTemplateActive ? (
+                  <div
+                    ref={slotMirrorRef}
+                    className="composer-slot-mirror"
+                    aria-hidden
+                  >
+                    {templateSegments.map((seg, i) =>
+                      seg.type === "text" ? (
+                        <span key={`t-${i}`}>{seg.value}</span>
+                      ) : (
+                        <span
+                          key={`s-${i}`}
+                          className={[
+                            "composer-slot-chip",
+                            seg.empty ? "is-empty" : "is-filled",
+                            templateMissingSet.has(seg.index)
+                              ? "is-invalid"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          {seg.open}
+                          {seg.value || "\u00a0"}
+                          {seg.close}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+                <textarea
+                  ref={textareaRef}
+                  className={`composer-input ${slotTemplateActive ? "is-slot-highlight" : ""}`.trim()}
+                  value={input}
+                  rows={2}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onInputChange(v);
+                    syncTriggerFromCaret(
+                      v,
+                      e.target.selectionStart ?? v.length,
+                    );
+                  }}
+                  onScroll={syncSlotMirrorScroll}
+                  onSelect={(e) => {
+                    const el = e.currentTarget;
+                    syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+                  }}
+                  onPaste={(e) => void onPaste(e)}
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    if (!el) return;
+                    if (slotTemplateActive) {
+                      const caret = el.selectionStart ?? 0;
+                      const slot = welcomeTemplateActive
+                        ? findPromptTemplateSlotAt(
+                            input,
+                            caret,
+                            welcomeTemplateHints ?? [],
+                          )
+                        : findSlotAt(input, caret);
+                      if (slot) {
+                        el.setSelectionRange(slot.innerStart, slot.innerEnd);
+                        return;
+                      }
+                    }
+                    syncTriggerFromCaret(el.value, el.selectionStart ?? 0);
+                  }}
+                  onKeyDown={onComposerKeyDown}
+                  placeholder={composerPlaceholder}
+                  aria-label={
+                    emptyMode === "agent"
+                      ? t("chat.agentGuideComposerAria")
+                      : welcomeTemplateActive
+                        ? t("chat.welcomeTemplateComposerAria")
+                        : emptyMode === "chat"
+                          ? t("chat.welcomePlaceholder")
+                          : composerPlaceholder || t("chat.placeholder")
+                  }
+                  disabled={sendBlocked || realtime.active}
+                  autoFocus
+                />
+              </div>
+            )}
+            {realtime.active && realtime.transcript ? (
+              <div className="composer-realtime-transcript" aria-live="polite">
+                {realtime.transcript}
+              </div>
+            ) : null}
+            <div className="composer-bar">
+              <div className="composer-bar-left">
+                <div className="composer-mode" ref={modeMenuRef}>
                   <button
                     type="button"
-                    className="send-btn send-btn--round send-btn--stop"
-                    onClick={() => onStopStream?.()}
-                    aria-label={t("chat.streamStop")}
-                    title={t("chat.streamStop")}
+                    className={`composer-mode-pill composer-policy-pill ${modeMenuOpen ? "is-open" : ""} ${approvalMode === "full_access" ? "is-full-access" : ""}`.trim()}
+                    disabled={approvalBusy}
+                    aria-haspopup="menu"
+                    aria-expanded={modeMenuOpen}
+                    aria-label={`${t("chat.modeMenu")} · ${t("chat.approval.menu")}`}
+                    title={`${modeMeta[chatMode].label} · ${approvalMeta[approvalMode].label}`}
+                    onClick={() => {
+                      setPlusOpen(false);
+                      setContextPopoverOpen(false);
+                      setPaletteKind(null);
+                      setModeMenuOpen((o) => !o);
+                    }}
                   >
-                    <Square size={14} strokeWidth={2.4} fill="currentColor" />
+                    {(() => {
+                      const Meta = modeMeta[chatMode];
+                      const Icon = Meta.Icon;
+                      const ApprovalIcon = approvalMeta[approvalMode].Icon;
+                      return (
+                        <>
+                          <Icon
+                            className="composer-mode-current-icon"
+                            size={15}
+                            strokeWidth={2.2}
+                            aria-hidden
+                          />
+                          <span className="composer-mode-pill-label">
+                            {Meta.label}
+                          </span>
+                          <span
+                            className="composer-policy-separator"
+                            aria-hidden
+                          >
+                            ·
+                          </span>
+                          <ApprovalIcon
+                            className="composer-policy-current-icon"
+                            size={15}
+                            strokeWidth={2.2}
+                            aria-hidden
+                          />
+                          <span className="composer-policy-approval">
+                            {approvalMeta[approvalMode].label}
+                          </span>
+                          <ChevronDown
+                            className="composer-mode-chevron"
+                            size={14}
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                        </>
+                      );
+                    })()}
                   </button>
-                </>
-              ) : null}
-              {showSendButton ? (
-                <button
-                  className="send-btn send-btn--round"
-                  type="submit"
-                  disabled={!canSend}
-                  aria-label={t("chat.send")}
-                  title={t("chat.send")}
+                  {modeMenuOpen && typeof document !== "undefined"
+                    ? createPortal(
+                        <div
+                          ref={modeMenuPanelRef}
+                          className="composer-mode-menu composer-policy-menu"
+                          role="menu"
+                          style={modeMenuStyle ?? { visibility: "hidden" }}
+                        >
+                          <div className="composer-policy-section-label">
+                            {t("chat.modeMenu")}
+                          </div>
+                          {CHAT_MODES.map((mode) => {
+                            const Meta = modeMeta[mode];
+                            const Icon = Meta.Icon;
+                            const selected = mode === chatMode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={selected}
+                                disabled={modeSwitchLocked}
+                                className={`composer-mode-item ${selected ? "is-selected" : ""}`}
+                                onClick={() => {
+                                  onChatModeChange(mode);
+                                  setModeMenuOpen(false);
+                                }}
+                              >
+                                <Icon size={16} strokeWidth={2} />
+                                <span className="composer-mode-item-text">
+                                  <span className="composer-mode-item-label">
+                                    {Meta.label}
+                                  </span>
+                                  <span className="composer-mode-item-desc">
+                                    {Meta.desc}
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check size={14} strokeWidth={2.4} />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                          <div className="composer-policy-divider" />
+                          <div className="composer-policy-section-label">
+                            {t("chat.approval.menu")}
+                          </div>
+                          {PERMISSION_PRESETS.map((mode) => {
+                            const Meta = approvalMeta[mode];
+                            const Icon = Meta.Icon;
+                            const selected = mode === approvalMode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={selected}
+                                data-approval-mode={mode}
+                                className={`composer-mode-item composer-approval-item ${selected ? "is-selected" : ""}`}
+                                onClick={() => void changeApprovalMode(mode)}
+                              >
+                                <Icon size={16} strokeWidth={2} />
+                                <span className="composer-mode-item-text">
+                                  <span className="composer-mode-item-label">
+                                    {Meta.label}
+                                    {mode === "ask_for_approval" ? (
+                                      <span className="composer-approval-recommended">
+                                        {t("chat.approval.recommended")}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <span className="composer-mode-item-desc">
+                                    {Meta.desc}
+                                  </span>
+                                </span>
+                                {selected ? (
+                                  <Check size={14} strokeWidth={2.4} />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                          <div
+                            className="composer-approval-health"
+                            data-status={sandboxHealth?.status ?? "unknown"}
+                          >
+                            <span
+                              className="composer-approval-health-dot"
+                              aria-hidden
+                            />
+                            <span>
+                              {sandboxHealth?.status === "available"
+                                ? t("chat.approval.sandboxAvailable")
+                                : t("chat.approval.sandboxUnavailable")}
+                            </span>
+                          </div>
+                        </div>,
+                        document.body,
+                      )
+                    : null}
+                </div>
+
+                <div className="composer-mcp-wrap" ref={plusWrapRef}>
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-plus-btn ${plusOpen ? "is-open" : ""} ${
+                      mcpHasEnabled ? "has-dot" : ""
+                    }`}
+                    disabled={streaming || realtime.active}
+                    title={t("chat.plusMenu")}
+                    aria-label={t("chat.plusMenu")}
+                    aria-haspopup="dialog"
+                    aria-expanded={plusOpen}
+                    onClick={() => {
+                      setModeMenuOpen(false);
+                      setPaletteKind(null);
+                      setContextPopoverOpen(false);
+                      setPlusOpen((value) => !value);
+                    }}
+                  >
+                    <Plus size={17} strokeWidth={2.2} />
+                  </button>
+                  <ComposerPlusMenu
+                    open={plusOpen}
+                    anchorRef={plusWrapRef}
+                    agentId={agentId}
+                    skills={skills}
+                    canAttach={
+                      attachments.length < MAX_ATTACHMENTS && fileAccept !== ""
+                    }
+                    canAttachFolder={attachments.length < MAX_ATTACHMENTS}
+                    onAttach={() => fileInputRef.current?.click()}
+                    onAttachFolder={() => void addFolder()}
+                    onSelectSkill={(skill) =>
+                      addComposerContext({
+                        id: skill.id,
+                        kind: "skill",
+                        name: skill.name,
+                        description: skill.description,
+                        path: skill.path,
+                      })
+                    }
+                    onSelectMcp={(server) =>
+                      addComposerContext({
+                        id: server.id,
+                        kind: "mcp",
+                        name: server.name,
+                        description: server.description,
+                      })
+                    }
+                    onClose={() => setPlusOpen(false)}
+                    onOpenSettings={() => onOpenMcpSettings?.()}
+                  />
+                </div>
+              </div>
+
+              <div className="composer-bar-right">
+                {!showStopControl ? (
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-realtime-btn ${
+                      realtime.active ? "is-on" : ""
+                    } ${realtime.status === "connecting" ? "is-connecting" : ""}`.trim()}
+                    disabled={
+                      sendBlocked ||
+                      !sessionId ||
+                      !realtimeAvailable ||
+                      !realtimeProviderId ||
+                      !realtimeBackendId
+                    }
+                    aria-pressed={realtime.active}
+                    aria-label={t(
+                      !realtimeAvailable
+                        ? "chat.realtimeUnavailable"
+                        : realtime.active
+                          ? "chat.realtimeStop"
+                          : "chat.realtimeStart",
+                    )}
+                    title={t(
+                      !realtimeAvailable
+                        ? "chat.realtimeUnavailable"
+                        : realtime.status === "connecting"
+                          ? "chat.realtimeConnecting"
+                          : realtime.active
+                            ? "chat.realtimeStop"
+                            : "chat.realtimeStart",
+                    )}
+                    onClick={realtime.toggle}
+                  >
+                    {realtime.active ? (
+                      <PhoneOff size={17} strokeWidth={2.1} />
+                    ) : (
+                      <Mic size={17} strokeWidth={2.1} />
+                    )}
+                  </button>
+                ) : null}
+                <div
+                  className="composer-context-wrap"
+                  ref={contextWrapRef}
+                  onPointerEnter={openContextPopover}
+                  onPointerLeave={scheduleContextPopoverClose}
                 >
-                  <SendHorizontal size={17} strokeWidth={2.2} />
-                </button>
-              ) : null}
+                  <button
+                    type="button"
+                    className={`composer-icon-btn composer-context-btn ${contextProgressTone} ${
+                      contextPopoverOpen ? "is-open" : ""
+                    }`}
+                    disabled={streaming}
+                    title={contextUsageLabel}
+                    aria-label={contextUsageLabel}
+                    aria-expanded={contextPopoverOpen}
+                    onFocus={openContextPopover}
+                    onClick={openContextPopover}
+                  >
+                    <svg
+                      className="composer-context-ring"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <circle
+                        className="composer-context-ring-track"
+                        cx="12"
+                        cy="12"
+                        r="9"
+                        pathLength="100"
+                      />
+                      {contextProgress != null ? (
+                        <circle
+                          className="composer-context-ring-value"
+                          cx="12"
+                          cy="12"
+                          r="9"
+                          pathLength="100"
+                          strokeDasharray={`${contextProgress} 100`}
+                        />
+                      ) : null}
+                    </svg>
+                  </button>
+                  <ContextUsagePopover
+                    open={contextPopoverOpen}
+                    snapshot={contextUsage}
+                    windowTokens={contextWindow}
+                    estimateCost={estimateCostLabel}
+                    containRef={contextWrapRef}
+                    onPointerEnter={cancelContextPopoverClose}
+                    onPointerLeave={scheduleContextPopoverClose}
+                    onClose={closeContextPopover}
+                    onViewDetails={() => {
+                      onOpenContext();
+                    }}
+                  />
+                </div>
+                {showStopControl ? (
+                  <>
+                    {showPauseResume ? (
+                      <button
+                        type="button"
+                        className="composer-icon-btn"
+                        onClick={() =>
+                          streamPaused ? onResumeStream?.() : onPauseStream?.()
+                        }
+                        title={t(
+                          streamPaused
+                            ? "chat.streamResume"
+                            : "chat.streamPause",
+                        )}
+                        aria-label={t(
+                          streamPaused
+                            ? "chat.streamResume"
+                            : "chat.streamPause",
+                        )}
+                      >
+                        <MorphToggleIcon
+                          active={streamPaused}
+                          activeIcon={PLAY_ICON}
+                          inactiveIcon={PAUSE_ICON}
+                          size={17}
+                          strokeWidth={2.2}
+                        />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="send-btn send-btn--round send-btn--stop"
+                      onClick={() => onStopStream?.()}
+                      aria-label={t("chat.streamStop")}
+                      title={t("chat.streamStop")}
+                    >
+                      <Square size={14} strokeWidth={2.4} fill="currentColor" />
+                    </button>
+                  </>
+                ) : null}
+                {showSendButton ? (
+                  <button
+                    className="send-btn send-btn--round"
+                    type="submit"
+                    disabled={!canSend}
+                    aria-label={t("chat.send")}
+                    title={t("chat.send")}
+                  >
+                    <SendHorizontal size={17} strokeWidth={2.2} />
+                  </button>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </div>
-      </form>
-      <SubagentsPanel
-        key={sessionId ?? "no-session"}
-        open={subagentsOpen}
-        rootSessionId={sessionId}
-        roots={subagentRoots}
-        threads={subagentThreads}
-        initialTarget={selectedSubagentPath}
-        streamError={subagentError}
-        loading={subagentsLoading}
-        initialized={subagentsInitialized}
-        refreshThreads={refreshSubagentThreads}
-        markRead={markSubagentRead}
-        onClose={() => setSubagentsOpen(false)}
+          </motion.div>
+        </motion.form>
+        <ComposerContextPreview
+          target={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+        />
+      </section>
+      {cronJob && cronTaskOpen ? (
+        <CronTaskDetailDrawer
+          job={cronJob}
+          runs={cronJobRuns}
+          runsLoading={cronJobRunsLoading}
+          busy={cronBusy}
+          nonModal
+          onClose={() => setCronTaskOpen(false)}
+          onEdit={() => setCronEditOpen(true)}
+          onToggleEnabled={() => void toggleCronJob()}
+          onRunNow={() => void runCronJobNow()}
+          onOpenRun={setSelectedCronRun}
+        />
+      ) : null}
+      {selectedCronRun ? (
+        <CronRunDetailDrawer
+          run={selectedCronRun}
+          messages={
+            selectedCronRun.session_id === sessionId
+              ? messages
+              : selectedCronMessages
+          }
+          traceLoading={selectedCronTraceLoading}
+          onClose={() => setSelectedCronRun(null)}
+          onDelete={() => void deleteSelectedCronRun()}
+        />
+      ) : null}
+      <CreateCronDialog
+        open={Boolean(cronJob && cronEditOpen)}
+        editingJob={cronJob}
+        onClose={() => setCronEditOpen(false)}
+        onCreated={() => {
+          if (cronJob) void loadCronTask(cronJob.id);
+        }}
+        providers={cronProviders}
+        activeProviderId={cronActiveProviderId}
       />
-    </section>
     </ChatMediaAttachProvider>
   );
 }

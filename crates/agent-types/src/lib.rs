@@ -1,8 +1,8 @@
 //! 跨 crate 共享类型：消息、工具描述、统一错误与 SQLite 打开协议。
 
 pub mod approval;
+pub mod async_user_input;
 pub mod auxiliary_target;
-pub mod chat_target;
 pub mod compact_scope;
 pub mod credentials;
 pub mod error;
@@ -10,8 +10,10 @@ pub mod grpc_addr;
 pub mod interaction_mode;
 pub mod media;
 pub mod memory_citation;
-pub mod message;
+pub mod model_profile;
 pub mod model_spec;
+pub mod model_target;
+pub mod model_tool;
 pub mod network_policy;
 pub mod notify;
 pub mod permissions;
@@ -22,11 +24,11 @@ pub mod title;
 pub mod tool;
 pub mod tool_call;
 pub mod tool_entry;
+pub mod tool_mode;
 pub mod tool_output;
 pub mod tool_spill;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
-pub use chat_target::*;
 pub use compact_scope::CompactTokenLimitScope;
 pub use grpc_addr::{
     grpc_bind_address, resolve_grpc_address, runtime_grpc_address, set_runtime_grpc_address,
@@ -36,6 +38,7 @@ pub use media::{
     MediaRef,
 };
 pub use model_spec::{ModelRole, ModelSpec};
+pub use model_target::*;
 pub use network_policy::{
     NetworkApprovalContext, NetworkApprovalProtocol, NetworkDecisionSource, NetworkPolicyAmendment,
     NetworkPolicyDecision, NetworkPolicyDecisionPayload, NetworkPolicyRuleAction,
@@ -46,12 +49,12 @@ pub use notify::{
 };
 pub use permissions::{
     is_builtin_profile, ApprovalPolicy, ApprovalsReviewer, FilesystemAccess, FilesystemPolicy,
-    GrantScope, NetworkAccess, NetworkPolicy, PermissionCapability, PermissionPreset,
-    PermissionProfile, PermissionProfileError, PermissionReason, PermissionRequest,
-    PermissionsConfig, SandboxMode, SessionPermissions, DANGER_FULL_ACCESS_PROFILE,
-    READ_ONLY_PROFILE, WORKSPACE_PROFILE,
+    GrantScope, NetworkAccess, NetworkHeaderInjection, NetworkPolicy, PermissionCapability,
+    PermissionPreset, PermissionProfile, PermissionProfileError, PermissionReason,
+    PermissionRequest, PermissionsConfig, SandboxMode, SessionPermissions,
+    DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
-pub use sqlite::{delete_sqlite_files, open_wal, ExampleSqliteStore, SqliteStore};
+pub use sqlite::{AstroDb, DbSpec, SqlitePool, SqliteStore};
 pub use title::sanitize_title;
 pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,
@@ -60,17 +63,21 @@ pub use tool_spill::{
 };
 
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
+pub use async_user_input::AsyncUserInputQuestion;
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 pub use interaction_mode::InteractionMode;
 pub use memory_citation::MemoryCitation;
+pub use model_profile::{
+    ApplyPatchToolType, ModelInputModality, ModelMultiAgentVersion, ModelProfile, ModelVerbosity,
+    WebSearchToolType,
+};
 pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RESULT_BYTES};
 pub use thread_memory_mode::ThreadMemoryMode;
-pub use tool_call::{
-    extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
-};
+pub use tool_call::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 pub use tool_entry::{
-    ExecApprovalRequirement, McpToolAnnotations, McpToolApproval, McpToolApprovalMode,
-    McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry, ToolExposure,
-    ToolName, ToolSpec,
+    ExecApprovalRequirement, FreeformToolFormat, McpToolAnnotations, McpToolApproval,
+    McpToolApprovalMode, McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry,
+    ToolExposure, ToolName, ToolSpec,
 };
-pub use tool_output::ToolOutput;
+pub use tool_mode::{deserialize_optional_tool_mode, ToolMode, ToolModeFeatureFlags};
+pub use tool_output::{ToolFileChange, ToolFileChangeKind, ToolOutput};

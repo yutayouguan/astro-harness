@@ -1,6 +1,34 @@
 //! 工具执行结果的结构化返回类型，替代原先的纯 `String`。
 
 use crate::media::MediaAsset;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolFileChangeKind {
+    Add,
+    Update,
+    Delete,
+    Move,
+}
+
+/// Exact before/after state produced by one structured file mutation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolFileChange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub move_path: Option<String>,
+    pub kind: ToolFileChangeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_content: Option<String>,
+    pub additions: usize,
+    pub deletions: usize,
+    pub reversible: bool,
+}
 
 #[derive(Debug, Clone)]
 pub enum ToolOutput {
@@ -11,6 +39,11 @@ pub enum ToolOutput {
         text: String,
         assets: Vec<MediaAsset>,
     },
+    /// Text result plus exact file mutations for turn-scoped review and undo.
+    FileChanges {
+        text: String,
+        changes: Vec<ToolFileChange>,
+    },
 }
 
 impl ToolOutput {
@@ -19,6 +52,7 @@ impl ToolOutput {
         match self {
             Self::Text(s) => s,
             Self::Media { text, .. } => text,
+            Self::FileChanges { text, .. } => text,
         }
     }
 
@@ -26,6 +60,7 @@ impl ToolOutput {
         match self {
             Self::Text(s) => s,
             Self::Media { text, .. } => text,
+            Self::FileChanges { text, .. } => text,
         }
     }
 
@@ -33,6 +68,14 @@ impl ToolOutput {
         match self {
             Self::Text(_) => &[],
             Self::Media { assets, .. } => assets,
+            Self::FileChanges { .. } => &[],
+        }
+    }
+
+    pub fn file_changes(&self) -> &[ToolFileChange] {
+        match self {
+            Self::FileChanges { changes, .. } => changes,
+            _ => &[],
         }
     }
 
@@ -40,6 +83,7 @@ impl ToolOutput {
         match self {
             Self::Text(s) => (s, Vec::new()),
             Self::Media { text, assets } => (text, assets),
+            Self::FileChanges { text, .. } => (text, Vec::new()),
         }
     }
 
@@ -47,6 +91,19 @@ impl ToolOutput {
     pub fn estimated_len(&self) -> usize {
         match self {
             Self::Text(s) => s.len(),
+            Self::FileChanges { text, changes } => {
+                text.len()
+                    + changes
+                        .iter()
+                        .map(|change| {
+                            change.root.as_ref().map_or(0, String::len)
+                                + change.path.len()
+                                + change.move_path.as_ref().map_or(0, String::len)
+                                + change.before_content.as_ref().map_or(0, String::len)
+                                + change.after_content.as_ref().map_or(0, String::len)
+                        })
+                        .sum::<usize>()
+            }
             Self::Media { text, assets } => {
                 text.len()
                     + assets
@@ -108,6 +165,28 @@ mod tests {
         };
         assert_eq!(out.text(), "done");
         assert_eq!(out.media().len(), 1);
+        assert!(out.estimated_len() > 4);
+    }
+
+    #[test]
+    fn file_changes_preserve_text_and_snapshots() {
+        let change = ToolFileChange {
+            root: None,
+            path: "a.txt".into(),
+            move_path: None,
+            kind: ToolFileChangeKind::Update,
+            before_content: Some("old\n".into()),
+            after_content: Some("new\n".into()),
+            additions: 1,
+            deletions: 1,
+            reversible: true,
+        };
+        let out = ToolOutput::FileChanges {
+            text: "done".into(),
+            changes: vec![change.clone()],
+        };
+        assert_eq!(out.text(), "done");
+        assert_eq!(out.file_changes(), &[change]);
         assert!(out.estimated_len() > 4);
     }
 

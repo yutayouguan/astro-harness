@@ -1,7 +1,7 @@
 //! 图片生成工具：按文本提示调用 Google Gemini Interactions / OpenAI 等图片 Provider。
 //!
 //! Google 路径走 Gemini Interactions API（参考图、多轮、search、video 等）；
-//! OpenAI 路径仅 prompt-only 生图。凭据来自 [`ToolContext::image_gen_targets`]：
+//! OpenAI / Azure Foundry v1 路径仅 prompt-only 生图。凭据来自 [`ToolContext::image_gen_targets`]：
 //! 先试 primary，失败再试 fallback。成功图片写入工作区 `generated/images/`。
 
 use std::path::{Path, PathBuf};
@@ -21,39 +21,39 @@ use crate::schema::schema_for_args;
 
 const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 
-/// `image_gen` tool args.
+/// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
-    /// Detailed image prompt (required): subject, setting, composition, lighting, materials, style, mood—not a short summary. Pass thinking drafts verbatim.
+    /// 详细图片提示词（必填）：主题、场景、构图、光线、材质、风格、氛围——不要简短概述。可直接传递思考草稿。
     pub prompt: String,
-    /// Short title for the filename; default "Image".
+    /// 文件名短标题；默认 "Image"。
     #[serde(default)]
     pub title: Option<String>,
-    /// Aspect ratio when the user asks (e.g. 16:9). Common: `1:1` / `16:9` / `9:16` / `4:3` / `3:4`.
+    /// 用户指定的宽高比（如 16:9）。常用：`1:1` / `16:9` / `9:16` / `4:3` / `3:4`。
     #[serde(default)]
     pub aspect_ratio: Option<String>,
-    /// Resolution tier when the user asks: `0.5K` / `1K` / `2K` / `4K` (uppercase K).
+    /// 用户指定的分辨率档位：`0.5K` / `1K` / `2K` / `4K`（大写 K）。
     #[serde(default)]
     pub image_size: Option<String>,
-    /// Reference image workspace paths (max 14).
+    /// 参考图片工作区路径（最多 14 张）。
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// Previous Interactions session id (multi-turn edit).
+    /// 上一次 Interactions 会话 ID（多轮编辑）。
     #[serde(default)]
     pub previous_interaction_id: Option<String>,
-    /// Enable Google Search grounding.
+    /// 启用 Google Search grounding。
     #[serde(default)]
     pub google_search: bool,
-    /// Enable image search (requires `google_search=true`).
+    /// 启用图片搜索（需 `google_search=true`）。
     #[serde(default)]
     pub image_search: bool,
-    /// Thinking depth: `minimal` / `high`.
+    /// 思考深度：`minimal` / `high`。
     #[serde(default)]
     pub thinking_level: Option<String>,
-    /// External video URL (mutually exclusive with `video`).
+    /// 外部视频 URL（与 `video` 互斥）。
     #[serde(default)]
     pub video_uri: Option<String>,
-    /// Workspace-relative generated video path (mutually exclusive with `video_uri`).
+    /// 工作区相对的生成视频路径（与 `video_uri` 互斥）。
     #[serde(default)]
     pub video: Option<String>,
 }
@@ -128,10 +128,15 @@ fn normalize_image_size_token(s: &str) -> Option<String> {
 }
 
 fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
-    args.image_size
+    args.aspect_ratio
         .as_deref()
         .map(str::trim)
         .is_some_and(|s| !s.is_empty())
+        || args
+            .image_size
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty())
         || args
             .reference_images
             .as_ref()
@@ -165,7 +170,8 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
-        description: "Generate or edit images (Gemini Interactions; OpenAI fallback is prompt-only). Clarify subject/style before generating. Use aspect_ratio/image_size fields—not only prompt. Saves under generated/images/."
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
+        description: "Generate or edit images. Gemini Interactions supports reference and advanced generation controls; OpenAI and Azure Foundry v1 currently support prompt-only generation. Saves under generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -195,7 +201,7 @@ pub async fn dispatch(
 
     if ctx.image_gen_targets.is_empty() {
         anyhow::bail!(
-            "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google 或 OpenAI，并配置 API Key。"
+            "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google、OpenAI、Azure 或 MiniMax，并配置 API Key。"
         );
     }
 
@@ -317,6 +323,12 @@ async fn generate_one_openai_compat(
     creds: &ImageGenCreds,
 ) -> anyhow::Result<types::ToolOutput> {
     let prompt = args.prompt.trim();
+    if has_advanced_interactions_args(args) {
+        anyhow::bail!(
+            "{} 图片生成当前仅支持 prompt/title；参考图、尺寸、搜索、思考或视频参数仅支持 Google Interactions",
+            creds.provider
+        );
+    }
     let config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
@@ -335,15 +347,10 @@ async fn generate_one_openai_compat(
         .ok_or_else(|| anyhow::anyhow!("未返回图片数据"))?;
 
     let rel = save_generated_image(ctx, &img, args.title.as_deref())?;
-    let mut out = format!(
+    let out = format!(
         "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
         creds.provider, creds.model
     );
-    if has_advanced_interactions_args(args) {
-        out.push_str(
-            "\nnote: OpenAI 路径忽略 Interactions 高级参数（image_size/reference_images/…）",
-        );
-    }
     Ok(super::media_out::media_output(
         out,
         types::MediaKind::Image,
@@ -600,6 +607,13 @@ mod arg_tests {
 
         let cases: Vec<(&str, ImageGenArgs)> = vec![
             (
+                "aspect_ratio",
+                ImageGenArgs {
+                    aspect_ratio: Some("16:9".into()),
+                    ..base.clone()
+                },
+            ),
+            (
                 "image_size",
                 ImageGenArgs {
                     image_size: Some("1K".into()),
@@ -681,8 +695,8 @@ mod path_tests {
         assert!(d.ends_with("generated/images"));
     }
 
-    #[test]
-    fn resolve_workspace_file_rejects_escape() {
+    #[tokio::test]
+    async fn resolve_workspace_file_rejects_escape() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         let outside = dir.path().join("outside");
@@ -691,8 +705,9 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -702,11 +717,13 @@ mod path_tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -714,26 +731,27 @@ mod path_tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let err = resolve_workspace_file(&ctx, "../outside/secret.txt").unwrap_err();
         assert!(err.to_string().contains("工作区内"), "unexpected: {err}");
     }
 
-    #[test]
-    fn resolve_workspace_file_accepts_in_workspace() {
+    #[tokio::test]
+    async fn resolve_workspace_file_accepts_in_workspace() {
         let dir = TempDir::new().unwrap();
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -743,11 +761,13 @@ mod path_tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws.clone(),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -755,10 +775,10 @@ mod path_tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();

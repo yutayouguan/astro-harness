@@ -53,14 +53,6 @@ fn command_error(operation: &str, error: anyhow::Error) -> String {
         );
         return "Open or resume the root task before following up this Agent Thread.".into();
     }
-    if error
-        .downcast_ref::<subagents::LegacyRuntimeDescriptorUnavailable>()
-        .is_some()
-    {
-        tracing::warn!(operation, "legacy Agent Thread cannot be recovered safely");
-        return "This Agent Thread predates safe recovery. Create a new Agent Thread to continue."
-            .into();
-    }
     tracing::warn!(operation, "desktop Agent Thread command failed");
     format!("{operation} failed")
 }
@@ -118,7 +110,7 @@ pub async fn close_subagent_thread(
 #[tauri::command]
 pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, String> {
     let memory_dir = home::default_memory_dir();
-    let project_root = worktree::resolve_project_root(None);
+    let project_root = agent::git_worktree::resolve_project_root(None);
     let configuration = subagents::load_agent_configuration(&memory_dir, project_root.as_deref())
         .map_err(|error| command_error("load agent configuration", error))?;
     Ok(configuration
@@ -192,17 +184,5 @@ mod tests {
         );
         assert!(!error.contains("secret"));
         assert!(!error.contains("user-private"));
-    }
-
-    #[test]
-    fn legacy_descriptor_error_is_actionable_without_runtime_details() {
-        let error = command_error(
-            "follow up agent thread",
-            anyhow::Error::new(subagents::LegacyRuntimeDescriptorUnavailable),
-        );
-        assert_eq!(
-            error,
-            "This Agent Thread predates safe recovery. Create a new Agent Thread to continue."
-        );
     }
 }

@@ -1,4 +1,13 @@
-import { AiAssistField, TextField, NumberField, SelectField, ToggleField, cfgStr, cfgNum, cfgBool } from "./ConfigField";
+import {
+  AiAssistField,
+  TextField,
+  NumberField,
+  SelectField,
+  ToggleField,
+  cfgStr,
+  cfgNum,
+  cfgBool,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -21,7 +30,13 @@ const GENRE_OPTIONS = [
   { value: "custom", label: "自定义" },
 ];
 
-export default function MusicGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function MusicGenConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

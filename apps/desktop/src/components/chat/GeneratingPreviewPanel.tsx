@@ -1,6 +1,7 @@
 /** 生成中文件的实时预览面板（右栏 preview Tab）：HTML 实时渲染 / 代码实时高亮。 */
 import { useCallback, useState } from "react";
-import { Check, Copy, FileCode2, Loader2 } from "lucide-react";
+import { FileCode2, Loader2 } from "lucide-react";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
 import CodeFileCard from "../media/CodeFileCard";
@@ -52,7 +53,12 @@ export default function GeneratingPreviewPanel({ preview }: Props) {
         >
           {preview.status === "streaming" ? (
             <>
-              <Loader2 size={12} strokeWidth={2.2} className="gen-preview-spin" aria-hidden />
+              <Loader2
+                size={12}
+                strokeWidth={2.2}
+                className="gen-preview-spin"
+                aria-hidden
+              />
               {t("chat.preview.streaming")}
             </>
           ) : (
@@ -67,11 +73,7 @@ export default function GeneratingPreviewPanel({ preview }: Props) {
           title={copied ? t("chat.codeCopied") : t("chat.copyCode")}
           aria-label={copied ? t("chat.codeCopied") : t("chat.copyCode")}
         >
-          {copied ? (
-            <Check size={14} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={14} strokeWidth={2} aria-hidden />
-          )}
+          <CopyMorphIcon copied={copied} size={14} aria-hidden />
         </button>
       </div>
       <div className="gen-preview-body">

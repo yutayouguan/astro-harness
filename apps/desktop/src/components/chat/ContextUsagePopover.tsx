@@ -6,6 +6,7 @@ import { useClampPopover } from "../../hooks/ui/useClampPopover";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
+  cacheHitPercent,
   displayContextWindow,
   formatTokenCount,
   usagePercent,
@@ -17,6 +18,8 @@ import ContextUsageBar from "./ContextUsageBar";
 
 const SEG_LABEL: Record<string, MessageKey> = {
   system: "chat.contextSeg.system",
+  developer: "chat.contextSeg.developer",
+  user_context: "chat.contextSeg.userContext",
   tools: "chat.contextSeg.tools",
   agents: "chat.contextSeg.agents",
   mcp: "chat.contextSeg.mcp",
@@ -41,6 +44,8 @@ type Props = {
   estimateCost?: EstimateCostLabel | null;
   onClose: () => void;
   onViewDetails: () => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
   /** 含触发按钮的外层；用于 click-outside 与锚点定位 */
   containRef?: RefObject<HTMLElement | null>;
 };
@@ -52,6 +57,8 @@ export default function ContextUsagePopover({
   estimateCost = null,
   onClose,
   onViewDetails,
+  onPointerEnter,
+  onPointerLeave,
   containRef,
 }: Props) {
   const { t } = useI18n();
@@ -97,6 +104,12 @@ export default function ContextUsagePopover({
   const used = snapshot?.totalTokens ?? 0;
   const pct = win > 0 ? usagePercent(used, win) : 0;
   const segs = snapshot ? visibleSegments(snapshot) : [];
+  const latest = snapshot?.latestUsage;
+  const cacheHit = latest ? cacheHitPercent(latest) : null;
+  const isEstimate = snapshot?.source === "local_estimate";
+  const sourceLabel = snapshot
+    ? t(`chat.contextUsageSource.${snapshot.source}` as MessageKey)
+    : "";
 
   return createPortal(
     <div
@@ -105,9 +118,13 @@ export default function ContextUsagePopover({
       role="dialog"
       aria-label={t("chat.contextUsage")}
       style={style ?? { visibility: "hidden" }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       <div className="ctx-usage-popover-header">
-        <span className="ctx-usage-popover-title">{t("chat.contextUsage")}</span>
+        <span className="ctx-usage-popover-title">
+          {t("chat.contextUsage")}
+        </span>
         <div className="ctx-usage-popover-header-actions">
           <button
             type="button"
@@ -139,9 +156,50 @@ export default function ContextUsagePopover({
               : t("chat.contextUsageEmpty")}
           </p>
           <p className="ctx-usage-popover-tokens">
-            ~{formatTokenCount(used)}
+            {isEstimate ? "~" : ""}
+            {formatTokenCount(used)}
             {win > 0 ? ` / ${formatTokenCount(win)}` : ""}
           </p>
+          <p className="ctx-usage-popover-source">{sourceLabel}</p>
+          {latest ? (
+            <dl className="ctx-usage-metrics">
+              <div>
+                <dt>{t("chat.contextUsageInput")}</dt>
+                <dd>{formatTokenCount(latest.inputTokens)}</dd>
+              </div>
+              {latest.cacheReadReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageCacheRead")}</dt>
+                  <dd>
+                    {formatTokenCount(latest.cacheReadTokens)}
+                    {cacheHit != null ? ` (${cacheHit}%)` : ""}
+                  </dd>
+                </div>
+              ) : null}
+              {latest.cacheWriteReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageCacheWrite")}</dt>
+                  <dd>{formatTokenCount(latest.cacheWriteTokens)}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>{t("chat.contextUsageOutput")}</dt>
+                <dd>{formatTokenCount(latest.outputTokens)}</dd>
+              </div>
+              {latest.reasoningReported ? (
+                <div>
+                  <dt>{t("chat.contextUsageReasoning")}</dt>
+                  <dd>{formatTokenCount(latest.reasoningTokens)}</dd>
+                </div>
+              ) : null}
+              {snapshot.estimatedTotalTokens !== snapshot.totalTokens ? (
+                <div>
+                  <dt>{t("chat.contextUsageLocalEstimate")}</dt>
+                  <dd>~{formatTokenCount(snapshot.estimatedTotalTokens)}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
           <ContextUsageBar snapshot={snapshot} windowTokens={win} />
           <ul className="ctx-usage-legend">
             {segs.map((s) => {
@@ -178,7 +236,9 @@ export default function ContextUsagePopover({
           <span className="ctx-usage-popover-cost-label">
             {t("chat.estimateCostTurn")}
           </span>
-          <span className="ctx-usage-popover-cost-value">{estimateCost.cost}</span>
+          <span className="ctx-usage-popover-cost-value">
+            {estimateCost.cost}
+          </span>
         </div>
       ) : null}
     </div>,

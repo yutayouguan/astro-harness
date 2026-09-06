@@ -1,0 +1,109 @@
+/* Liquid Glass 配方：一套镜面折光玻璃，两档强度。
+ *
+ * 与既有磨砂玻璃（--glass-fill / --glass-rim）的区别在四件事：
+ *   1. 衬底极稀薄，背后的颜色能透上来而不是被奶白挡住；
+ *   2. backdrop 高饱和 + 微提亮，透过来的颜色更艳；
+ *   3. 边缘用多层 inset 叠出镜面高光，模拟玻璃厚度对光的折射，
+ *      而不是单薄的 1px 描边；
+ *   4. 柔和外投影把面板从背景里托起来。
+ *
+ * 真实的液态折射（feTurbulence + feDisplacementMap）需要作用于 backdrop，
+ * WKWebView 不支持 `backdrop-filter: url(#f)`，因此这里用分层高光近似。
+ *
+ * 本文件只声明配方取值；由 `tokens/glass-intensity.css` 里的
+ * `html[data-glass="liquid" | "liquid-soft"]` 决定启用哪一档并映射到通用
+ * --glass-* 契约上。--liquid-glass-* 为贴近参考稿的一档，
+ * --liquid-glass-soft-* 为保留可读性的克制一档。 */
+
+html[data-theme="light"] {
+  /* ── 贴近参考稿 ───────────────────────────────────────── */
+  --liquid-glass-tint: rgba(255, 255, 255, 0.14);
+  --liquid-glass-sheen: linear-gradient(
+    148deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(255, 255, 255, 0.16) 22%,
+    rgba(255, 255, 255, 0.05) 52%,
+    rgba(255, 255, 255, 0.1) 78%,
+    rgba(255, 255, 255, 0.26) 100%
+  );
+  --liquid-glass-edge: rgba(255, 255, 255, 0.42);
+  --liquid-glass-inner: rgba(255, 255, 255, 0.28);
+  /* 保留一道纤细的迎光边，避免 border 与多层 rim 叠加成厚白边。 */
+  --liquid-glass-rim:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.74),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.24),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.28),
+    inset 0 6px 12px -10px rgba(255, 255, 255, 0.46),
+    inset 0 -6px 12px -10px rgba(15, 23, 42, 0.1);
+  --liquid-glass-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px -10px rgba(15, 23, 42, 0.12);
+  --liquid-glass-saturate: 2.05;
+  --liquid-glass-blur-scale: 1.15;
+  --liquid-glass-backdrop: blur(20px) saturate(2.05) brightness(1.05);
+
+  /* ── 克制一档 ─────────────────────────────────────────── */
+  --liquid-glass-soft-tint: rgba(255, 255, 255, 0.32);
+  --liquid-glass-soft-sheen: linear-gradient(
+    148deg,
+    rgba(255, 255, 255, 0.38) 0%,
+    rgba(255, 255, 255, 0.14) 30%,
+    rgba(255, 255, 255, 0.06) 62%,
+    rgba(255, 255, 255, 0.16) 100%
+  );
+  --liquid-glass-soft-edge: rgba(255, 255, 255, 0.36);
+  --liquid-glass-soft-inner: rgba(255, 255, 255, 0.32);
+  --liquid-glass-soft-rim:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.58),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.2),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.26);
+  --liquid-glass-soft-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.03), 0 5px 14px -8px rgba(15, 23, 42, 0.09);
+  --liquid-glass-soft-saturate: 1.5;
+  --liquid-glass-soft-blur-scale: 1;
+  --liquid-glass-soft-backdrop: blur(18px) saturate(1.5);
+}
+
+html[data-theme="dark"] {
+  /* 暗色下衬底仍要压暗以托住文字，靠亮边和高饱和拿到玻璃感 */
+  --liquid-glass-tint: rgba(18, 16, 32, 0.42);
+  --liquid-glass-sheen: linear-gradient(
+    148deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.04) 30%,
+    rgba(255, 255, 255, 0.015) 60%,
+    rgba(255, 255, 255, 0.07) 100%
+  );
+  --liquid-glass-edge: rgba(255, 255, 255, 0.14);
+  --liquid-glass-inner: rgba(255, 255, 255, 0.08);
+  --liquid-glass-rim:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.07),
+    inset 0 7px 16px -13px rgba(255, 255, 255, 0.16),
+    inset 0 -7px 14px -12px rgba(0, 0, 0, 0.24);
+  --liquid-glass-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.22), 0 8px 22px -12px rgba(0, 0, 0, 0.34);
+  --liquid-glass-saturate: 1.9;
+  --liquid-glass-blur-scale: 1.15;
+  --liquid-glass-backdrop: blur(22px) saturate(1.9) brightness(1.1);
+
+  --liquid-glass-soft-tint: rgba(14, 12, 26, 0.58);
+  --liquid-glass-soft-sheen: linear-gradient(
+    148deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 34%,
+    rgba(255, 255, 255, 0.012) 64%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  --liquid-glass-soft-edge: rgba(255, 255, 255, 0.1);
+  --liquid-glass-soft-inner: rgba(255, 255, 255, 0.055);
+  --liquid-glass-soft-rim:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.12),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  --liquid-glass-soft-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.2), 0 6px 18px -10px rgba(0, 0, 0, 0.28);
+  --liquid-glass-soft-saturate: 1.4;
+  --liquid-glass-soft-blur-scale: 1;
+  --liquid-glass-soft-backdrop: blur(20px) saturate(1.4);
+}

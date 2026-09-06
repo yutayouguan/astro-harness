@@ -1,12 +1,7 @@
 /* 通用应用内对话框（Portal → body） */
-:root {
-  --z-dialog: 1500;
-}
-
 .app-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--z-dialog);
   display: grid;
   place-items: center;
   padding: 24px 16px;
@@ -17,8 +12,10 @@
       transparent 72%
     ),
     color-mix(in srgb, var(--bg-base, #0f172a) 42%, transparent);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
   animation: app-dialog-fade-in 0.16s ease-out;
 }
 
@@ -37,17 +34,30 @@ html[data-theme="light"] .app-dialog-backdrop {
   width: min(400px, 92vw);
   padding: 18px 20px 16px;
   border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--dialog-accent) 22%, var(--glass-edge));
+  border: 1px solid
+    color-mix(in srgb, var(--dialog-accent) 22%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--tone-soft, transparent) 48%, var(--glass-panel, rgba(255, 255, 255, 0.3)));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.22)
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 48%,
+      var(--glass-panel, rgba(255, 255, 255, 0.3))
+    );
   box-shadow:
-    0 22px 52px color-mix(in srgb, var(--dialog-accent) 14%, rgba(15, 23, 42, 0.18)),
+    0 22px 52px
+    color-mix(in srgb, var(--dialog-accent) 14%, rgba(15, 23, 42, 0.18)),
     0 1px 0 rgba(255, 255, 255, 0.42) inset;
-  backdrop-filter: blur(22px) saturate(1.35);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
-  animation: app-dialog-rise-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: app-dialog-rise-in 0.22s
+    var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 /* 危险态：外壳仍跟 Tab tone；危险色只落在图标 / 强调区 / 确认按钮 */
@@ -60,9 +70,17 @@ html[data-theme="light"] .app-dialog-backdrop {
 }
 
 html[data-theme="dark"] .app-dialog {
-  border-color: color-mix(in srgb, var(--dialog-accent) 28%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(
+    in srgb,
+    var(--dialog-accent) 28%,
+    rgba(255, 255, 255, 0.1)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 28%, rgba(8, 10, 22, 0.9));
   box-shadow:
     0 22px 52px rgba(0, 0, 0, 0.5),
@@ -121,13 +139,22 @@ html[data-theme="dark"] .app-dialog {
   margin: 2px 0 4px;
   padding: 11px 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--dialog-accent) 22%, var(--glass-edge));
-  background: color-mix(in srgb, var(--dialog-accent) 8%, var(--surface, var(--glass-panel)));
+  border: 1px solid
+    color-mix(in srgb, var(--dialog-accent) 22%, var(--glass-edge));
+  background: color-mix(
+    in srgb,
+    var(--dialog-accent) 8%,
+    var(--surface, var(--glass-panel))
+  );
 }
 
 .app-dialog.is-danger .app-dialog-emphasis {
   border-color: color-mix(in srgb, var(--dialog-danger) 28%, var(--glass-edge));
-  background: color-mix(in srgb, var(--dialog-danger) 8%, var(--surface, var(--glass-panel)));
+  background: color-mix(
+    in srgb,
+    var(--dialog-danger) 8%,
+    var(--surface, var(--glass-panel))
+  );
 }
 
 .app-dialog-emphasis-label {
@@ -169,7 +196,8 @@ html[data-theme="dark"] .app-dialog {
 .app-dialog-input:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--dialog-accent) 48%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dialog-accent) 16%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--dialog-accent) 16%, transparent);
 }
 
 html[data-theme="dark"] .app-dialog-input {
@@ -193,11 +221,11 @@ html[data-theme="dark"] .app-dialog-input {
   letter-spacing: 0.01em;
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease,
-    box-shadow 0.12s ease,
-    transform 0.12s ease;
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.2s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
 
 .app-dialog-btn.is-cancel {
@@ -228,8 +256,16 @@ html[data-theme="dark"] .app-dialog-input {
 }
 
 .app-dialog-btn.is-confirm.is-danger {
-  color: color-mix(in srgb, var(--dialog-danger, var(--danger)) 72%, var(--ink));
-  border-color: color-mix(in srgb, var(--dialog-danger, var(--danger)) 36%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger)) 72%,
+    var(--ink)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger)) 36%,
+    transparent
+  );
   background:
     linear-gradient(165deg, rgba(255, 255, 255, 0.22), transparent),
     color-mix(in srgb, var(--dialog-danger, var(--danger)) 16%, transparent);
@@ -273,7 +309,7 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
 @keyframes app-dialog-rise-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(8px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -295,18 +331,21 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
 }
 
 .app-dialog-backdrop.is-closing {
-  animation: app-dialog-fade-out 0.12s ease-out forwards;
+  animation: app-dialog-fade-out 0.14s ease-out forwards;
 }
 
 .app-dialog-backdrop.is-closing .app-dialog,
 .app-dialog-backdrop.is-closing .about-dialog {
-  animation: app-dialog-rise-out 0.12s ease-out forwards;
+  animation: app-dialog-rise-out 0.14s ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-dialog-backdrop,
+  .app-dialog-backdrop {
+    animation: app-dialog-fade-in 0.1s ease-out;
+  }
+
   .app-dialog {
-    animation: none;
+    animation: app-dialog-fade-in 0.1s ease-out;
   }
 
   .app-dialog-btn.is-confirm:hover:not(:disabled),
@@ -319,7 +358,7 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
   .app-dialog-backdrop.is-closing,
   .app-dialog-backdrop.is-closing .app-dialog,
   .app-dialog-backdrop.is-closing .about-dialog {
-    animation: none;
+    animation: app-dialog-fade-out 0.1s ease-out forwards;
   }
 
   body:has(.app-dialog-backdrop) .app-shell {
@@ -329,17 +368,14 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
 }
 
 /* ── 关于 Astro ── */
-.about-dialog-backdrop {
-  z-index: calc(var(--z-dialog) + 20);
-}
-
 .about-dialog {
   position: relative;
   width: min(420px, 92vw);
   padding: 28px 28px 22px;
   border-radius: 22px;
   text-align: center;
-  border: 1px solid color-mix(in srgb, var(--tone, #3b82f6) 24%, var(--glass-edge));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #3b82f6) 24%, var(--glass-edge));
   background:
     radial-gradient(
       ellipse 90% 55% at 50% -8%,
@@ -347,25 +383,57 @@ body:has(.app-dialog-backdrop.is-closing) .app-shell {
       transparent 62%
     ),
     linear-gradient(165deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.4)),
-    color-mix(in srgb, var(--tone-soft, transparent) 48%, var(--glass-panel, rgba(255, 255, 255, 0.55)));
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 48%,
+      var(--glass-panel, rgba(255, 255, 255, 0.55))
+    );
   box-shadow:
-    0 28px 64px color-mix(in srgb, var(--tone, #3b82f6) 16%, rgba(15, 23, 42, 0.18)),
+    0 28px 64px
+    color-mix(in srgb, var(--tone, #3b82f6) 16%, rgba(15, 23, 42, 0.18)),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.4));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.4));
   color: var(--ink);
-  animation: app-dialog-rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: app-dialog-rise-in 0.36s
+    var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.about-dialog-orb {
+  animation: about-orb-entrance 0.5s
+    var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) 0.1s both;
+}
+
+@keyframes about-orb-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 html[data-theme="dark"] .about-dialog {
-  border-color: color-mix(in srgb, var(--tone, #818cf8) 30%, rgba(255, 255, 255, 0.1));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #818cf8) 30%,
+    rgba(255, 255, 255, 0.1)
+  );
   background:
     radial-gradient(
       ellipse 90% 55% at 50% -8%,
       color-mix(in srgb, var(--tone, #818cf8) 34%, transparent),
       transparent 62%
     ),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 32%, rgba(8, 10, 22, 0.92));
   box-shadow:
     0 28px 64px rgba(0, 0, 0, 0.55),
@@ -408,12 +476,11 @@ html[data-theme="dark"] .about-dialog {
   display: grid;
   place-items: center;
   border-radius: 28px;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, #fff 55%, transparent),
-      color-mix(in srgb, var(--tone, #3b82f6) 18%, transparent)
-    );
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, #fff 55%, transparent),
+    color-mix(in srgb, var(--tone, #3b82f6) 18%, transparent)
+  );
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--tone, #3b82f6) 22%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -513,8 +580,42 @@ html[data-theme="dark"] .about-dialog-title {
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  animation: stagger-fade-up var(--duration-normal, 220ms)
+    var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.about-dialog-features li:nth-child(1) {
+  animation-delay: 0.12s;
+}
+.about-dialog-features li:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.about-dialog-features li:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.about-dialog-features li:nth-child(4) {
+  animation-delay: 0.24s;
+}
+.about-dialog-features li:nth-child(5) {
+  animation-delay: 0.28s;
+}
+.about-dialog-features li:nth-child(6) {
+  animation-delay: 0.32s;
+}
+.about-dialog-features li:nth-child(n + 7) {
+  animation-delay: 0.36s;
+}
+
+.about-dialog-features li:hover {
+  transform: translateY(-1px) scale(1.04);
+  transition: transform 0.2s
+    var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
   color: color-mix(in srgb, var(--tone, #3b82f6) 70%, var(--ink));
-  background: color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone-soft, transparent) 70%,
+    transparent
+  );
   border: 1px solid color-mix(in srgb, var(--tone, #3b82f6) 18%, transparent);
 }
 

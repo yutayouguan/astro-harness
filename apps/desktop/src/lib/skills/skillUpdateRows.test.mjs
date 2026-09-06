@@ -4,6 +4,9 @@ import {
   applyCheckResults,
   filterUpdateRows,
   mergeUpdateRows,
+  resolveUpdateVersionPresentation,
+  setFoldersUpdating,
+  summarizeUpdateRows,
 } from "./skillUpdateRows.ts";
 
 const pptInstalled = {
@@ -13,6 +16,7 @@ const pptInstalled = {
   path: "",
   source_dir: "",
   enabled: true,
+  scope: "global",
 };
 
 const pptOrigin = {
@@ -21,6 +25,7 @@ const pptOrigin = {
   store: "skillhub",
   install_ref: "skillhub:owner/ppt-generator-skill",
   agent_id: "workspace",
+  scope: "global",
   installed_at: 1,
 };
 
@@ -48,8 +53,8 @@ test("name match links origin when folder differs", () => {
       {
         folder: "weather-skill",
         name: "weather",
-        store: "clawhub",
-        install_ref: "clawhub:weather",
+        store: "skillhub",
+        install_ref: "skillhub:owner/weather",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -97,8 +102,8 @@ test("linked machine skill is included", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -127,8 +132,8 @@ test("unlinked machine skill is ignored", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },
@@ -233,6 +238,79 @@ test("applyCheckResults maps current status by origin folder", () => {
   assert.equal(applied[0].status, "current");
 });
 
+test("applyCheckResults normalizes same-version outdated result to current", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.4" };
+  const staleCheck = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "1.0.4",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const applied = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [staleCheck],
+  );
+  assert.equal(applied[0].status, "current");
+  assert.deepEqual(resolveUpdateVersionPresentation(applied[0], staleCheck), {
+    installedVersion: "1.0.4",
+    latestVersion: "1.0.4",
+    showVersionFlow: false,
+  });
+});
+
+test("updating folders keep independent progress until each finishes", () => {
+  let folders = setFoldersUpdating(new Set(), ["aihot"], true);
+  folders = setFoldersUpdating(folders, ["ontology"], true);
+  assert.deepEqual([...folders].sort(), ["aihot", "ontology"]);
+
+  folders = setFoldersUpdating(folders, ["ontology"], false);
+  assert.deepEqual([...folders], ["aihot"]);
+});
+
+test("outdated row shows installed to latest flow when versions differ", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.0" };
+  const check = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "2.0.0",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const [row] = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [check],
+  );
+
+  assert.deepEqual(resolveUpdateVersionPresentation(row, check), {
+    installedVersion: "1.0.0",
+    latestVersion: "2.0.0",
+    showVersionFlow: true,
+  });
+});
+
+test("same-version timestamp-only result does not offer an update", () => {
+  const origin = { ...pptOrigin, remote_version: "1.0.0" };
+  const check = {
+    folder: "ppt-generator-skill",
+    status: "outdated",
+    remote_version: "1.0.0",
+    remote_updated_at: 99,
+    message: "",
+  };
+  const [row] = applyCheckResults(
+    mergeUpdateRows([pptInstalled], [], [origin], "workspace"),
+    [check],
+  );
+
+  assert.deepEqual(resolveUpdateVersionPresentation(row, check), {
+    installedVersion: "1.0.0",
+    latestVersion: "1.0.0",
+    showVersionFlow: false,
+  });
+  assert.equal(row.status, "current");
+});
+
 test("applyCheckResults leaves no_origin rows unchanged", () => {
   const rows = mergeUpdateRows(
     [{ ...pptInstalled, id: "/tmp/orphan", name: "orphan" }],
@@ -302,7 +380,7 @@ test("filter updatable excludes unknown rows", () => {
   assert.equal(filterUpdateRows(applied, "updatable").length, 0);
 });
 
-test("filter updatable excludes machine-scoped rows with origin", () => {
+test("machine-scoped rows do not inherit a global origin", () => {
   const rows = mergeUpdateRows(
     [],
     [
@@ -321,14 +399,65 @@ test("filter updatable excludes machine-scoped rows with origin", () => {
       {
         folder: "find-skills",
         name: "find-skills",
-        store: "clawhub",
-        install_ref: "clawhub:find-skills",
+        store: "skillhub",
+        install_ref: "skillhub:owner/find-skills",
         agent_id: "workspace",
         installed_at: 1,
       },
     ],
     "workspace",
   );
-  assert.equal(filterUpdateRows(rows, "with_origin").length, 1);
+  assert.equal(filterUpdateRows(rows, "with_origin").length, 0);
+  assert.equal(filterUpdateRows(rows, "no_origin").length, 1);
   assert.equal(filterUpdateRows(rows, "updatable").length, 0);
+});
+
+test("summarizeUpdateRows separates updates, current, attention and missing origins", () => {
+  const base = mergeUpdateRows(
+    [
+      pptInstalled,
+      { ...pptInstalled, id: "/tmp/current", name: "current" },
+      { ...pptInstalled, id: "/tmp/error", name: "error" },
+      { ...pptInstalled, id: "/tmp/orphan", name: "orphan" },
+    ],
+    [],
+    [
+      pptOrigin,
+      { ...pptOrigin, folder: "current", name: "current" },
+      { ...pptOrigin, folder: "error", name: "error" },
+    ],
+    "workspace",
+  );
+  const rows = applyCheckResults(base, [
+    {
+      folder: "ppt-generator-skill",
+      status: "outdated",
+      remote_version: "2.0.0",
+      remote_updated_at: 99,
+      message: "",
+    },
+    {
+      folder: "current",
+      status: "current",
+      remote_version: "1.0.0",
+      remote_updated_at: 1,
+      message: "",
+    },
+    {
+      folder: "error",
+      status: "error",
+      remote_version: null,
+      remote_updated_at: null,
+      message: "network error",
+    },
+  ]);
+
+  assert.deepEqual(summarizeUpdateRows(rows), {
+    total: 4,
+    tracked: 3,
+    outdated: 1,
+    current: 1,
+    attention: 1,
+    noOrigin: 1,
+  });
 });

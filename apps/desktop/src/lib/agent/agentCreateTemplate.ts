@@ -1,5 +1,15 @@
 /** 创建 Agent 引导用的工作区模板文案。 */
 
+import {
+  findPromptTemplateSlotAt,
+  listPromptTemplateSegments,
+  listPromptTemplateSlots,
+  nextEmptyPromptTemplateSlot,
+  prevEmptyPromptTemplateSlot,
+  type PromptTemplateSegment,
+  type PromptTemplateSlot,
+} from "../chat/promptTemplate.ts";
+
 /** 中文槽位提示（填在「」内，便于识别与 Tab 跳转） */
 export const SLOT_HINTS_ZH = [
   "名称",
@@ -30,26 +40,8 @@ export const AGENT_CREATE_TEMPLATE_ZH =
 export const AGENT_CREATE_TEMPLATE_EN =
   "Help me create an assistant: name is 「name」, background is 「background」, speaking style is 「style」, mainly help me with 「help with」, do not 「avoid」, call me 「call me」, my preferences are 「prefs」";
 
-export type BracketSlot = {
-  index: number;
-  open: number;
-  close: number;
-  innerStart: number;
-  innerEnd: number;
-  empty: boolean;
-};
-
-export type TemplateSegment =
-  | { type: "text"; value: string }
-  | {
-      type: "slot";
-      value: string;
-      empty: boolean;
-      open: string;
-      close: string;
-      index: number;
-      required: boolean;
-    };
+export type BracketSlot = PromptTemplateSlot;
+export type TemplateSegment = PromptTemplateSegment;
 
 /** 必填槽：0=名称，3=主要做什么 */
 export const REQUIRED_SLOT_INDICES = [0, 3] as const;
@@ -62,7 +54,6 @@ export type AgentCreatePrepareResult = {
   sanitized: string;
 };
 
-const OPEN = "「";
 const CLOSE = "」";
 
 /** 槽位内容是否仍为占位提示（未真正填写） */
@@ -75,58 +66,16 @@ export function isRequiredSlotIndex(index: number): boolean {
 }
 
 export function listSlots(text: string): BracketSlot[] {
-  const slots: BracketSlot[] = [];
-  let i = 0;
-  let index = 0;
-  while (i < text.length) {
-    const open = text.indexOf(OPEN, i);
-    if (open < 0) break;
-    const close = text.indexOf(CLOSE, open + OPEN.length);
-    if (close < 0) break;
-    const innerStart = open + OPEN.length;
-    const innerEnd = close;
-    const inner = text.slice(innerStart, innerEnd);
-    slots.push({
-      index,
-      open,
-      close,
-      innerStart,
-      innerEnd,
-      empty: innerStart === innerEnd || isSlotHint(inner),
-    });
-    index += 1;
-    i = close + CLOSE.length;
-  }
-  return slots;
+  return listPromptTemplateSlots(text, [...SLOT_HINT_SET]);
 }
 
 /** 将模板拆成普通文本 + 可高亮槽位，供输入框镜像渲染 */
 export function listTemplateSegments(text: string): TemplateSegment[] {
-  const slots = listSlots(text);
-  if (slots.length === 0) {
-    return text ? [{ type: "text", value: text }] : [];
-  }
-  const out: TemplateSegment[] = [];
-  let cursor = 0;
-  for (const slot of slots) {
-    if (slot.open > cursor) {
-      out.push({ type: "text", value: text.slice(cursor, slot.open) });
-    }
-    out.push({
-      type: "slot",
-      value: text.slice(slot.innerStart, slot.innerEnd),
-      empty: slot.empty,
-      open: OPEN,
-      close: CLOSE,
-      index: slot.index,
-      required: isRequiredSlotIndex(slot.index),
-    });
-    cursor = slot.close + CLOSE.length;
-  }
-  if (cursor < text.length) {
-    out.push({ type: "text", value: text.slice(cursor) });
-  }
-  return out;
+  return listPromptTemplateSegments(
+    text,
+    [...SLOT_HINT_SET],
+    REQUIRED_SLOT_INDICES,
+  );
 }
 
 /**
@@ -188,35 +137,22 @@ export function prepareAgentCreateSend(text: string): AgentCreatePrepareResult {
   };
 }
 
-export function findSlotAt(
-  text: string,
-  caret: number,
-): BracketSlot | null {
-  for (const slot of listSlots(text)) {
-    if (caret >= slot.open && caret <= slot.close + CLOSE.length) {
-      return slot;
-    }
-  }
-  return null;
+export function findSlotAt(text: string, caret: number): BracketSlot | null {
+  return findPromptTemplateSlotAt(text, caret, [...SLOT_HINT_SET]);
 }
 
 export function nextEmptySlot(
   text: string,
   fromCaret: number,
 ): BracketSlot | null {
-  const slots = listSlots(text).filter((s) => s.empty);
-  return slots.find((s) => s.innerStart > fromCaret) ?? slots[0] ?? null;
+  return nextEmptyPromptTemplateSlot(text, fromCaret, [...SLOT_HINT_SET]);
 }
 
 export function prevEmptySlot(
   text: string,
   fromCaret: number,
 ): BracketSlot | null {
-  const slots = listSlots(text).filter((s) => s.empty);
-  for (let i = slots.length - 1; i >= 0; i--) {
-    if (slots[i].innerEnd < fromCaret) return slots[i];
-  }
-  return slots[slots.length - 1] ?? null;
+  return prevEmptyPromptTemplateSlot(text, fromCaret, [...SLOT_HINT_SET]);
 }
 
 export function templateForLocale(locale: string): string {

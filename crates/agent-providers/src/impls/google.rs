@@ -1,4 +1,7 @@
-//! Google Gemini Interactions API — 原生 CompletionModel 实现。
+//! Google Gemini Interactions API — 非 Agent Chat 兼容模型实现。
+
+use std::future::Future;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -6,16 +9,43 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, EmbeddingModel, FromClient, ImageGenModel, ModelBase,
-    MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
+    Capabilities, Capable, ChatCompletionModel, EmbeddingModel, FromClient, ImageGenModel,
+    ModelBase, MusicGenModel, ProviderClient, ProviderExt, TTSModel, VideoGenModel,
 };
 use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 const API_REVISION: &str = "2026-05-20";
+const MAX_CONNECT_ATTEMPTS: usize = 3;
+const CONNECT_RETRY_BASE_DELAY_MS: u64 = 150;
+
+// Retry only connection-establishment failures. HTTP responses and stream errors
+// must not be replayed because the server may already have stored the interaction.
+async fn retry_connect<T, E, SendFn, SendFuture, Retryable>(
+    mut send: SendFn,
+    retryable: Retryable,
+) -> std::result::Result<T, E>
+where
+    SendFn: FnMut() -> SendFuture,
+    SendFuture: Future<Output = std::result::Result<T, E>>,
+    Retryable: Fn(&E) -> bool,
+{
+    let mut attempt = 1usize;
+    loop {
+        match send().await {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt < MAX_CONNECT_ATTEMPTS && retryable(&error) => {
+                let delay_ms = CONNECT_RETRY_BASE_DELAY_MS * attempt as u64;
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
 
 // ─── Provider Extension ─────────────────────────────────
 
@@ -78,9 +108,36 @@ impl FromClient<Google> for InteractionsCompletionModel {
     }
 }
 
+impl InteractionsCompletionModel {
+    async fn send_interactions(&self, url: &str, body: &Value) -> Result<reqwest::Response> {
+        let response = retry_connect(
+            || {
+                self.http
+                    .post(url)
+                    .headers(Google.auth_headers(&self.api_key))
+                    .header("content-type", "application/json")
+                    .json(body)
+                    .send()
+            },
+            reqwest::Error::is_connect,
+        )
+        .await;
+
+        match response {
+            Ok(response) => Ok(response),
+            Err(error) if error.is_connect() => Err(error).with_context(|| {
+                format!("连接 Google Interactions 失败（已尝试 {MAX_CONNECT_ATTEMPTS} 次）: {url}")
+            }),
+            Err(error) => {
+                Err(error).with_context(|| format!("连接 Google Interactions 失败: {url}"))
+            }
+        }
+    }
+}
+
 #[async_trait::async_trait]
-impl CompletionModel for InteractionsCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for InteractionsCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let base = self.base_url.trim_end_matches('/');
         let url = if base.contains("/v1beta") {
             format!("{base}/interactions")
@@ -93,32 +150,50 @@ impl CompletionModel for InteractionsCompletionModel {
         } else {
             &request.model
         };
-        let (system, input) = to_interactions_input(&request.messages);
+        let previous = request
+            .previous_interaction_id
+            .as_deref()
+            .filter(|prev| !prev.is_empty());
+        let messages = request.input_with_instructions();
+        let converted = to_interactions_input(&messages, previous.is_some());
 
         let mut body = json!({
             "model": model,
-            "input": input,
+            "input": converted.steps,
             "stream": true,
         });
 
-        if let Some(prev) = &request.previous_interaction_id {
-            if !prev.is_empty() {
+        if converted.continues_previous {
+            if let Some(prev) = previous {
                 body["previous_interaction_id"] = json!(prev);
             }
         }
+        let system = converted.system;
         if let Some(sys) = system {
             body["system_instruction"] = json!(sys);
         }
 
-        // Tools
+        // 工具定义
         if !request.tools.is_empty() {
-            let tools: Vec<Value> = request.tools.iter().map(|t| {
-                json!({"type": "function", "name": t.name, "description": t.description, "parameters": t.parameters})
-            }).collect();
-            body["tools"] = Value::Array(tools);
+            let tools: Vec<Value> = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "type": "function",
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    })
+                })
+                .collect();
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+            }
         }
 
-        // generation_config
+        // 生成参数
         let mut gen = serde_json::Map::new();
         if let Some(temp) = request.temperature {
             gen.insert("temperature".into(), json!(temp));
@@ -128,22 +203,15 @@ impl CompletionModel for InteractionsCompletionModel {
                 gen.insert("max_output_tokens".into(), json!(max));
             }
         }
-        let thinking_level = match request.thinking.as_ref() {
-            Some(tc) if !tc.enabled => "minimal",
-            Some(tc) => match tc.effort.trim() {
-                "max" | "xhigh" | "high" => "high",
-                "minimal" | "min" => "minimal",
-                "low" => "low",
-                _ => "medium",
-            },
-            None => "medium",
-        };
-        gen.insert("thinking_level".into(), json!(thinking_level));
+        gen.insert(
+            "thinking_level".into(),
+            json!(thinking_level(request.thinking.as_ref())),
+        );
         if !gen.is_empty() {
             body["generation_config"] = Value::Object(gen);
         }
 
-        // additional_params features
+        // 额外参数：Google 搜索、响应格式、安全设置
         if let Some(v) = request.additional_params.get("google_search") {
             if v.as_bool().unwrap_or(false) {
                 let tools = body.get_mut("tools").and_then(|t| t.as_array_mut());
@@ -161,8 +229,7 @@ impl CompletionModel for InteractionsCompletionModel {
             body["safety_settings"] = ss.clone();
         }
 
-        // additional_params merge — route sampling params into generation_config;
-        // skip params unsupported by Google Interactions API.
+        // 额外参数合并：采样参数路由到 generation_config；跳过 Interactions API 不支持的参数。
         if let Some(extra) = request.additional_params.as_object() {
             const GEN_CFG_KEYS: &[&str] = &["top_p", "top_k", "temperature"];
             const SKIP_KEYS: &[&str] = &[
@@ -173,7 +240,7 @@ impl CompletionModel for InteractionsCompletionModel {
                 "response_format",
                 "safety_settings",
             ];
-            // Phase 1: route generation_config params
+            // 阶段一：采样参数归入 generation_config
             for (k, v) in extra {
                 if GEN_CFG_KEYS.contains(&k.as_str()) {
                     if let Some(gc) = body
@@ -184,7 +251,7 @@ impl CompletionModel for InteractionsCompletionModel {
                     }
                 }
             }
-            // Phase 2: merge remaining top-level params
+            // 阶段二：剩余参数合并到顶层
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
                     if GEN_CFG_KEYS.contains(&k.as_str()) || SKIP_KEYS.contains(&k.as_str()) {
@@ -196,39 +263,159 @@ impl CompletionModel for InteractionsCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_google_interactions(
+            &mut body,
+            request.tool_choice.as_ref(),
+        );
 
-        let auth = Google.auth_headers(&self.api_key);
-        let response = self
-            .http
-            .post(&url)
-            .headers(auth)
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
+        let mut response = self.send_interactions(&url, &body).await?;
+        // 服务端 interaction 状态过期或与客户端历史不一致时，续写会以 404 拒绝；
+        // 此时放弃 previous_interaction_id 并整段重放。
+        if converted.continues_previous && response.status() == reqwest::StatusCode::NOT_FOUND {
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("previous_interaction_id");
+                obj.insert(
+                    "input".into(),
+                    json!(to_interactions_input(&messages, false).steps),
+                );
+            }
+            response = self.send_interactions(&url, &body).await?;
+        }
+
+        let parser = std::sync::Arc::new(std::sync::Mutex::new(InteractionsStreamState::default()));
+        let extract: crate::shared::sse::ChunkExtract = std::sync::Arc::new(move |data| {
+            let Ok(mut parser) = parser.lock() else {
+                return vec![crate::types::StreamChunk::Error(
+                    "Google Interactions stream parser state is poisoned".into(),
+                )];
+            };
+            parser.extract(data)
+        });
+        crate::shared::sse::sse_stream(response, extract)
             .await
-            .with_context(|| format!("连接 Google Interactions 失败: {url}"))?;
+            .with_context(|| format!("{url} (model={model})"))
+    }
+}
 
-        crate::shared::sse::sse_stream(
-            response,
-            crate::shared::sse::wrap_single_extract(extract_interactions_delta),
-        )
-        .await
+/// Interactions 的思考档位。
+///
+/// 服务端只接受 `low` / `medium` / `high`，`minimal` 会被整轮拒收
+/// （400 invalid_request），因此关闭思考与 minimal effort 都落到最低档 `low`。
+fn thinking_level(thinking: Option<&crate::types::request::ThinkingConfig>) -> &'static str {
+    match thinking {
+        Some(tc) if !tc.enabled => "low",
+        Some(tc) => match tc.effort.trim() {
+            "max" | "xhigh" | "high" => "high",
+            "minimal" | "min" | "low" => "low",
+            _ => "medium",
+        },
+        None => "medium",
     }
 }
 
 // ─── Message Conversion ──────────────────────────────────
 
-fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
-    use crate::types::message::*;
-    let mut system = None;
+/// `to_interactions_input` 的产物。
+struct InteractionsInput {
+    system: Option<String>,
+    steps: Vec<Value>,
+    /// 是否以 `previous_interaction_id` 续写服务端已有的 interaction。
+    continues_previous: bool,
+}
+
+/// 把内部消息序列转成 Interactions API 的 `input` 步骤。
+///
+/// 已有 `previous_interaction_id` 时，只补发最后一条 assistant 之后的
+/// `function_result` / `user_input`，由服务端保留之前的 function call 与签名。
+/// 无法续写时按 Interactions 原生 step 完整重放 call/result 对，不将工具
+/// 结果降级为 `user_input`。
+fn to_interactions_input(
+    messages: &[crate::types::ChatCompletionMessage],
+    has_previous: bool,
+) -> InteractionsInput {
+    use crate::types::request_content::*;
+
+    let continuation_start = messages
+        .iter()
+        .rposition(|m| matches!(m, ChatCompletionMessage::Assistant { .. }))
+        .map(|idx| idx + 1)
+        .filter(|start| *start < messages.len());
+    let continues_previous = has_previous && continuation_start.is_some();
+    let replayed = if continues_previous {
+        &messages[continuation_start.unwrap_or(0)..]
+    } else {
+        messages
+    };
+
+    // ChatCompletionMessage::Tool 不带工具名，function_result 需从助手回合回填。
+    let mut call_names = std::collections::HashMap::new();
+    for m in messages {
+        if let ChatCompletionMessage::Assistant { content } = m {
+            for c in content {
+                if let AssistantContent::ToolCall(tc) = c {
+                    call_names.insert(tc.id.as_str(), tc.name.as_str());
+                }
+            }
+        }
+    }
+    // system_instruction 是 interaction 级参数，续写时同样要重发。
+    // Interactions 只有一个 system_instruction 字段；内部的 developer 角色降级到此字段。
+    let instruction_parts = messages
+        .iter()
+        .filter_map(|m| match m {
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
+                (!content.trim().is_empty()).then(|| content.clone())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let system = (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n"));
+
+    let replayable_call_ids = messages
+        .iter()
+        .filter_map(|message| match message {
+            ChatCompletionMessage::Assistant { content } => Some(content),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|content| match content {
+            AssistantContent::ToolCall(call)
+                if call
+                    .signature
+                    .as_deref()
+                    .is_some_and(|value| !value.is_empty()) =>
+            {
+                Some(call.id.as_str())
+            }
+            _ => None,
+        })
+        .collect::<std::collections::HashSet<_>>();
+    let steps = to_interactions_steps(
+        replayed,
+        &call_names,
+        (!continues_previous).then_some(&replayable_call_ids),
+    );
+    InteractionsInput {
+        system,
+        steps,
+        continues_previous,
+    }
+}
+
+fn to_interactions_steps(
+    messages: &[crate::types::ChatCompletionMessage],
+    call_names: &std::collections::HashMap<&str, &str>,
+    replayable_call_ids: Option<&std::collections::HashSet<&str>>,
+) -> Vec<Value> {
+    use crate::types::request_content::*;
     let mut steps = Vec::new();
 
     for m in messages {
         match m {
-            Message::System { content } => {
-                system = Some(content.clone());
-            }
-            Message::User { content } => {
+            // system_instruction 由调用方单独下发，不进 input。
+            ChatCompletionMessage::System { .. } | ChatCompletionMessage::Developer { .. } => {}
+            ChatCompletionMessage::User { content } => {
                 let parts: Vec<Value> = content
                     .iter()
                     .map(|c| match c {
@@ -248,21 +435,35 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                     .collect();
                 steps.push(json!({"type": "user_input", "content": parts}));
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 ..
             } => {
+                if replayable_call_ids.is_some_and(|ids| !ids.contains(tool_call_id.as_str())) {
+                    continue;
+                }
+                let name = call_names
+                    .get(tool_call_id.as_str())
+                    .copied()
+                    .unwrap_or("tool");
+                // 缺少 name 的 function_result 会被服务端整体拒收。
                 steps.push(json!({
                     "type": "function_result",
-                    "id": tool_call_id,
+                    "call_id": tool_call_id,
+                    "name": name,
                     "result": content,
                 }));
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 // thinking step first
                 for c in content {
                     if let AssistantContent::Thinking { text, signature } = c {
+                        if replayable_call_ids.is_some()
+                            && signature.as_deref().is_none_or(str::is_empty)
+                        {
+                            continue;
+                        }
                         let mut step = json!({"type": "thought"});
                         if let Some(sig) = signature {
                             step["signature"] = json!(sig);
@@ -273,34 +474,35 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
                         steps.push(step);
                     }
                 }
-                // text output
-                let text_parts: Vec<String> = content
+                // 先重放模型正文。
+                let text = content
                     .iter()
-                    .filter_map(|c| {
-                        if let AssistantContent::Text { text } = c {
-                            Some(text.clone())
-                        } else {
-                            None
-                        }
+                    .filter_map(|c| match c {
+                        AssistantContent::Text { text } => Some(text.as_str()),
+                        _ => None,
                     })
-                    .collect();
-                if !text_parts.is_empty() {
+                    .collect::<Vec<_>>()
+                    .join("");
+                if !text.is_empty() {
                     steps.push(json!({
                         "type": "model_output",
-                        "content": [{"type": "text", "text": text_parts.join("")}]
+                        "content": [{"type": "text", "text": text}]
                     }));
                 }
-                // tool calls
+                // 再重放原生 function_call，保留 call id、参数和 Gemini 签名。
                 for c in content {
                     if let AssistantContent::ToolCall(tc) = c {
+                        if replayable_call_ids.is_some_and(|ids| !ids.contains(tc.id.as_str())) {
+                            continue;
+                        }
                         let mut step = json!({
                             "type": "function_call",
                             "id": tc.id,
                             "name": tc.name,
                             "arguments": tc.arguments,
                         });
-                        if let Some(ref sig) = tc.signature {
-                            step["signature"] = json!(sig);
+                        if let Some(signature) = &tc.signature {
+                            step["signature"] = json!(signature);
                         }
                         steps.push(step);
                     }
@@ -308,7 +510,7 @@ fn to_interactions_input(messages: &[crate::types::Message]) -> (Option<String>,
             }
         }
     }
-    (system, steps)
+    steps
 }
 
 fn media_part(kind: &str, url: &str, mime_hint: &str) -> Value {
@@ -327,12 +529,121 @@ fn media_part(kind: &str, url: &str, mime_hint: &str) -> Value {
 
 // ─── SSE Parsing ─────────────────────────────────────────
 
-fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
-    use crate::types::stream::{StreamChunk, Usage};
-    let v: Value = serde_json::from_str(data).ok()?;
+#[derive(Default)]
+struct InteractionsStreamState {
+    current_function_call_slot: Option<u32>,
+    function_call_slots: std::collections::HashSet<u32>,
+}
+
+impl InteractionsStreamState {
+    fn register_function_call(&mut self, index: u32) {
+        self.current_function_call_slot = Some(index);
+        self.function_call_slots.insert(index);
+    }
+
+    fn arguments_slot(&self, reported_index: u32) -> u32 {
+        if self.function_call_slots.contains(&reported_index) {
+            reported_index
+        } else {
+            self.current_function_call_slot.unwrap_or(reported_index)
+        }
+    }
+
+    fn extract(&mut self, data: &str) -> Vec<crate::types::StreamChunk> {
+        use crate::types::stream::StreamChunk;
+        let Ok(v) = serde_json::from_str::<Value>(data) else {
+            return Vec::new();
+        };
+        let event_type = v.get("event_type").and_then(|e| e.as_str()).unwrap_or("");
+
+        if matches!(event_type, "interaction.completed" | "interaction.failed") {
+            let status = v
+                .pointer("/interaction/status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown");
+            let mut chunks = Vec::with_capacity(3);
+            if let Some(id) = v
+                .pointer("/interaction/id")
+                .and_then(|s| s.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                chunks.push(StreamChunk::InteractionId(id.to_string()));
+            }
+            if let Some(usage) = v
+                .pointer("/interaction/usage")
+                .and_then(parse_interactions_usage)
+            {
+                chunks.push(StreamChunk::Usage(usage));
+            }
+            chunks.push(StreamChunk::Done {
+                finish_reason: if status == "requires_action" {
+                    "tool_calls".to_string()
+                } else {
+                    status.to_string()
+                },
+            });
+            self.current_function_call_slot = None;
+            self.function_call_slots.clear();
+            return chunks;
+        }
+
+        extract_interactions_delta(self, &v).into_iter().collect()
+    }
+}
+
+fn parse_interactions_usage(v: &Value) -> Option<crate::types::stream::Usage> {
+    use crate::types::stream::Usage;
+    let input = v
+        .get("total_input_tokens")
+        .or_else(|| v.get("prompt_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let visible_output = v
+        .get("total_output_tokens")
+        .or_else(|| v.get("completion_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let reasoning = v
+        .get("total_thought_tokens")
+        .or_else(|| v.get("reasoning_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let cache_read = v
+        .get("total_cached_tokens")
+        .or_else(|| v.get("cached_tokens"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let reported_total_tokens = v
+        .get("total_tokens")
+        .and_then(|x| x.as_u64())
+        .map(|x| x.min(u64::from(u32::MAX)) as u32);
+    if input == 0 && visible_output == 0 && reasoning == 0 {
+        return None;
+    }
+    Some(Usage {
+        input_tokens: input.saturating_sub(cache_read),
+        output_tokens: visible_output.saturating_add(reasoning),
+        cache_read_tokens: cache_read,
+        cache_write_tokens: 0,
+        reasoning_tokens: reasoning,
+        request_count: 1,
+        reported_total_tokens,
+        cache_read_reported: v.get("total_cached_tokens").is_some()
+            || v.get("cached_tokens").is_some(),
+        cache_write_reported: false,
+        reasoning_reported: v.get("total_thought_tokens").is_some()
+            || v.get("reasoning_tokens").is_some(),
+    })
+}
+
+fn extract_interactions_delta(
+    state: &mut InteractionsStreamState,
+    v: &Value,
+) -> Option<crate::types::StreamChunk> {
+    use crate::types::stream::StreamChunk;
     let event_type = v.get("event_type").and_then(|e| e.as_str()).unwrap_or("");
 
-    // interaction.created → extract interaction_id early
+    // interaction.created → 提前提取 interaction_id
     if event_type == "interaction.created" {
         let id = v
             .pointer("/interaction/id")
@@ -341,68 +652,7 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
         return Some(StreamChunk::InteractionId(id));
     }
 
-    // interaction completed → extract usage + finish
-    if event_type.contains("completed") || event_type.contains("failed") {
-        let status = v
-            .pointer("/interaction/status")
-            .and_then(|s| s.as_str())
-            .unwrap_or("unknown");
-        let interaction_id = v
-            .pointer("/interaction/id")
-            .and_then(|s| s.as_str())
-            .map(str::to_string);
-
-        let usage = v.pointer("/interaction/usage").and_then(|u| {
-            let input = u
-                .get("total_input_tokens")
-                .or_else(|| u.get("prompt_tokens"))
-                .and_then(|x| x.as_u64())
-                .unwrap_or(0) as u32;
-            let output = u
-                .get("total_output_tokens")
-                .or_else(|| u.get("completion_tokens"))
-                .and_then(|x| x.as_u64())
-                .unwrap_or(0) as u32;
-            let reasoning = u
-                .get("total_thought_tokens")
-                .or_else(|| u.get("reasoning_tokens"))
-                .and_then(|x| x.as_u64())
-                .unwrap_or(0) as u32;
-            let cache_read = u
-                .get("total_cached_tokens")
-                .or_else(|| u.get("cached_tokens"))
-                .and_then(|x| x.as_u64())
-                .unwrap_or(0) as u32;
-            if input == 0 && output == 0 {
-                return None;
-            }
-            Some(Usage {
-                input_tokens: input,
-                output_tokens: output,
-                cache_read_tokens: cache_read,
-                cache_write_tokens: 0,
-                reasoning_tokens: reasoning,
-                request_count: 1,
-            })
-        });
-
-        if let Some(id) = interaction_id {
-            return Some(StreamChunk::InteractionId(id));
-        }
-        if let Some(u) = usage {
-            return Some(StreamChunk::Usage(u));
-        }
-        let reason = if status == "requires_action" {
-            "tool_calls"
-        } else {
-            status
-        };
-        return Some(StreamChunk::Done {
-            finish_reason: reason.to_string(),
-        });
-    }
-
-    // step events — route on event_type, not step/type
+    // step 事件 — 按 event_type 路由，而非 step/type
     let delta = v.get("delta");
 
     match event_type {
@@ -444,15 +694,17 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                 "arguments" | "arguments_delta" => {
                     let args = delta
                         .and_then(|d| d.get("arguments"))
-                        .map(|a| a.to_string())?;
-                    let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                        .map(interactions_arguments_delta)?;
+                    let reported_index =
+                        v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                    let index = state.arguments_slot(reported_index);
                     Some(StreamChunk::ToolCallDelta {
                         index,
                         arguments: args,
                     })
                 }
                 "function_call" => {
-                    let step = v.get("step").unwrap_or(&v);
+                    let step = v.get("step").unwrap_or(v);
                     let id = step
                         .get("id")
                         .and_then(|s| s.as_str())
@@ -464,7 +716,18 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                         .unwrap_or("")
                         .to_string();
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    Some(StreamChunk::ToolCallStart { index, id, name })
+                    state.register_function_call(index);
+                    let signature = step
+                        .get("signature")
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    Some(StreamChunk::ToolCallStart {
+                        index,
+                        id,
+                        name,
+                        signature,
+                    })
                 }
                 _ => None,
             }
@@ -485,8 +748,24 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
                         .unwrap_or("")
                         .to_string();
                     let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                    Some(StreamChunk::ToolCallStart { index, id, name })
+                    state.register_function_call(index);
+                    let signature = step
+                        .get("signature")
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    Some(StreamChunk::ToolCallStart {
+                        index,
+                        id,
+                        name,
+                        signature,
+                    })
                 }
+                "thought" => step
+                    .get("signature")
+                    .and_then(|s| s.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|signature| StreamChunk::ThoughtSignature(signature.to_string())),
                 _ => None,
             }
         }
@@ -499,6 +778,16 @@ fn extract_interactions_delta(data: &str) -> Option<crate::types::StreamChunk> {
         }
         _ => None,
     }
+}
+
+/// Interactions API 的函数参数增量可能是 JSON 对象或已编码的 JSON 字符串。
+/// 对后者调用 `Value::to_string()` 会多加一层引号，导致累加器解析为
+/// `Value::String` 而非工具参数结构体期望的对象。
+fn interactions_arguments_delta(arguments: &Value) -> String {
+    arguments
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| arguments.to_string())
 }
 
 // ─── 连通性探测 ─────────────────────────────────────────
@@ -733,50 +1022,378 @@ impl MusicGenModel for LyriaMusicModel {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
     use super::*;
+
+    fn extract_single(data: &str) -> Option<crate::types::StreamChunk> {
+        InteractionsStreamState::default()
+            .extract(data)
+            .into_iter()
+            .next()
+    }
     use crate::traits::client::ChatClient;
+
+    #[tokio::test]
+    async fn connect_retry_succeeds_on_the_third_attempt() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+
+        let result = retry_connect(
+            || {
+                let attempt = observed.fetch_add(1, Ordering::SeqCst) + 1;
+                std::future::ready(if attempt < MAX_CONNECT_ATTEMPTS {
+                    Err(true)
+                } else {
+                    Ok("connected")
+                })
+            },
+            |retryable| *retryable,
+        )
+        .await;
+
+        assert_eq!(result, Ok("connected"));
+        assert_eq!(attempts.load(Ordering::SeqCst), MAX_CONNECT_ATTEMPTS);
+    }
+
+    #[tokio::test]
+    async fn connect_retry_does_not_repeat_non_connect_errors() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let observed = attempts.clone();
+
+        let result = retry_connect(
+            || {
+                observed.fetch_add(1, Ordering::SeqCst);
+                std::future::ready(Err::<(), _>(false))
+            },
+            |retryable| *retryable,
+        )
+        .await;
+
+        assert_eq!(result, Err(false));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn google_has_chat() {
         let client = ProviderClient::new("test-key", Google);
-        let _model = client.completion_model("gemini-3.5-flash");
+        let _model = client.chat_completion_model("gemini-3.5-flash");
+    }
+
+    #[test]
+    fn interactions_usage_normalizes_cache_and_reasoning_without_double_counting() {
+        let usage = parse_interactions_usage(&serde_json::json!({
+            "total_input_tokens": 66,
+            "total_output_tokens": 16,
+            "total_thought_tokens": 51,
+            "total_cached_tokens": 6,
+            "total_tokens": 133
+        }))
+        .expect("usage");
+
+        assert_eq!(usage.input_tokens, 60);
+        assert_eq!(usage.cache_read_tokens, 6);
+        assert_eq!(usage.output_tokens, 67);
+        assert_eq!(usage.reasoning_tokens, 51);
+        assert_eq!(usage.reported_total_tokens, Some(133));
+        assert_eq!(usage.total_tokens(), 133);
+    }
+
+    #[test]
+    fn thinking_level_never_emits_unsupported_minimal() {
+        use crate::types::request::ThinkingConfig;
+        let off = ThinkingConfig {
+            enabled: false,
+            effort: "high".into(),
+            ..ThinkingConfig::default()
+        };
+        let minimal = ThinkingConfig {
+            enabled: true,
+            effort: "minimal".into(),
+            ..ThinkingConfig::default()
+        };
+        assert_eq!(thinking_level(Some(&off)), "low");
+        assert_eq!(thinking_level(Some(&minimal)), "low");
+        assert_eq!(thinking_level(None), "medium");
+        let high = ThinkingConfig {
+            enabled: true,
+            effort: "xhigh".into(),
+            ..ThinkingConfig::default()
+        };
+        assert_eq!(thinking_level(Some(&high)), "high");
     }
 
     #[test]
     fn system_instruction_extracted() {
         let msgs = vec![
-            crate::types::Message::system("Be helpful"),
-            crate::types::Message::user_text("Hi"),
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::developer("Follow project policy"),
+            crate::types::ChatCompletionMessage::user_text("Hi"),
         ];
-        let (sys, steps) = to_interactions_input(&msgs);
-        assert_eq!(sys.as_deref(), Some("Be helpful"));
-        assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0]["type"], "user_input");
+        let converted = to_interactions_input(&msgs, false);
+        assert_eq!(
+            converted.system.as_deref(),
+            Some("Be helpful\n\nFollow project policy")
+        );
+        assert_eq!(converted.steps.len(), 1);
+        assert_eq!(converted.steps[0]["type"], "user_input");
+        assert!(!converted.continues_previous);
+    }
+
+    fn tool_loop_messages() -> Vec<crate::types::ChatCompletionMessage> {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+        vec![
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![AssistantContent::ToolCall(
+                ToolCall {
+                    id: "call-1".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: Some("sig-1".into()),
+                },
+            )]),
+            crate::types::ChatCompletionMessage::tool_result("call-1", "/tmp", false),
+        ]
+    }
+
+    #[test]
+    fn tool_loop_continues_previous_interaction_with_delta_only() {
+        let converted = to_interactions_input(&tool_loop_messages(), true);
+        assert!(converted.continues_previous);
+        // 服务端已存有 user_input / function_call，续写只补发工具结果。
+        assert_eq!(converted.steps.len(), 1);
+        assert_eq!(converted.steps[0]["type"], "function_result");
+        assert_eq!(converted.steps[0]["call_id"], "call-1");
+        // 缺少 name 会被服务端整体拒收。
+        assert_eq!(converted.steps[0]["name"], "exec_command");
+        assert_eq!(converted.system.as_deref(), Some("Be helpful"));
+    }
+
+    #[test]
+    fn replayed_history_keeps_native_tool_call_and_result_paired() {
+        let converted = to_interactions_input(&tool_loop_messages(), false);
+        assert!(!converted.continues_previous);
+        let kinds: Vec<&str> = converted
+            .steps
+            .iter()
+            .map(|s| s["type"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(kinds, ["user_input", "function_call", "function_result"]);
+        assert_eq!(converted.steps[1]["id"], "call-1");
+        assert_eq!(converted.steps[1]["name"], "exec_command");
+        assert_eq!(converted.steps[1]["arguments"]["command"], "pwd");
+        assert_eq!(converted.steps[1]["signature"], "sig-1");
+        assert_eq!(converted.steps[2]["call_id"], "call-1");
+        assert_eq!(converted.steps[2]["result"], "/tmp");
+    }
+
+    #[test]
+    fn replay_does_not_serialize_structured_tool_calls_as_text() {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![
+                AssistantContent::Text {
+                    text: "Checking the directory.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call-1".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: Some("sig-1".into()),
+                }),
+            ]),
+        ];
+        let converted = to_interactions_input(&msgs, false);
+        let text = converted.steps[1]["content"][0]["text"].as_str().unwrap();
+        assert_eq!(text, "Checking the directory.");
+        assert!(!text.contains("exec_command"));
+        assert!(!text.contains("pwd"));
+        assert_eq!(converted.steps[2]["type"], "function_call");
+        assert_eq!(converted.steps[2]["name"], "exec_command");
+        assert_eq!(converted.steps[2]["arguments"]["command"], "pwd");
+    }
+
+    #[test]
+    fn mixed_text_tool_call_and_result_keep_interactions_pairing() {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![
+                AssistantContent::Text {
+                    text: "Checking the directory.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call-1".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: Some("sig-1".into()),
+                }),
+            ]),
+            crate::types::ChatCompletionMessage::tool_result("call-1", "/tmp", false),
+        ];
+
+        let converted = to_interactions_input(&msgs, false);
+        let kinds: Vec<&str> = converted
+            .steps
+            .iter()
+            .map(|step| step["type"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "user_input",
+                "model_output",
+                "function_call",
+                "function_result"
+            ]
+        );
+        assert_eq!(converted.steps[2]["id"], "call-1");
+        assert_eq!(converted.steps[3]["call_id"], "call-1");
+        assert_eq!(converted.steps[3]["name"], "exec_command");
+    }
+
+    #[test]
+    fn full_replay_drops_unsigned_foreign_tool_pairs() {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::user_text("查看当前目录"),
+            crate::types::ChatCompletionMessage::assistant(vec![AssistantContent::ToolCall(
+                ToolCall {
+                    id: "foreign-call".into(),
+                    name: "exec_command".into(),
+                    arguments: json!({"command": "pwd"}),
+                    signature: None,
+                },
+            )]),
+            crate::types::ChatCompletionMessage::tool_result("foreign-call", "/tmp", false),
+            crate::types::ChatCompletionMessage::user_text("继续"),
+        ];
+        let converted = to_interactions_input(&msgs, false);
+        let kinds = converted
+            .steps
+            .iter()
+            .map(|step| step["type"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>();
+        assert_eq!(kinds, ["user_input", "user_input"]);
+    }
+
+    #[test]
+    fn new_user_turn_continues_with_only_the_new_input() {
+        let mut msgs = tool_loop_messages();
+        msgs.push(crate::types::ChatCompletionMessage::assistant_text(
+            "在 /tmp",
+        ));
+        msgs.push(crate::types::ChatCompletionMessage::user_text("再看一次"));
+        let converted = to_interactions_input(&msgs, true);
+        // 服务端已保留上一轮，新用户回合只补发末尾 user_input。
+        assert!(converted.continues_previous);
+        assert_eq!(converted.steps.len(), 1);
+        assert_eq!(
+            converted.steps.last().map(|s| s["type"].as_str()),
+            Some(Some("user_input"))
+        );
     }
 
     #[test]
     fn extract_text_delta() {
         let data =
             r#"{"index":1,"delta":{"text":"Hello","type":"text"},"event_type":"step.delta"}"#;
-        let chunk = extract_interactions_delta(data);
+        let chunk = extract_single(data);
         assert!(matches!(chunk, Some(crate::types::StreamChunk::Text(ref t)) if t == "Hello"));
+    }
+
+    #[test]
+    fn extract_string_encoded_arguments_without_double_encoding() {
+        let data = r#"{"index":0,"delta":{"type":"arguments","arguments":"{\"command\":\"pwd && ls -la\"}"},"event_type":"step.delta"}"#;
+        let chunk = extract_single(data);
+        assert!(matches!(
+            chunk,
+            Some(crate::types::StreamChunk::ToolCallDelta { arguments, .. })
+                if arguments == r#"{"command":"pwd && ls -la"}"#
+        ));
+    }
+
+    #[test]
+    fn extract_object_arguments_as_json() {
+        let data = r#"{"index":0,"delta":{"type":"arguments","arguments":{"path":".","operation":"list"}},"event_type":"step.delta"}"#;
+        let chunk = extract_single(data);
+        assert!(matches!(
+            chunk,
+            Some(crate::types::StreamChunk::ToolCallDelta { arguments, .. })
+                if arguments == r#"{"operation":"list","path":"."}"#
+        ));
     }
 
     #[test]
     fn extract_thought_signature() {
         let data = r#"{"index":0,"delta":{"signature":"abc123","type":"thought_signature"},"event_type":"step.delta"}"#;
-        let chunk = extract_interactions_delta(data);
+        let chunk = extract_single(data);
         assert!(
             matches!(chunk, Some(crate::types::StreamChunk::ThoughtSignature(ref s)) if s == "abc123")
         );
     }
 
     #[test]
-    fn extract_completed_usage() {
-        let data = r#"{"interaction":{"id":"v1_test","status":"completed","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#;
-        let chunk = extract_interactions_delta(data);
+    fn extract_thought_signature_from_step_start() {
+        let data = r#"{"index":0,"step":{"type":"thought","signature":"abc123"},"event_type":"step.start"}"#;
+        let chunk = extract_single(data);
         assert!(
-            matches!(chunk, Some(crate::types::StreamChunk::InteractionId(ref id)) if id == "v1_test")
+            matches!(chunk, Some(crate::types::StreamChunk::ThoughtSignature(ref s)) if s == "abc123")
         );
+    }
+
+    #[test]
+    fn completed_event_preserves_id_usage_and_finish_reason() {
+        let data = r#"{"interaction":{"id":"v1_test","status":"completed","usage":{"total_input_tokens":10,"total_output_tokens":5}},"event_type":"interaction.completed"}"#;
+        let chunks = InteractionsStreamState::default().extract(data);
+        assert!(matches!(
+            &chunks[0],
+            crate::types::StreamChunk::InteractionId(id) if id == "v1_test"
+        ));
+        assert!(matches!(
+            &chunks[1],
+            crate::types::StreamChunk::Usage(usage)
+                if usage.input_tokens == 10 && usage.output_tokens == 5
+        ));
+        assert!(matches!(
+            &chunks[2],
+            crate::types::StreamChunk::Done { finish_reason } if finish_reason == "completed"
+        ));
+    }
+
+    #[test]
+    fn function_call_signature_and_arguments_follow_the_native_call_slot() {
+        let mut parser = InteractionsStreamState::default();
+        let start = parser.extract(
+            r#"{"index":1,"step":{"type":"function_call","id":"fc_1","name":"exec_command","arguments":{},"signature":"sig_abc"},"event_type":"step.start"}"#,
+        );
+        assert!(matches!(
+            &start[0],
+            crate::types::StreamChunk::ToolCallStart {
+                index: 1,
+                id,
+                name,
+                signature: Some(signature),
+            } if id == "fc_1" && name == "exec_command" && signature == "sig_abc"
+        ));
+
+        let step_done = parser.extract(
+            r#"{"index":1,"step":{"type":"function_call","id":"fc_1"},"event_type":"step.completed"}"#,
+        );
+        assert!(step_done.is_empty());
+
+        // Gemini 3 可能在此报告前一个 thought step 的 index。将参数绑定到活跃的
+        // function_call 条目，而非创建孤立槽位。
+        let arguments = parser.extract(
+            r#"{"index":0,"delta":{"type":"arguments_delta","arguments":"{\"command\":\"pwd\"}"},"event_type":"step.delta"}"#,
+        );
+        assert!(matches!(
+            &arguments[0],
+            crate::types::StreamChunk::ToolCallDelta { index: 1, arguments }
+                if arguments == r#"{"command":"pwd"}"#
+        ));
     }
 }

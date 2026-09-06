@@ -13,7 +13,7 @@ use types::truncate_chars;
 
 use crate::db::UsageDb;
 use crate::trace_insights::TRACE_EVENTS_LIMIT;
-use home::default_memory_dir;
+use home::{data_dir, default_memory_dir};
 
 /// 单行 eval 记录（一个 session）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,13 +55,13 @@ pub struct EvalMessagePreview {
 const MSG_TRUNCATE: usize = 2_000;
 
 /// 从默认 `usage.db` + sessions 导出单会话 JSONL（通常一行）。
-pub fn export_session_eval_jsonl(session_id: &str, path: &Path) -> anyhow::Result<usize> {
-    let db = UsageDb::open_default()?;
-    export_session_eval_jsonl_with_db(&db, session_id, path)
+pub async fn export_session_eval_jsonl(session_id: &str, path: &Path) -> anyhow::Result<usize> {
+    let db = UsageDb::open_default().await?;
+    export_session_eval_jsonl_with_db(&db, session_id, path).await
 }
 
 /// 可注入 [`UsageDb`]（测试用 tempfile）。
-pub fn export_session_eval_jsonl_with_db(
+pub async fn export_session_eval_jsonl_with_db(
     db: &UsageDb,
     session_id: &str,
     path: &Path,
@@ -71,12 +71,12 @@ pub fn export_session_eval_jsonl_with_db(
         anyhow::bail!("session_id 为空");
     }
 
-    let rows = db.list_trace_events(sid, TRACE_EVENTS_LIMIT)?;
+    let rows = db.list_trace_events(sid, TRACE_EVENTS_LIMIT).await?;
     let agent_id = rows.first().map(|r| r.agent_id.clone()).unwrap_or_default();
     let tokens: i64 = rows.iter().map(|r| r.total_tokens).sum();
     let cost_usd: f64 = rows.iter().map(|r| r.cost_usd).sum();
 
-    let (title, messages) = load_session_previews(sid);
+    let (title, messages) = load_session_previews(sid).await;
     let events: Vec<EvalEvent> = rows
         .into_iter()
         .map(|r| EvalEvent {
@@ -104,26 +104,25 @@ pub fn export_session_eval_jsonl_with_db(
     Ok(1)
 }
 
-fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePreview>) {
-    let sessions_dir = default_memory_dir().join("sessions");
-    let Ok(store) = SessionStore::open_sessions_dir(&sessions_dir) else {
+async fn load_session_previews(session_id: &str) -> (String, Vec<EvalMessagePreview>) {
+    let sessions_dir = data_dir(&default_memory_dir());
+    let Ok(store) = SessionStore::open_sessions_dir(&sessions_dir).await else {
         return (String::new(), Vec::new());
     };
-    let Ok(msgs) = store.get_messages(session_id) else {
+    let Ok(msgs) = store.get_response_items(session_id).await else {
         return (String::new(), Vec::new());
     };
     let title = msgs
         .iter()
-        .find(|m| m.role == "user")
-        .and_then(|m| m.content.as_deref())
-        .map(|c| truncate_chars(c, 120))
+        .find(|item| item.role() == Some("user"))
+        .map(|item| truncate_chars(&item.text(), 120))
         .unwrap_or_default();
     let previews: Vec<EvalMessagePreview> = msgs
         .iter()
         .take(50)
-        .map(|m| EvalMessagePreview {
-            role: m.role.clone(),
-            content: truncate_chars(m.content.as_deref().unwrap_or(""), MSG_TRUNCATE),
+        .map(|item| EvalMessagePreview {
+            role: item.role().unwrap_or("item").to_string(),
+            content: truncate_chars(&item.text(), MSG_TRUNCATE),
         })
         .collect();
     (title, previews)
@@ -148,12 +147,12 @@ mod tests {
     use crate::db::NewUsageEvent;
     use tempfile::TempDir;
 
-    #[test]
-    fn export_jsonl_roundtrip() {
+    #[tokio::test]
+    async fn export_jsonl_roundtrip() {
         let dir = TempDir::new().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let db_path = dir.path().join("usage.db");
-        let db = UsageDb::new(db_path).unwrap();
+        let db = UsageDb::new(db_path).await.unwrap();
         db.insert(NewUsageEvent {
             ts: "2026-07-17T00:00:00Z".into(),
             kind: "llm".into(),
@@ -176,10 +175,13 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         })
+        .await
         .unwrap();
 
         let out = dir.path().join("eval.jsonl");
-        let n = export_session_eval_jsonl_with_db(&db, "sess-eval-1", &out).unwrap();
+        let n = export_session_eval_jsonl_with_db(&db, "sess-eval-1", &out)
+            .await
+            .unwrap();
         assert_eq!(n, 1);
         let text = fs::read_to_string(&out).unwrap();
         let rec: EvalSessionRecord = serde_json::from_str(text.trim()).unwrap();

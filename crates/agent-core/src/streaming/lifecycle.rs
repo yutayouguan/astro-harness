@@ -1,10 +1,10 @@
-//! Unified turn-event helpers for the model/tool loop.
+//! 模型/工具循环的统一 turn 事件辅助函数。
 
 use std::sync::Arc;
 
 use agent_protocol::{
-    DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, TokenCountEvent, ToolItem,
-    ToolStatus, TurnItem,
+    AgentMessageItem, DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem,
+    TokenCountEvent, ToolExecutionMode, ToolItem, ToolStatus, TurnItem,
 };
 use providers::Usage;
 
@@ -13,19 +13,17 @@ use crate::runtime::event_identity::{event_turn_id, normalize_event_msg};
 use crate::runtime::usage::{apply_llm_usage_dual_write, LlmUsageWrite};
 use crate::runtime::{Session, TurnContext};
 
-/// Match Codex's completed MCP event result cap: keep the model/history copy
-/// untouched while preventing a single durable/live event from carrying
-/// multi-megabyte inline payloads.
+/// MCP 事件结果上限：保持模型/历史副本不变，同时防止单个持久/实时事件
+/// 携带多兆字节的内联负载。
 pub(crate) const TOOL_COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 
-/// Persist an event before delivering it to live consumers.
+/// 在将事件投递给实时消费者之前先持久化。
 pub(crate) async fn emit(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
     session.send_event(turn_context.sub_id(), msg).await;
 }
 
-/// Send an event whose protocol-facing identities were normalized while its
-/// bounded payload copy was constructed. This deliberately skips a second
-/// identity projection while retaining raw-turn tap routing.
+/// 发送一个在构建有界负载副本时已完成协议侧身份归一化的事件。
+/// 刻意跳过第二次身份投影，同时保留原始 turn tap 路由。
 pub(crate) async fn emit_prepared(session: &Session, turn_context: &TurnContext, msg: EventMsg) {
     session
         .send_prepared_event(turn_context.sub_id(), msg)
@@ -56,13 +54,20 @@ pub(crate) async fn emit_delta(
     .await;
 }
 
-pub(crate) fn tool_turn_item(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ToolExecutionMetadata {
+    pub batch_id: String,
+    pub mode: ToolExecutionMode,
+}
+
+pub(crate) fn tool_turn_item_with_execution(
     id: impl Into<String>,
     name: impl Into<String>,
     arguments: serde_json::Value,
     output: Option<serde_json::Value>,
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> TurnItem {
     let id = id.into();
     let name = name.into();
@@ -72,10 +77,16 @@ pub(crate) fn tool_turn_item(
         arguments,
         output,
         media,
+        file_changes: Vec::new(),
         status,
+        batch_id: execution.map(|value| value.batch_id.clone()),
+        execution_mode: execution.map(|value| value.mode),
     };
-    if name == "terminal" || name == "code_exec" {
+    let child_name = name.rsplit('.').next().unwrap_or(&name);
+    if child_name == "exec_command" || child_name == "code_exec" {
         TurnItem::CommandExecution(item)
+    } else if child_name == "image_gen" {
+        TurnItem::ImageGeneration(item)
     } else if name.starts_with("mcp__") {
         TurnItem::McpToolCall(item)
     } else if matches!(
@@ -106,10 +117,19 @@ fn tool_completed_event(
     output: Option<serde_json::Value>,
     media: &[types::MediaAsset],
     status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> EventMsg {
     let mut event = EventMsg::ItemCompleted(ItemEvent {
         turn_id: turn_id.to_string(),
-        item: tool_turn_item(id, name, arguments.clone(), output, media.to_vec(), status),
+        item: tool_turn_item_with_execution(
+            id,
+            name,
+            arguments.clone(),
+            output,
+            media.to_vec(),
+            status,
+            execution,
+        ),
     });
     normalize_event_msg(&mut event, turn_id);
     event
@@ -139,6 +159,7 @@ fn truncated_tool_completed_event(
     inline_media_omitted: usize,
     stable_media_omitted: usize,
     preview: &str,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> EventMsg {
     tool_completed_event(
         turn_id,
@@ -154,17 +175,16 @@ fn truncated_tool_completed_event(
         })),
         stable_media,
         status,
+        execution,
     )
 }
 
-/// Build the completed tool event copy under the 1 MiB durable/live cap.
+/// 在 1 MiB 持久/实时上限内构建已完成的工具事件副本。
 ///
-/// The original tool output has already been recorded before this helper is
-/// called. Inline data URLs are never copied into an oversized event; stable
-/// workspace/remote references are retained when they fit. The preview budget
-/// is chosen against the fully serialized live and JSONL rollout envelopes,
-/// so JSON escaping, wrapper overhead, and the record newline count toward the
-/// cap.
+/// 在调用此辅助函数之前，原始工具输出已经被记录。内联 data URL 不会被复制到
+/// 超大事件中；当空间允许时保留稳定的工作区/远程引用。预览预算基于完整序列化后的
+/// 实时和 JSONL rollout 信封计算，因此 JSON 转义、包装开销和记录换行符
+/// 都计入上限。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounded_tool_completed_event(
     turn_id: &str,
@@ -175,6 +195,82 @@ pub(crate) fn bounded_tool_completed_event(
     media: Vec<types::MediaAsset>,
     status: ToolStatus,
 ) -> EventMsg {
+    bounded_tool_completed_event_inner(turn_id, id, name, arguments, output, media, status, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounded_tool_completed_event_with_execution(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
+    status: ToolStatus,
+    execution: &ToolExecutionMetadata,
+) -> EventMsg {
+    bounded_tool_completed_event_inner(
+        turn_id,
+        id,
+        name,
+        arguments,
+        output,
+        media,
+        status,
+        Some(execution),
+    )
+}
+
+/// Attach structured file changes while preserving the hard event-size limit.
+/// If snapshots make the event too large, retain summary metadata but disable undo.
+pub(crate) fn attach_file_changes(
+    turn_id: &str,
+    event: &mut EventMsg,
+    mut changes: Vec<types::ToolFileChange>,
+) {
+    if changes.is_empty() {
+        return;
+    }
+    set_event_file_changes(event, changes.clone());
+    if serialized_event_len(turn_id, event) <= TOOL_COMPLETED_EVENT_MAX_BYTES {
+        return;
+    }
+    for change in &mut changes {
+        change.before_content = None;
+        change.after_content = None;
+        change.reversible = false;
+    }
+    set_event_file_changes(event, changes);
+    if serialized_event_len(turn_id, event) > TOOL_COMPLETED_EVENT_MAX_BYTES {
+        set_event_file_changes(event, Vec::new());
+    }
+}
+
+fn set_event_file_changes(event: &mut EventMsg, changes: Vec<types::ToolFileChange>) {
+    let tool = match event {
+        EventMsg::ItemCompleted(ItemEvent {
+            item:
+                TurnItem::CommandExecution(tool)
+                | TurnItem::DynamicToolCall(tool)
+                | TurnItem::FileChange(tool),
+            ..
+        }) => tool,
+        _ => return,
+    };
+    tool.file_changes = changes;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bounded_tool_completed_event_inner(
+    turn_id: &str,
+    id: &str,
+    name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    media: Vec<types::MediaAsset>,
+    status: ToolStatus,
+    execution: Option<&ToolExecutionMetadata>,
+) -> EventMsg {
     let original = tool_completed_event(
         turn_id,
         id,
@@ -183,6 +279,7 @@ pub(crate) fn bounded_tool_completed_event(
         output.clone(),
         &media,
         status,
+        execution,
     );
     let original_serialized_bytes = serialized_event_len(turn_id, &original);
     if original_serialized_bytes <= TOOL_COMPLETED_EVENT_MAX_BYTES {
@@ -217,6 +314,7 @@ pub(crate) fn bounded_tool_completed_event(
         inline_media_omitted,
         stable_media_omitted,
         "",
+        execution,
     );
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
         stable_media_omitted = stable_media.len();
@@ -232,6 +330,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
@@ -249,13 +348,13 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
 
-    // Final hard-stop fallback. Event-facing identities are already capped, so
-    // a null-arguments/no-media marker has a small, deterministic upper bound.
-    // The assertion prevents an oversized event from ever reaching dispatch if
-    // that invariant is changed later.
+    // 最终硬停兜底。事件侧身份已被截断，因此 null-arguments/no-media 标记
+    // 具有小且确定的上界。此断言防止超大事件到达分发环节（即使将来
+    // 该不变量被改变）。
     if serialized_event_len(turn_id, &bounded) > TOOL_COMPLETED_EVENT_MAX_BYTES {
         event_arguments = serde_json::Value::Null;
         stable_media_omitted = stable_media_omitted.saturating_add(stable_media.len());
@@ -271,6 +370,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             "",
+            execution,
         );
     }
     assert!(
@@ -298,6 +398,7 @@ pub(crate) fn bounded_tool_completed_event(
             inline_media_omitted,
             stable_media_omitted,
             &preview,
+            execution,
         );
         if serialized_event_len(turn_id, &candidate) <= TOOL_COMPLETED_EVENT_MAX_BYTES {
             best = candidate;
@@ -322,10 +423,45 @@ pub(crate) async fn emit_assistant_completed(
         turn_context,
         EventMsg::ItemCompleted(ItemEvent {
             turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(AgentMessageItem {
                 id: item_id,
                 content,
+                delivery: None,
+                questions: None,
             }),
+        }),
+    )
+    .await;
+}
+
+pub(crate) async fn emit_async_agent_message(
+    session: &Session,
+    turn_context: &TurnContext,
+    item_id: String,
+    content: String,
+    questions: Option<Vec<agent_protocol::AsyncUserInputQuestion>>,
+) {
+    let item = TurnItem::AgentMessage(AgentMessageItem {
+        id: item_id,
+        content,
+        delivery: Some(agent_protocol::AgentMessageDelivery::Async),
+        questions,
+    });
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemStarted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item: item.clone(),
+        }),
+    )
+    .await;
+    emit(
+        session,
+        turn_context,
+        EventMsg::ItemCompleted(ItemEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item,
         }),
     )
     .await;
@@ -368,12 +504,15 @@ pub(crate) async fn emit_reasoning_completed(
 pub(crate) async fn emit_response_items_completed(
     session: &Session,
     turn_context: &TurnContext,
+    assistant_started: bool,
     assistant_item_id: String,
     assistant_content: String,
     reasoning_item_id: String,
     reasoning_content: String,
 ) {
-    emit_assistant_completed(session, turn_context, assistant_item_id, assistant_content).await;
+    if assistant_started {
+        emit_assistant_completed(session, turn_context, assistant_item_id, assistant_content).await;
+    }
     if !reasoning_content.is_empty() {
         emit_reasoning_completed(session, turn_context, reasoning_item_id, reasoning_content).await;
     }
@@ -384,7 +523,12 @@ fn text_item(id: String, content: String, reasoning: bool) -> TurnItem {
     if reasoning {
         TurnItem::Reasoning(item)
     } else {
-        TurnItem::AgentMessage(item)
+        TurnItem::AgentMessage(AgentMessageItem {
+            id: item.id,
+            content: item.content,
+            delivery: None,
+            questions: None,
+        })
     }
 }
 
@@ -404,47 +548,6 @@ pub(crate) async fn emit_extension_completed(
                 id,
                 namespace: namespace.to_string(),
                 payload,
-            }),
-        }),
-    )
-    .await;
-}
-
-pub(crate) async fn emit_hook_started(
-    session: &Session,
-    turn_context: &TurnContext,
-    hook_name: &str,
-) -> String {
-    let item_id = format!("hook-{}", uuid::Uuid::new_v4());
-    emit(
-        session,
-        turn_context,
-        EventMsg::HookStarted(ItemEvent {
-            turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::HookPrompt(TextItem {
-                id: item_id.clone(),
-                content: hook_name.to_string(),
-            }),
-        }),
-    )
-    .await;
-    item_id
-}
-
-pub(crate) async fn emit_hook_completed(
-    session: &Session,
-    turn_context: &TurnContext,
-    item_id: String,
-    hook_name: &str,
-) {
-    emit(
-        session,
-        turn_context,
-        EventMsg::HookCompleted(ItemEvent {
-            turn_id: turn_context.sub_id().to_string(),
-            item: TurnItem::HookPrompt(TextItem {
-                id: item_id,
-                content: hook_name.to_string(),
             }),
         }),
     )
@@ -506,7 +609,7 @@ pub(crate) async fn emit_subagent_activity(
     .await;
 }
 
-/// Best-effort dual write of LLM usage to usage.db and the session bill.
+/// 尽力双写 LLM 用量到 usage.db 和会话账单。
 pub(super) async fn record_llm_usage(
     session: &Arc<Session>,
     streamer: &ProviderStreamer,
@@ -553,7 +656,8 @@ pub(super) async fn record_llm_usage(
         },
         None,
         Some(agent.sessions()),
-    );
+    )
+    .await;
 }
 
 pub(crate) async fn emit_usage(
@@ -566,21 +670,27 @@ pub(crate) async fn emit_usage(
         return;
     };
     record_llm_usage(session, streamer, &usage).await;
+    session
+        .record_token_usage(turn_context.sub_id(), usage)
+        .await;
     emit(
         session,
         turn_context,
         EventMsg::TokenCount(TokenCountEvent {
             turn_id: Some(turn_context.sub_id().to_string()),
-            input_tokens: u64::from(usage.input_tokens),
+            input_tokens: u64::from(usage.prompt_tokens()),
+            input_tokens_include_cache: true,
+            uncached_input_tokens: u64::from(usage.input_tokens),
             output_tokens: u64::from(usage.output_tokens),
-            total_tokens: u64::from(usage.input_tokens)
-                .saturating_add(u64::from(usage.output_tokens))
-                .saturating_add(u64::from(usage.cache_read_tokens))
-                .saturating_add(u64::from(usage.cache_write_tokens)),
+            total_tokens: u64::from(usage.total_tokens()),
+            provider_total_tokens: usage.reported_total_tokens.map(u64::from),
             cache_read_tokens: u64::from(usage.cache_read_tokens),
             cache_write_tokens: u64::from(usage.cache_write_tokens),
             reasoning_tokens: u64::from(usage.reasoning_tokens),
             request_count: u64::from(usage.request_count),
+            cache_read_reported: usage.cache_read_reported,
+            cache_write_reported: usage.cache_write_reported,
+            reasoning_reported: usage.reasoning_reported,
         }),
     )
     .await;
@@ -591,6 +701,62 @@ mod tests {
     use super::*;
     use crate::runtime::Config;
 
+    #[test]
+    fn tool_item_keeps_execution_batch_metadata() {
+        let execution = ToolExecutionMetadata {
+            batch_id: "batch-1".into(),
+            mode: ToolExecutionMode::Parallel,
+        };
+        let TurnItem::DynamicToolCall(item) = tool_turn_item_with_execution(
+            "call-1",
+            "read_file",
+            serde_json::json!({}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            Some(&execution),
+        ) else {
+            panic!("expected dynamic tool call");
+        };
+        assert_eq!(item.batch_id.as_deref(), Some("batch-1"));
+        assert_eq!(item.execution_mode, Some(ToolExecutionMode::Parallel));
+    }
+
+    #[test]
+    fn image_gen_is_a_first_class_business_item() {
+        let TurnItem::ImageGeneration(item) = tool_turn_item_with_execution(
+            "call-image-1",
+            "image_gen",
+            serde_json::json!({"prompt": "A polar bear"}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            None,
+        ) else {
+            panic!("expected image generation item");
+        };
+
+        assert_eq!(item.id, "call-image-1");
+        assert_eq!(item.name, "image_gen");
+        assert_eq!(item.status, ToolStatus::InProgress);
+    }
+
+    #[test]
+    fn namespaced_image_gen_is_a_first_class_business_item() {
+        let TurnItem::ImageGeneration(item) = tool_turn_item_with_execution(
+            "img-ns",
+            "media.image_gen",
+            serde_json::json!({"prompt":"cat"}),
+            None,
+            Vec::new(),
+            ToolStatus::InProgress,
+            None,
+        ) else {
+            panic!("expected namespaced ImageGeneration item");
+        };
+        assert_eq!(item.name, "media.image_gen");
+    }
+
     async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {
         let dir = tempfile::tempdir().unwrap();
         let session = Arc::new(
@@ -598,6 +764,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "event-helper-test".into(),
             )
+            .await
             .unwrap(),
         );
         let context = session.create_turn_context("turn-1".into()).await;
@@ -654,8 +821,8 @@ mod tests {
     #[test]
     fn oversized_provider_call_id_cannot_break_completed_event_cap() {
         let call_id = "provider-call-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
-        let first = completed_event_with_identity("turn-1", &call_id, "terminal");
-        let second = completed_event_with_identity("turn-1", &call_id, "terminal");
+        let first = completed_event_with_identity("turn-1", &call_id, "exec_command");
+        let second = completed_event_with_identity("turn-1", &call_id, "exec_command");
         assert!(serialized_event_len("turn-1", &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
         assert_eq!(first, second, "bounded correlation id must be stable");
     }
@@ -672,8 +839,8 @@ mod tests {
     #[test]
     fn oversized_turn_id_cannot_break_completed_event_cap() {
         let turn_id = "provider-turn-id".repeat(TOOL_COMPLETED_EVENT_MAX_BYTES / 8);
-        let first = completed_event_with_identity(&turn_id, "call-1", "terminal");
-        let second = completed_event_with_identity(&turn_id, "call-1", "terminal");
+        let first = completed_event_with_identity(&turn_id, "call-1", "exec_command");
+        let second = completed_event_with_identity(&turn_id, "call-1", "exec_command");
         assert!(serialized_event_len(&turn_id, &first) <= TOOL_COMPLETED_EVENT_MAX_BYTES);
         assert_eq!(first, second, "bounded turn correlation id must be stable");
     }
@@ -721,31 +888,6 @@ mod tests {
             event.msg,
             EventMsg::TurnComplete(agent_protocol::TurnCompleteEvent { turn_id, .. })
                 if turn_id == event.id
-        ));
-    }
-
-    #[tokio::test]
-    async fn hook_started_and_completed_share_stable_item_id() {
-        let (_dir, session, context) = session().await;
-        let rx = session.subscribe_turn_events("turn-1").await;
-        let item_id = emit_hook_started(&session, &context, ::hooks::PRE_API_REQUEST).await;
-        emit_hook_completed(
-            &session,
-            &context,
-            item_id.clone(),
-            ::hooks::PRE_API_REQUEST,
-        )
-        .await;
-
-        let started = rx.recv().await.unwrap();
-        let completed = rx.recv().await.unwrap();
-        assert!(matches!(
-            started.msg,
-            EventMsg::HookStarted(ItemEvent { item, .. }) if item.id() == item_id
-        ));
-        assert!(matches!(
-            completed.msg,
-            EventMsg::HookCompleted(ItemEvent { item, .. }) if item.id() == item_id
         ));
     }
 

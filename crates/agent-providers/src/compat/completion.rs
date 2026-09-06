@@ -10,10 +10,30 @@ use anyhow::{Context, Result};
 use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
-use super::messages::to_openai_messages;
+use super::chat_completions::to_openai_messages_with_developer_role;
 use super::sse::extract_openai_delta;
-use crate::traits::{CompletionModel, FromClient, ProviderClient, ProviderExt};
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::traits::{ChatCompletionModel, FromClient, ProviderClient, ProviderExt};
+use crate::types::{ChatCompletionRequest, CompletionStream};
+
+fn openai_chat_function_tools(
+    tools: &[crate::types::request_content::ToolDefinition],
+) -> Vec<Value> {
+    tools
+        .iter()
+        .flat_map(|tool| tool.function_definitions())
+        .map(|tool| {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "strict": tool.strict,
+                }
+            })
+        })
+        .collect()
+}
 
 /// Thinking 请求格式 — 厂商如何将统一 `thinking_config` 映射到线路字段。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,17 +59,8 @@ pub trait OpenAICompatible: ProviderExt {
     /// 是否支持原生 function calling。
     const SUPPORTS_TOOLS: bool = true;
 
-    /// 是否支持 Responses API（`/responses` 端点）。
-    const SUPPORTS_RESPONSES: bool = false;
-
-    /// Responses API: 是否设置 `store: false`（OpenAI 平台专有）。
-    const RESPONSES_STORE_FALSE: bool = false;
-
-    /// Responses API: 是否启用 `parallel_tool_calls`。
-    const RESPONSES_PARALLEL_TOOLS: bool = false;
-
-    /// Responses API: reasoning 对象是否包含 `summary: "auto"`。
-    const RESPONSES_REASONING_SUMMARY: bool = false;
+    /// Chat Completions 是否原生接受 `developer` role；旧兼容端点降级为 `system`。
+    const SUPPORTS_DEVELOPER_ROLE: bool = false;
 
     /// Thinking 请求格式。
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::None;
@@ -65,12 +76,6 @@ pub trait OpenAICompatible: ProviderExt {
     fn finalize_body(&self, body: &mut Value) {
         apply_thinking_compat(Self::THINKING_FORMAT, Self::EFFORT_MAP, body);
     }
-
-    /// Responses API 请求体微调。
-    ///
-    /// 在 Responses JSON body 构造完成后、发送前调用。
-    /// 默认空实现；厂商可覆盖以处理 thinking/reasoning 等差异。
-    fn finalize_responses_body(&self, _body: &mut Value) {}
 }
 
 /// 根据 thinking 格式和 effort 映射表处理 `thinking_config`。
@@ -166,17 +171,21 @@ impl<Ext: ProviderExt> FromClient<Ext> for OpenAICompletionModel<Ext> {
 }
 
 #[async_trait::async_trait]
-impl<Ext> CompletionModel for OpenAICompletionModel<Ext>
+impl<Ext> ChatCompletionModel for OpenAICompletionModel<Ext>
 where
     Ext: OpenAICompatible + Clone + Send + Sync + 'static,
 {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/chat/completions");
 
+        let messages = request.input_with_instructions();
         let mut body = json!({
             "model": if request.model.is_empty() { &self.model } else { &request.model },
-            "messages": to_openai_messages(&request.messages),
+            "messages": to_openai_messages_with_developer_role(
+                &messages,
+                Ext::SUPPORTS_DEVELOPER_ROLE,
+            ),
             "stream": true,
         });
 
@@ -209,22 +218,11 @@ where
         }
 
         if Ext::SUPPORTS_TOOLS && !request.tools.is_empty() {
-            let tools: Vec<Value> = request
-                .tools
-                .iter()
-                .map(|t| {
-                    json!({
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        }
-                    })
-                })
-                .collect();
-            body["tools"] = Value::Array(tools);
-            body["tool_choice"] = json!("auto");
+            let tools = openai_chat_function_tools(&request.tools);
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+                body["tool_choice"] = json!("auto");
+            }
         }
 
         // 厂商 hook：线路格式微调
@@ -243,6 +241,11 @@ where
                 }
             }
         }
+        crate::shared::tool_policy::apply_openai_chat(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let auth = self.ext_instance.auth_headers(&self.api_key);
         let has_auth = !auth.is_empty();
@@ -271,6 +274,27 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::request_content::{
+        FunctionToolDefinition, NamespaceToolDefinition, ToolDefinition, ToolNamespaceDefinition,
+    };
+
+    #[test]
+    fn namespace_tools_are_not_flattened_for_legacy_chat_providers() {
+        let tools =
+            openai_chat_function_tools(&[ToolDefinition::Namespace(ToolNamespaceDefinition {
+                name: "cron".into(),
+                description: "Scheduled jobs".into(),
+                tools: vec![NamespaceToolDefinition::Function(FunctionToolDefinition {
+                    name: "list".into(),
+                    description: "List scheduled jobs".into(),
+                    parameters: json!({"type": "object"}),
+                    strict: false,
+                    defer_loading: None,
+                })],
+            })]);
+
+        assert!(tools.is_empty());
+    }
 
     #[test]
     fn thinking_none_ignores_config() {

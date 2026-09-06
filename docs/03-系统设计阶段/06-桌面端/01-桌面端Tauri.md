@@ -1,5 +1,7 @@
 # 桌面端（Tauri v2）
 
+> **Harness 边界（2026-08-29）**：Tauri 是 Harness 的宿主和 UI 适配层。它提交 Thread `Op`、转发 gRPC/live events 并呈现审批，但不应复制 turn 状态机、工具路由或恢复真相。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：Tauri v2 架构、React 前端、事件驱动
 
 ## 目录结构

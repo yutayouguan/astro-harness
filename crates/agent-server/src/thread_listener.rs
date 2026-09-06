@@ -88,6 +88,42 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
     use proto::thread_event::Payload;
 
     let (turn_id, payload) = match &event.msg {
+        EventMsg::RealtimeConversationStarted(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "started".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationSdp(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "sdp".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationRealtime(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "event".into(),
+                payload_json: serde_json::to_string(&value.payload)
+                    .unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationClosed(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "closed".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
+        EventMsg::RealtimeConversationListVoicesResponse(value) => (
+            event.id.clone(),
+            Payload::Realtime(proto::ThreadRealtimeEvent {
+                kind: "voices".into(),
+                payload_json: serde_json::to_string(value).unwrap_or_else(|_| "null".into()),
+            }),
+        ),
         EventMsg::TurnStarted(started) => (
             started.turn_id.clone(),
             Payload::TurnStarted(proto::ThreadTurnStarted {
@@ -167,6 +203,14 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("elicitation", request)),
         ),
+        EventMsg::GuardianAssessment(assessment) => (
+            assessment.turn_id.clone(),
+            Payload::Extension(extension_payload(
+                assessment.id.clone(),
+                "astro.guardian_assessment",
+                assessment,
+            )),
+        ),
         EventMsg::DynamicToolCallRequest(request) => (
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("dynamic_tool_call", request)),
@@ -175,16 +219,31 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
             request.turn_id.clone(),
             Payload::ControlRequest(control_payload("dynamic_tool_response", request)),
         ),
-        EventMsg::McpToolCallBegin(item) | EventMsg::HookStarted(item) => (
+        EventMsg::McpToolCallBegin(item) => (
             item.turn_id.clone(),
             Payload::ItemStarted(item_payload(&item.item, "in_progress")),
         ),
         EventMsg::McpToolCallEnd(item)
-        | EventMsg::HookCompleted(item)
         | EventMsg::SubAgentActivity(item)
         | EventMsg::ContextCompacted(item) => (
             item.turn_id.clone(),
             Payload::ItemCompleted(item_payload(&item.item, "completed")),
+        ),
+        EventMsg::HookStarted(hook) => (
+            hook.turn_id.clone().unwrap_or_else(|| event.id.clone()),
+            Payload::Extension(extension_payload(
+                hook.run.id.clone(),
+                "astro.hook_started",
+                hook,
+            )),
+        ),
+        EventMsg::HookCompleted(hook) => (
+            hook.turn_id.clone().unwrap_or_else(|| event.id.clone()),
+            Payload::Extension(extension_payload(
+                hook.run.id.clone(),
+                "astro.hook_completed",
+                hook,
+            )),
         ),
         EventMsg::ContextUsage(usage) => (
             usage.turn_id.clone(),
@@ -198,8 +257,19 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
             tokens.turn_id.clone().unwrap_or_else(|| event.id.clone()),
             Payload::TokenCount(proto::ThreadTokenCount {
                 input_tokens: tokens.input_tokens,
+                input_tokens_include_cache: tokens.input_tokens_include_cache,
                 output_tokens: tokens.output_tokens,
                 total_tokens: tokens.total_tokens,
+                uncached_input_tokens: tokens.uncached_input_tokens,
+                cache_read_tokens: tokens.cache_read_tokens,
+                cache_write_tokens: tokens.cache_write_tokens,
+                reasoning_tokens: tokens.reasoning_tokens,
+                request_count: tokens.request_count,
+                provider_total_tokens: tokens.provider_total_tokens.unwrap_or_default(),
+                provider_total_tokens_reported: tokens.provider_total_tokens.is_some(),
+                cache_read_reported: tokens.cache_read_reported,
+                cache_write_reported: tokens.cache_write_reported,
+                reasoning_reported: tokens.reasoning_reported,
             }),
         ),
         EventMsg::ThreadSettingsApplied(value) => (
@@ -473,9 +543,15 @@ pub async fn run_listener_commands(
                         .cloned()
                         .collect::<Vec<_>>();
                     pending_background_turn_ids.sort();
+                    let (provider_id, backend_id, model, reasoning_effort) =
+                        state.history.thread_settings();
                     ThreadSnapshot {
                         thread_id: thread_id.clone(),
                         status: state.status.clone(),
+                        provider_id,
+                        backend_id,
+                        model,
+                        reasoning_effort,
                         turns: if include_turns {
                             state.history.completed_turns().to_vec()
                         } else {

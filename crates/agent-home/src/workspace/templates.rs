@@ -107,7 +107,7 @@ pub(crate) const TEMPLATE_AGENTS: &str = r#"# AGENTS.md — 本记忆空间的�
 - **长期精炼：** `MEMORY.md` — 跨会话稳定事实与决策（提炼后的结论）
 - **每日记忆：** `memory/YYYY-MM-DD.md` — 当日流水与事件
 - **用户档案：** `USER.md` — 称呼、背景、协作偏好
-- **会话检索：** `~/.astro/sessions/`（全局会话库）
+- **会话检索：** `~/.astro/data/state.db`（全局会话库）
 
 想记住的事必须写入文件。「心里记一下」撑不过重启。
 
@@ -164,6 +164,12 @@ Skills 定义工具「怎么用」。本文件记录「你这台机器上的具�
 - HTML → `generated/html/`
 - 其它 → `generated/other/`
 
+## 可选命令行工具
+
+Astro 会在运行时探测当前进程 `PATH` 中的可执行工具，并把可用状态附加到本文件对应的上下文；未检测到的工具不得假设存在，也不得自行安装。
+
+检测到 RTK 时，仅对其支持且输出较大的只读、搜索、构建、测试及 Git 查看命令优先添加 `rtk` 前缀。精确/机器可读输出、JSON、补丁、管道或重定向、交互式命令继续使用原始命令；RTK 失败时安全回退原命令。
+
 ## 示例
 
 ```markdown
@@ -194,7 +200,9 @@ pub(crate) const TEMPLATE_MEMORY: &str = r#"# MEMORY.md — 长期精炼记忆
 pub(crate) const ENSURED_DIRS: &[&str] = &[
     "workspace",
     "agents",
-    "sessions",
+    "data",
+    "memory",
+    "sessions/rollouts",
     "skills",
     "cron",
     "cron/output",
@@ -212,7 +220,7 @@ pub(crate) const STATE_FILES: &[(&str, &str)] = &[
     ("skills-enabled.json", "{\n}\n"),
     ("tools-enabled.json", "{\n}\n"),
     ("models.json", "{\n  \"providers\": {}\n}\n"),
-    ("dreaming.json", "{\n  \"enabled\": false\n}\n"),
+    ("memory/dreaming.json", "{\n  \"enabled\": false\n}\n"),
     ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),
     ("active-agent.json", "{\n  \"id\": \"workspace\"\n}\n"),
 ];

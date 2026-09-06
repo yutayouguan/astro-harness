@@ -1,10 +1,21 @@
 /** 多题澄清叠层向导：Tab + 选项/自由输入 + 卡片切换动画。 */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  PencilLine,
+  ShieldAlert,
+  ShieldCheck,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import { useI18n } from "../i18n/LocaleContext";
 import {
   isPresetAnswer,
   parseClarifySteps,
+  parseApprovalContent,
+  shouldSubmitClarifyInput,
   type ClarifyWizardStep,
 } from "./clarifySteps";
 
@@ -13,6 +24,13 @@ export { parseClarifySteps };
 
 type Props = {
   steps: ClarifyWizardStep[];
+  variant?: "default" | "approval";
+  approvalTitle?: string;
+  approvalBody?: string;
+  approvalKind?: string;
+  approvalDetail?: string;
+  allowAlways?: boolean;
+  approvalTypeLabel?: string;
   disabled?: boolean;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
@@ -22,6 +40,13 @@ type Direction = "forward" | "backward";
 
 export default function ClarifyWizard({
   steps,
+  variant = "default",
+  approvalTitle,
+  approvalBody,
+  approvalKind,
+  approvalDetail,
+  allowAlways = false,
+  approvalTypeLabel,
   disabled = false,
   onAction,
 }: Props) {
@@ -33,6 +58,11 @@ export default function ClarifyWizard({
   const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [approvalChoice, setApprovalChoice] = useState<
+    "approve" | "approve_always" | "approve_type" | "deny" | null
+  >(null);
+  const approvalTitleId = useId();
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   const safeIndex = Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0));
   const step = steps[safeIndex];
@@ -178,6 +208,38 @@ export default function ClarifyWizard({
 
   if (!steps.length || !step) return null;
 
+  if (collapsed && variant === "approval" && approvalChoice) {
+    const approved = approvalChoice !== "deny";
+    const label =
+      approvalChoice === "approve_always"
+        ? t("chat.a2ui.approvalAlwaysApproved")
+        : approvalChoice === "approve_type"
+          ? t("chat.a2ui.approvalTypeApproved", {
+              type: approvalTypeLabel ?? "",
+            })
+          : approved
+            ? t("chat.a2ui.approvalApproved")
+            : t("chat.a2ui.approvalDenied");
+    return (
+      <div
+        className={`a2ui-clarify-wizard is-collapsed is-approval-result ${approved ? "is-approved" : "is-denied"}`}
+        data-a2ui-id="wizard"
+        role="status"
+      >
+        <div className="a2ui-approval-result">
+          <span className="a2ui-approval-result-icon" aria-hidden>
+            {approved ? (
+              <Check size={15} strokeWidth={2.5} />
+            ) : (
+              <X size={15} strokeWidth={2.5} />
+            )}
+          </span>
+          <span>{label}</span>
+        </div>
+      </div>
+    );
+  }
+
   if (collapsed) {
     const summaryParts = steps
       .map((s) => {
@@ -196,7 +258,9 @@ export default function ClarifyWizard({
         onKeyDown={(e) => e.key === "Enter" && setCollapsed(false)}
       >
         <div className="a2ui-clarify-collapsed">
-          <span className="a2ui-clarify-collapsed-icon" aria-hidden>✓</span>
+          <span className="a2ui-clarify-collapsed-icon" aria-hidden>
+            ✓
+          </span>
           <div className="a2ui-clarify-collapsed-body">
             {summaryParts.map((p) => (
               <span key={p.question} className="a2ui-clarify-collapsed-pair">
@@ -205,7 +269,9 @@ export default function ClarifyWizard({
               </span>
             ))}
           </div>
-          <span className="a2ui-clarify-collapsed-expand" aria-hidden>▸</span>
+          <span className="a2ui-clarify-collapsed-expand" aria-hidden>
+            ▸
+          </span>
         </div>
       </div>
     );
@@ -217,6 +283,32 @@ export default function ClarifyWizard({
   const customValue =
     customDrafts[step.id] ??
     (saved && !isPresetAnswer(step, saved) ? saved : "");
+  const customActionLabel = isLast
+    ? t("chat.a2ui.clarifySubmit")
+    : t("chat.a2ui.clarifyNext");
+  const previousStepsAnswered = steps
+    .slice(0, safeIndex)
+    .every((s) => answers[s.id]?.trim() || customDrafts[s.id]?.trim());
+  const customActionDisabled =
+    disabled ||
+    phase === "exit" ||
+    !currentHasAnswer() ||
+    (isLast && !previousStepsAnswered);
+
+  const handleCustomAction = () => {
+    if (customActionDisabled) return;
+    const draft = customDrafts[step.id]?.trim();
+    if (draft) {
+      confirmCustom(draft);
+      return;
+    }
+    if (isSingle) return;
+    if (isLast) {
+      handleSubmit();
+    } else {
+      handleNext();
+    }
+  };
 
   const backPeek = multi
     ? steps.slice(safeIndex + 1, safeIndex + 3).map((_, i) => i + 1)
@@ -224,48 +316,186 @@ export default function ClarifyWizard({
 
   const dirClass = `is-${direction}`;
 
+  if (variant === "approval") {
+    const isSandboxRetry = approvalKind === "sandbox_retry";
+    const content = isSandboxRetry
+      ? {
+          description: t("chat.a2ui.sandboxRetryDescription"),
+          command: approvalDetail ?? "",
+        }
+      : parseApprovalContent(approvalBody ?? step.question);
+    const renderedTitle = isSandboxRetry
+      ? t("chat.a2ui.sandboxRetryTitle")
+      : approvalTitle || step.question;
+    const commandLabel = isSandboxRetry
+      ? t("chat.a2ui.sandboxRetryDetail")
+      : t("chat.a2ui.approvalCommand");
+    const submitApproval = (
+      choice: "approve" | "approve_always" | "approve_type" | "deny",
+    ) => {
+      if (disabled) return;
+      setApprovalChoice(choice);
+      setCollapsed(true);
+      onAction(choice, {});
+    };
+    return (
+      <section
+        className={`a2ui-clarify-wizard is-approval ${disabled ? "is-disabled" : ""}`}
+        data-a2ui-id="wizard"
+        aria-labelledby={approvalTitleId}
+      >
+        <div className="a2ui-approval-header">
+          <span className="a2ui-approval-mark" aria-hidden>
+            <ShieldAlert size={19} strokeWidth={2} />
+          </span>
+          <div className="a2ui-approval-heading">
+            <span className="a2ui-approval-eyebrow">
+              {t("chat.a2ui.approvalRequired")}
+            </span>
+            <h3 id={approvalTitleId} className="a2ui-approval-title">
+              {renderedTitle}
+            </h3>
+          </div>
+        </div>
+
+        {content.description ? (
+          <p className="a2ui-approval-description">{content.description}</p>
+        ) : null}
+
+        {content.command ? (
+          <div className="a2ui-approval-command">
+            <div className="a2ui-approval-command-label">
+              <TerminalSquare size={14} aria-hidden />
+              <span>{commandLabel}</span>
+            </div>
+            <pre>
+              <code>{content.command}</code>
+            </pre>
+          </div>
+        ) : null}
+
+        <div className="a2ui-approval-actions">
+          <button
+            type="button"
+            className="a2ui-approval-action is-deny"
+            disabled={disabled}
+            onClick={() => submitApproval("deny")}
+          >
+            <X size={17} strokeWidth={2.2} aria-hidden />
+            <span className="a2ui-approval-action-copy">
+              <strong>{t("chat.a2ui.approvalDeny")}</strong>
+              <small>{t("chat.a2ui.approvalDenyHint")}</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="a2ui-approval-action is-approve"
+            disabled={disabled}
+            onClick={() => submitApproval("approve")}
+          >
+            <Check size={17} strokeWidth={2.3} aria-hidden />
+            <span className="a2ui-approval-action-copy">
+              <strong>{t("chat.a2ui.approvalOnce")}</strong>
+              <small>{t("chat.a2ui.approvalOnceHint")}</small>
+            </span>
+          </button>
+        </div>
+
+        {allowAlways ? (
+          <div className="a2ui-approval-persistent-actions">
+            <button
+              type="button"
+              className="a2ui-approval-always"
+              disabled={disabled}
+              onClick={() => submitApproval("approve_always")}
+            >
+              <ShieldCheck size={17} strokeWidth={2} aria-hidden />
+              <span className="a2ui-approval-action-copy">
+                <strong>{t("chat.a2ui.approvalAlways")}</strong>
+                <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
+              </span>
+              <ArrowRight
+                className="a2ui-approval-always-arrow"
+                size={16}
+                aria-hidden
+              />
+            </button>
+            {approvalTypeLabel ? (
+              <button
+                type="button"
+                className="a2ui-approval-always is-type"
+                disabled={disabled}
+                onClick={() => submitApproval("approve_type")}
+              >
+                <TerminalSquare size={17} strokeWidth={2} aria-hidden />
+                <span className="a2ui-approval-action-copy">
+                  <strong>
+                    {t("chat.a2ui.approvalType", { type: approvalTypeLabel })}
+                  </strong>
+                  <small>{t("chat.a2ui.approvalTypeHint")}</small>
+                </span>
+                <ArrowRight
+                  className="a2ui-approval-always-arrow"
+                  size={16}
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   const customInput = (
-    <label
+    <div
       className={`a2ui-clarify-custom ${hasPresets ? "is-inline-option" : "is-standalone"}`}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        customInputRef.current?.focus();
+      }}
     >
-      {hasPresets ? (
-        <span className="a2ui-clarify-custom-label">{t("chat.a2ui.clarifyCustom")}</span>
-      ) : null}
+      <PencilLine className="a2ui-clarify-custom-icon" size={16} aria-hidden />
       <input
+        ref={customInputRef}
         type="text"
         className="a2ui-clarify-custom-input"
         disabled={disabled || phase === "exit"}
-        placeholder={t("chat.a2ui.clarifyCustomPlaceholder")}
+        aria-label={t("chat.a2ui.clarifyCustom")}
+        placeholder={
+          hasPresets
+            ? t("chat.a2ui.clarifyCustom")
+            : t("chat.a2ui.clarifyCustomPlaceholder")
+        }
         value={customValue}
         onChange={(e) => {
           const v = e.target.value;
           setCustomDrafts((prev) => ({ ...prev, [step.id]: v }));
-          if (presetSelected) {
-            setAnswers((prev) => {
-              const next = { ...prev };
-              delete next[step.id];
-              return next;
-            });
-          }
+          setAnswers((prev) => {
+            const next = { ...prev };
+            if (v.trim()) next[step.id] = v.trim();
+            else delete next[step.id];
+            return next;
+          });
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (shouldSubmitClarifyInput(e.key, e.nativeEvent.isComposing)) {
             e.preventDefault();
-            confirmCustom();
+            handleCustomAction();
           }
         }}
       />
-      {!hasPresets || isSingle ? (
-        <button
-          type="button"
-          className="a2ui-button is-primary a2ui-clarify-custom-submit"
-          disabled={disabled || !customValue.trim() || phase === "exit"}
-          onClick={() => confirmCustom()}
-        >
-          {isSingle ? t("chat.a2ui.clarifySubmit") : t("chat.a2ui.clarifyNext")}
-        </button>
-      ) : null}
-    </label>
+      <button
+        type="button"
+        className="a2ui-clarify-custom-submit"
+        disabled={customActionDisabled}
+        onClick={handleCustomAction}
+        aria-label={customActionLabel}
+        title={customActionLabel}
+      >
+        <ArrowRight size={17} strokeWidth={2.2} aria-hidden />
+      </button>
+    </div>
   );
 
   return (
@@ -274,9 +504,15 @@ export default function ClarifyWizard({
       data-a2ui-id="wizard"
     >
       {multi ? (
-        <div className="a2ui-clarify-tabs" role="tablist" aria-label={t("chat.a2ui.clarifyTabs")}>
+        <div
+          className="a2ui-clarify-tabs"
+          role="tablist"
+          aria-label={t("chat.a2ui.clarifyTabs")}
+        >
           {steps.map((s, i) => {
-            const answered = Boolean(answers[s.id]?.trim() || customDrafts[s.id]?.trim());
+            const answered = Boolean(
+              answers[s.id]?.trim() || customDrafts[s.id]?.trim(),
+            );
             const active = i === safeIndex;
             return (
               <button
@@ -296,7 +532,9 @@ export default function ClarifyWizard({
               >
                 <span className="a2ui-clarify-tab-index">{i + 1}</span>
                 <span className="a2ui-clarify-tab-label">
-                  {s.question.length > 10 ? `${s.question.slice(0, 10)}…` : s.question}
+                  {s.question.length > 10
+                    ? `${s.question.slice(0, 10)}…`
+                    : s.question}
                 </span>
               </button>
             );
@@ -363,45 +601,6 @@ export default function ClarifyWizard({
           ) : (
             customInput
           )}
-
-          {multi ? (
-            <div className="a2ui-clarify-nav">
-              <button
-                type="button"
-                className="a2ui-button"
-                disabled={disabled || safeIndex === 0 || phase === "exit"}
-                onClick={() => goTo(safeIndex - 1)}
-              >
-                {t("chat.a2ui.clarifyBack")}
-              </button>
-              {!isLast ? (
-                <button
-                  type="button"
-                  className="a2ui-button is-primary"
-                  disabled={
-                    disabled || !currentHasAnswer() || phase === "exit"
-                  }
-                  onClick={handleNext}
-                >
-                  {t("chat.a2ui.clarifyNext")}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="a2ui-button is-primary"
-                  disabled={
-                    disabled ||
-                    !currentHasAnswer() ||
-                    steps.slice(0, -1).some((s) => !answers[s.id]?.trim()) ||
-                    phase === "exit"
-                  }
-                  onClick={handleSubmit}
-                >
-                  {t("chat.a2ui.clarifySubmit")}
-                </button>
-              )}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

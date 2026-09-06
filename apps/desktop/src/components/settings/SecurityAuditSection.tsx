@@ -95,7 +95,9 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-function eventTone(event: SecurityAuditEvent): "danger" | "success" | "neutral" {
+function eventTone(
+  event: SecurityAuditEvent,
+): "danger" | "success" | "neutral" {
   if (
     event.event.endsWith(".denied") ||
     event.event.endsWith("backend_unavailable")
@@ -144,7 +146,9 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const [events, setEvents] = useState<SecurityAuditEvent[]>([]);
-  const [retention, setRetention] = useState<SecurityAuditRetention | null>(null);
+  const [retention, setRetention] = useState<SecurityAuditRetention | null>(
+    null,
+  );
   const [filter, setFilter] = useState<AuditFilter>("all");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -152,10 +156,12 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [exportResult, setExportResult] = useState<SecurityAuditExportResult | null>(null);
+  const [exportResult, setExportResult] =
+    useState<SecurityAuditExportResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
-  const [clearResult, setClearResult] = useState<SecurityAuditClearResult | null>(null);
+  const [clearResult, setClearResult] =
+    useState<SecurityAuditClearResult | null>(null);
   const [clearError, setClearError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -186,7 +192,15 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
   }, [active]);
 
   const loadMore = useCallback(async () => {
-    if (!active || !isTauri() || !nextCursor || loading || loadingMore || clearing) return;
+    if (
+      !active ||
+      !isTauri() ||
+      !nextCursor ||
+      loading ||
+      loadingMore ||
+      clearing
+    )
+      return;
     setLoadingMore(true);
     setLoadMoreError(null);
     try {
@@ -196,11 +210,16 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
       });
       setEvents((current) => {
         const seen = new Set(current.map((event) => event.id));
-        return [...current, ...page.items.filter((event) => !seen.has(event.id))];
+        return [
+          ...current,
+          ...page.items.filter((event) => !seen.has(event.id)),
+        ];
       });
       setNextCursor(page.nextCursor);
     } catch (reason) {
-      setLoadMoreError(reason instanceof Error ? reason.message : String(reason));
+      setLoadMoreError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -226,10 +245,13 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     setExportResult(null);
     setExportError(null);
     try {
-      const result = await invoke<SecurityAuditExportResult | null>("export_security_audits", {
-        source: filter,
-        limit: Math.min(visible.length, MAX_AUDIT_EXPORT_EVENTS),
-      });
+      const result = await invoke<SecurityAuditExportResult | null>(
+        "export_security_audits",
+        {
+          source: filter,
+          limit: Math.min(visible.length, MAX_AUDIT_EXPORT_EVENTS),
+        },
+      );
       if (result) setExportResult(result);
     } catch (reason) {
       setExportError(reason instanceof Error ? reason.message : String(reason));
@@ -278,7 +300,9 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
     setExportResult(null);
     setExportError(null);
     try {
-      const result = await invoke<SecurityAuditClearResult>("clear_security_audits");
+      const result = await invoke<SecurityAuditClearResult>(
+        "clear_security_audits",
+      );
       setEvents([]);
       setNextCursor(null);
       setClearResult(result);
@@ -304,12 +328,20 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             type="button"
             className="mcp-btn-ghost"
             onClick={() => void exportVisible()}
-            disabled={loading || loadingMore || exporting || clearing || visible.length === 0}
+            disabled={
+              loading ||
+              loadingMore ||
+              exporting ||
+              clearing ||
+              visible.length === 0
+            }
             aria-label={t("approvals.audit.export")}
             title={t("approvals.audit.exportHint")}
           >
             <Download size={14} aria-hidden />
-            {exporting ? t("approvals.audit.exporting") : t("approvals.audit.export")}
+            {exporting
+              ? t("approvals.audit.exporting")
+              : t("approvals.audit.export")}
           </button>
           <button
             type="button"
@@ -319,7 +351,11 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             aria-label={t("approvals.audit.refresh")}
             title={t("approvals.audit.refresh")}
           >
-            <RefreshCw size={14} className={loading ? "is-spinning" : ""} aria-hidden />
+            <RefreshCw
+              size={14}
+              className={loading ? "is-spinning" : ""}
+              aria-hidden
+            />
             {t("approvals.audit.refresh")}
           </button>
         </div>
@@ -338,10 +374,18 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
             type="button"
             className="mcp-btn-ghost security-audit-clear"
             onClick={() => void clearAll()}
-            disabled={loading || loadingMore || exporting || clearing || events.length === 0}
+            disabled={
+              loading ||
+              loadingMore ||
+              exporting ||
+              clearing ||
+              events.length === 0
+            }
           >
             <Trash2 size={14} aria-hidden />
-            {clearing ? t("approvals.audit.clearing") : t("approvals.audit.clear")}
+            {clearing
+              ? t("approvals.audit.clearing")
+              : t("approvals.audit.clear")}
           </button>
         </div>
       )}
@@ -445,14 +489,20 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
                     : ShieldCheck;
             const capabilityTargets = totalCapabilityTargets(event);
             return (
-              <li key={event.id} className="security-audit-item" data-tone={tone}>
+              <li
+                key={event.id}
+                className="security-audit-item"
+                data-tone={tone}
+              >
                 <span className="security-audit-icon" aria-hidden>
                   <EventIcon size={15} strokeWidth={2.2} />
                 </span>
                 <div className="security-audit-content">
                   <div className="security-audit-title-row">
                     <strong>
-                      {EVENT_LABELS[event.event] ? t(EVENT_LABELS[event.event]) : event.event}
+                      {EVENT_LABELS[event.event]
+                        ? t(EVENT_LABELS[event.event])
+                        : event.event}
                     </strong>
                     <time dateTime={event.createdAt} title={event.createdAt}>
                       {formatTimestamp(event.createdAt)}
@@ -465,11 +515,17 @@ export default function SecurityAuditSection({ active }: { active: boolean }) {
                     {event.target && <span>{event.target}</span>}
                     {capabilityTargets > 0 && (
                       <span>
-                        {t("approvals.audit.targets", { n: String(capabilityTargets) })}
+                        {t("approvals.audit.targets", {
+                          n: String(capabilityTargets),
+                        })}
                       </span>
                     )}
                     {event.durationMs != null && (
-                      <span>{t("approvals.audit.duration", { n: String(event.durationMs) })}</span>
+                      <span>
+                        {t("approvals.audit.duration", {
+                          n: String(event.durationMs),
+                        })}
+                      </span>
                     )}
                   </div>
                 </div>

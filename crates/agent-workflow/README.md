@@ -4,7 +4,7 @@
 
 ## 核心职责
 
-1. **工作流数据模型** -- 定义 41 种节点类型（跨 6 大类别）、边、位置、变量等完整工作流结构，JSON 序列化持久化到 `~/.astro/workflows/workflows.json`。
+1. **工作流数据模型** -- 定义 43 种节点类型（跨 6 大类别）、边、位置、变量等完整工作流结构，JSON 序列化持久化到 `~/.astro/workflows/workflows.json`。
 2. **DAG 拓扑排序与并行执行** -- Kahn 算法分层拓扑排序，同层节点并行执行（`join_all`），支持条件分支跳过、过滤阻断、循环迭代、子工作流递归（最大深度 5）。
 3. **变量上下文与插值** -- `{{var}}` 模板插值、嵌套 JSON 路径解析、条件表达式求值（比较 / 逻辑组合 / 取反）。
 4. **运行记录管理** -- SQLite WAL 模式存储运行记录与步骤日志，支持查询、删除、自动清理（保留最近 500 条）。
@@ -15,7 +15,7 @@
 | 文件 | 职责 |
 |------|------|
 | `lib.rs` | crate 入口，导出所有子模块 |
-| `model.rs` | 数据模型：`Workflow` / `WorkflowNode` / `WorkflowEdge` / `NodeType` (41 种) / `NodeCategory` (6 类) |
+| `model.rs` | 数据模型：`Workflow` / `WorkflowNode` / `WorkflowEdge` / `NodeType` (43 种) / `NodeCategory` (6 类) |
 | `store.rs` | JSON 文件持久化：`WorkflowStore` CRUD、校验、自动备份（保留最近 5 个） |
 | `error.rs` | 错误类型：`WorkflowError`（环路 / 无执行器 / 节点失败 / 超时 / 递归深度等）、`StoreError` |
 | `run_db.rs` | SQLite 运行记录：`WorkflowRunDb`、`WorkflowRunRow` / `WorkflowStepLogRow`、DDL、清理 |
@@ -35,7 +35,8 @@
 
 ### 数据模型
 
-- `Workflow` -- 完整工作流定义：id / name / nodes / edges / variables / enabled / ai_callable
+- `Workflow` -- 完整工作流定义：id / name / nodes / edges / variables / enabled / agent_tool
+- `WorkflowAgentTool` -- Agent 调用契约：`exposure` / `name` / `input_schema` / `output_description` / `examples` / `confirmation`
 - `WorkflowNode` -- 节点：id / node_type / label / position / config / disabled
 - `WorkflowEdge` -- 边：source / target / source_handle / target_handle
 - `NodeType` -- 41 种节点类型枚举（snake_case 序列化）
@@ -46,6 +47,7 @@
 ### 引擎
 
 - `execute_workflow()` -- 执行一条工作流，返回 `WorkflowRunResult`
+- `execute_workflow_with_provider_configs_and_run_id()` -- 使用调用方预分配的 run id 和运行时 Provider 凭证执行
 - `DagPlan` -- DAG 分层执行计划：layers (可并行的节点 id 层) + trigger_node_id
 - `resolve_dag()` -- Kahn 拓扑排序，禁用节点自动跳过，含环则报错
 - `detect_cycle()` -- 环路检测，返回参与环的节点 id 列表
@@ -57,7 +59,7 @@
 
 ### 持久化
 
-- `WorkflowStore` -- JSON 文件 CRUD：`list()` / `get()` / `create()` / `update()` / `delete()` / `save_workflow()` / `set_enabled()` / `set_ai_callable()` / `validate_workflow()`
+- `WorkflowStore` -- JSON 文件 CRUD：`list()` / `get()` / `create()` / `update()` / `delete()` / `save_workflow()` / `set_enabled()` / `update_agent_tool()` / `validate_workflow()`
 - `WorkflowRunDb` -- SQLite 运行记录：`insert_run()` / `finish_run()` / `get_run()` / `list_runs()` / `delete_run()` / `insert_step_log()` / `finish_step_log()` / `list_step_logs()` / `prune_old_runs()`
 - `WorkflowRunRow` / `WorkflowStepLogRow` -- 运行记录与步骤日志行
 
@@ -72,6 +74,41 @@
 - **home** -- `~/.astro` 路径约定（`default_memory_dir()` 用于定位 workflows 目录）
 - **providers** -- AI 节点执行器通过 providers crate 调用 LLM / 图像 / 语音等服务
 - **前端** -- `apps/desktop` 使用 `@xyflow/react` 渲染流程图编辑器，通过 Tauri 命令调用本 crate
+- **Agent 工具** -- 启用的 Workflow 按 `agent_tool` 契约投影为 `workflow` namespace 子工具；Deferred 仅在 `tool_search` 可用时可发现
+
+## Agent 工具契约
+
+```yaml
+agent_tool:
+  exposure: deferred # disabled | deferred | direct
+  name: generate_weekly_report
+  input_schema:
+    type: object
+    properties:
+      topic:
+        type: string
+    required: [topic]
+    additionalProperties: false
+  output_description: 结构化周报
+  examples:
+    - topic: Astro
+  confirmation: auto # auto | always
+```
+
+Registry 内部使用 `workflow__<workflow_id>` 作为稳定执行键，模型侧使用
+`(namespace="workflow", name=<agent_tool.name>)`。每个 Step 都从 WorkflowStore 重建并冻结
+Registry 快照；后续编辑或删除不会改变已签发调用的执行内容。
+
+Agent 调用参数会先按 `input_schema` 校验，再原样注入 `trigger_input`。结果包含
+`run_id/status/output/error/steps_executed`。超过 30 秒的执行转入后台，Agent 可用
+`workflow.get_run` 查询或用 `workflow.cancel_run` 取消。AI、媒体、Action 和人工审批节点
+会在运行整个 Workflow 前进入 Agent 审批链。
+
+`get_run` / `cancel_run` 只允许访问当前 Agent Session 启动的 run；其他 Session 的 id
+按不存在处理。Agent Step 还会冻结被引用的子工作流，执行期间的编辑/删除不会
+改变已签发调用。`Code` 节点当前仍使用旧的本地子进程执行器，因此不允许通过
+Agent 工具调用，直到它接入 Agent sandbox。Workflow HTTP/Webhook 对初始 URL 和每一次
+重定向都执行 DNS/私网 SSRF 检查。
 
 ### 目录约定
 

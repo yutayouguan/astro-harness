@@ -1,0 +1,262 @@
+/* Cron panel list page */
+.cron-page {
+  --plugins-control-h: 36px;
+  --plugins-shell-radius: 14px;
+  --plugins-item-radius: 10px;
+  /* 材质与分段 Tab 同源，见 styles/components/tabs.css */
+  --plugins-shell-border: var(--seg-shell-border);
+  --plugins-shell-bg: var(--seg-shell-bg);
+  --plugins-shell-shadow: var(--seg-shell-shadow);
+  --plugins-active-bg: var(--seg-item-bg-active);
+  --plugins-active-shadow: var(--seg-item-shadow-active);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 直接铺在页面底色上：不再套一层玻璃卡片 */
+.cron-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  container-name: cron-pane;
+}
+
+.cron-pane > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 顶栏一行：左侧标题与创建操作，右侧导航与视图工具。
+   与标题栏拖拽区的命中规则由 shell/header.css 统一管理。 */
+.cron-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.cron-toolbar-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cron-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+  height: 36px;
+}
+
+.cron-toolbar-end .expandable-search-btn,
+.cron-toolbar-end .expandable-search-field {
+  height: var(--plugins-control-h);
+  border-color: var(--plugins-shell-border);
+  border-radius: 12px;
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+}
+
+.cron-create-group {
+  display: flex;
+  align-items: center;
+}
+
+.cron-toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: var(--plugins-control-h);
+  padding: 0 12px;
+  border: 1px solid var(--plugins-shell-border);
+  border-radius: 12px;
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
+  color: var(--tone, var(--ink));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    filter 150ms ease,
+    transform 120ms ease;
+}
+
+.cron-toolbar-action:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.cron-toolbar-action--template {
+  border-left-color: color-mix(in srgb, var(--tone, #64748b) 18%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.cron-toolbar-action:hover {
+  filter: brightness(1.04);
+}
+
+.cron-toolbar-action:active {
+  transform: scale(0.98);
+}
+
+.cron-template-picker {
+  margin-bottom: 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--plugins-shell-border);
+  border-radius: var(--plugins-shell-radius);
+  background: var(--plugins-shell-bg);
+  box-shadow: var(--plugins-shell-shadow);
+}
+
+.cron-template-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin-bottom: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cron-template-picker-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.cron-template-picker-close:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+
+@container cron-pane (max-width: 980px) {
+  .cron-toolbar-start,
+  .cron-toolbar-end {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .cron-toolbar-end {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+.cron-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  /* 盖过下方任务卡片，避免 Agent 下拉被遮挡 */
+  z-index: 40;
+}
+
+.cron-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px 12px;
+  list-style: none;
+  margin: 0;
+  z-index: 1;
+}
+
+.cron-pane-actions,
+.cron-pane-head .panel-agent-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 36px;
+}
+
+.cron-pane-head .panel-agent-toolbar-end .expandable-search-btn,
+.cron-pane-head .panel-agent-toolbar-end .expandable-search-field {
+  height: 36px;
+  border-radius: 12px;
+}
+
+.cron-error {
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.cron-loading {
+  margin: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+
+.cron-empty-with-templates {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0 2px 32px;
+  mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 16px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black calc(100% - 16px),
+    transparent 100%
+  );
+}
+
+.cron-empty-with-templates .cron-empty {
+  flex: none;
+  gap: 6px;
+  padding: 18px 24px 22px;
+}
+
+.cron-empty-with-templates .cron-empty .astro-empty-art {
+  width: 92px;
+}
+
+/* 默认 28ch 在中文下会在词中断行，这里按像素给足一行 */
+.cron-page .astro-empty-hint {
+  max-width: 320px;
+  text-wrap: balance;
+}
+
+.cron-empty-cta {
+  margin-top: 10px;
+  padding: 8px 18px;
+}

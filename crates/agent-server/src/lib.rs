@@ -30,7 +30,7 @@ pub(crate) const POST_TURN_COMPLETION_MARKER_TIMEOUT: std::time::Duration =
 pub(crate) const BACKGROUND_EXTENSION_SINK_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(6 * 60);
 
-/// Durable Thread used for workspace-wide events that are not owned by one chat session.
+/// 用于工作区级事件的持久 Thread，不属于任何单个聊天会话。
 pub const WORKSPACE_EVENT_THREAD_ID: &str = "astro-workspace-events";
 
 use std::time::Duration;
@@ -103,7 +103,7 @@ pub async fn serve(
     }
 
     // 后台 cron ticker：独立 current_thread 运行时。
-    // AgentLoop / SessionStore（rusqlite RefCell）不是 Send，不能进多线程 tokio::spawn。
+    // AgentLoop / SessionStore 不是 Send，不能进多线程 tokio::spawn。
     std::thread::Builder::new()
         .name("astro-cron".into())
         .spawn(|| {
@@ -119,7 +119,7 @@ pub async fn serve(
             };
             rt.block_on(async move {
                 // 启动时回收上次进程残留的 running 记录。
-                if let Err(err) = agent::exec::cron::reconcile_orphaned_runs() {
+                if let Err(err) = agent::exec::cron::reconcile_orphaned_runs().await {
                     tracing::warn!(error = %err, "cron: reconcile orphaned runs failed");
                 }
                 let mut interval = tokio::time::interval(Duration::from_secs(30));
@@ -184,7 +184,7 @@ pub async fn serve(
     tracing::info!("Memory dir: {}", memory_dir.display());
     tracing::info!("Logs dir: {}", logs_dir().display());
     tracing::info!("Cron dir: {}", cron_dir().display());
-    tracing::info!("Providers: google, openai, claude, deepseek, minmax, zhipu, mimo, ollama");
+    tracing::info!("Providers: google, openai, claude, deepseek, minimax, zhipu, mimo, ollama");
 
     Server::builder()
         .add_service(AstroServiceServer::new(service))

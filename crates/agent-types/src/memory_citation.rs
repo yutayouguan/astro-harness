@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-/// A citation pointing to a specific range in a memory file.
+/// 指向记忆文件中特定行范围的引用。
 ///
-/// Used to trace which lines of `MEMORY.md`, `USER.md`, or other
-/// knowledge sources influenced an agent response or decision.
+/// 用于追溯 `MEMORY.md`、`USER.md` 或其他知识源中哪些行
+/// 影响了 agent 的回复或决策。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryCitation {
-    /// Relative or absolute path to the cited file.
+    /// 被引用文件的相对或绝对路径。
     pub path: String,
-    /// First cited line (1-indexed, inclusive).
+    /// 引用起始行（从 1 开始，包含）。
     pub line_start: u32,
-    /// Last cited line (1-indexed, inclusive).
+    /// 引用结束行（从 1 开始，包含）。
     pub line_end: u32,
-    /// Free-form note explaining why this range is relevant.
+    /// 自由格式说明，解释此范围为何相关。
     pub note: String,
 }

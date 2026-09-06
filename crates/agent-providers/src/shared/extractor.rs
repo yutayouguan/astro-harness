@@ -1,8 +1,6 @@
-//! 结构化抽取（Rig Extractor 风格）：强制模型通过 `submit` 提交强类型结果。
-//!
-//! 主聊天仍走 XML `<tool_call>`；本模块用于入梦 / 澄清 / cron 等一次性抽取，
-//! 不向下流式 UI 暴露原生 tools。
+//! 结构化抽取（Rig Extractor 风格）：强制模型通过原生 `submit` 工具提交强类型结果。
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use futures::StreamExt;
@@ -13,8 +11,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-use crate::types::message::Message;
-use crate::types::request::ProviderConfig;
+use crate::types::request::{ProviderConfig, ToolChoice};
+use crate::types::request_content::ChatCompletionMessage;
 use crate::types::stream::StreamChunk;
 
 /// 结构化抽取过程中的错误类型。
@@ -33,40 +31,65 @@ pub enum ExtractionError {
     PromptError(String),
 }
 
-/// 从模型自由文本中解析 `submit` 载荷（XML tool_call / JSON 围栏 / 裸 JSON）。
+/// 从 JSON 围栏或裸 JSON 文本中解析结构化载荷。
+///
+/// 这是供现有直接调用方使用的纯 JSON 工具；[`Extractor`] 本身只接受原生
+/// `submit` 工具调用，不从模型正文提取工具语义。
 pub fn parse_submit_payload<T: DeserializeOwned>(raw: &str) -> Result<T, ExtractionError> {
-    if let Some(args) = extract_submit_arguments_json(raw) {
-        return Ok(serde_json::from_value(args)?);
-    }
     if let Some(obj) = extract_json_object(raw) {
         return Ok(serde_json::from_value(obj)?);
     }
     Err(ExtractionError::NoData)
 }
 
-/// 从 `<tool_call>` XML 块中提取 `name == "submit"` 的 `arguments`。
-fn extract_submit_arguments_json(raw: &str) -> Option<Value> {
-    const OPEN: &str = "<tool_call>";
-    const CLOSE: &str = "</tool_call>";
-    let mut rest = raw;
-    while let Some(start) = rest.find(OPEN) {
-        let after = &rest[start + OPEN.len()..];
-        let end = after.find(CLOSE)?;
-        let inner = after[..end].trim();
-        if let Ok(v) = serde_json::from_str::<Value>(inner) {
-            let name = v.get("name").and_then(|n| n.as_str()).unwrap_or("");
-            if name == "submit" {
-                if let Some(args) = v.get("arguments").cloned() {
-                    return Some(args);
-                }
-            }
-        }
-        rest = &after[end + CLOSE.len()..];
-    }
-    None
+#[derive(Debug, Default)]
+struct NativeSubmitAccumulator {
+    names: BTreeMap<u32, String>,
+    arguments: BTreeMap<u32, String>,
 }
 
-/// 从文本中提取首个 JSON 对象（支持 markdown 围栏与裸 JSON）。
+impl NativeSubmitAccumulator {
+    fn start(&mut self, index: u32, name: String) {
+        self.names.insert(index, name);
+    }
+
+    fn push_arguments(&mut self, index: u32, delta: &str) {
+        let arguments = self.arguments.entry(index).or_default();
+        if looks_like_complete_json(delta)
+            && (arguments.is_empty() || looks_like_complete_json(arguments))
+        {
+            *arguments = delta.to_string();
+        } else {
+            arguments.push_str(delta);
+        }
+    }
+
+    fn finish<T: DeserializeOwned>(self) -> Result<T, ExtractionError> {
+        if self.names.len() != 1 {
+            return Err(ExtractionError::PromptError(format!(
+                "expected exactly one native submit call, received {}",
+                self.names.len()
+            )));
+        }
+        let Some((index, name)) = self.names.iter().next() else {
+            return Err(ExtractionError::NoData);
+        };
+        if name != "submit" {
+            return Err(ExtractionError::PromptError(format!(
+                "expected native submit call, received {name}"
+            )));
+        }
+        let arguments = self.arguments.get(index).map(String::as_str).unwrap_or("");
+        Ok(serde_json::from_str(arguments.trim())?)
+    }
+}
+
+fn looks_like_complete_json(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed.starts_with('{') && trimmed.ends_with('}')
+}
+
+/// 解析完整的 JSON 对象（支持 markdown 围栏与裸 JSON）。
 fn extract_json_object(raw: &str) -> Option<Value> {
     let trimmed = raw.trim();
     if let Some(stripped) = strip_markdown_fence(trimmed) {
@@ -79,30 +102,6 @@ fn extract_json_object(raw: &str) -> Option<Value> {
     if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
         if v.is_object() {
             return Some(v);
-        }
-    }
-    // 扫描首个 { ... } 对象
-    let bytes = trimmed.as_bytes();
-    let mut depth = 0i32;
-    let mut start = None;
-    for (i, &b) in bytes.iter().enumerate() {
-        if b == b'{' {
-            if depth == 0 {
-                start = Some(i);
-            }
-            depth += 1;
-        } else if b == b'}' {
-            depth -= 1;
-            if depth == 0 {
-                if let Some(s) = start {
-                    if let Ok(v) = serde_json::from_str::<Value>(&trimmed[s..=i]) {
-                        if v.is_object() {
-                            return Some(v);
-                        }
-                    }
-                }
-                start = None;
-            }
         }
     }
     None
@@ -267,16 +266,15 @@ where
         ExtractorBuilder::new(provider, model, config)
     }
 
-    /// 构造 system + user 消息，引导模型通过 `submit` 输出符合 Schema 的 JSON。
-    fn build_messages(&self, text: &str) -> Vec<Message> {
+    /// 构造 system + user 消息，引导模型通过原生 `submit` 工具返回结果。
+    fn build_messages(&self, text: &str) -> Vec<ChatCompletionMessage> {
         let schema = schema_value_for::<T>();
         let schema_pretty =
             serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string());
 
         let mut system = String::new();
-        system.push_str("你是结构化数据抽取器。只通过 submit 工具提交结果，不要输出解释性散文。\n");
         system.push_str(
-            "必须输出且仅输出一次：\n<tool_call>{\"name\":\"submit\",\"arguments\":{...}}</tool_call>\n",
+            "你是结构化数据抽取器。必须且只能调用一次原生 submit 工具，不要输出解释性散文。\n",
         );
         system.push_str("arguments 必须符合以下 JSON Schema：\n");
         system.push_str(&schema_pretty);
@@ -290,22 +288,45 @@ where
         }
 
         let user = format!("请从以下文本抽取结构化数据：\n\n{text}");
-        vec![Message::system(system), Message::user_text(user)]
+        vec![
+            ChatCompletionMessage::system(system),
+            ChatCompletionMessage::user_text(user),
+        ]
+    }
+
+    fn submit_tool(&self) -> Value {
+        json!({
+            "type": "function",
+            "function": {
+                "name": "submit",
+                "description": "提交符合指定 JSON Schema 的结构化抽取结果",
+                "parameters": schema_value_for::<T>(),
+            }
+        })
     }
 
     /// 调用模型并反序列化为 `T`。
     pub async fn extract(&self, text: &str) -> Result<T, ExtractionError> {
         let messages = self.build_messages(text);
-        let mut stream =
-            crate::dispatch::chat_stream(&self.provider, messages, vec![], &self.config)
-                .await
-                .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
+        let mut stream = crate::dispatch::chat_stream_with_tool_policy(
+            &self.provider,
+            messages,
+            vec![self.submit_tool()],
+            &self.config,
+            Some(ToolChoice::Specific("submit".into())),
+            Some(false),
+        )
+        .await
+        .map_err(|e| ExtractionError::PromptError(e.to_string()))?;
 
-        let mut out = String::new();
+        let mut submit = NativeSubmitAccumulator::default();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| ExtractionError::PromptError(e.to_string()))?;
             match chunk {
-                StreamChunk::Text(token) => out.push_str(&token),
+                StreamChunk::ToolCallStart { index, name, .. } => submit.start(index, name),
+                StreamChunk::ToolCallDelta { index, arguments } => {
+                    submit.push_arguments(index, &arguments);
+                }
                 StreamChunk::Error(msg) => {
                     return Err(ExtractionError::PromptError(format!("error:{msg}")));
                 }
@@ -313,10 +334,7 @@ where
             }
         }
 
-        if out.trim().is_empty() {
-            return Err(ExtractionError::NoData);
-        }
-        parse_submit_payload(&out)
+        submit.finish()
     }
 }
 
@@ -325,17 +343,54 @@ mod unit_tests {
     use super::*;
     use serde::Deserialize;
 
-    #[derive(Debug, Deserialize, PartialEq)]
+    #[derive(Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
     struct Tiny {
         ok: bool,
     }
 
     #[test]
-    fn submit_xml_ok() {
-        let raw = "<tool_call>{\"name\":\"submit\",\"arguments\":{\"ok\":true}}</tool_call>";
-        assert_eq!(
-            parse_submit_payload::<Tiny>(raw).unwrap(),
-            Tiny { ok: true }
-        );
+    fn native_submit_accumulates_arguments() {
+        let mut submit = NativeSubmitAccumulator::default();
+        submit.push_arguments(0, "{\"ok\":");
+        submit.start(0, "submit".into());
+        submit.push_arguments(0, "true}");
+        assert_eq!(submit.finish::<Tiny>().unwrap(), Tiny { ok: true });
+    }
+
+    #[test]
+    fn native_submit_rejects_non_submit_calls() {
+        let mut submit = NativeSubmitAccumulator::default();
+        submit.start(0, "other".into());
+        submit.push_arguments(0, "{\"ok\":true}");
+        assert!(matches!(
+            submit.finish::<Tiny>(),
+            Err(ExtractionError::PromptError(_))
+        ));
+    }
+
+    #[test]
+    fn native_submit_rejects_multiple_calls() {
+        let mut submit = NativeSubmitAccumulator::default();
+        submit.start(0, "submit".into());
+        submit.push_arguments(0, "{\"ok\":true}");
+        submit.start(1, "submit".into());
+        submit.push_arguments(1, "{\"ok\":false}");
+        assert!(matches!(
+            submit.finish::<Tiny>(),
+            Err(ExtractionError::PromptError(_))
+        ));
+    }
+
+    #[test]
+    fn extractor_declares_native_submit_tool_without_text_protocol() {
+        let extractor =
+            Extractor::<Tiny>::builder("openai", "test-model", ProviderConfig::default()).build();
+        let messages = extractor.build_messages("source");
+        assert!(messages
+            .iter()
+            .all(|message| !message.text_content().contains("<tool_call>")));
+        let tool = extractor.submit_tool();
+        assert_eq!(tool["function"]["name"], "submit");
+        assert_eq!(tool["function"]["parameters"]["type"], "object");
     }
 }

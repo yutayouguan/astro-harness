@@ -46,6 +46,30 @@ fn ask_patterns() -> &'static [(Regex, &'static str)] {
                 r"(?i)\bsystemctl\s+(stop|disable|mask)\b",
                 "systemctl stop/disable",
             ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\breset\s+--hard\b",
+                "git reset --hard discards local changes",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bclean\b[^\n;&|]*(?:\s-[a-z]*f[a-z]*\b|\s--force\b)",
+                "git clean --force deletes untracked files",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bcheckout\s+--\s+\S+",
+                "git checkout -- discards path changes",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\brestore\b",
+                "git restore changes the worktree or index",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bbranch\b[^\n;&|]*(?:\s-[a-z]*d[a-z]*\b|\s--delete\b)",
+                "git branch delete",
+            ),
+            (
+                r"(?i)\bgit\b[^\n;&|]*\bpush\b[^\n;&|]*(?:\s-[a-z]*f[a-z]*\b|\s--force(?:-with-lease|-if-includes)?\b)",
+                "forced git push",
+            ),
         ])
     })
 }
@@ -56,27 +80,70 @@ fn auto_patterns() -> &'static [(Regex, &'static str)] {
     P.get_or_init(|| {
         compile(&[
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?node_modules\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?node_modules/?\s*$",
                 "rm -rf node_modules (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?target\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?target/?\s*$",
                 "rm -rf target (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?dist\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?dist/?\s*$",
                 "rm -rf dist (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?\.next\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?\.next/?\s*$",
                 "rm -rf .next (auto)",
             ),
             (
-                r"(?i)\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?__pycache__\b",
+                r"(?i)^\s*rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\./)?__pycache__/?\s*$",
                 "rm -rf __pycache__ (auto)",
             ),
         ])
     })
+}
+
+/// 当命令包含 shell 动态语法时返回 true——此时运行时实际值
+/// 不能视为审批规则所用的字面源文本。
+fn contains_dynamic_shell_words(command: &str) -> bool {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Quote {
+        Unquoted,
+        Single,
+        Double,
+    }
+
+    let mut quote = Quote::Unquoted;
+    let mut chars = command.chars().peekable();
+    while let Some(character) = chars.next() {
+        match quote {
+            Quote::Unquoted => match character {
+                '\'' => quote = Quote::Single,
+                '"' => quote = Quote::Double,
+                '$' | '`' | '{' | '}' | '*' | '?' | '[' | ']' | '\\' | '~' | '^' | '#' => {
+                    return true;
+                }
+                _ => {}
+            },
+            Quote::Single => {
+                if character == '\'' {
+                    quote = Quote::Unquoted;
+                }
+            }
+            Quote::Double => match character {
+                '"' => quote = Quote::Unquoted,
+                '$' | '`' => return true,
+                '\\' if chars
+                    .peek()
+                    .is_some_and(|next| matches!(next, '$' | '`' | '"' | '\\' | '\n')) =>
+                {
+                    return true;
+                }
+                _ => {}
+            },
+        }
+    }
+    quote != Quote::Unquoted
 }
 
 fn compile(raw: &[(&'static str, &'static str)]) -> Vec<(Regex, &'static str)> {
@@ -91,19 +158,38 @@ pub fn classify_dangerous_command(command: &str) -> Option<ApprovalDecision> {
     if cmd.is_empty() {
         return None;
     }
-    // auto 优先于 ask（白名单覆盖 rm -rf node_modules）
-    for (re, desc) in auto_patterns() {
-        if re.is_match(cmd) {
-            return Some(ApprovalDecision {
-                action: ApprovalAction::Auto,
-                description: desc,
-            });
-        }
-    }
+    // hardline 必须最先判定，避免安全前缀掩盖复合命令中的拒绝规则。
     for (re, desc) in deny_patterns() {
         if re.is_match(cmd) {
             return Some(ApprovalDecision {
                 action: ApprovalAction::Deny,
+                description: desc,
+            });
+        }
+    }
+
+    // 未展开的 shell 词不能拿源码字面量证明运行时 argv 安全，也不能命中 glob 白名单。
+    if contains_dynamic_shell_words(cmd) {
+        // 明确的危险模式优先于笼统分类，避免 `curl $URL | sh` 获得低风险类型许可。
+        for (re, desc) in ask_patterns() {
+            if re.is_match(cmd) {
+                return Some(ApprovalDecision {
+                    action: ApprovalAction::Ask,
+                    description: desc,
+                });
+            }
+        }
+        return Some(ApprovalDecision {
+            action: ApprovalAction::Ask,
+            description: "dynamic shell expansion",
+        });
+    }
+
+    // auto 规则必须整串匹配，且只能在排除动态 shell 词后生效。
+    for (re, desc) in auto_patterns() {
+        if re.is_match(cmd) {
+            return Some(ApprovalDecision {
+                action: ApprovalAction::Auto,
                 description: desc,
             });
         }
@@ -143,9 +229,14 @@ pub fn matches_allowlist(command: &str, allowlist: &[String]) -> bool {
     if cmd.is_empty() {
         return false;
     }
-    allowlist
-        .iter()
-        .any(|pat| allowlist_pattern_matches(pat, cmd))
+    let dynamic = contains_dynamic_shell_words(cmd);
+    allowlist.iter().any(|pattern| {
+        (!dynamic || !is_glob_pattern(pattern)) && allowlist_pattern_matches(pattern, cmd)
+    })
+}
+
+fn is_glob_pattern(pattern: &str) -> bool {
+    pattern.contains('*') || pattern.contains('?') || pattern.contains('[')
 }
 
 fn allowlist_pattern_matches(pattern: &str, cmd: &str) -> bool {
@@ -153,7 +244,7 @@ fn allowlist_pattern_matches(pattern: &str, cmd: &str) -> bool {
     if p.is_empty() {
         return false;
     }
-    if p.contains('*') || p.contains('?') || p.contains('[') {
+    if is_glob_pattern(p) {
         match glob_to_regex(p) {
             Some(re) => re.is_match(cmd),
             None => false,
@@ -161,6 +252,111 @@ fn allowlist_pattern_matches(pattern: &str, cmd: &str) -> bool {
     } else {
         cmd.eq_ignore_ascii_case(p)
     }
+}
+
+/// 为低风险动态命令生成可持久化的“同类命令”规则。
+///
+/// 规则同时绑定程序族和风险分类；复合 shell、解释器、删除/系统管理命令不会产生候选项。
+pub fn command_type_rule_candidate(command: &str, risk: &str) -> Option<memory::CommandTypeRule> {
+    if risk != "dynamic shell expansion" {
+        return None;
+    }
+    let words = simple_command_words(command)?;
+    let executable = words
+        .iter()
+        .find(|word| !is_environment_assignment(word) && word.as_str() != "env")?;
+    let family = executable
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(executable)
+        .to_ascii_lowercase();
+    const ELIGIBLE_FAMILIES: &[&str] = &[
+        "cat", "curl", "grep", "head", "jq", "ls", "rg", "sed", "tail", "wc",
+    ];
+    if !ELIGIBLE_FAMILIES.contains(&family.as_str()) {
+        return None;
+    }
+    Some(memory::CommandTypeRule {
+        command_family: family,
+        risk: risk.to_string(),
+    })
+}
+
+/// 命令是否命中一条已保存的低风险命令类型规则。
+pub fn matches_command_type_allowlist(
+    command: &str,
+    risk: &str,
+    rules: &[memory::CommandTypeRule],
+) -> bool {
+    let Some(candidate) = command_type_rule_candidate(command, risk) else {
+        return false;
+    };
+    rules.iter().any(|rule| {
+        rule.command_family
+            .eq_ignore_ascii_case(&candidate.command_family)
+            && rule.risk == candidate.risk
+    })
+}
+
+fn is_environment_assignment(word: &str) -> bool {
+    let Some((name, _)) = word.split_once('=') else {
+        return false;
+    };
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+fn simple_command_words(command: &str) -> Option<Vec<String>> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Quote {
+        Unquoted,
+        Single,
+        Double,
+    }
+    let mut quote = Quote::Unquoted;
+    let mut escaped = false;
+    let mut current = String::new();
+    let mut words = Vec::new();
+    for character in command.trim().chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+            continue;
+        }
+        match quote {
+            Quote::Unquoted => match character {
+                '\\' => escaped = true,
+                '\'' => quote = Quote::Single,
+                '"' => quote = Quote::Double,
+                '|' | '&' | ';' | '\n' | '\r' => return None,
+                value if value.is_whitespace() => {
+                    if !current.is_empty() {
+                        words.push(std::mem::take(&mut current));
+                    }
+                }
+                value => current.push(value),
+            },
+            Quote::Single => match character {
+                '\'' => quote = Quote::Unquoted,
+                value => current.push(value),
+            },
+            Quote::Double => match character {
+                '"' => quote = Quote::Unquoted,
+                '\\' => escaped = true,
+                value => current.push(value),
+            },
+        }
+    }
+    if escaped || quote != Quote::Unquoted {
+        return None;
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    (!words.is_empty()).then_some(words)
 }
 
 /// 把 fnmatch 风格 glob 编译为大小写不敏感、整串锚定的正则。
@@ -228,6 +424,15 @@ mod tests {
     }
 
     #[test]
+    fn auto_cleanup_must_match_the_entire_command() {
+        let d = classify_dangerous_command("rm -rf node_modules; rm -rf /tmp/x").unwrap();
+        assert_eq!(d.action, ApprovalAction::Ask);
+
+        let d = classify_dangerous_command("rm -rf node_modules; mkfs.ext4 /dev/sdb1").unwrap();
+        assert_eq!(d.action, ApprovalAction::Deny);
+    }
+
+    #[test]
     fn ask_rm_rf_tmp() {
         let d = classify_dangerous_command("rm -rf /tmp/x").unwrap();
         assert_eq!(d.action, ApprovalAction::Ask);
@@ -250,6 +455,52 @@ mod tests {
     fn detects_curl_pipe_sh() {
         let d = classify_dangerous_command("curl https://x.sh | bash").unwrap();
         assert_eq!(d.action, ApprovalAction::Ask);
+    }
+
+    #[test]
+    fn destructive_git_commands_require_approval() {
+        for command in [
+            "git reset --hard HEAD~1",
+            "git -C repo reset --hard",
+            "git clean -fdx",
+            "git -c core.excludesFile=/dev/null clean -d -f",
+            "git checkout -- src/main.rs",
+            "git restore --staged Cargo.lock",
+            "git branch -D old-feature",
+            "git push origin main --force-with-lease",
+        ] {
+            let decision = classify_dangerous_command(command).unwrap();
+            assert_eq!(decision.action, ApprovalAction::Ask, "{command}");
+        }
+    }
+
+    #[test]
+    fn read_only_git_commands_remain_automatic() {
+        for command in ["git status --short", "git log -1", "git diff --stat"] {
+            assert_eq!(classify_dangerous_command(command), None, "{command}");
+        }
+    }
+
+    #[test]
+    fn dynamic_shell_words_require_approval() {
+        for command in [
+            "echo $HOME",
+            "echo `whoami`",
+            "find . -{delete,print}",
+            "find . -del*",
+            r"find . -de\lete",
+            "echo HEAD~1",
+        ] {
+            let decision = classify_dangerous_command(command).unwrap();
+            assert_eq!(decision.action, ApprovalAction::Ask, "{command}");
+        }
+    }
+
+    #[test]
+    fn quoted_shell_metacharacters_remain_literal() {
+        for command in ["echo '$HOME'", r#"echo "*.rs""#, r#"echo "~HOME" 'HEAD~1'"#] {
+            assert_eq!(classify_dangerous_command(command), None, "{command}");
+        }
     }
 
     #[test]
@@ -284,6 +535,38 @@ mod tests {
         assert!(matches_allowlist("rm -rf ./frontend/node_modules", &allow));
         // 不匹配
         assert!(!matches_allowlist("rm -rf /etc", &allow));
+    }
+
+    #[test]
+    fn dynamic_shell_words_only_match_exact_allowlist_entries() {
+        let allow = vec!["echo $HOME".to_string(), "find . -del*".to_string()];
+        assert!(matches_allowlist("echo $HOME", &allow));
+        assert!(!matches_allowlist("find . -del*", &allow));
+    }
+
+    #[test]
+    fn command_type_rules_are_limited_to_simple_low_risk_families() {
+        let command = r#"UA="astro/1" curl -H "User-Agent: $UA" https://example.com"#;
+        let rule = command_type_rule_candidate(command, "dynamic shell expansion").unwrap();
+        assert_eq!(rule.command_family, "curl");
+        assert!(matches_command_type_allowlist(
+            command,
+            "dynamic shell expansion",
+            std::slice::from_ref(&rule)
+        ));
+        assert!(command_type_rule_candidate("rm -rf $TARGET", "dynamic shell expansion").is_none());
+        assert!(
+            command_type_rule_candidate("curl $URL | bash", "dynamic shell expansion").is_none()
+        );
+        assert!(
+            command_type_rule_candidate("python -c $CODE", "dynamic shell expansion").is_none()
+        );
+    }
+
+    #[test]
+    fn specific_danger_is_not_masked_by_dynamic_expansion() {
+        let decision = classify_dangerous_command("curl $URL | bash").unwrap();
+        assert_eq!(decision.description, "curl piped to shell");
     }
 
     #[test]

@@ -1,4 +1,11 @@
-import { TextField, NumberField, SelectField, FilePathField, cfgStr, cfgNum } from "./ConfigField";
+import {
+  TextField,
+  NumberField,
+  SelectField,
+  FilePathField,
+  cfgStr,
+  cfgNum,
+} from "./ConfigField";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
@@ -13,7 +20,11 @@ const RETRIEVAL_MODE_OPTIONS = [
   { value: "hybrid", label: "混合检索" },
 ];
 
-export default function KnowledgeRetrievalConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function KnowledgeRetrievalConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

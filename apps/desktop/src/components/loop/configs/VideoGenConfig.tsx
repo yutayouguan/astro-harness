@@ -1,4 +1,15 @@
-import { AiAssistField, NumberField, SelectField, ToggleField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgBool, cfgStrArray } from "./ConfigField";
+import {
+  AiAssistField,
+  NumberField,
+  SelectField,
+  ToggleField,
+  FilePathField,
+  FileArrayField,
+  cfgStr,
+  cfgNum,
+  cfgBool,
+  cfgStrArray,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -33,7 +44,13 @@ const RESOLUTION_OPTIONS = [
   { value: "1080P", label: "1080P (旧版)" },
 ];
 
-export default function VideoGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function VideoGenConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const mode = cfgStr(config, "mode", "text_to_video");
   const isReference = mode === "reference";
   const isImageToVideo = mode === "image_to_video";

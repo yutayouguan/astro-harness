@@ -6,7 +6,8 @@ textarea {
   color: inherit;
 }
 
-button:not(:disabled),
+/* 分隔条也是 button，但它的光标由各自的 resizer 规则定义 */
+button:not(:disabled, [role="separator"]),
 [role="button"]:not(:disabled) {
   cursor: pointer;
 }
@@ -39,8 +40,6 @@ html[data-theme="dark"] select:-webkit-autofill {
   transition: background-color 99999s ease-out;
 }
 
-
-
 /* 窗口缩放动画期间：关过渡；暂停（不取消）CSS 动画 */
 html.zooming,
 html.zooming * {
@@ -72,20 +71,17 @@ html.zooming #root {
 
 /* macOS 原生透明：body 背景半透明，让 NSVisualEffectView 穿透 */
 html[data-platform="macos"] body {
-  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 72%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--window-underlay, var(--bg1)) 72%,
+    transparent
+  ) !important;
 }
 
 html[data-platform="macos"][data-theme="dark"] body {
-  background: color-mix(in srgb, var(--window-underlay, var(--bg1)) 55%, transparent) !important;
-}
-
-
-/* Overlay 标题栏：红绿灯约占 12–38px 高、左侧约 78px 宽 */
-:root {
-  --titlebar-h: 52px;
-  --titlebar-traffic-w: 78px;
-  /* 浮层叠放：抽屉 < 菜单（含 portal 下拉） < tip */
-  --z-drawer: 1300;
-  --z-menu: 1400;
-  --z-tip: 10001;
+  background: color-mix(
+    in srgb,
+    var(--window-underlay, var(--bg1)) 55%,
+    transparent
+  ) !important;
 }

@@ -12,10 +12,12 @@ pub mod approval;
 pub mod builtin;
 pub mod engine;
 pub mod interaction_mode;
+pub mod terminal_session;
 
 pub use approval::{
-    classify_dangerous_command, is_hardline_blocked, matches_allowlist, resolve_command_action,
-    ApprovalAction, ApprovalMode,
+    classify_dangerous_command, command_type_rule_candidate, is_hardline_blocked,
+    matches_allowlist, matches_command_type_allowlist, resolve_command_action, ApprovalAction,
+    ApprovalMode,
 };
 pub use builtin::context_tools::render_pinned_for_prompt;
 pub(crate) use engine::path_safe;
@@ -24,6 +26,8 @@ pub use interaction_mode::{
     check_tool_call, filter_schemas, tool_visible_in_mode, InteractionMode,
 };
 
+pub use builtin::hitl::request_user_input_async::parse_async_user_message;
+pub use builtin::shell::browser;
 pub use builtin::shell::jobs::{
     shutdown_all_jobs as shutdown_background_jobs,
     shutdown_jobs_for_session as shutdown_background_jobs_for_session,
@@ -37,23 +41,27 @@ pub use context::{
     ToolContext,
 };
 pub use dispatch::{
-    builtin_handler_names, dispatch_tool, in_process_network_hosts,
-    tool_requires_in_process_network, tool_requires_in_process_write,
+    builtin_handler_names, dispatch_runtime, dispatch_tool, tool_requires_in_process_write,
 };
+pub use engine::code_mode::render_tool_description as render_code_mode_tool_description;
 pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,
 };
-pub use engine::executor::{LegacyToolAdapter, ToolExecutor, ToolExecutorFuture};
-pub use engine::network::InProcessNetworkGrant;
+pub use engine::executor::{
+    CoreToolRuntime, DynamicToolAdapter, LegacyToolAdapter, ToolExecutor, ToolExecutorFuture,
+};
+pub use engine::workflow::{register_workflow_tools, WORKFLOW_TOOLSET};
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
 pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use sandbox::{SandboxAuditKind, SandboxAuditMetadata};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
-pub use types::{
-    extract_tool_calls, resolve_tool_calls, ParsedToolCall, ToolCallAccumulator, ToolCallDelta,
+pub use terminal_session::{
+    shared_terminal_sessions, TerminalDimensions, TerminalReadResult, TerminalSessionInfo,
+    TerminalSessionManager,
 };
+pub use types::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 
 // 宏：`tool_schema!` / `register_tool_schemars!` / `define_tool_args!` / `submit_builtin_tool!`
 
@@ -169,6 +177,9 @@ macro_rules! submit_builtin_tool {
 pub fn register_all(registry: &mut ToolRegistry) {
     for hook in inventory::iter::<BuiltinToolRegistrar> {
         (hook.register)(registry);
+        for name in hook.names {
+            registry.bind_builtin_runtime(name, hook.handler);
+        }
     }
 }
 
@@ -192,6 +203,7 @@ mod inventory_register_tests {
             "video_gen",
             "speech_gen",
             "ask_user",
+            "request_user_input_async",
             "spawn_agent",
             "list_agents",
             "send_message",
@@ -199,7 +211,6 @@ mod inventory_register_tests {
             "wait_agent",
             "interrupt_agent",
             "present",
-            "file_ops",
             "web_search",
         ] {
             assert!(
@@ -207,6 +218,14 @@ mod inventory_register_tests {
                 "missing {expected}; got {names:?}"
             );
         }
+        let api_names = registry
+            .schemas_for_api()
+            .into_iter()
+            .filter_map(|schema| schema["name"].as_str().map(str::to_string))
+            .collect::<Vec<_>>();
+        assert!(api_names.contains(&"request_user_input_async".to_string()));
+        assert!(!api_names.contains(&"send_user_message_async".to_string()));
+        assert!(registry.get("send_user_message_async").is_none());
     }
 
     #[test]
@@ -218,6 +237,20 @@ mod inventory_register_tests {
             assert!(
                 handlers.binary_search(&entry.name.as_str()).is_ok(),
                 "metadata tool `{}` has no dispatch handler",
+                entry.name
+            );
+            assert!(
+                registry.runtime(&entry.name).is_some(),
+                "metadata tool `{}` has no CoreToolRuntime",
+                entry.name
+            );
+            assert_eq!(
+                registry
+                    .runtime(&entry.name)
+                    .expect("runtime checked above")
+                    .tool_name(),
+                entry.tool_name(),
+                "runtime identity differs from metadata for `{}`",
                 entry.name
             );
         }

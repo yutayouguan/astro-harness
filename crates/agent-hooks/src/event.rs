@@ -14,25 +14,25 @@ pub enum HookEvent {
     SubagentStart,
     SubagentStop,
     Stop,
+    Interrupt,
     PreLlmCall,
     PreApiRequest,
     PostApiRequest,
     TransformTerminalOutput,
     TransformToolResult,
-    TransformLlmOutput,
+    TransformFinalLlmOutput,
     PostLlmCall,
     PostApprovalResponse,
     PreGatewayDispatch,
     SessionReset,
-    SessionFinalize,
     GatewayStartup,
     AgentEnd,
     CommandNewChat,
 }
 
 impl HookEvent {
-    /// Codex canonical 事件，顺序是对外契约的一部分。
-    pub const CODEX: [Self; 11] = [
+    /// Command hook 支持的 canonical 事件，顺序是对外契约的一部分。
+    pub const COMMAND_HOOK_EVENTS: [Self; 12] = [
         Self::PreToolUse,
         Self::PermissionRequest,
         Self::PostToolUse,
@@ -44,6 +44,7 @@ impl HookEvent {
         Self::SubagentStart,
         Self::SubagentStop,
         Self::Stop,
+        Self::Interrupt,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -59,20 +60,45 @@ impl HookEvent {
             Self::SubagentStart => "SubagentStart",
             Self::SubagentStop => "SubagentStop",
             Self::Stop => "Stop",
+            Self::Interrupt => "Interrupt",
             Self::PreLlmCall => "PreLlmCall",
             Self::PreApiRequest => "PreApiRequest",
             Self::PostApiRequest => "PostApiRequest",
             Self::TransformTerminalOutput => "TransformTerminalOutput",
             Self::TransformToolResult => "TransformToolResult",
-            Self::TransformLlmOutput => "TransformLlmOutput",
+            Self::TransformFinalLlmOutput => "TransformFinalLlmOutput",
             Self::PostLlmCall => "PostLlmCall",
             Self::PostApprovalResponse => "PostApprovalResponse",
             Self::PreGatewayDispatch => "PreGatewayDispatch",
             Self::SessionReset => "SessionReset",
-            Self::SessionFinalize => "SessionFinalize",
             Self::GatewayStartup => "GatewayStartup",
             Self::AgentEnd => "AgentEnd",
             Self::CommandNewChat => "CommandNewChat",
+        }
+    }
+
+    pub fn from_command_name(name: &str) -> Option<Self> {
+        Self::COMMAND_HOOK_EVENTS
+            .into_iter()
+            .find(|event| event.as_str() == name)
+    }
+
+    /// Stable event label used inside persisted `hooks.state` keys.
+    pub const fn key_label(self) -> &'static str {
+        match self {
+            Self::PreToolUse => "pre_tool_use",
+            Self::PermissionRequest => "permission_request",
+            Self::PostToolUse => "post_tool_use",
+            Self::PreCompact => "pre_compact",
+            Self::PostCompact => "post_compact",
+            Self::SessionStart => "session_start",
+            Self::SessionEnd => "session_end",
+            Self::UserPromptSubmit => "user_prompt_submit",
+            Self::SubagentStart => "subagent_start",
+            Self::SubagentStop => "subagent_stop",
+            Self::Stop => "stop",
+            Self::Interrupt => "interrupt",
+            _ => self.as_str(),
         }
     }
 }
@@ -81,18 +107,18 @@ impl HookEvent {
 mod tests {
     use super::*;
     use crate::names::{
-        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, PERMISSION_REQUEST,
-        POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL, POST_TOOL_USE,
-        PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_USE,
-        SESSION_END, SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START,
-        SUBAGENT_STOP, TRANSFORM_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
-        USER_PROMPT_SUBMIT,
+        is_mutating_hook, AGENT_END, COMMAND_NEW_CHAT, GATEWAY_STARTUP, INTERRUPT,
+        PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_COMPACT, POST_LLM_CALL,
+        POST_TOOL_USE, PRE_API_REQUEST, PRE_COMPACT, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL,
+        PRE_TOOL_USE, SESSION_END, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START,
+        SUBAGENT_STOP, TRANSFORM_FINAL_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT,
+        TRANSFORM_TOOL_RESULT, USER_PROMPT_SUBMIT,
     };
     #[test]
-    fn codex_events_have_exact_names_and_order() {
-        let codex: [HookEvent; 11] = HookEvent::CODEX;
+    fn command_hook_events_have_exact_names_and_order() {
+        let events: [HookEvent; 12] = HookEvent::COMMAND_HOOK_EVENTS;
         let as_str: fn(HookEvent) -> &'static str = HookEvent::as_str;
-        let names: Vec<_> = codex.into_iter().map(as_str).collect();
+        let names: Vec<_> = events.into_iter().map(as_str).collect();
 
         assert_eq!(
             names,
@@ -108,6 +134,7 @@ mod tests {
                 "SubagentStart",
                 "SubagentStop",
                 "Stop",
+                "Interrupt",
             ]
         );
     }
@@ -125,18 +152,18 @@ mod tests {
         assert_eq!(SUBAGENT_START, "SubagentStart");
         assert_eq!(SUBAGENT_STOP, "SubagentStop");
         assert_eq!(STOP, "Stop");
+        assert_eq!(INTERRUPT, "Interrupt");
 
         assert_eq!(PRE_LLM_CALL, "PreLlmCall");
         assert_eq!(PRE_API_REQUEST, "PreApiRequest");
         assert_eq!(POST_API_REQUEST, "PostApiRequest");
         assert_eq!(TRANSFORM_TERMINAL_OUTPUT, "TransformTerminalOutput");
         assert_eq!(TRANSFORM_TOOL_RESULT, "TransformToolResult");
-        assert_eq!(TRANSFORM_LLM_OUTPUT, "TransformLlmOutput");
+        assert_eq!(TRANSFORM_FINAL_LLM_OUTPUT, "TransformFinalLlmOutput");
         assert_eq!(POST_LLM_CALL, "PostLlmCall");
         assert_eq!(POST_APPROVAL_RESPONSE, "PostApprovalResponse");
         assert_eq!(PRE_GATEWAY_DISPATCH, "PreGatewayDispatch");
         assert_eq!(SESSION_RESET, "SessionReset");
-        assert_eq!(SESSION_FINALIZE, "SessionFinalize");
         assert_eq!(GATEWAY_STARTUP, "GatewayStartup");
         assert_eq!(AGENT_END, "AgentEnd");
         assert_eq!(COMMAND_NEW_CHAT, "CommandNewChat");
@@ -159,13 +186,14 @@ mod tests {
             STOP,
             TRANSFORM_TOOL_RESULT,
             TRANSFORM_TERMINAL_OUTPUT,
-            TRANSFORM_LLM_OUTPUT,
+            TRANSFORM_FINAL_LLM_OUTPUT,
         ] {
             assert!(is_mutating_hook(canonical), "{canonical}");
         }
 
         assert!(!is_mutating_hook("post_tool_call"));
         assert!(!is_mutating_hook("pre_tool_call"));
+        assert!(!is_mutating_hook("TransformLlmOutput"));
         assert!(!is_mutating_hook("acme:custom_event"));
     }
 }

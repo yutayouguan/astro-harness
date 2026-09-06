@@ -1,25 +1,14 @@
 import type { ComponentType, SVGProps } from "react";
 import {
   IconChat,
+  IconCron,
   IconLoop,
+  IconPlugin,
   IconSettings,
-  IconSkills,
-  IconWorkspace,
 } from "../../components/icons";
 import type { MessageKey } from "../../i18n/messages";
-import { HEADER_AGENT_PICKER_NAV_IDS } from "./headerAgentPicker";
 
-export {
-  HEADER_AGENT_PICKER_NAV_IDS,
-  showsHeaderAgentPicker,
-} from "./headerAgentPicker";
-
-export type NavId =
-  | "chat"
-  | "loop"
-  | "files"
-  | "skills"
-  | "settings";
+export type NavId = "chat" | "cron" | "loop" | "skills" | "settings";
 
 export type SettingsTabId =
   | "preferences"
@@ -30,6 +19,8 @@ export type SettingsTabId =
   | "preferences:about"
   | "providers"
   | "tools"
+  | "browser"
+  | "terminal"
   | "models"
   | "insights"
   | "evolution"
@@ -67,10 +58,15 @@ export const NAV: {
   tone: Tone;
 }[] = [
   { id: "chat", labelKey: "nav.chat", Icon: IconChat, tone: "blue" },
+  { id: "cron", labelKey: "nav.cron", Icon: IconCron, tone: "cyan" },
   { id: "loop", labelKey: "nav.loop", Icon: IconLoop, tone: "pink" },
-  { id: "files", labelKey: "nav.files", Icon: IconWorkspace, tone: "purple" },
-  { id: "skills", labelKey: "nav.skills", Icon: IconSkills, tone: "indigo" },
-  { id: "settings", labelKey: "nav.settings", Icon: IconSettings, tone: "twilight" },
+  { id: "skills", labelKey: "nav.skills", Icon: IconPlugin, tone: "indigo" },
+  {
+    id: "settings",
+    labelKey: "nav.settings",
+    Icon: IconSettings,
+    tone: "twilight",
+  },
 ];
 
 export const PAGE_META: Record<
@@ -78,13 +74,8 @@ export const PAGE_META: Record<
   { titleKey: MessageKey; subKey: MessageKey }
 > = {
   chat: { titleKey: "page.chat.title", subKey: "page.chat.sub" },
+  cron: { titleKey: "page.cron.title", subKey: "page.cron.sub" },
   loop: { titleKey: "page.loop.title", subKey: "page.loop.sub" },
-  files: { titleKey: "page.files.title", subKey: "page.files.sub" },
   skills: { titleKey: "page.skills.title", subKey: "page.skills.sub" },
   settings: { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
-
-/** 标题栏展示统一 AgentPicker 的导航页（memory 保留页内专用入口）。 */
-export const HEADER_AGENT_PICKER_NAVS: ReadonlySet<NavId> = new Set(
-  HEADER_AGENT_PICKER_NAV_IDS,
-);

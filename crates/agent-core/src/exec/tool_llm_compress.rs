@@ -4,7 +4,6 @@
 //! 辅模型：`AuxiliaryTask::Compaction`；失败或无目标时回退 head/tail。
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::warn;
@@ -50,13 +49,13 @@ pub fn make_llm_compress_view(
         "{TOOL_LLM_COMPRESS_MARK}\n\
          Tool: {name}\n\
          Original chars: {original_chars}. Full output remains in session DB.\n\
-         Recovery: `search` (scope=session) or `file_ops` read on spill path if present.\n\n\
+         Recovery: `search` (scope=session) or `exec_command` to read the spill path if present.\n\n\
          {body}"
     )
 }
 
-async fn complete_compaction_chat(
-    target: &types::ChatTarget,
+async fn complete_compaction_response(
+    target: &types::ModelTarget,
     prompt: &str,
     max_tokens: u32,
 ) -> anyhow::Result<String> {
@@ -75,14 +74,13 @@ async fn complete_compaction_chat(
         additional_params: serde_json::Value::Null,
         ..ProviderConfig::default()
     };
-    let messages = vec![
-        ProviderMessage::system(
-            "You compress tool outputs for coding agents. Preserve critical facts.",
-        ),
-        ProviderMessage::user_text(prompt),
-    ];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "You compress tool outputs for coding agents. Preserve critical facts.",
+        prompt,
+        &config,
+    )
+    .await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
@@ -99,7 +97,7 @@ async fn complete_compaction_chat(
 
 /// 对单条 tool 结果做 LLM 摘要；失败返回 Err（调用方回退 head/tail）。
 pub async fn summarize_tool_result(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     tool_name: Option<&str>,
     content: &str,
     max_chars: usize,
@@ -112,7 +110,7 @@ pub async fn summarize_tool_result(
     let max_tokens = u32::try_from((max_chars / 3).clamp(256, 1_024)).unwrap_or(512);
     let mut last_err = None;
     for target in targets.iter().take(2) {
-        match complete_compaction_chat(target, &prompt, max_tokens).await {
+        match complete_compaction_response(target, &prompt, max_tokens).await {
             Ok(text) => {
                 return Ok(make_llm_compress_view(
                     tool_name,
@@ -141,17 +139,17 @@ mod tests {
 
     #[test]
     fn prompt_mentions_tool_and_budget() {
-        let p = tool_summary_prompt("file_ops", "hello world", 900);
-        assert!(p.contains("file_ops"));
+        let p = tool_summary_prompt("exec_command", "hello world", 900);
+        assert!(p.contains("exec_command"));
         assert!(p.contains("900"));
         assert!(p.contains("hello world"));
     }
 
     #[test]
     fn llm_view_uses_mark() {
-        let v = make_llm_compress_view(Some("terminal"), "ls ok", 1200);
+        let v = make_llm_compress_view(Some("exec_command"), "ls ok", 1200);
         assert!(v.starts_with(TOOL_LLM_COMPRESS_MARK));
-        assert!(v.contains("terminal"));
+        assert!(v.contains("exec_command"));
         assert!(v.contains("ls ok"));
         assert!(types::is_externalized_view(&v));
     }

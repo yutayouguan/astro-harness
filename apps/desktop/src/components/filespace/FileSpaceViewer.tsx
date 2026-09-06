@@ -262,9 +262,7 @@ export default function FileSpaceViewer({
   if (kind === "pdf") {
     const src = resolveMediaSrc(path);
     if (!src || pdfBroken) {
-      return (
-        <BrokenMedia path={path} onOpenExternally={onOpenExternally} />
-      );
+      return <BrokenMedia path={path} onOpenExternally={onOpenExternally} />;
     }
     return (
       <div className="fs-preview-pdf-wrap" data-kind="document">
@@ -369,9 +367,7 @@ export default function FileSpaceViewer({
       {showSource && (
         <div
           className={
-            showModeToggle
-              ? "fs-viewer-split"
-              : "fs-viewer-editor-wrap"
+            showModeToggle ? "fs-viewer-split" : "fs-viewer-editor-wrap"
           }
         >
           <div className="fs-viewer-editor">

@@ -11,7 +11,10 @@ const METHOD_OPTIONS = [
   { value: "PUT", label: "PUT" },
 ];
 
-export default function WebhookTriggerConfig({ config, onChange }: ConfigProps) {
+export default function WebhookTriggerConfig({
+  config,
+  onChange,
+}: ConfigProps) {
   return (
     <>
       <TextField

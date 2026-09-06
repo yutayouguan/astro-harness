@@ -3,7 +3,82 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::message::{Message, ToolDefinition};
+use agent_protocol::ResponseItem;
+
+use super::request_content::{ChatCompletionMessage, ToolDefinition};
+
+/// Azure/OpenAI Responses 提示缓存的请求级模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptCacheMode {
+    Implicit,
+    Explicit,
+}
+
+/// Azure/OpenAI Responses 提示缓存的强类型配置。
+///
+/// `ttl` 当前仅支持 Azure 文档定义的 `30m`，因此不暴露任意字符串。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PromptCacheConfig {
+    pub key: Option<String>,
+    pub mode: Option<PromptCacheMode>,
+    pub ttl_30m: bool,
+}
+
+impl PromptCacheConfig {
+    /// 从透传参数提取并校验 Responses 提示缓存字段。
+    ///
+    /// 已提取的字段会从 `additional_params` 移除，避免未校验值在后续
+    /// 浅合并时覆盖强类型结果。
+    pub fn take_from_additional_params(params: &mut Value) -> Result<Option<Self>, String> {
+        let Some(object) = params.as_object_mut() else {
+            return Ok(None);
+        };
+        let key = match object.remove("prompt_cache_key") {
+            Some(Value::String(value)) if !value.trim().is_empty() => {
+                Some(value.trim().to_string())
+            }
+            Some(Value::String(_)) => return Err("prompt_cache_key must not be empty".into()),
+            None => None,
+            Some(_) => return Err("prompt_cache_key must be a string".into()),
+        };
+
+        let mut mode = None;
+        let mut ttl_30m = false;
+        if let Some(options) = object.remove("prompt_cache_options") {
+            let Value::Object(options) = options else {
+                return Err("prompt_cache_options must be an object".into());
+            };
+            if let Some(value) = options.get("mode") {
+                mode = Some(match value.as_str() {
+                    Some("implicit") => PromptCacheMode::Implicit,
+                    Some("explicit") => PromptCacheMode::Explicit,
+                    _ => {
+                        return Err("prompt_cache_options.mode must be implicit or explicit".into())
+                    }
+                });
+            }
+            if let Some(value) = options.get("ttl") {
+                if value.as_str() != Some("30m") {
+                    return Err("prompt_cache_options.ttl must be 30m".into());
+                }
+                ttl_30m = true;
+            }
+            if let Some(key) = options
+                .keys()
+                .find(|key| !matches!(key.as_str(), "mode" | "ttl"))
+            {
+                return Err(format!("unsupported prompt_cache_options field: {key}"));
+            }
+        }
+
+        if key.is_none() && mode.is_none() && !ttl_30m {
+            Ok(None)
+        } else {
+            Ok(Some(Self { key, mode, ttl_30m }))
+        }
+    }
+}
 
 /// 单次模型调用的运行时配置。
 #[derive(Debug, Clone)]
@@ -58,31 +133,171 @@ pub struct ThinkingConfig {
     pub effort: String,
 }
 
-/// 统一聊天补全请求（provider-agnostic）。
+/// 统一的原生工具选择策略（provider 无关）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolChoice {
+    /// 由模型自行决定是否调用工具。
+    Auto,
+    /// 强制至少调用一次原生工具。
+    Required,
+    /// 禁用原生工具调用。
+    None,
+    /// 强制调用指定名称的工具。
+    Specific(String),
+}
+
+/// Agent 交给模型的原生 Responses prompt。
 #[derive(Debug, Clone)]
-pub struct CompletionRequest {
+pub struct ResponsesRequest {
     pub model: String,
-    pub messages: Vec<Message>,
+    /// 稳定的基础指令，独立于带角色的对话输入。
+    pub instructions: String,
+    /// 原生 Responses input。Agent 历史不得经 `ChatCompletionMessage` 降级后进入此字段。
+    pub input: Vec<ResponseItem>,
+    /// 原生工具 schema；不编码到指令或消息文本中。
     pub tools: Vec<ToolDefinition>,
+    /// 显式工具选择策略。`None` 保持 provider 默认。
+    pub tool_choice: Option<ToolChoice>,
+    /// 是否允许 provider 并行发起工具调用。`None` 保持默认。
+    pub parallel_tool_calls: Option<bool>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub thinking: Option<ThinkingConfig>,
+    /// 已校验的 Responses 提示缓存参数。
+    pub prompt_cache: Option<PromptCacheConfig>,
+    pub additional_params: Value,
+}
+
+impl Default for ResponsesRequest {
+    fn default() -> Self {
+        Self {
+            model: String::new(),
+            instructions: String::new(),
+            input: Vec::new(),
+            tools: Vec::new(),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            thinking: None,
+            prompt_cache: None,
+            additional_params: Value::Null,
+        }
+    }
+}
+
+/// 非 Agent Chat/Anthropic/Gemini 等兼容调用请求。
+///
+/// 此类型不进入 Agent target/fallback 链，也不能用于恢复 Agent 历史。
+#[derive(Debug, Clone)]
+pub struct ChatCompletionRequest {
+    pub model: String,
+    pub instructions: String,
+    pub input: Vec<ChatCompletionMessage>,
+    pub tools: Vec<ToolDefinition>,
+    pub tool_choice: Option<ToolChoice>,
+    pub parallel_tool_calls: Option<bool>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub thinking: Option<ThinkingConfig>,
     pub additional_params: Value,
-    /// Google Interactions：续写上一轮 interaction。
     pub previous_interaction_id: Option<String>,
 }
 
-impl Default for CompletionRequest {
+impl Default for ChatCompletionRequest {
     fn default() -> Self {
         Self {
             model: String::new(),
-            messages: Vec::new(),
+            instructions: String::new(),
+            input: Vec::new(),
             tools: Vec::new(),
+            tool_choice: None,
+            parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             thinking: None,
             additional_params: Value::Null,
             previous_interaction_id: None,
         }
+    }
+}
+
+impl ChatCompletionRequest {
+    /// 将 instructions 字段降级为 system 消息，供线路协议没有顶层指令字段的 provider 使用。
+    pub fn input_with_instructions(&self) -> Vec<ChatCompletionMessage> {
+        let mut messages = Vec::with_capacity(self.input.len() + 1);
+        if !self.instructions.trim().is_empty() {
+            messages.push(ChatCompletionMessage::system(&self.instructions));
+        }
+        messages.extend(self.input.iter().cloned());
+        messages
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::request_content::Role;
+
+    #[test]
+    fn prompt_cache_config_is_extracted_and_validated() {
+        let mut params = serde_json::json!({
+            "top_p": 0.9,
+            "prompt_cache_key": " agent:workspace:v1 ",
+            "prompt_cache_options": {"mode": "explicit", "ttl": "30m"}
+        });
+        let cache = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect("valid prompt cache config")
+            .expect("cache config");
+        assert_eq!(cache.key.as_deref(), Some("agent:workspace:v1"));
+        assert_eq!(cache.mode, Some(PromptCacheMode::Explicit));
+        assert!(cache.ttl_30m);
+        assert_eq!(params, serde_json::json!({"top_p": 0.9}));
+    }
+
+    #[test]
+    fn prompt_cache_config_rejects_unknown_ttl() {
+        let mut params = serde_json::json!({
+            "prompt_cache_options": {"mode": "implicit", "ttl": "24h"}
+        });
+        let error = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect_err("unsupported ttl must fail");
+        assert!(error.contains("ttl must be 30m"));
+    }
+
+    #[test]
+    fn prompt_cache_config_rejects_empty_key() {
+        let mut params = serde_json::json!({"prompt_cache_key": "  "});
+        let error = PromptCacheConfig::take_from_additional_params(&mut params)
+            .expect_err("empty cache key must fail");
+        assert!(error.contains("must not be empty"));
+    }
+
+    #[test]
+    fn lowering_keeps_contract_layers_distinct() {
+        let request = ChatCompletionRequest {
+            instructions: "stable base".into(),
+            input: vec![
+                ChatCompletionMessage::developer("dynamic policy"),
+                ChatCompletionMessage::user_text("hello"),
+            ],
+            tools: vec![ToolDefinition::function(
+                "lookup",
+                "Lookup data",
+                serde_json::json!({"type": "object"}),
+            )],
+            ..Default::default()
+        };
+
+        let input = request.input_with_instructions();
+        assert_eq!(input[0].role(), Role::System);
+        assert_eq!(input[1].role(), Role::Developer);
+        assert_eq!(input[2].role(), Role::User);
+        assert!(!request.instructions.contains("lookup"));
+        assert!(request
+            .input
+            .iter()
+            .all(|message| !message.text_content().contains("lookup")));
+        assert_eq!(request.tools[0].name(), "lookup");
     }
 }

@@ -7,9 +7,6 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use memory::MemoryManager;
 use session::ConversationStore;
-use types::DANGER_FULL_ACCESS_PROFILE;
-
-use super::network::InProcessNetworkGrant;
 
 pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
 
@@ -24,14 +21,16 @@ pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
 pub struct ToolContext<'a> {
     /// 当前 Agent 的记忆管理器；只在同步 memory/context/persona 操作期间短暂加锁。
     pub memory: &'a RwLock<MemoryManager>,
-    /// 共享会话库（`{memory_dir}/sessions`），供 `search` 使用。
+    /// 共享会话库（`{memory_dir}/data/state.db`），供 `search` 使用。
     pub sessions: &'a dyn ConversationStore,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
     pub memory_dir: PathBuf,
     /// 当前 Agent 工作区目录（记忆空间），与代码仓分离。
     pub workspace_dir: PathBuf,
-    /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/file_ops 以此为根。
+    /// 可选代码/项目根（git worktree 或 `ASTRO_PROJECT_ROOT`）；有值时 terminal/apply_patch 以此为根。
     pub project_root: Option<PathBuf>,
+    /// 项目全部授权根；第一个元素是主 cwd。
+    pub workspace_roots: Vec<PathBuf>,
     /// 媒体生成主备凭证，由前端 Provider 面板注入。
     pub image_gen_targets: &'a ImageGenTargets,
     /// 当前会话 id；subagent threads、todo 等持久记录用它关联父会话。
@@ -40,13 +39,15 @@ pub struct ToolContext<'a> {
     pub turn_id: Option<String>,
     /// 当前聊天会话的 LLM 凭证（provider / model / api_key / base_url）。
     pub credentials: &'a ModelCredentials,
+    /// Root turn 当前选择的 service tier；只作为进程内继承材料。
+    pub service_tier: Option<String>,
     /// 含 primary 的聊天 fallback 链，供子 Agent thread 继承。
-    pub chat_targets: &'a [types::ChatTarget],
+    pub model_targets: &'a [types::ModelTarget],
     /// 子 Agent 执行调度器（由 AgentLoop 注入；工具层测试可为 None）。
     pub execution: Option<Arc<dyn crate::AgentThreadDispatch>>,
     /// 当前会话的权限 profile；子 Agent 缺省继承，可由 custom agent 收紧。
     pub permission_profile: Option<String>,
-    /// Ephemeral custom-agent skill enable/disable layer.
+    /// 临时的自定义 Agent skill 启用/禁用层。
     pub skill_config_overrides: &'a [(PathBuf, bool)],
     /// 插件钩子总线（由 AgentLoop 注入；无 bus 时对应工具跳过 transform 钩子）。
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
@@ -56,23 +57,21 @@ pub struct ToolContext<'a> {
     ///
     /// 该值只存在于本次 `ToolContext` 生命周期，不会持久化或扩大到后续工具调用。
     pub workspace_write_grant: bool,
-    /// Current attempt-scoped sandbox policy selected by the orchestrator.
+    /// 当前 attempt 级别的沙箱策略，由 orchestrator 选择。
     ///
-    /// Only the orchestrator may set this for initial or escalated attempts.
-    /// It is never persisted or inherited by later tool calls.
+    /// 仅 orchestrator 可为初始或升级的 attempt 设置此值。
+    /// 不会持久化，也不会被后续工具调用继承。
     pub sandbox_policy: Option<sandbox::SandboxPolicy>,
-    /// 当前单次工具调用已获得的进程内网络主机授权。
+    /// 当前 attempt 级别的受管代理租约。
     ///
-    /// 与命令沙箱的 `network.enabled` 相互独立，不会持久化或跨工具调用复用。
-    pub network_grant: InProcessNetworkGrant,
-    /// Current attempt-scoped managed proxy lease.
-    ///
-    /// The lease keeps the listener alive through sandbox setup and process execution.
+    /// 该租约在沙箱设置和进程执行期间保持 listener 存活。
     pub managed_network: Option<Arc<network_proxy::StartedNetworkProxy>>,
     /// 当前模型上下文窗口总容量（token 数）；由 AgentLoop 注入，`None` 表示未知。
     pub context_window: Option<u64>,
     /// 当前已使用的上下文 token 数；由 AgentLoop 注入，`None` 表示未知。
     pub context_tokens_used: Option<u64>,
+    /// Session 级工具注册表；`tool_search` 用它搜索 deferred 工具。
+    pub tool_registry: Option<&'a RwLock<crate::registry::ToolRegistry>>,
 }
 
 impl<'a> ToolContext<'a> {
@@ -114,33 +113,19 @@ impl<'a> ToolContext<'a> {
     /// 从当前磁盘配置构造本次工具调用的不可变命令沙箱策略。
     pub fn command_sandbox_policy(&self) -> anyhow::Result<sandbox::SandboxPolicy> {
         let root = self.ensure_project_or_workspace()?;
-        build_command_sandbox_policy(
+        build_command_sandbox_policy_with_roots(
             &self.memory_dir,
             &root,
+            &self.workspace_roots,
             self.permission_profile.as_deref(),
             self.workspace_write_grant,
             self.sandbox_policy.clone(),
         )
     }
 
-    /// 返回当前调用实际生效的进程内网络授权。
-    pub fn effective_in_process_network_grant(&self) -> InProcessNetworkGrant {
-        let loaded = memory::load_permission_settings(&self.memory_dir);
-        let profile_id = self
-            .permission_profile
-            .as_deref()
-            .unwrap_or(&loaded.selection.profile_id);
-        if profile_id == DANGER_FULL_ACCESS_PROFILE {
-            InProcessNetworkGrant::unrestricted()
-        } else {
-            self.network_grant.clone()
-        }
-    }
-
-    /// Prepare the managed network environment for a child process.
+    /// 为子进程准备受管网络环境。
     ///
-    /// Returns `None` when no managed proxy is active for this attempt, meaning
-    /// the caller should not alter the child environment for network proxying.
+    /// 当前 attempt 无活跃的受管代理时返回 `None`，表示调用方无需为网络代理修改子进程环境。
     pub fn prepare_managed_network_env(
         &self,
         env: std::collections::HashMap<String, String>,
@@ -150,10 +135,9 @@ impl<'a> ToolContext<'a> {
             .map(|started| started.proxy().prepare(env))
     }
 
-    /// Drain the managed proxy's blocked-request queue and return the latest denial.
+    /// 排空受管代理的被拦截请求队列，返回最近一次拒绝记录。
     ///
-    /// The queue is drained per attempt; `.pop()` reports the most recent denial
-    /// deterministically when a process made several blocked requests.
+    /// 队列按 attempt 排空；当进程发起多次被拦截请求时，`.pop()` 确定性地返回最近的拒绝记录。
     pub fn take_managed_network_denial(&self) -> Option<types::NetworkPolicyDecisionPayload> {
         self.managed_network
             .as_ref()?
@@ -197,6 +181,24 @@ pub fn build_command_sandbox_policy(
     workspace_write_grant: bool,
     sandbox_policy: Option<sandbox::SandboxPolicy>,
 ) -> anyhow::Result<sandbox::SandboxPolicy> {
+    build_command_sandbox_policy_with_roots(
+        memory_dir,
+        execution_root,
+        &[],
+        permission_profile,
+        workspace_write_grant,
+        sandbox_policy,
+    )
+}
+
+pub fn build_command_sandbox_policy_with_roots(
+    memory_dir: &Path,
+    execution_root: &Path,
+    workspace_roots: &[PathBuf],
+    permission_profile: Option<&str>,
+    workspace_write_grant: bool,
+    sandbox_policy: Option<sandbox::SandboxPolicy>,
+) -> anyhow::Result<sandbox::SandboxPolicy> {
     if let Some(policy) = sandbox_policy {
         return Ok(policy);
     }
@@ -207,7 +209,13 @@ pub fn build_command_sandbox_policy(
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
         mode = types::SandboxMode::WorkspaceWrite;
     }
-    sandbox::SandboxPolicy::new(mode, execution_root, Vec::new(), false).map_err(Into::into)
+    let extra_roots: Vec<PathBuf> = workspace_roots
+        .iter()
+        .filter(|root| root.as_path() != execution_root)
+        .cloned()
+        .collect();
+    // 网络默认放开：只有显式配置 managed proxy 的 profile 才会把子进程流量收回代理。
+    sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, true).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -242,7 +250,7 @@ network_proxy:
                 .unwrap();
 
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
-        assert!(!policy.network_access);
+        assert!(policy.network_access);
     }
 
     #[test]
@@ -277,15 +285,16 @@ permissions:
         assert!(error.to_string().contains("not yet executable"), "{error}");
     }
 
-    #[test]
-    fn one_call_grant_upgrades_read_only_to_workspace_write_without_network() {
+    #[tokio::test]
+    async fn one_call_grant_upgrades_read_only_to_workspace_write() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+            .await
+            .unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let credentials = ModelCredentials::default();
@@ -295,11 +304,13 @@ permissions:
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace.clone(),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &credentials,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -307,10 +318,10 @@ permissions:
             hook_runtime: None,
             workspace_write_grant: true,
             sandbox_policy: None,
-            network_grant: InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let policy = ctx.command_sandbox_policy().unwrap();
@@ -319,11 +330,11 @@ permissions:
             policy.writable_roots,
             vec![workspace.canonicalize().unwrap()]
         );
-        assert!(!policy.network_access);
+        assert!(policy.network_access);
     }
 
     #[test]
-    fn one_attempt_sandbox_override_expands_filesystem_without_network() {
+    fn one_attempt_sandbox_override_keeps_its_own_network_setting() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
@@ -370,6 +381,34 @@ permissions:
         .unwrap();
 
         assert_eq!(policy, selected);
+    }
+
+    #[test]
+    fn workspace_profile_materializes_all_project_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = dir.path().join("primary");
+        let secondary = dir.path().join("secondary");
+        std::fs::create_dir_all(&primary).unwrap();
+        std::fs::create_dir_all(&secondary).unwrap();
+        memory::set_permission_preset(dir.path(), types::PermissionPreset::ApproveForMe).unwrap();
+
+        let policy = build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &primary,
+            &[primary.clone(), secondary.clone()],
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            policy.writable_roots,
+            vec![
+                primary.canonicalize().unwrap(),
+                secondary.canonicalize().unwrap()
+            ]
+        );
     }
 
     #[test]

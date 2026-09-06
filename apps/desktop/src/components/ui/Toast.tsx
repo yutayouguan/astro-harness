@@ -1,7 +1,8 @@
-/** 轻量 Toast：倒计时环绕进度条后自动消失，可手动点 ×；按 tone 显示图标与配色。 */
+/** 轻量 Toast：倒计时环绕进度条后自动消失，支持关闭和可选操作。 */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useI18n } from "../../i18n/LocaleContext";
 
 export const TOAST_DURATION_MS = 6000;
@@ -15,6 +16,8 @@ type Props = {
   durationMs?: number;
   sticky?: boolean;
   tone?: ToastTone;
+  actionLabel?: string;
+  onAction?: () => void | Promise<void>;
   onDismiss: () => void;
 };
 
@@ -132,9 +135,12 @@ export function Toast({
   durationMs = TOAST_DURATION_MS,
   sticky = false,
   tone = "info",
+  actionLabel,
+  onAction,
   onDismiss,
 }: Props) {
   const { t } = useI18n();
+  const reducedMotion = useReducedMotion();
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
 
@@ -144,34 +150,69 @@ export function Toast({
     return () => clearTimeout(id);
   }, [visible, message, durationMs, sticky]);
 
-  if (!visible || !message) return null;
+  if (typeof document === "undefined") return null;
 
   // Portal 到 body：避免 chat/media 等祖先的 transform/filter
   // 把 position:fixed 变成相对该祖先定位（表现为「贴在内容区」而非视口右下角）。
   return createPortal(
-    <div
-      className={`astro-toast tone-${tone}${sticky ? " is-sticky" : ""}`}
-      role={tone === "error" ? "alert" : "status"}
-      aria-live={tone === "error" ? "assertive" : "polite"}
-      data-tone={tone}
-    >
-      {!sticky && <ToastCountdownRing durationMs={durationMs} />}
-      {sticky && <div className="astro-toast-sticky-mark" aria-hidden />}
-      <div className="astro-toast-row">
-        <span className={`astro-toast-icon tone-${tone}`} aria-hidden>
-          <ToneIcon tone={tone} />
-        </span>
-        <p className="astro-toast-msg">{message}</p>
-        <button
-          type="button"
-          className="astro-toast-close"
-          aria-label={t("common.close")}
-          onClick={onDismiss}
+    <AnimatePresence initial={false}>
+      {visible && message ? (
+        <motion.div
+          key="toast"
+          className={`astro-toast tone-${tone}${sticky ? " is-sticky" : ""}`}
+          role={tone === "error" ? "alert" : "status"}
+          aria-live={tone === "error" ? "assertive" : "polite"}
+          data-tone={tone}
+          initial={
+            reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }
+          }
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={
+            reducedMotion
+              ? { opacity: 0, transition: { duration: 0.12 } }
+              : {
+                  opacity: 0,
+                  y: 6,
+                  scale: 0.985,
+                  transition: { duration: 0.14, ease: "easeOut" },
+                }
+          }
+          transition={{
+            duration: reducedMotion ? 0.12 : 0.22,
+            ease: [0.22, 1, 0.36, 1],
+          }}
         >
-          <X size={14} strokeWidth={2.25} aria-hidden />
-        </button>
-      </div>
-    </div>,
+          {!sticky && <ToastCountdownRing durationMs={durationMs} />}
+          {sticky && <div className="astro-toast-sticky-mark" aria-hidden />}
+          <div className="astro-toast-row">
+            <span className={`astro-toast-icon tone-${tone}`} aria-hidden>
+              <ToneIcon tone={tone} />
+            </span>
+            <p className="astro-toast-msg">{message}</p>
+            {actionLabel && onAction && (
+              <button
+                type="button"
+                className="astro-toast-action"
+                onClick={() => {
+                  onDismiss();
+                  void onAction();
+                }}
+              >
+                {actionLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              className="astro-toast-close"
+              aria-label={t("common.close")}
+              onClick={onDismiss}
+            >
+              <X size={14} strokeWidth={2.25} aria-hidden />
+            </button>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
     document.body,
   );
 }

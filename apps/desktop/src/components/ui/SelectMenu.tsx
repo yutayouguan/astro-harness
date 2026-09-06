@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 /** 下拉选项 */
 export type SelectOption = {
@@ -32,27 +38,11 @@ type Props = {
   placeholder?: string;
   /** 展开方向：auto（默认）/ up（强制向上）/ down（强制向下） */
   openDirection?: "auto" | "up" | "down";
+  /** 选中项标记：默认勾选，单选筛选可使用圆点。 */
+  selectionIndicator?: "check" | "radio";
+  /** 长选项列表的可视高度上限。 */
+  menuMaxHeight?: number;
 };
-
-/** 触发器右侧展开箭头 */
-function ChevronDown({ open }: { open: boolean }) {
-  return (
-    <svg
-      className={`select-menu-chevron${open ? " is-open" : ""}`}
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
 
 /** 选中项勾选标记 */
 function CheckIcon() {
@@ -74,6 +64,14 @@ function CheckIcon() {
   );
 }
 
+function RadioIcon() {
+  return (
+    <span className="select-menu-radio" aria-hidden>
+      <span />
+    </span>
+  );
+}
+
 /** 通用下拉选择菜单（Portal 列表） */
 export function SelectMenu({
   value,
@@ -85,6 +83,8 @@ export function SelectMenu({
   "aria-label": ariaLabel,
   placeholder = "—",
   openDirection = "auto",
+  selectionIndicator = "check",
+  menuMaxHeight = 260,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -92,6 +92,7 @@ export function SelectMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
   const selected = options.find((o) => o.value === value);
   const label = selected?.label ?? placeholder;
 
@@ -106,11 +107,11 @@ export function SelectMenu({
     open,
     anchorRef: triggerRef,
     menuRef: listRef,
-    sizeKey: `${options.length}:${value}:${openDirection}`,
+    sizeKey: `${options.length}:${value}:${openDirection}:${menuMaxHeight}`,
     minWidth: 140,
     maxWidth: 280,
-    maxHeightCap: 260,
-    maxHeightRatio: 0.42,
+    maxHeightCap: menuMaxHeight,
+    maxHeightRatio: menuMaxHeight > 260 ? 0.8 : 0.42,
     preferAlign: "start",
     placement,
   });
@@ -196,7 +197,8 @@ export function SelectMenu({
 
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !listRef.current) return;
-    const items = listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
+    const items =
+      listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
 
@@ -243,8 +245,10 @@ export function SelectMenu({
               minWidth: Math.max(pos.width, 140),
               maxWidth: pos.widthCap,
               maxHeight: pos.maxHeight,
+              zIndex: layer,
               ...menuToneStyle,
             }}
+            onPointerDownCapture={bringToFront}
           >
             {options.map((opt, i) => {
               const active = opt.value === value;
@@ -271,8 +275,18 @@ export function SelectMenu({
                         {opt.icon}
                       </span>
                     ) : null}
-                    <span className="select-menu-option-label">{opt.label}</span>
-                    {active ? <CheckIcon /> : null}
+                    <span className="select-menu-option-label">
+                      {opt.label}
+                    </span>
+                    {active ? (
+                      selectionIndicator === "radio" ? (
+                        <RadioIcon />
+                      ) : (
+                        <CheckIcon />
+                      )
+                    ) : selectionIndicator === "radio" ? (
+                      <span className="select-menu-radio" aria-hidden />
+                    ) : null}
                   </button>
                 </li>
               );
@@ -313,7 +327,15 @@ export function SelectMenu({
           </span>
         ) : null}
         <span className="select-menu-value">{label}</span>
-        <ChevronDown open={open} />
+        <MorphToggleIcon
+          className={`select-menu-chevron${open ? " is-open" : ""}`}
+          active={open}
+          activeIcon={ChevronUpData}
+          inactiveIcon={ChevronDownData}
+          size={14}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </button>
       {menu}
     </div>

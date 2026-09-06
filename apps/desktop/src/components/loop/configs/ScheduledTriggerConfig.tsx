@@ -15,15 +15,18 @@ const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "UTC" },
 ];
 
-export default function ScheduledTriggerConfig({ config, onChange }: ConfigProps) {
+export default function ScheduledTriggerConfig({
+  config,
+  onChange,
+}: ConfigProps) {
   return (
     <>
       <TextField
         label="调度表达式"
         value={cfgStr(config, "schedule")}
         onChange={(v) => onChange({ ...config, schedule: v })}
-        placeholder="every:5m / 0 9 * * * / once:RFC3339"
-        hint="支持 every:Nm/Nh、五段 cron、once:RFC3339"
+        placeholder="every:5m / 0 9 * * *"
+        hint="支持 every:Nm/Nh/Nd 和五段 cron"
       />
       <SelectField
         label="时区"

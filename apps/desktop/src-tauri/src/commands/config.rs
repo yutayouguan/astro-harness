@@ -47,7 +47,11 @@ pub async fn set_tools_enabled(
 /// 内置工具目录（schemars 派生参数），供前端 Tools 面板展示
 #[tauri::command]
 pub async fn get_tool_catalog() -> Result<Vec<tools::ToolCatalogItem>, String> {
-    Ok(tools::builtin_catalog())
+    let mut registry = tools::ToolRegistry::new();
+    tools::register_all(&mut registry);
+    tools::register_workflow_tools(&mut registry, &home::default_memory_dir())
+        .map_err(|error| error.to_string())?;
+    Ok(tools::catalog_for_ui(&registry))
 }
 
 /// MCP 发现工具的前端 DTO。
@@ -185,9 +189,21 @@ pub struct McpServerDto {
     /// 单工具审批模式覆盖。
     #[serde(default, rename = "toolApprovalModes")]
     pub tool_approval_modes: HashMap<String, String>,
+    /// 单工具文本输出 token 上限。
+    #[serde(default, rename = "toolOutputTokenLimits")]
+    pub tool_output_token_limits: HashMap<String, u64>,
     /// 最近一次 list_tools 缓存
     #[serde(default)]
     pub discovered: Vec<McpDiscoveredToolDto>,
+    /// 配置作用域：global / builtin / project。
+    #[serde(default = "default_global_scope")]
+    pub scope: String,
+    /// 配置来源层，用于 UI 解释覆盖关系。
+    #[serde(default = "default_user_provenance")]
+    pub provenance: String,
+    /// packaged/builtin 配置为只读。
+    #[serde(default = "default_true")]
+    pub editable: bool,
 }
 
 /// serde 默认传输类型：`stdio`。
@@ -200,12 +216,24 @@ fn default_true() -> bool {
     true
 }
 
+fn default_global_scope() -> String {
+    "global".into()
+}
+
+fn default_user_provenance() -> String {
+    "user".into()
+}
+
 fn default_mcp_approval_mode() -> String {
     "auto".into()
 }
 
 /// `McpServerConfig` → 前端 DTO。
 fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
+    dto_from_config_scoped(c, "global")
+}
+
+fn dto_from_config_scoped(c: mcp::McpServerConfig, scope: &str) -> McpServerDto {
     let tools = c
         .tools
         .iter()
@@ -218,6 +246,17 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
             config
                 .approval_mode()
                 .map(|mode| (name.clone(), mode.as_str().to_string()))
+        })
+        .collect();
+    let tool_output_token_limits = c
+        .tools
+        .iter()
+        .filter_map(|(name, config)| {
+            let limit = match config {
+                mcp::McpToolConfig::Enabled(_) => None,
+                mcp::McpToolConfig::Settings(settings) => settings.output_token_limit,
+            }?;
+            Some((name.clone(), u64::try_from(limit.get()).ok()?))
         })
         .collect();
     McpServerDto {
@@ -244,6 +283,7 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
         default_tools_approval_mode: c.default_tools_approval_mode.as_str().to_string(),
         tools,
         tool_approval_modes,
+        tool_output_token_limits,
         discovered: c
             .discovered
             .into_iter()
@@ -257,6 +297,13 @@ fn dto_from_config(c: mcp::McpServerConfig) -> McpServerDto {
                 open_world_hint: d.annotations.open_world_hint,
             })
             .collect(),
+        scope: scope.to_string(),
+        provenance: if scope == "builtin" {
+            "packaged".to_string()
+        } else {
+            scope.to_string()
+        },
+        editable: scope != "builtin",
     }
 }
 
@@ -307,6 +354,16 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
             mcp::McpToolConfig::from_parts(true, Some(types::McpToolApprovalMode::parse(&mode)?)),
         );
     }
+    for (name, raw_limit) in d.tool_output_token_limits {
+        let limit = usize::try_from(raw_limit)
+            .ok()
+            .and_then(std::num::NonZeroUsize::new)
+            .ok_or_else(|| format!("tool output token limit for {name:?} must be positive"))?;
+        let entry = tools
+            .entry(name)
+            .or_insert(mcp::McpToolConfig::Enabled(true));
+        *entry = entry.clone().with_output_token_limit(Some(limit));
+    }
     Ok(mcp::McpServerConfig {
         id: mcp::sanitize_server_id(&d.id),
         name: d.name,
@@ -353,10 +410,23 @@ fn config_from_dto(d: McpServerDto) -> Result<mcp::McpServerConfig, String> {
 
 /// Tauri 命令：get_mcp_servers。
 #[tauri::command]
-pub async fn get_mcp_servers() -> Result<Vec<McpServerDto>, String> {
-    // 编辑器只读写全局层，避免把可信项目的有效配置摊平回全局文件。
-    let servers = mcp::load_mcp_servers().map_err(|e| e.to_string())?;
-    Ok(servers.into_iter().map(dto_from_config).collect())
+pub async fn get_mcp_servers(
+    scope: Option<String>,
+    project_root: Option<String>,
+) -> Result<Vec<McpServerDto>, String> {
+    let scope = scope.as_deref().unwrap_or("global");
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(std::path::PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
+    let servers =
+        mcp::load_mcp_servers_scoped(scope, resolved_root.as_deref()).map_err(|e| e.to_string())?;
+    Ok(servers
+        .into_iter()
+        .map(|server| dto_from_config_scoped(server, scope))
+        .collect())
 }
 
 /// 读取指定 Agent 的 MCP Hub 真实连接状态；无活跃 Hub 时返回分层配置状态。
@@ -366,7 +436,7 @@ pub async fn get_mcp_server_statuses(
 ) -> Result<Vec<McpRuntimeStatusDto>, String> {
     let memory_root = home::default_memory_dir();
     let id = normalize_agent_id(agent_id).unwrap_or_else(|| home::active_agent_id(&memory_root));
-    let project_root = worktree::resolve_project_root(None)
+    let project_root = agent::git_worktree::resolve_project_root(None)
         .map(|root| root.to_string_lossy().into_owned())
         .unwrap_or_default();
     let endpoint = endpoint_url(&default_grpc_address());
@@ -418,12 +488,24 @@ pub async fn reconnect_mcp_server(
 
 /// Tauri 命令：set_mcp_servers。
 #[tauri::command]
-pub async fn set_mcp_servers(servers: Vec<McpServerDto>) -> Result<(), String> {
+pub async fn set_mcp_servers(
+    servers: Vec<McpServerDto>,
+    scope: Option<String>,
+    project_root: Option<String>,
+) -> Result<(), String> {
+    let scope = scope.as_deref().unwrap_or("global");
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(std::path::PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     let configs: Vec<_> = servers
         .into_iter()
         .map(config_from_dto)
         .collect::<Result<_, _>>()?;
-    mcp::save_mcp_servers(&configs).map_err(|e| e.to_string())
+    mcp::save_mcp_servers_scoped(scope, resolved_root.as_deref(), &configs)
+        .map_err(|e| e.to_string())
 }
 
 /// 短连 list_tools，写回 discovered，并合并默认工具开关
@@ -437,7 +519,7 @@ pub async fn refresh_mcp_tools(
     let effective_agent_id = id
         .clone()
         .unwrap_or_else(|| home::active_agent_id(&memory_root));
-    let execution_root = worktree::resolve_project_root(None)
+    let execution_root = agent::git_worktree::resolve_project_root(None)
         .unwrap_or_else(|| home::agent_workspace_dir(&memory_root, &effective_agent_id));
     let profile_id = memory::load_permission_settings(&memory_root)
         .selection
@@ -505,12 +587,15 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
-    let db = usage::UsageDb::open_default().map_err(|e| e.to_string())?;
+    let db = usage::UsageDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     db.query_insights(usage::UsageInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
     })
+    .await
     .map_err(|e| e.to_string())
 }
 
@@ -540,6 +625,7 @@ pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceI
         as_of: args.as_of,
         agent_id,
     })
+    .await
     .map_err(|e| e.to_string())
 }
 
@@ -603,7 +689,11 @@ mod mcp_config_tests {
             default_tools_approval_mode: "auto".into(),
             tools: HashMap::new(),
             tool_approval_modes: HashMap::new(),
+            tool_output_token_limits: HashMap::new(),
             discovered: Vec::new(),
+            scope: default_global_scope(),
+            provenance: default_user_provenance(),
+            editable: true,
         }
     }
 
@@ -684,6 +774,7 @@ mod mcp_config_tests {
         dto.tools.insert("publish".into(), false);
         dto.tool_approval_modes
             .insert("publish".into(), "prompt".into());
+        dto.tool_output_token_limits.insert("publish".into(), 512);
         dto.discovered.push(McpDiscoveredToolDto {
             name: "publish".into(),
             description: "Publish a document".into(),
@@ -703,6 +794,7 @@ mod mcp_config_tests {
             config.tool_approval_mode("publish"),
             types::McpToolApprovalMode::Prompt
         );
+        assert_eq!(config.tool_output_token_limit("publish"), Some(512));
         assert!(!config.is_tool_enabled("publish"));
 
         let dto = dto_from_config(config);
@@ -711,6 +803,7 @@ mod mcp_config_tests {
             dto.tool_approval_modes.get("publish").map(String::as_str),
             Some("prompt")
         );
+        assert_eq!(dto.tool_output_token_limits.get("publish"), Some(&512));
         assert_eq!(dto.discovered[0].destructive_hint, Some(true));
     }
 

@@ -25,26 +25,26 @@ const RAW_MAX_BYTES: usize = 12_000;
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum WebFetchMode {
-    /// Extract readable text from HTML (default).
+    /// 从 HTML 提取可读文本（默认）。
     #[default]
     Text,
-    /// Return raw HTTP body as-is (no HTML stripping, no redirects).
+    /// 原样返回 HTTP body（不剥离 HTML，不跟随重定向）。
     Raw,
 }
 
-/// Arguments for the `web_fetch` tool.
+/// `web_fetch` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebFetchArgs {
-    /// Single URL (mutually exclusive with `urls`; `urls` wins if both set).
+    /// 单个 URL（与 `urls` 互斥；同时设置时 `urls` 优先）。
     #[serde(default)]
     pub url: Option<String>,
-    /// Multiple URLs (max 5, text mode only).
+    /// 多个 URL（最多 5 个，仅 text 模式）。
     #[serde(default)]
     pub urls: Option<Vec<String>>,
-    /// Max characters of body text per URL (default 12000, hard cap 48000, text mode only).
+    /// 每个 URL 的正文最大字符数（默认 12000，硬上限 48000，仅 text 模式）。
     #[serde(default)]
     pub max_chars: Option<usize>,
-    /// Fetch mode: "text" (default, HTML stripped) or "raw" (original body, no redirects).
+    /// 抓取模式："text"（默认，剥离 HTML）或 "raw"（原始 body，不跟随重定向）。
     #[serde(default)]
     pub mode: WebFetchMode,
 }
@@ -73,23 +73,19 @@ crate::submit_builtin_tool! {
     async_ctx: dispatch,
 }
 
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
+pub async fn dispatch(_ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow::Result<String> {
     let parsed: WebFetchArgs = serde_json::from_value(args.clone())
         .map_err(|e| anyhow::anyhow!("web_fetch 参数无效: {e}"))?;
-    let grant = ctx.effective_in_process_network_grant();
 
     match parsed.mode {
-        WebFetchMode::Text => dispatch_text(parsed, grant).await,
-        WebFetchMode::Raw => dispatch_raw(parsed, grant).await,
+        WebFetchMode::Text => dispatch_text(parsed).await,
+        WebFetchMode::Raw => dispatch_raw(parsed).await,
     }
 }
 
 // ── mode=text（原 web_extract 逻辑）──────────────────────────────
 
-async fn dispatch_text(
-    parsed: WebFetchArgs,
-    grant: crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
+async fn dispatch_text(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let max_chars = parsed
         .max_chars
         .unwrap_or(DEFAULT_MAX_CHARS)
@@ -124,12 +120,12 @@ async fn dispatch_text(
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(25))
-        .redirect(public_redirect_policy(5, grant.clone()))
+        .redirect(public_redirect_policy(5))
         .build()?;
 
     let mut sections = Vec::with_capacity(targets.len());
     for (i, url) in targets.iter().enumerate() {
-        assert_public_http_url(url, &grant)?;
+        assert_public_http_url(url)?;
         match fetch_and_extract(&client, url, max_chars).await {
             Ok(body) => sections.push(format!(
                 "### [{}/{}] {}\n\n{}",
@@ -151,17 +147,14 @@ async fn dispatch_text(
 
 // ── mode=raw（原 http_fetch 逻辑）──────────────────────────────
 
-async fn dispatch_raw(
-    parsed: WebFetchArgs,
-    grant: crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
+async fn dispatch_raw(parsed: WebFetchArgs) -> anyhow::Result<String> {
     let url = parsed
         .url
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("web_fetch mode=raw 需要 url"))?;
-    assert_public_http_url(url, &grant)?;
+    assert_public_http_url(url)?;
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))

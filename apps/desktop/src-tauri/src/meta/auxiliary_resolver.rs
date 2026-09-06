@@ -21,14 +21,13 @@ pub struct ResolvedTarget {
 }
 
 impl ResolvedTarget {
-    fn to_chat_target(&self) -> types::ChatTarget {
-        types::ChatTarget {
+    fn to_model_target(&self) -> types::ModelTarget {
+        types::ModelTarget {
             provider_id: self.provider.id.clone(),
             backend_id: self.backend_id.clone(),
             model: self.model.clone(),
             api_key: self.api_key.clone(),
             base_url: self.provider.endpoint.clone(),
-            api_mode: self.provider.api_mode.clone(),
         }
     }
 }
@@ -42,11 +41,11 @@ pub struct AuxiliaryTargets {
 }
 
 impl AuxiliaryTargets {
-    /// 展开为跨进程 `ChatTarget` 链（最多 2 项：preferred + fallback）。
-    pub fn to_chat_targets(&self) -> Vec<types::ChatTarget> {
-        let mut out = vec![self.preferred.to_chat_target()];
+    /// 展开为跨进程 `ModelTarget` 链（最多 2 项：preferred + fallback）。
+    pub fn to_model_targets(&self) -> Vec<types::ModelTarget> {
+        let mut out = vec![self.preferred.to_model_target()];
         if let Some(fb) = &self.fallback {
-            out.push(fb.to_chat_target());
+            out.push(fb.to_model_target());
         }
         out
     }
@@ -76,7 +75,7 @@ fn resolved_from_ui_provider(
 fn resolve_with<F, K>(
     kind: AuxiliaryKind,
     aux: &AuxiliaryConfig,
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
     mut find_provider: F,
     mut resolve_key: K,
 ) -> Result<AuxiliaryTargets, String>
@@ -147,7 +146,7 @@ where
 fn resolve_for_config(
     kind: AuxiliaryKind,
     aux: &AuxiliaryConfig,
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
 ) -> Result<AuxiliaryTargets, String> {
     resolve_with(
         kind,
@@ -167,7 +166,7 @@ fn resolve_for_config(
 /// [`build_auxiliary_model_targets`]，避免重复读盘。
 pub fn resolve_auxiliary_targets(
     kind: AuxiliaryKind,
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
 ) -> Result<AuxiliaryTargets, String> {
     let aux = memory::load_auxiliary_config(&home::default_memory_dir());
     resolve_for_config(kind, &aux, primary)
@@ -180,7 +179,7 @@ pub fn resolve_auxiliary_targets(
 /// 供离线进化 `reflection` / `judge` 路由复用。
 fn resolve_route_for(
     route: &AuxiliaryRoute,
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
 ) -> Result<AuxiliaryTargets, String> {
     let primary_provider = providers::find_provider(&primary.provider_id)
         .ok()
@@ -244,7 +243,7 @@ fn resolve_route_for(
 /// 将离线进化路由（`reflection` / `judge`）解析为 preferred/fallback。
 pub fn resolve_evolution_targets(
     kind: memory::EvolutionRouteKind,
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
 ) -> Result<AuxiliaryTargets, String> {
     let cfg = memory::load_evolution_config(&home::default_memory_dir());
     let route = cfg.route(kind).clone();
@@ -264,13 +263,17 @@ fn to_common_task(kind: AuxiliaryKind) -> types::AuxiliaryTask {
 
 /// 解析会话侧辅助任务用的 primary：优先匹配会话账单里的 backend/endpoint/model，
 /// 否则回退到 UI 当前激活提供商。
-pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTarget, String> {
+pub async fn primary_model_target_for_session(
+    session_id: &str,
+) -> Result<types::ModelTarget, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    let store = session::SessionStore::open_sessions_dir(&root.join("sessions"))
+    let store = session::SessionStore::open_sessions_dir(&home::data_dir(&root))
+        .await
         .map_err(|e| e.to_string())?;
     let billing = store
         .get_session_billing(session_id)
+        .await
         .map_err(|e| e.to_string())?;
     let session_model = billing
         .as_ref()
@@ -293,7 +296,7 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
         let candidates: Vec<&providers::ProviderConfigDto> = state
             .providers
             .iter()
-            .filter(|p| p.enabled && p.backend_id == *bp)
+            .filter(|p| p.enabled && p.supports_responses_api && p.backend_id == *bp)
             .collect();
         if let Some(url) = billing_base_url.as_ref() {
             if let Some(p) = candidates
@@ -307,15 +310,23 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
     });
 
     let provider_id = matched_id
-        .or_else(|| state.active_provider_id.clone())
+        .or_else(|| {
+            state.active_provider_id.as_ref().and_then(|id| {
+                state
+                    .providers
+                    .iter()
+                    .any(|p| p.id == *id && p.enabled && p.supports_responses_api)
+                    .then(|| id.clone())
+            })
+        })
         .or_else(|| {
             state
                 .providers
                 .iter()
-                .find(|p| p.enabled)
+                .find(|p| p.enabled && p.supports_responses_api)
                 .map(|p| p.id.clone())
         })
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        .ok_or_else(|| "请先配置并启用支持 Responses API 的提供商".to_string())?;
 
     let ui = providers::find_provider(&provider_id)?;
     let model = session_model.unwrap_or_else(|| ui.model.clone());
@@ -323,13 +334,12 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
         return Err("会话/提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(types::ChatTarget {
+    Ok(types::ModelTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
-        api_mode: ui.api_mode,
     })
 }
 
@@ -338,7 +348,7 @@ pub fn primary_chat_target_for_session(session_id: &str) -> Result<types::ChatTa
 /// 单个任务解析失败（如 primary 的 UI Provider 已被删除）时跳过该任务，不阻塞
 /// 主聊天；跳过的任务在 backend 侧 `AgentLoop::auxiliary_targets` 中回退主模型。
 pub fn build_auxiliary_model_targets(
-    primary: &types::ChatTarget,
+    primary: &types::ModelTarget,
 ) -> Vec<proto::AuxiliaryModelTarget> {
     let aux = memory::load_auxiliary_config(&home::default_memory_dir());
     let mut out = Vec::new();
@@ -347,7 +357,7 @@ pub fn build_auxiliary_model_targets(
             continue;
         };
         let task = to_common_task(kind).as_str().to_string();
-        for (order, target) in resolved.to_chat_targets().into_iter().enumerate() {
+        for (order, target) in resolved.to_model_targets().into_iter().enumerate() {
             out.push(proto::AuxiliaryModelTarget {
                 task: task.clone(),
                 provider_id: target.provider_id,
@@ -385,18 +395,17 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: String::new(),
+            embedding_model: String::new(),
         }
     }
 
-    fn primary_target() -> types::ChatTarget {
-        types::ChatTarget {
+    fn primary_target() -> types::ModelTarget {
+        types::ModelTarget {
             provider_id: "prov-primary".into(),
             backend_id: "openai".into(),
             model: "gpt-5.6".into(),
             api_key: "primary-key".into(),
             base_url: "https://prov-primary.example".into(),
-            api_mode: String::new(),
         }
     }
 
@@ -668,7 +677,7 @@ mod tests {
     }
 
     #[test]
-    fn to_chat_targets_includes_fallback_when_present() {
+    fn to_model_targets_includes_fallback_when_present() {
         let aux = AuxiliaryConfig {
             dreaming: AuxiliaryRoute {
                 provider: "prov-cheap".into(),
@@ -697,7 +706,7 @@ mod tests {
             always_has_key("k"),
         )
         .unwrap();
-        let chain = result.to_chat_targets();
+        let chain = result.to_model_targets();
         assert_eq!(chain.len(), 2);
         assert_eq!(chain[0].provider_id, "prov-cheap");
         assert_eq!(chain[1].provider_id, "prov-primary");

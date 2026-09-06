@@ -2,7 +2,7 @@
  * 聊天会话本地持久化：消息列表写入 localStorage，附件重字段剥离以免撑爆配额。
  */
 
-import type { ChatMessage, PendingInterrupt } from "../../types";
+import type { ConversationEntry, PendingInterrupt } from "../../types";
 import type { ContextUsageSnapshot } from "./contextUsage";
 
 const STORAGE_KEY = "astro.chat.session";
@@ -20,7 +20,15 @@ export function loadContextUsageForSession(
     const map = JSON.parse(raw) as Record<string, ContextUsageSnapshot>;
     const snap = map?.[sessionId];
     if (!snap || typeof snap.totalTokens !== "number") return null;
-    return snap;
+    return {
+      ...snap,
+      estimatedTotalTokens: snap.estimatedTotalTokens ?? snap.totalTokens,
+      source:
+        snap.source === "provider_reported" ||
+        snap.source === "provider_recomputed"
+          ? snap.source
+          : "local_estimate",
+    };
   } catch {
     return null;
   }
@@ -58,16 +66,19 @@ export function saveContextUsageForSession(
 /** 持久化的会话快照 */
 export type StoredChatSession = {
   sessionId: string | null;
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   /** 未决 HITL interrupt（重载后仍禁用普通发送） */
   pendingInterrupts?: PendingInterrupt[];
   /** 最近一次后端 context_usage 快照（真实窗口与分层占用） */
   contextUsage?: ContextUsageSnapshot;
+  ephemeral?: boolean;
+  parentSessionId?: string;
+  excludedTurnCount?: number;
   updatedAt: number;
 };
 
 /** 去掉 previewUrl / dataBase64 等大字段后再存储 */
-function stripHeavyFields(messages: ChatMessage[]): ChatMessage[] {
+function stripHeavyFields(messages: ConversationEntry[]): ConversationEntry[] {
   return messages.map((m) => ({
     ...m,
     attachments: m.attachments?.map((a) => ({
@@ -82,8 +93,11 @@ function stripHeavyFields(messages: ChatMessage[]): ChatMessage[] {
 }
 
 /** 是否仅为欢迎占位（不应落盘） */
-export function isWelcomeOnly(messages: ChatMessage[]): boolean {
-  return messages.length === 0 || (messages.length === 1 && messages[0].id === "welcome");
+export function isWelcomeOnly(messages: ConversationEntry[]): boolean {
+  return (
+    messages.length === 0 ||
+    (messages.length === 1 && messages[0].id === "welcome")
+  );
 }
 
 /** 用户是否主动清空过聊天（避免欢迎页写回） */
@@ -146,7 +160,7 @@ function peekStoredSession(): StoredChatSession | null {
  */
 export function saveChatSession(
   sessionId: string | null,
-  messages: ChatMessage[],
+  messages: ConversationEntry[],
   pendingInterrupts: PendingInterrupt[] = [],
   contextUsage?: ContextUsageSnapshot | null,
 ): void {
@@ -163,13 +177,18 @@ export function saveChatSession(
     const usage =
       contextUsage === undefined
         ? prev?.contextUsage
-        : contextUsage ?? undefined;
+        : (contextUsage ?? undefined);
     const payload: StoredChatSession = {
       sessionId,
       messages: stripHeavyFields(messages),
       pendingInterrupts:
         pendingInterrupts.length > 0 ? pendingInterrupts : undefined,
       contextUsage: usage,
+      ephemeral: prev?.sessionId === sessionId ? prev.ephemeral : undefined,
+      parentSessionId:
+        prev?.sessionId === sessionId ? prev.parentSessionId : undefined,
+      excludedTurnCount:
+        prev?.sessionId === sessionId ? prev.excludedTurnCount : undefined,
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -181,24 +200,31 @@ export function saveChatSession(
   }
 }
 
+/** 记录当前会话的临时 Side 属性，供刷新/异常退出恢复时执行清理。 */
+export function saveEphemeralSessionMeta(
+  sessionId: string,
+  parentSessionId: string | null | undefined,
+  excludedTurnCount: number,
+): void {
+  try {
+    const current = peekStoredSession();
+    if (!current || current.sessionId !== sessionId) return;
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...current,
+        ephemeral: true,
+        parentSessionId: parentSessionId ?? undefined,
+        excludedTurnCount,
+        updatedAt: Date.now(),
+      } satisfies StoredChatSession),
+    );
+  } catch {
+    // private mode / quota
+  }
+}
+
 /** 清空会话（同 {@link markChatCleared}） */
 export function clearChatSession(): void {
   markChatCleared();
-}
-
-/**
- * 编辑消息截断后立刻同步本地持久化。
- * keep 为空时标记 cleared，避免空列表触发 restore 时把旧历史从 localStorage/DB 拉回。
- */
-export function persistAfterEditTruncate(
-  sessionId: string | null,
-  keptMessages: ChatMessage[],
-  pendingInterrupts: PendingInterrupt[] = [],
-  contextUsage?: ContextUsageSnapshot | null,
-): void {
-  if (isWelcomeOnly(keptMessages)) {
-    markChatCleared();
-    return;
-  }
-  saveChatSession(sessionId, keptMessages, pendingInterrupts, contextUsage);
 }

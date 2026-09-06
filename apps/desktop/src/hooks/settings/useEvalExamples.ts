@@ -31,7 +31,9 @@ export function useEvalExamples(active = true): UseEvalExamples {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [examples, setExamples] = useState<EvalExampleDto[]>([]);
-  const [importCandidates, setImportCandidates] = useState<EvalImportCandidateDto[]>([]);
+  const [importCandidates, setImportCandidates] = useState<
+    EvalImportCandidateDto[]
+  >([]);
   const [importLoading, setImportLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -52,9 +54,12 @@ export function useEvalExamples(active = true): UseEvalExamples {
     if (!active) return;
     setImportLoading(true);
     try {
-      const next = await invoke<EvalImportCandidateDto[]>("list_eval_import_candidates", {
-        limit: 12,
-      });
+      const next = await invoke<EvalImportCandidateDto[]>(
+        "list_eval_import_candidates",
+        {
+          limit: 12,
+        },
+      );
       setImportCandidates(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -86,7 +91,9 @@ export function useEvalExamples(active = true): UseEvalExamples {
   const remove = useCallback(async (id: string) => {
     setError(null);
     try {
-      const next = await invoke<EvalExampleDto[]>("remove_eval_example", { id });
+      const next = await invoke<EvalExampleDto[]>("remove_eval_example", {
+        id,
+      });
       setExamples(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -97,12 +104,17 @@ export function useEvalExamples(active = true): UseEvalExamples {
     async (sessionId: string, skillId?: string | null) => {
       setError(null);
       try {
-        const next = await invoke<EvalExampleDto[]>("import_eval_from_session", {
-          sessionId,
-          skillId: skillId ?? null,
-        });
+        const next = await invoke<EvalExampleDto[]>(
+          "import_eval_from_session",
+          {
+            sessionId,
+            skillId: skillId ?? null,
+          },
+        );
         setExamples(next);
-        setImportCandidates((prev) => prev.filter((c) => c.sessionId !== sessionId));
+        setImportCandidates((prev) =>
+          prev.filter((c) => c.sessionId !== sessionId),
+        );
       } catch (err) {
         setError(errorMessage(err));
       }

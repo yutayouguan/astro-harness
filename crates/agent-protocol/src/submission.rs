@@ -1,8 +1,16 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 
+use crate::control::{
+    DynamicToolResponse, ElicitationResponse, InterAgentCommunication, RequestPermissionsResponse,
+    RequestUserInputResponse, ReviewDecision, ReviewRequest, ThreadSettingsOverrides,
+    TurnSettingsOutcome, TurnSettingsUpdate, UserShellLaunch,
+};
 use crate::items::ExtensionItem;
+use crate::realtime::{
+    ConversationAudioParams, ConversationSpeechParams, ConversationStartParams,
+    ConversationTextParams,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnInput {
@@ -13,9 +21,16 @@ pub struct TurnInput {
     pub client_message_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TurnInputRequest {
     pub input: Vec<TurnInput>,
+    /// Replace the active history with this absolute chat-bubble prefix before
+    /// accepting the new input. Used by edited-input resubmission; absent for normal turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_keep_chat_bubbles: Option<u32>,
+    /// Persistent settings applied only after this input is accepted.
+    #[serde(skip, default)]
+    pub thread_settings: ThreadSettingsOverrides,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,36 +66,100 @@ pub enum TurnInputError {
     Invalid(String),
 }
 
+/// Result of stopping an unfinished regular turn without recording a terminal event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuspendTurnOutcome {
+    Suspended { turn_id: String },
+    NotActive,
+    HasLiveDescendants,
+    UnsupportedTask,
+}
+
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Op {
+    /// Start a realtime conversation stream for this thread.
+    RealtimeConversationStart {
+        params: ConversationStartParams,
+        /// Realtime credentials and routing stay scoped to this connection.
+        target: types::ModelTarget,
+        /// Completes only after the provider handshake succeeds or fails.
+        reply: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+    /// Append an audio frame to the running realtime conversation.
+    RealtimeConversationAudio(ConversationAudioParams),
+    /// Append a role-bearing text item to the running realtime conversation.
+    RealtimeConversationText(ConversationTextParams),
+    /// Ask the running realtime conversation to speak the supplied text.
+    RealtimeConversationSpeech(ConversationSpeechParams),
+    /// Close the running realtime conversation.
+    RealtimeConversationClose,
+    /// Emit the voices supported by the realtime transport.
+    RealtimeConversationListVoices,
     TurnInput {
         request: TurnInputRequest,
         mode: TurnInputMode,
         reply: tokio::sync::oneshot::Sender<Result<TurnInputSubmission, TurnInputError>>,
     },
+    /// Resume sampling for a persisted interrupted turn without appending user input.
+    RecoverTurn {
+        turn_id: String,
+        reply: tokio::sync::oneshot::Sender<Result<TurnInputSubmission, TurnInputError>>,
+    },
+    /// Stop a regular turn without a terminal event, flush it, then close the runtime.
+    SuspendTurnAndShutdown {
+        reply: tokio::sync::oneshot::Sender<Result<SuspendTurnOutcome, TurnInputError>>,
+    },
     Interrupt,
+    /// Terminate this thread's background terminal jobs without interrupting the active turn.
+    CleanBackgroundTerminals,
     ThreadSettings {
-        settings: Value,
+        thread_settings: ThreadSettingsOverrides,
     },
     ExecApproval {
         id: String,
-        decision: Value,
+        decision: ReviewDecision,
     },
     PatchApproval {
         id: String,
-        decision: Value,
+        decision: ReviewDecision,
     },
     UserInputAnswer {
         id: String,
-        response: Value,
+        response: RequestUserInputResponse,
     },
     RequestPermissionsResponse {
         id: String,
-        response: Value,
+        response: RequestPermissionsResponse,
     },
     DynamicToolResponse {
         id: String,
-        response: Value,
+        response: DynamicToolResponse,
+    },
+    /// Resolve one pending MCP `elicitation/create` request.
+    ResolveElicitation {
+        server_name: String,
+        request_id: String,
+        response: ElicitationResponse,
+        reply: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// Atomically update the next sampling step of the named active turn.
+    TurnSettings {
+        turn_id: String,
+        update: TurnSettingsUpdate,
+        reply: tokio::sync::oneshot::Sender<TurnSettingsOutcome>,
+    },
+    /// Arm exactly one retry for a previously denied Guardian assessment.
+    ApproveGuardianDeniedAction {
+        assessment_id: String,
+        reply: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// Run an explicit user-authored login-shell command outside the agent sandbox.
+    RunUserShellCommand {
+        command: String,
+        cwd: Option<std::path::PathBuf>,
+        reply: tokio::sync::oneshot::Sender<Result<UserShellLaunch, String>>,
     },
     RefreshMcpServers,
     ReloadUserConfig,
@@ -89,10 +168,10 @@ pub enum Op {
         num_turns: u32,
     },
     Review {
-        request: Value,
+        review_request: ReviewRequest,
     },
     InterAgentCommunication {
-        communication: Value,
+        communication: InterAgentCommunication,
     },
     EmitExtension {
         item: ExtensionItem,

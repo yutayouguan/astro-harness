@@ -1,4 +1,10 @@
-import { AiAssistField, NumberField, SelectField, FilePathField, FileArrayField, cfgStr, cfgNum, cfgStrArray } from "./ConfigField";
+import {
+  AiAssistField,
+  NumberField,
+  SelectField,
+  cfgStr,
+  cfgNum,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -10,41 +16,28 @@ interface ConfigProps {
   aiModel?: string;
 }
 
-const MODE_OPTIONS = [
-  { value: "text_to_image", label: "文生图" },
-  { value: "image_to_image", label: "图生图 (风格/变体)" },
-  { value: "face_swap", label: "换脸" },
-];
-
 const SIZE_OPTIONS = [
   { value: "1024x1024", label: "1024×1024" },
-  { value: "1792x1024", label: "1792×1024" },
-  { value: "1024x1792", label: "1024×1792" },
-  { value: "512x512", label: "512×512" },
-];
-
-const STYLE_OPTIONS = [
-  { value: "natural", label: "natural" },
-  { value: "vivid", label: "vivid" },
+  { value: "1536x1024", label: "1536×1024" },
+  { value: "1024x1536", label: "1024×1536" },
 ];
 
 const OUTPUT_FORMAT_OPTIONS = [
   { value: "png", label: "PNG" },
   { value: "webp", label: "WebP" },
-  { value: "jpg", label: "JPG" },
+  { value: "jpeg", label: "JPEG" },
 ];
 
-export default function ImageGenConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
-  const mode = cfgStr(config, "mode", "text_to_image");
+export default function ImageGenConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>
-      <SelectField
-        label="生成模式"
-        value={mode}
-        onChange={(v) => onChange({ ...config, mode: v })}
-        options={MODE_OPTIONS}
-      />
       <AiAssistField
         label="生成提示词"
         value={cfgStr(config, "prompt_template")}
@@ -63,46 +56,11 @@ export default function ImageGenConfig({ config, onChange, upstreamOutputs, aiPr
         onModelChange={(v) => onChange({ ...config, model: v })}
         mediaType="image"
       />
-      {(mode === "image_to_image" || mode === "face_swap") && (
-        <FilePathField
-          label="源图片"
-          value={cfgStr(config, "source_image")}
-          onChange={(v) => onChange({ ...config, source_image: v })}
-          accept="image"
-          upstream={up}
-          hint="要转换/换脸的原始图片"
-        />
-      )}
-      <FileArrayField
-        label="参考图片"
-        value={cfgStrArray(config, "reference_images")}
-        onChange={(v) => onChange({ ...config, reference_images: v })}
-        accept="image"
-        upstream={up}
-        hint="风格参考或人脸参考图"
-      />
-      {(mode === "image_to_image" || mode === "face_swap") && (
-        <NumberField
-          label="相似度强度"
-          value={cfgNum(config, "strength")}
-          onChange={(v) => onChange({ ...config, strength: v })}
-          min={0}
-          max={1}
-          step={0.05}
-          placeholder="0.8"
-        />
-      )}
       <SelectField
         label="尺寸"
         value={cfgStr(config, "size", "1024x1024")}
         onChange={(v) => onChange({ ...config, size: v })}
         options={SIZE_OPTIONS}
-      />
-      <SelectField
-        label="风格"
-        value={cfgStr(config, "style", "natural")}
-        onChange={(v) => onChange({ ...config, style: v })}
-        options={STYLE_OPTIONS}
       />
       <NumberField
         label="生成张数"

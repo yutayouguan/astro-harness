@@ -1,19 +1,23 @@
 # Crate 结构详解
 
+> **Agent Harness 基线（2026-09-04）**：Harness 主链由 `agent-core`、`agent-providers`、`agent-tools`、`agent-protocol`、`agent-rollout`、`agent-session`、`agent-extensions`、`agent-mcp`、`agent-realtime`、`agent-subagents`、`agent-sandbox`、`agent-network-proxy` 和 `agent-server` 共同组成。`AgentLoop` 是 `Session` 的兼容别名，`agent-delegate` 只负责显式 worktree 任务。见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
+
 > 阶段：系统设计 | 状态：定稿 | 说明：各 Rust crate 详细结构与核心 trait 定义
 >
-> 本文档已根据实际代码库同步更新（2026-08-22）。
+> 本文档已根据实际代码库同步更新（2026-09-04）。
 
 ## Cargo Workspace 根配置
 
-所有 Rust crate 扁平放置在 `crates/agent-*` 下（package name 保持短名），Tauri 桌面应用在 `apps/desktop/src-tauri`。共 25 个 crate + 1 个桌面应用 = 26 个 workspace 成员。
+所有 Rust crate 扁平放置在 `crates/agent-*` 下（package name 保持短名），Tauri 桌面应用在 `apps/desktop/src-tauri`。共 28 个 crate + 1 个桌面应用 = 29 个 workspace 成员。
 
 ```toml
 [workspace]
 members = [
     "crates/agent-types",
+    "crates/agent-db",
     "crates/agent-config",
     "crates/agent-protocol",
+    "crates/agent-realtime",
     "crates/agent-rollout",
     "crates/agent-home",
     "crates/agent-skills",
@@ -34,6 +38,7 @@ members = [
     "crates/agent-workflow",
     "crates/agent-a2ui",
     "crates/agent-tools",
+    "crates/agent-extensions",
     "crates/agent-core",
     "crates/agent-server",
     "apps/desktop/src-tauri",
@@ -58,29 +63,32 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ChatTarget`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。零业务逻辑。 |
-| `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`。无产品特有字段，不做文件系统发现。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、结构化 `ToolName`、`ToolEntry`（含 `ToolExposure`、`namespace`）、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
+| `crates/agent-db` | `agent-db` | 统一 SQLite 基础层：`AstroDb`、`DbSpec`、文件级 WAL/auto-vacuum 幂等初始化、连接级 synchronous/foreign-keys/busy-timeout、连接池与迁移错误。 |
+| `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、多来源 `ConfigLayerSource`、`ConfigKeyPath`、逐键来源与稳定版本。无产品特有字段，不做文件系统发现。 |
 | `crates/agent-protocol` | `agent-protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
-| `crates/agent-rollout` | `agent-rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |
+| `crates/agent-realtime` | `realtime` | Realtime transport negotiation、WebSocket/WebRTC/ExistingCall、V2/V3 wire decoding、typed event、transcript reducer 与 handoff/BEM。 |
+| `crates/agent-rollout` | `agent-rollout` | JSONL append-only 历史记录：原生 `ResponseItem`、durable `RealtimeItem`、`TokenUsageRecord`、事件与 compaction/fork 重建。rollout 是线程历史的权威事实源。 |
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
-| `crates/agent-hooks` | `hooks` | 三总线 hook 系统：Plugin（进程内同步 `PluginHookBus`）、Gateway（文件扫描外部 manifest）、Shell（config-map 异步 shell 命令）。Codex 对齐事件名。 |
-| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：trait 系统（`OpenAICompatible` + `ThinkingFormat`）、数据驱动兼容、Responses API、TOML 自定义 provider、`ProviderProfile` 表、流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure、混元等 15+ 厂商。 |
+| `crates/agent-hooks` | `hooks` | typed hook runtime：Plugin、Command/MCP、Gateway 与 legacy Shell；支持 canonical 事件、信任和 session-owned async 生命周期。 |
+| `crates/agent-providers` | `providers` | 多厂商模型与媒体适配层：Agent 只走 Responses；非 Agent 调用独立使用 Chat/Messages/Interactions/媒体 API。OpenAI 目录可门控 `persistent` reasoning，wire 映射为 `disabled`；其他 Provider 不透传。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、AgentThreadChanged 等 RPC。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v22，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回、rollout 投影重建。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
-| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现与调用、OAuth 认证。工具名约定：`mcp__{server}__{tool}`。 |
+| `crates/agent-mcp` | `mcp` | MCP 客户端 — per-agent 进程级连接池（`McpHub`），工具发现/调用、OAuth、elicitation 与 process-owned event-stream manager 基础。模型侧使用 `namespace=mcp__{server}` + 原生子工具名；Hub 内部执行键为 `mcp__{server}__{tool}`。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
-| `crates/agent-network-proxy` | `network-proxy` | 受管网络代理：HTTP CONNECT 策略、per-attempt 租约、网络审批流。 |
+| `crates/agent-network-proxy` | `network-proxy` | 受管网络代理：HTTP CONNECT 策略、per-attempt 租约、网络审批流，以及脱敏保留的 header injection requirements；CONNECT 不检查 TLS 内 method/path。 |
 | `crates/agent-sandbox` | `sandbox` | 沙箱权限控制：`PermissionProfile`（read-only/workspace-write/danger-full-access）、权限审计、网络策略。 |
-| `crates/agent-delegate` | `worktree` | 轻量级工具执行代理（已精简，核心子 Agent 逻辑迁移到 `agent-subagents`）。 |
+| `crates/agent-delegate` | `worktree` | 显式桌面多任务的 managed worktree：默认 detached checkout，保留嵌套 cwd，清理继承 Git selector/hooks/filter，失败回滚，脏工作树保留供恢复。Subagent 不隐式调用。 |
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
-| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`data/cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
 | `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger/AI/Media/FlowControl/DataProcessing/Action），DAG 执行引擎、变量解析、运行 DB。 |
 | `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。 |
 | `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、注册表/分发、ToolExposure 三级暴露（Direct/Deferred/Hidden）、BM25 工具搜索、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。 |
+| `crates/agent-extensions` | `agent-extensions` | 可信用户/项目扩展发现，校验 manifest/config Schema/MCP ID/路径边界，生成 turn-scoped 不可变 `ExtensionSnapshot`，并按指纹 reconcile MCP/Skills/Hooks/toolsets 变化。 |
 | `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装。 |
 | `crates/agent-server` | `server` | gRPC 服务端（tonic）：Thread submit/resume/subscribe RPC、`ThreadHistoryBuilder` 活跃 Turn 快照、per-connection 128 容量队列、慢消费者断连。`run_embedded()` 供 Tauri in-process 使用。 |
 | `apps/desktop/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。Thread 事件流桥接。插件：window-vibrancy、tauri-plugin-clipboard、tauri-plugin-window-state、tauri-plugin-autostart。 |
@@ -135,7 +143,7 @@ apps/desktop/src-tauri ← Tauri 桌面壳
 crates/agent-tools/src/
 ├── lib.rs                    # register_all()、interaction_mode
 ├── engine/                   # 工具引擎核心
-│   ├── registry.rs           # ToolRegistry — schemas_for_api / activate_deferred / BM25 搜索
+│   ├── registry.rs           # ToolRegistry — Direct schema / discovered Deferred 路由
 │   ├── dispatch.rs           # 工具分发与执行
 │   ├── catalog.rs            # 工具目录列表
 │   ├── context.rs            # 工具执行上下文

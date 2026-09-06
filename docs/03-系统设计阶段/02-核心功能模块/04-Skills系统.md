@@ -1,5 +1,7 @@
 # Skills 系统
 
+> **Harness 定位（2026-08-29）**：Skill 是按需加载的 scaffold/能力包；它可向 `PromptContract` 注入指令，也可通过 `astro_tools` additive 放宽 toolset，但不拥有 turn loop、审批或沙箱。这些始终由 Harness 执行。
+
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 
 > :warning: Skills 系统已在详细设计阶段进行了重大重新设计（对齐 Claude Code Skills 架构）。

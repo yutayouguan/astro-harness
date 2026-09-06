@@ -13,18 +13,18 @@ pub const USER_PROMPT_SUBMIT: &str = HookEvent::UserPromptSubmit.as_str();
 pub const SUBAGENT_START: &str = HookEvent::SubagentStart.as_str();
 pub const SUBAGENT_STOP: &str = HookEvent::SubagentStop.as_str();
 pub const STOP: &str = HookEvent::Stop.as_str();
+pub const INTERRUPT: &str = HookEvent::Interrupt.as_str();
 
 pub const PRE_LLM_CALL: &str = HookEvent::PreLlmCall.as_str();
 pub const PRE_API_REQUEST: &str = HookEvent::PreApiRequest.as_str();
 pub const POST_API_REQUEST: &str = HookEvent::PostApiRequest.as_str();
 pub const TRANSFORM_TERMINAL_OUTPUT: &str = HookEvent::TransformTerminalOutput.as_str();
 pub const TRANSFORM_TOOL_RESULT: &str = HookEvent::TransformToolResult.as_str();
-pub const TRANSFORM_LLM_OUTPUT: &str = HookEvent::TransformLlmOutput.as_str();
+pub const TRANSFORM_FINAL_LLM_OUTPUT: &str = HookEvent::TransformFinalLlmOutput.as_str();
 pub const POST_LLM_CALL: &str = HookEvent::PostLlmCall.as_str();
 pub const POST_APPROVAL_RESPONSE: &str = HookEvent::PostApprovalResponse.as_str();
 pub const PRE_GATEWAY_DISPATCH: &str = HookEvent::PreGatewayDispatch.as_str();
 pub const SESSION_RESET: &str = HookEvent::SessionReset.as_str();
-pub const SESSION_FINALIZE: &str = HookEvent::SessionFinalize.as_str();
 pub const GATEWAY_STARTUP: &str = HookEvent::GatewayStartup.as_str();
 pub const AGENT_END: &str = HookEvent::AgentEnd.as_str();
 pub const COMMAND_NEW_CHAT: &str = HookEvent::CommandNewChat.as_str();
@@ -47,6 +47,6 @@ pub fn is_mutating_hook(name: &str) -> bool {
             | STOP
             | TRANSFORM_TOOL_RESULT
             | TRANSFORM_TERMINAL_OUTPUT
-            | TRANSFORM_LLM_OUTPUT
+            | TRANSFORM_FINAL_LLM_OUTPUT
     )
 }

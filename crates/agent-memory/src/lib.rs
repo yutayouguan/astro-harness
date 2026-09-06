@@ -4,6 +4,7 @@
 //! 完整工作区引导仍由 [`ensure_workspace`] 编排（`home` 脚手架 + 会话库 + 技能播种）。
 
 pub mod agent;
+pub mod citation;
 pub mod config;
 pub mod decision_log;
 pub mod dreaming;
@@ -16,18 +17,19 @@ pub mod session;
 pub use agent::store::{parse_memory_entries, MemoryStore, MemoryWriteResult};
 pub use agent::workspace;
 pub use config::{
-    add_command_to_allowlist, amend_network_domain, load_approvals_config, load_auxiliary_config,
-    load_compression_config, load_evolution_config, load_learning_config, load_memory_config,
-    load_permission_settings, remove_command_from_allowlist, reset_all_auxiliary_routes,
-    reset_all_evolution_routes, reset_compression_config, resolve_auxiliary, set_approval_mode,
+    add_command_to_allowlist, add_command_type_to_allowlist, amend_network_domain,
+    load_auxiliary_config, load_command_approval_config, load_compression_config,
+    load_evolution_config, load_learning_config, load_memory_config, load_permission_settings,
+    remove_command_from_allowlist, remove_command_type_from_allowlist, reset_all_auxiliary_routes,
+    reset_all_evolution_routes, reset_compression_config, resolve_auxiliary,
     set_auto_refresh_on_update, set_auxiliary_route, set_background_review_enabled,
     set_compression_config, set_evolution_auto, set_evolution_curator, set_evolution_dspy,
     set_evolution_enabled, set_evolution_gates, set_evolution_route, set_evolution_search,
-    set_permission_preset, set_write_approval, ApprovalsConfig, AuxiliaryConfig, AuxiliaryKind,
-    AuxiliaryRoute, CompressionConfig, EvolutionAuto, EvolutionConfig, EvolutionCurator,
-    EvolutionDspy, EvolutionGates, EvolutionRouteKind, EvolutionSearch, LearningConfig,
-    LoadedPermissionSettings, MemoryConfig, PermissionConfigDiagnostic, PermissionConfigSource,
-    PermissionDiagnosticCode,
+    set_permission_preset, set_write_approval, AuxiliaryConfig, AuxiliaryKind, AuxiliaryRoute,
+    CommandApprovalConfig, CommandTypeRule, CompressionConfig, EvolutionAuto, EvolutionConfig,
+    EvolutionCurator, EvolutionDspy, EvolutionGates, EvolutionRouteKind, EvolutionSearch,
+    LearningConfig, LoadedPermissionSettings, MemoryConfig, PermissionConfigDiagnostic,
+    PermissionConfigSource, PermissionDiagnosticCode,
 };
 pub use decision_log::{
     append_decision, decisions_path, list_recent as list_recent_decisions, try_append_decision,

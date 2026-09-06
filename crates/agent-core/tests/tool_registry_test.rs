@@ -30,7 +30,7 @@ fn test_check_fn_filters_unavailable() {
         toolset: "test".to_string(),
         description: "不可用工具".to_string(),
         schema: serde_json::json!({}),
-        check_fn: Some(Box::new(|| false)),
+        check_fn: Some(std::sync::Arc::new(|| false)),
         icon: "❌",
         ..ToolEntry::lifecycle_defaults()
     });
@@ -110,6 +110,7 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         reg.register(ToolEntry {
             name: name.clone(),
             toolset: mcp::MCP_TOOLSET.to_string(),
+            namespace: mcp::tool_namespace("demo"),
             description: "mcp".into(),
             schema: serde_json::json!({"type": "object", "properties": {}}),
             check_fn: None,
@@ -118,18 +119,20 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
         });
     }
 
-    let names: Vec<_> = reg
-        .schemas_for_api()
+    let specs = reg.schemas_for_api();
+    let namespace = specs
         .iter()
-        .filter_map(|s| {
-            s.pointer("/function/name")
-                .and_then(|n| n.as_str())
-                .map(str::to_string)
-        })
+        .find(|spec| spec["type"] == "namespace" && spec["name"] == "mcp__demo")
+        .expect("native MCP namespace");
+    let names: Vec<_> = namespace["tools"]
+        .as_array()
+        .expect("namespace tools")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
         .collect();
-    assert!(names.iter().any(|n| n == "mcp__demo__keep"));
-    assert!(names.iter().any(|n| n == "mcp__demo__unset"));
-    assert!(!names.iter().any(|n| n == "mcp__demo__drop"));
+    assert!(names.contains(&"keep"));
+    assert!(names.contains(&"unset"));
+    assert!(!names.contains(&"drop"));
     assert!(!reg.is_tool_allowed("mcp__demo__drop"));
 
     server.enabled = false;
@@ -162,8 +165,10 @@ fn reload_uses_agent_specific_tools_enabled() {
     });
     reg.reload_enabled_from_disk(Some("custom-bot"));
     assert!(!reg.is_tool_allowed("memory"));
-    assert!(reg
-        .schemas_for_api()
-        .iter()
-        .all(|s| s.pointer("/function/name").and_then(|n| n.as_str()) != Some("memory")));
+    assert!(reg.schemas_for_api().iter().all(|s| {
+        s.get("name")
+            .or_else(|| s.pointer("/function/name"))
+            .and_then(|n| n.as_str())
+            != Some("memory")
+    }));
 }

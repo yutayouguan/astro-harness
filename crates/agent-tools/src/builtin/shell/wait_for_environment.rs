@@ -11,10 +11,10 @@ fn default_timeout() -> u64 {
     30
 }
 
-/// Arguments for the `wait_for_environment` tool.
+/// `wait_for_environment` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WaitForEnvironmentArgs {
-    /// Timeout in seconds to wait for the environment (default 30, max 60).
+    /// 等待环境就绪的超时秒数（默认 30，上限 60）。
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
 }

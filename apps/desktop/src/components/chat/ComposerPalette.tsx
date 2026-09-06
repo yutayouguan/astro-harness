@@ -1,10 +1,10 @@
-/** 输入框浮动命令面板（/ 斜杠 · @ 提及 · 推理档位）。 */
+/** 输入框浮动命令面板（/ 斜杠 · @ 提及）。 */
 import { useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { ThinkingLevel } from "../../lib/chat/thinkingPrefs";
 import type { SlashAction } from "../../lib/chat/composerCommands";
+import type { ComposerContextToken } from "../../lib/chat/composerContext";
 
-export type PaletteKind = "slash" | "mention" | "thinking";
+export type PaletteKind = "slash" | "mention";
 
 export type PaletteItem = {
   id: string;
@@ -15,7 +15,8 @@ export type PaletteItem = {
   action?: SlashAction | "insert" | "help" | "clear";
   skillName?: string;
   mentionKind?: "agent" | "skill" | "mcp";
-  level?: ThinkingLevel;
+  /** 选择后以结构化标签加入输入框，而不是写入普通文本。 */
+  contextToken?: ComposerContextToken;
   /** 分组标签（如"指令"/"技能"/"添加"/"插件"） */
   group?: string;
 };
@@ -48,7 +49,7 @@ export function ComposerPalette({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q || kind === "thinking") return items;
+    if (!q) return items;
     return items.filter(
       (it) =>
         it.title.toLowerCase().includes(q) ||
@@ -65,7 +66,10 @@ export function ComposerPalette({
   }, [activeIndex]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, { label: string; items: { item: PaletteItem; globalIdx: number }[] }>();
+    const map = new Map<
+      string,
+      { label: string; items: { item: PaletteItem; globalIdx: number }[] }
+    >();
     filtered.forEach((item, idx) => {
       const g = item.group || "";
       if (!map.has(g)) map.set(g, { label: g, items: [] });
@@ -87,11 +91,13 @@ export function ComposerPalette({
           groups.map((group) => (
             <div key={group.label} className="composer-palette-group">
               {group.label && (
-                <div className="composer-palette-group-label">{group.label}</div>
+                <div className="composer-palette-group-label">
+                  {group.label}
+                </div>
               )}
               {group.items.map(({ item, globalIdx }) => {
                 const active = globalIdx === activeIndex;
-                const selected = selectedId === item.id || selectedId === item.level;
+                const selected = selectedId === item.id;
                 return (
                   <button
                     key={item.id}
@@ -104,14 +110,22 @@ export function ComposerPalette({
                     onClick={() => onSelect(item)}
                   >
                     {item.icon && (
-                      <span className="composer-palette-ico" aria-hidden>{item.icon}</span>
+                      <span className="composer-palette-ico" aria-hidden>
+                        {item.icon}
+                      </span>
                     )}
-                    <span className="composer-palette-item-name">{item.title}</span>
+                    <span className="composer-palette-item-name">
+                      {item.title}
+                    </span>
                     {item.description && (
-                      <span className="composer-palette-item-hint">{item.description}</span>
+                      <span className="composer-palette-item-hint">
+                        {item.description}
+                      </span>
                     )}
                     {selected && (
-                      <span className="composer-palette-check" aria-hidden>✓</span>
+                      <span className="composer-palette-check" aria-hidden>
+                        ✓
+                      </span>
                     )}
                   </button>
                 );

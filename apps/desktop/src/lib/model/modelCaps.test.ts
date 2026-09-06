@@ -33,7 +33,15 @@ test("listActiveModelCaps keeps fixed order", () => {
       audio_gen: true,
       music_gen: true,
     }),
-    ["tools", "reasoning", "file", "web", "image_gen", "audio_gen", "music_gen"],
+    [
+      "tools",
+      "reasoning",
+      "file",
+      "web",
+      "image_gen",
+      "audio_gen",
+      "music_gen",
+    ],
   );
 });
 
@@ -89,7 +97,14 @@ test("attachmentAcceptForCaps gates by capabilities", () => {
     }),
     "image/*,video/*",
   );
-  assert.equal(attachmentKindAllowed("image", { ...EMPTY_MODEL_CAPABILITIES }), false);
+  assert.equal(
+    attachmentKindAllowed("image", { ...EMPTY_MODEL_CAPABILITIES }),
+    false,
+  );
+  assert.equal(
+    attachmentKindAllowed("folder", { ...EMPTY_MODEL_CAPABILITIES }),
+    true,
+  );
   assert.equal(
     attachmentKindAllowed("audio", {
       ...EMPTY_MODEL_CAPABILITIES,

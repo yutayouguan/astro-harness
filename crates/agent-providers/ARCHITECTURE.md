@@ -1,357 +1,138 @@
-# Providers Crate Architecture Redesign
+# Providers 架构
 
-> 借鉴 Rig 框架，用 trait-based zero-cost 抽象替代当前的 match-on-string 分发。
+> 状态：当前实现基线
+> 更新：2026-09-01
 
-## 1. 核心类型系统
+## 1. 设计目标
 
-### 1.1 消息模型
+Provider crate 同时服务两类需求，但不混淆其协议边界：
 
-```rust
-/// 角色枚举（替代 `role: String`）
-pub enum Role { System, User, Assistant, Tool }
+1. **Agent Responses**：只使用 Responses API，以 `ResponseItem` 为原生历史。
+2. **工具与媒体能力**：允许使用厂商原生或兼容协议，例如 Chat Completions、Anthropic Messages、Gemini Native、Interactions、embedding、TTS、图像和视频 API。
 
-/// 用户消息内容（多模态）
-pub enum UserContent {
-    Text(String),
-    Image { url: String },
-    Audio { url: String, mime_type: String },
-    Video { url: String, mime_type: String },
-    Document { url: String, mime_type: String },
-    ToolResult { tool_call_id: String, content: String, is_error: bool },
-}
+`ApiMode` 中仍出现多种协议，不表示 Agent 可在它们之间切换。Agent 的资格由 `supports_agent_responses()` 单独决定。
 
-/// 助手消息内容
-pub enum AssistantContent {
-    Text(String),
-    ToolCall(ToolCall),
-    Thinking { text: String, signature: Option<String> },
-}
-
-/// 统一消息
-pub enum Message {
-    System { content: String },
-    User { content: Vec<UserContent> },
-    Assistant { content: Vec<AssistantContent> },
-}
-
-/// 工具调用
-pub struct ToolCall {
-    pub id: String,
-    pub name: String,
-    pub arguments: serde_json::Value,
-    pub signature: Option<String>,  // Gemini 3 strict mode
-}
-
-/// 工具定义（provider-agnostic JSON Schema）
-pub struct ToolDefinition {
-    pub name: String,
-    pub description: String,
-    pub parameters: serde_json::Value,
-}
-```
-
-### 1.2 请求/响应
+## 2. 类型边界
 
 ```rust
-/// 统一聊天请求
-pub struct CompletionRequest {
+pub struct ResponsesRequest {
     pub model: String,
-    pub messages: Vec<Message>,
+    pub instructions: String,
+    pub input: Vec<agent_protocol::ResponseItem>,
     pub tools: Vec<ToolDefinition>,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: Option<ThinkingConfig>,
-    pub additional_params: serde_json::Value,
+    // tool choice, thinking, token and provider-specific parameters...
 }
 
-pub struct ThinkingConfig {
-    pub enabled: bool,
-    pub budget_tokens: Option<u32>,
-    pub effort: String,  // "high" / "max" / ...
-}
-
-/// 流式分片
-pub enum StreamChunk {
-    Text(String),
-    Thinking(String),
-    ThoughtSignature(String),
-    ToolCallStart { index: u32, id: String, name: String },
-    ToolCallDelta { index: u32, arguments: String },
-    Usage(Usage),
-    Citation(serde_json::Value),
-    Done { finish_reason: String },
-    Error(String),
-}
-
-/// 流式响应
-pub type CompletionStream = Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>;
-```
-
-## 2. 能力 trait 系统
-
-### 2.1 能力标记（编译期检查）
-
-```rust
-/// 标记 trait
-pub trait Capability {}
-
-/// 有此能力
-pub struct Capable<M>(PhantomData<M>);
-impl<M> Capability for Capable<M> {}
-
-/// 无此能力
-pub struct Nothing;
-impl Capability for Nothing {}
-
-/// 厂商能力声明
-pub trait Capabilities {
-    type Chat: Capability;         // 聊天补全
-    type Embedding: Capability;    // 向量嵌入
-    type ImageGen: Capability;     // 图片生成
-    type VideoGen: Capability;     // 视频生成
-    type TTS: Capability;          // 语音合成
-    type MusicGen: Capability;     // 音乐生成
-    type ASR: Capability;          // 语音识别
+pub struct ChatCompletionRequest {
+    pub instructions: String,
+    pub input: Vec<Message>,
+    // compatibility-only fields...
 }
 ```
 
-### 2.2 模型 trait
+字段语义：
 
-```rust
-/// 聊天补全模型
-#[async_trait]
-pub trait CompletionModel: Send + Sync {
-    async fn stream(
-        &self,
-        request: CompletionRequest,
-    ) -> Result<CompletionStream>;
-}
+| 字段 | 所属路径 | 规则 |
+| --- | --- | --- |
+| `ResponsesRequest.instructions` | Agent | 顶层稳定指令，不与历史消息混排 |
+| `ResponsesRequest.input` | Agent | canonical Responses Items；adapter 直接序列化 |
+| `ChatCompletionRequest.input` | 非 Agent | `Message` 兼容输入，类型上无法进入 Agent 模型 |
+| `tools` | 独立 schema | 保留 function/custom/namespace/tool_search/web_search 类型 |
 
-/// 嵌入模型
-#[async_trait]
-pub trait EmbeddingModel: Send + Sync {
-    async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
-}
+Agent 内部、Session DB 和 Desktop history RPC 均不生成 `Message` 历史视图。
+`Message` 只是非 Agent `ChatCompletionRequest` 的局部输入类型。
 
-/// 图片生成模型
-#[async_trait]
-pub trait ImageGenModel: Send + Sync {
-    async fn generate(&self, prompt: &str, config: &ImageGenConfig) -> Result<Vec<GeneratedImage>>;
-}
+## 3. Agent 路径
 
-/// TTS 模型
-#[async_trait]
-pub trait TTSModel: Send + Sync {
-    async fn synthesize(&self, text: &str, config: &TTSConfig) -> Result<AudioResult>;
-}
-
-// ... VideoGen, MusicGen, ASR 类似
+```text
+agent-core Vec<ResponseItem>
+  -> agent_responses_stream
+  -> normalize provider id
+  -> supports_agent_responses
+  -> ResponsesRequest { input: Vec<ResponseItem>, ... }
+  -> Registry ResponsesModel
+  -> Responses adapter
+  -> POST /responses + SSE
+  -> CompletionStream
 ```
 
-## 3. 泛型客户端 `Client<Ext>`
+`agent_responses_prompt()` 是标题、压缩、记忆回顾、审批等一轮式 Agent 辅助任务的便捷入口。它构造原生 user `ResponseItem`，不经过 Chat message lowering。
 
-```rust
-pub struct Client<Ext> {
-    http: reqwest::Client,
-    base_url: String,
-    api_key: String,
-    ext: Ext,
-}
+### 3.1 Capability gate
 
-/// 厂商扩展必须实现
-pub trait ProviderExt: Send + Sync + Clone {
-    /// 厂商名称
-    const NAME: &'static str;
-    /// 认证方式
-    fn auth_headers(&self, api_key: &str) -> HeaderMap;
-}
+内置 Provider 只有在 `ProviderProfile.supports_responses = true` 时才能参与 Agent 路由。custom provider 由 custom Responses 配置进入该入口。找不到 capability 时返回 `UnsupportedCapability`，而不是静默改发 `/chat/completions`。
 
-/// 编译期能力绑定（blanket impl）
-impl<Ext, M> ChatClient for Client<Ext>
-where
-    Ext: Capabilities<Chat = Capable<M>>,
-    M: CompletionModel,
-{
-    type Model = M;
-    fn chat_model(&self, model: &str) -> M { ... }
-}
+主目标与所有 fallback 候选都执行相同检查。显式保存的 `api_mode = chat_completions` 不能改变 Agent-only 约束。
+
+### 3.2 原生工具历史
+
+Responses adapter 必须保留下列关系：
+
+```text
+FunctionCall(call_id=A)       -> FunctionCallOutput(call_id=A)
+CustomToolCall(call_id=B)     -> CustomToolCallOutput(call_id=B)
+ToolSearchCall(id=C)          -> ToolSearchOutput(id=C)
 ```
 
-## 4. OpenAI 兼容厂商接入（一行接厂商）
+模型发出的 call item 在工具执行前进入历史；对应 output 完成后追加。下一次 sampling 使用同一组原生项。禁止用 assistant/tool `Message` 猜测或重新生成 call id。
 
-```rust
-/// OpenAI 兼容厂商只需实现此 trait
-pub trait OpenAICompatible: ProviderExt {
-    /// 默认基址
-    const BASE_URL: &'static str;
-    /// 是否支持 stream_options.include_usage
-    const STREAM_USAGE: bool = true;
-    /// 是否支持原生 function calling
-    const SUPPORTS_TOOLS: bool = true;
+历史修复只能处理确知的边界情况，例如丢弃没有对应 call 的孤立 output；不得跨过后续 assistant call 重排旧结果。
 
-    /// 请求体微调（线路格式差异修补）
-    fn finalize_body(&self, _body: &mut serde_json::Value) {}
-}
+## 4. 通用 Provider 路径
 
-// ────── 具体厂商 ──────
+`chat_stream()` 和 `chat_stream_direct()` 为非 Agent 调用保留。调用者通过 `ChatCompletionRequest.input` 使用 `Message`，registry 从独立的 `chat_completion_model` 选择 Chat Completions、Anthropic、Interactions 或 Gemini Native adapter；它不会进入 Agent fallback 链。
 
-pub struct DeepSeek;
-impl ProviderExt for DeepSeek {
-    const NAME: &'static str = "deepseek";
-    fn auth_headers(&self, key: &str) -> HeaderMap { bearer(key) }
-}
-impl OpenAICompatible for DeepSeek {
-    const BASE_URL: &'static str = "https://api.deepseek.com/v1";
-    fn finalize_body(&self, body: &mut Value) {
-        // DeepSeek V4: thinking 参数
-        if let Some(thinking) = body.get("thinking_config") { ... }
-    }
-}
-impl Capabilities for DeepSeek {
-    type Chat = Capable<OpenAICompletionModel<Self>>;
-    type Embedding = Nothing;
-    type ImageGen = Nothing;
-    type VideoGen = Nothing;
-    type TTS = Nothing;
-    type MusicGen = Nothing;
-    type ASR = Nothing;
-}
+这条路径主要服务：
 
-// 一行接入 — 只需 3 个 impl block
-```
+- 媒体工具内部的文本辅助调用；
+- provider 连通性或兼容性检查；
+- 尚未迁移到 Agent runtime 的独立能力；
+- 各厂商专用 API。
 
-## 5. 原生厂商实现
+通用路径不得被 `agent-core` 的主模型或辅助模型绕过 Agent Responses 入口使用。
 
-```rust
-// Anthropic — 自己的消息转换 + SSE 解析
-pub struct Anthropic;
-impl ProviderExt for Anthropic {
-    const NAME: &'static str = "anthropic";
-    fn auth_headers(&self, key: &str) -> HeaderMap {
-        headers! { "x-api-key" => key, "anthropic-version" => ANTHROPIC_VERSION }
-    }
-}
-impl Capabilities for Anthropic {
-    type Chat = Capable<AnthropicCompletionModel>;
-    type Embedding = Nothing;
-    type ImageGen = Nothing;
-    // ...
-}
-// AnthropicCompletionModel 实现 CompletionModel trait
-// 内部处理 Message → Anthropic wire format 转换
+## 5. 流式协议
 
-// Google — Interactions API
-pub struct Google;
-impl Capabilities for Google {
-    type Chat = Capable<InteractionsCompletionModel>;
-    type Embedding = Capable<GeminiEmbeddingModel>;
-    type ImageGen = Capable<InteractionsImageModel>;
-    type VideoGen = Capable<VeoVideoModel>;
-    type TTS = Capable<GeminiTTSModel>;
-    type MusicGen = Capable<LyriaMusicModel>;
-    type ASR = Nothing;  // 编译期阻止调用
-}
+Provider adapter 输出统一 `CompletionStream`。`StreamChunk` 携带：
 
-// MiniMax — 多能力
-pub struct MiniMax;
-impl Capabilities for MiniMax {
-    type Chat = Capable<OpenAICompletionModel<Self>>;
-    type Embedding = Capable<OpenAIEmbeddingModel<Self>>;
-    type ImageGen = Capable<MiniMaxImageModel>;
-    type VideoGen = Capable<MiniMaxVideoModel>;
-    type TTS = Capable<MiniMaxTTSModel>;
-    type MusicGen = Capable<MiniMaxMusicModel>;
-    type ASR = Nothing;
-}
-```
+- 文本与 reasoning delta；
+- 原生 tool-call delta；
+- usage；
+- finish/error 状态。
 
-## 6. 模块结构
+`agent-core` 负责把 delta 累积成 canonical `ResponseItem`、持久化完成项并驱动工具循环。自由文本不参与工具识别。
 
-```
-providers/src/
-  lib.rs              — crate root, re-exports
-  types/
-    mod.rs            — Message, Role, UserContent, AssistantContent
-    request.rs        — CompletionRequest, ThinkingConfig
-    stream.rs         — StreamChunk, CompletionStream, Usage
-    media.rs          — GeneratedImage, AudioResult, VideoResult
-  traits/
-    mod.rs            — CompletionModel, EmbeddingModel, ImageGenModel, TTSModel, ...
-    capability.rs     — Capable<M>, Nothing, Capabilities trait
-    client.rs         — Client<Ext>, ProviderExt, ChatClient blanket impl
-  compat/
-    mod.rs            — OpenAICompatible trait
-    completion.rs     — OpenAICompletionModel<Ext> — 共享 Chat Completions 实现
-    embedding.rs      — OpenAIEmbeddingModel<Ext> — 共享 Embeddings 实现
-    sse.rs            — OpenAI SSE 解析
-    messages.rs       — Message → OpenAI wire format
-  anthropic/
-    mod.rs            — Anthropic ext + Capabilities
-    completion.rs     — AnthropicCompletionModel
-    messages.rs       — Message → Anthropic wire format
-    sse.rs            — Anthropic SSE 解析
-    batch.rs          — Batch API
-    token_count.rs    — Count tokens
-  google/
-    mod.rs            — Google ext + Capabilities
-    interactions.rs   — InteractionsCompletionModel
-    image.rs          — InteractionsImageModel
-    tts.rs            — GeminiTTSModel
-    video.rs          — VeoVideoModel
-    music.rs          — LyriaMusicModel
-    embedding.rs      — GeminiEmbeddingModel
-    files.rs          — Files API
-  minimax/
-    mod.rs            — MiniMax ext + Capabilities
-    image.rs          — MiniMaxImageModel
-    video.rs          — MiniMaxVideoModel
-    tts.rs            — MiniMaxTTSModel
-    music.rs          — MiniMaxMusicModel
-    files.rs          — Files API
-    voice_clone.rs    — Voice clone
-  vendors/            — 一行接入的 OpenAI 兼容厂商
-    deepseek.rs       — 3 impl blocks
-    zhipu.rs
-    moonshot.rs
-    ollama.rs
-    nvidia.rs
-    bailian.rs
-    volcengine.rs
-    openrouter.rs
-    azure.rs          — Azure deployment URL quirk
-  registry.rs         — ProviderRegistry（动态 dyn dispatch）
-  profile.rs          — 静态配置表（fallback defaults）
-```
+fallback 只允许在首个可见 chunk 前发生；一旦已有模型输出，不切换 Provider 拼接另一条响应。
 
-## 7. 迁移状态
+## 6. Usage 归一化
 
-### Phase 1: 类型系统 + trait 骨架 ✅
-- `types/` — Message, Role, UserContent, AssistantContent, CompletionRequest, StreamChunk
-- `traits/` — CompletionModel, Capability, Capable/Nothing, Client<Ext>, DynProvider
-- `compat/` — OpenAICompatible trait + OpenAICompletionModel<Ext>
-- `shared/` — SSE 流解析基础设施
+所有 adapter 将用量映射为统一 `Usage`，同时保留字段是否由 Provider 实际报告：
 
-### Phase 2: 厂商实现 ✅
-- `impls/` — 14 个厂商（11 OpenAI 兼容 + Anthropic/Google 原生 + MiniMax）
+- Responses 的 cached input 已包含在 input 中；
+- reasoning 已包含在 output 中；
+- 未上报的细项不能伪装为 Provider 报告的零；
+- 多请求聚合仅在所有请求均报告某字段时保持其 reported 标记。
 
-### Phase 3: 注册表 + 桥接 ✅
-- `new_registry.rs` — 基于 trait 的动态注册表
-- `bridge.rs` — 新旧类型双向转换
-- `new_dispatch.rs` — 新管线聊天分发（旧签名兼容）
+## 7. 新增 Agent Provider
 
-### Phase 4: 管线切换 ✅
-- `chat_stream_for_provider()` 已委托给 `new_dispatch::chat_stream_new()`
-- agent 层有 `map_new_provider_stream()` 和 `to_new_messages()` 新函数
+要让新 Provider 进入 Agent 路由：
 
-### Phase 5: 旧代码淘汰（进行中）
-- 旧 `api/trait_.rs` 类型保留作为兼容层（下游仍在用）
-- 旧 `vendors/profile_backed.rs` 保留（verify/image_gen 路径仍在用）
-- 旧 `anthropic/` `google/` `openai/` 模块保留（媒体/探测路径仍在用）
-- 需要逐步将下游 15+ 文件的 import 从 `providers::trait_::ChatMessage` 迁移到 `providers::types::Message`
+1. 实现或复用 Responses adapter；
+2. 验证 instructions、`ResponseItem` 输入、reasoning、工具调用、工具输出、usage 和流终态；
+3. 在 profile 中将默认 `api_mode` 设为 `Responses`；
+4. 仅在测试通过后设置 `supports_responses = true`；
+5. 添加工具多轮、call/output 邻接、首包前 fallback 和 4xx 错误回归测试。
 
-## 8. 不变量
+只实现 Chat Completions 或其他协议的 Provider 可以继续服务非 Agent 能力，但不能标记为 Agent-capable。
 
-1. 所有 `impl Capability for Capable<M>` 和 `impl Capability for Nothing` 是零大小类型
-2. `Client<Ext>` 的 `Ext` 是零大小（常量方法，无运行时开销）
-3. `OpenAICompletionModel<Ext>` 通过 `Ext::finalize_body()` 实现厂商差异，无 match 分支
-4. 动态 dispatch 仅在 `ProviderRegistry`（需要按 string id 查找时），所有内部调用走静态 dispatch
+## 8. 事实源
+
+| 契约 | 路径 |
+| --- | --- |
+| Agent/通用入口 | `src/dispatch.rs` |
+| Provider capability | `src/profile.rs` |
+| 请求类型 | `src/types/request.rs` |
+| Responses adapter | `src/compat/responses.rs` |
+| Registry | `src/registry.rs` |
+| 流式类型 | `src/types/stream.rs` |
+| canonical history | `../agent-protocol/src/response_item.rs` |

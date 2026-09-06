@@ -31,9 +31,11 @@ pub struct AgentLogLine {
 
 const MAX_LINES: usize = 500;
 
-/// 扫描 `agent.log` / `errors.log` 尾部，按 session/turn/level 过滤后返回匹配行。
+/// 扫描 `agent.log.YYYY-MM-DD` / `errors.log.YYYY-MM-DD` 滚动日志尾部，
+/// 按 session/turn/level 过滤后返回匹配行。同时兼容未滚动的
+/// `agent.log` / `errors.log`。
 ///
-/// - 每个文件内按**从新到旧**（文件末尾优先）遍历；返回顺序与遍历一致。
+/// - 同一来源先读最新日期文件，每个文件内按**从新到旧**（文件末尾优先）遍历。
 /// - `LogSource::Both` 先读 `agent.log` 再读 `errors.log`，在共享 `lines` 上限内顺序拼接；
 ///   **不会**按时间戳跨文件合并排序。
 pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
@@ -45,25 +47,71 @@ pub fn query_agent_logs(q: AgentLogQuery) -> anyhow::Result<Vec<AgentLogLine>> {
         LogSource::Both => &[("agent", "agent.log"), ("errors", "errors.log")],
     };
     for (src, name) in files {
-        let path = q.logs_dir.join(name);
-        if !path.exists() {
-            continue;
-        }
-        let raw = std::fs::read_to_string(&path)?;
-        for line in raw.lines().rev() {
-            if !line_matches(line, &q) {
-                continue;
-            }
-            out.push(AgentLogLine {
-                raw: line.to_string(),
-                source: (*src).into(),
-            });
-            if out.len() >= limit {
-                return Ok(out);
+        for path in source_log_files(&q.logs_dir, name)? {
+            let raw = std::fs::read_to_string(&path)?;
+            for line in raw.lines().rev() {
+                if !line_matches(line, &q) {
+                    continue;
+                }
+                out.push(AgentLogLine {
+                    raw: line.to_string(),
+                    source: (*src).into(),
+                });
+                if out.len() >= limit {
+                    return Ok(out);
+                }
             }
         }
     }
     Ok(out)
+}
+
+fn source_log_files(logs_dir: &std::path::Path, base_name: &str) -> anyhow::Result<Vec<PathBuf>> {
+    let exact = logs_dir.join(base_name);
+    let mut dated = Vec::new();
+
+    let entries = match std::fs::read_dir(logs_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+
+    let dated_prefix = format!("{base_name}.");
+    for entry in entries {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(date) = file_name.strip_prefix(&dated_prefix) else {
+            continue;
+        };
+        if is_iso_date(date) {
+            dated.push(entry.path());
+        }
+    }
+
+    // ISO 日期可直接按文件名逆序得到从新到旧。若未来切换为不滚动文件，
+    // 则优先读取固定文件名，再补充历史日志。
+    dated.sort_by(|left, right| right.file_name().cmp(&left.file_name()));
+    if exact.is_file() {
+        dated.insert(0, exact);
+    }
+    Ok(dated)
+}
+
+fn is_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
 }
 
 fn line_matches(line: &str, q: &AgentLogQuery) -> bool {
@@ -289,5 +337,61 @@ mod tests {
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].source, "agent");
         assert!(lines[0].raw.contains("agent-line"));
+    }
+
+    #[test]
+    fn reads_daily_rolling_logs_newest_file_first() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(
+            &dir.path().join("agent.log.2026-09-04"),
+            &["INFO previous-day"],
+        );
+        write_lines(
+            &dir.path().join("agent.log.2026-09-05"),
+            &["INFO current-day-first", "WARN current-day-latest"],
+        );
+        write_lines(
+            &dir.path().join("agent.log.backup"),
+            &["ERROR must-not-be-read"],
+        );
+
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].raw.contains("current-day-latest"));
+        assert!(lines[1].raw.contains("current-day-first"));
+        assert!(lines[2].raw.contains("previous-day"));
+        assert!(lines
+            .iter()
+            .all(|line| !line.raw.contains("must-not-be-read")));
+    }
+
+    #[test]
+    fn unrotated_log_precedes_daily_history() {
+        let dir = tempfile::tempdir().unwrap();
+        write_lines(&dir.path().join("agent.log.2026-09-05"), &["INFO dated"]);
+        write_lines(&dir.path().join("agent.log"), &["INFO active"]);
+
+        let lines = query_agent_logs(AgentLogQuery {
+            logs_dir: dir.path().to_path_buf(),
+            session_id: None,
+            turn_id: None,
+            min_level: None,
+            lines: 50,
+            source: LogSource::Agent,
+        })
+        .unwrap();
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].raw.contains("active"));
+        assert!(lines[1].raw.contains("dated"));
     }
 }

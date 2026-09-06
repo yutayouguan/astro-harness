@@ -199,9 +199,16 @@ pub fn run() {
             ui::tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(include_str!("../updater.pub").trim())
+                .build(),
+        )
+        .plugin(commands::browser::live_browser_plugin())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -229,12 +236,32 @@ pub fn run() {
             set_app_menu_locale,
             // — chat —
             commands::chat::start_chat,
+            commands::chat::start_realtime_conversation,
+            commands::chat::send_realtime_audio,
+            commands::chat::send_realtime_text,
+            commands::chat::send_realtime_speech,
+            commands::chat::close_realtime_conversation,
+            commands::chat::list_realtime_voices,
             commands::chat::chat_control,
             commands::chat::steer_chat,
             commands::chat::interrupt_resume,
+            commands::chat::resolve_elicitation,
+            commands::chat::update_turn_settings,
+            commands::chat::reconcile_extensions,
+            commands::chat::approve_guardian_denied_action,
+            commands::chat::run_user_shell_command,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_read,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_kill,
+            commands::terminal::terminal_close,
+            commands::terminal::terminal_open_external,
             commands::chat::generate_image,
+            commands::wallpaper::import_wallpaper,
+            commands::wallpaper::generate_wallpaper,
+            commands::wallpaper::analyze_wallpaper,
             commands::chat::query_memory,
-            commands::chat::count_tokens,
             // — agent —
             commands::agent::prepare_task_worktree,
             commands::agent::cleanup_task_worktree,
@@ -253,6 +280,8 @@ pub fn run() {
             commands::session::remove_chat_bubbles,
             commands::session::list_recent_sessions,
             commands::session::list_sessions,
+            commands::session::list_session_statuses,
+            commands::session::set_session_project_root,
             commands::session::rename_session,
             commands::session::regenerate_session_title,
             commands::session::archive_session,
@@ -260,10 +289,42 @@ pub fn run() {
             commands::session::pin_session,
             commands::session::unpin_session,
             commands::session::delete_session_permanently,
+            commands::session::discard_side_session,
+            commands::branches::get_chat_branch_graph,
+            commands::browser::browser_panel_control,
+            commands::browser::browser_live_webview_control,
+            commands::browser::browser_preview_project_file,
+            commands::browser::browser_get_settings,
+            commands::browser::browser_set_settings,
+            commands::browser::browser_revoke_approval,
+            commands::updater::check_app_update,
+            commands::updater::install_app_update,
+            // — projects —
+            commands::common::get_default_workspace_path,
+            commands::session::list_projects,
+            commands::session::ensure_default_project,
+            commands::session::create_project,
+            commands::session::update_project,
+            commands::session::delete_project,
+            commands::session::move_project,
+            commands::session::assign_session_to_project,
+            commands::session::assign_session_to_project_if_unassigned,
             // — files —
+            commands::files::project_list_files,
+            commands::files::project_read_file,
+            commands::files::project_git_diff,
+            commands::files::apply_turn_file_changes,
+            commands::files::inspect_turn_file_changes,
+            commands::files::project_open_path_externally,
+            commands::files::project_write_file,
+            commands::files::project_create_file,
+            commands::files::project_create_directory,
+            commands::files::project_rename_path,
+            commands::files::project_trash_paths,
             commands::files::list_files,
             commands::files::read_file,
             commands::files::open_path_externally,
+            commands::files::open_path_in_vscode,
             commands::files::reveal_in_folder,
             commands::files::trash_paths,
             commands::files::read_file_base64,
@@ -289,15 +350,13 @@ pub fn run() {
             commands::cron::set_cron_job_enabled,
             commands::cron::run_cron_job_now,
             commands::cron::get_cron_run,
+            commands::cron::get_cron_run_by_session,
             commands::cron::delete_cron_run,
             commands::cron::list_cron_runs,
             commands::cron::list_cron_job_runs,
-            // — batch & model catalog —
-            commands::batch::create_batch,
-            commands::batch::get_batch,
-            commands::batch::list_batches,
-            commands::batch::get_batch_results,
-            commands::batch::list_model_catalog,
+            // — model catalog —
+            commands::model_catalog::list_model_catalog,
+            commands::openrouter_rankings::get_openrouter_rankings,
             // — memory —
             commands::memory::refresh_memory,
             commands::memory::list_pending_memory_writes,
@@ -315,11 +374,12 @@ pub fn run() {
             commands::memory::get_security_audit_retention,
             commands::memory::list_security_audit_page,
             commands::memory::list_security_audits,
-            commands::memory::set_approval_mode,
             commands::memory::get_permission_settings,
             commands::memory::set_permission_preset,
             commands::memory::add_command_allowlist,
             commands::memory::remove_command_allowlist,
+            commands::memory::remove_command_type_allowlist,
+            commands::memory::remove_browser_approval_rule,
             // — loops —
             commands::loops::list_loops,
             commands::loops::get_loop,
@@ -327,7 +387,7 @@ pub fn run() {
             commands::loops::save_loop,
             commands::loops::delete_loop,
             commands::loops::set_loop_enabled,
-            commands::loops::set_loop_ai_callable,
+            commands::loops::set_loop_agent_tool,
             commands::loops::run_loop,
             commands::loops::list_loop_runs,
             commands::loops::get_loop_run,
@@ -335,6 +395,7 @@ pub fn run() {
             commands::loops::list_loop_step_logs,
             commands::loops::export_loop,
             commands::loops::export_loop_svg,
+            commands::loops::open_loop_export,
             commands::loops::import_loop,
             commands::loops::ai_generate_workflow,
             commands::loops::loop_ai_polish,
@@ -373,6 +434,7 @@ pub fn run() {
             commands::providers::reorder_providers,
             commands::providers::delete_provider,
             commands::providers::set_active_provider,
+            commands::providers::set_active_image_provider,
             commands::providers::set_provider_api_key,
             commands::providers::get_provider_api_key,
             commands::providers::clear_provider_api_key,
@@ -466,6 +528,15 @@ pub fn run() {
             infra::ip_location::infer_ip_location,
         ])
         .setup(|app| {
+            match tauri::async_runtime::block_on(
+                commands::session::cleanup_stale_side_sessions(),
+            ) {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count, "cleaned stale ephemeral side sessions");
+                }
+                Ok(_) => {}
+                Err(err) => tracing::warn!("side session cleanup failed: {err}"),
+            }
             if let Err(err) = memory::ensure_default_workspace() {
                 tracing::warn!("workspace bootstrap failed: {err}");
             }

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 
 function pad2(n: number) {
@@ -80,6 +81,7 @@ export function GlassDatePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
   const pos = useAnchoredMenu({
     open,
@@ -193,10 +195,17 @@ export function GlassDatePicker({
                   left: pos.left,
                   width: pos.width,
                   maxHeight: pos.maxHeight,
+                  zIndex: layer,
                   ...toneStyle,
                 }
-              : { visibility: "hidden", width: 248, ...toneStyle }
+              : {
+                  visibility: "hidden",
+                  width: 248,
+                  zIndex: layer,
+                  ...toneStyle,
+                }
           }
+          onPointerDownCapture={bringToFront}
         >
           <div className="cron-dt-pop-head">
             <button

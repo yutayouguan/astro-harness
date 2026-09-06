@@ -117,17 +117,14 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
 
-  const cancelLabel =
-    request?.options.cancelLabel ?? t("dialog.cancel");
+  const cancelLabel = request?.options.cancelLabel ?? t("dialog.cancel");
   const confirmLabel =
     request?.kind === "prompt"
       ? (request.options.confirmLabel ?? t("dialog.save"))
       : (request?.options.confirmLabel ?? t("dialog.confirm"));
 
   const promptEmpty =
-    request?.kind === "prompt" &&
-    !request.options.allowEmpty &&
-    !draft.trim();
+    request?.kind === "prompt" && !request.options.allowEmpty && !draft.trim();
 
   return (
     <DialogContext.Provider value={api}>
@@ -145,7 +142,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             request.kind === "confirm" ? request.options.emphasis : undefined
           }
           emphasisLabel={
-            request.kind === "confirm" ? request.options.emphasisLabel : undefined
+            request.kind === "confirm"
+              ? request.options.emphasisLabel
+              : undefined
           }
           variant={
             request.kind === "prompt"

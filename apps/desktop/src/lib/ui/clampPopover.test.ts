@@ -1,17 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  clampFloatingTip,
-  clampPopover,
-  pointAnchor,
-} from "./clampPopover.ts";
+import { clampFloatingTip, clampPopover, pointAnchor } from "./clampPopover.ts";
 
-function rect(
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-) {
+function rect(left: number, top: number, width: number, height: number) {
   return {
     left,
     top,
@@ -63,7 +54,9 @@ test("respects content-pane bounds not full window", () => {
     pad: 8,
   });
   assert.ok(r.left >= pane.left + 8);
-  assert.ok(r.left + Math.min(600, pane.right - pane.left - 16) <= pane.right - 8);
+  assert.ok(
+    r.left + Math.min(600, pane.right - pane.left - 16) <= pane.right - 8,
+  );
 });
 
 test("auto placement opens above when below is tight", () => {

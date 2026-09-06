@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Variable, X, Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
+import { FolderOpen, Variable, X, Sparkles, Loader2 } from "lucide-react";
+import { Eye as EyeData, EyeOff as EyeOffData } from "lucide";
+import { MorphToggleIcon } from "../../icons/MorphIcon";
 import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
 import AutocompleteTextarea from "./AutocompleteTextarea";
@@ -19,7 +21,15 @@ interface TextFieldProps {
   upstream?: UpstreamOutput[];
 }
 
-export function TextField({ label, value, onChange, placeholder, multiline, hint, upstream }: TextFieldProps) {
+export function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  multiline,
+  hint,
+  upstream,
+}: TextFieldProps) {
   const hasUpstream = upstream && upstream.length > 0;
   return (
     <label className="loop-config-field">
@@ -65,7 +75,16 @@ interface NumberFieldProps {
   hint?: string;
 }
 
-export function NumberField({ label, value, onChange, placeholder, min, max, step, hint }: NumberFieldProps) {
+export function NumberField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  min,
+  max,
+  step,
+  hint,
+}: NumberFieldProps) {
   return (
     <label className="loop-config-field">
       <span className="loop-config-label">{label}</span>
@@ -73,7 +92,9 @@ export function NumberField({ label, value, onChange, placeholder, min, max, ste
         className="loop-config-input"
         type="number"
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+        onChange={(e) =>
+          onChange(e.target.value ? Number(e.target.value) : undefined)
+        }
         placeholder={placeholder}
         min={min}
         max={max}
@@ -92,7 +113,13 @@ interface SelectFieldProps {
   hint?: string;
 }
 
-export function SelectField({ label, value, onChange, options, hint }: SelectFieldProps) {
+export function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+}: SelectFieldProps) {
   return (
     <label className="loop-config-field">
       <span className="loop-config-label">{label}</span>
@@ -119,7 +146,12 @@ interface ToggleFieldProps {
   hint?: string;
 }
 
-export function ToggleField({ label, value, onChange, hint }: ToggleFieldProps) {
+export function ToggleField({
+  label,
+  value,
+  onChange,
+  hint,
+}: ToggleFieldProps) {
   return (
     <label className="loop-config-field loop-config-field--row">
       <span className="loop-config-label">{label}</span>
@@ -149,26 +181,46 @@ export function Section({ title, children }: SectionProps) {
 }
 
 /** 从节点 config 对象读取字段值 */
-export function cfgStr(config: Record<string, unknown>, key: string, fallback = ""): string {
+export function cfgStr(
+  config: Record<string, unknown>,
+  key: string,
+  fallback = "",
+): string {
   const v = config[key];
   return typeof v === "string" ? v : fallback;
 }
 
-export function cfgNum(config: Record<string, unknown>, key: string): number | undefined {
+export function cfgNum(
+  config: Record<string, unknown>,
+  key: string,
+): number | undefined {
   const v = config[key];
   return typeof v === "number" ? v : undefined;
 }
 
-export function cfgBool(config: Record<string, unknown>, key: string, fallback = false): boolean {
+export function cfgBool(
+  config: Record<string, unknown>,
+  key: string,
+  fallback = false,
+): boolean {
   const v = config[key];
   return typeof v === "boolean" ? v : fallback;
 }
 
-export function cfgStrArray(config: Record<string, unknown>, key: string): string[] {
+export function cfgStrArray(
+  config: Record<string, unknown>,
+  key: string,
+): string[] {
   const v = config[key];
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  if (Array.isArray(v))
+    return v.filter((x): x is string => typeof x === "string");
   if (typeof v === "string" && v.trim()) {
-    try { const arr = JSON.parse(v); if (Array.isArray(arr)) return arr; } catch { /* ignore */ }
+    try {
+      const arr = JSON.parse(v);
+      if (Array.isArray(arr)) return arr;
+    } catch {
+      /* ignore */
+    }
   }
   return [];
 }
@@ -196,8 +248,16 @@ interface AiAssistFieldProps {
 
 /** 带 AI 润色/生成按钮的文本输入 */
 export function AiAssistField({
-  label, value, onChange, placeholder, hint, task,
-  aiProviderId, aiModel, multiline = true, upstream,
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  task,
+  aiProviderId,
+  aiModel,
+  multiline = true,
+  upstream,
 }: AiAssistFieldProps) {
   const [loading, setLoading] = useState(false);
 
@@ -229,7 +289,11 @@ export function AiAssistField({
           title={value.trim() ? "AI 润色" : "AI 生成"}
           type="button"
         >
-          {loading ? <Loader2 size={13} className="loop-spin" /> : <Sparkles size={13} />}
+          {loading ? (
+            <Loader2 size={13} className="loop-spin" />
+          ) : (
+            <Sparkles size={13} />
+          )}
           <span>{value.trim() ? "润色" : "AI 生成"}</span>
         </button>
       </div>
@@ -275,7 +339,13 @@ interface PasswordFieldProps {
   hint?: string;
 }
 
-export function PasswordField({ label, value, onChange, placeholder, hint }: PasswordFieldProps) {
+export function PasswordField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+}: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="loop-config-field">
@@ -295,7 +365,12 @@ export function PasswordField({ label, value, onChange, placeholder, hint }: Pas
           title={visible ? "隐藏" : "显示"}
           type="button"
         >
-          {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+          <MorphToggleIcon
+            active={visible}
+            activeIcon={EyeOffData}
+            inactiveIcon={EyeData}
+            size={14}
+          />
         </button>
       </div>
       {hint && <span className="loop-config-hint">{hint}</span>}
@@ -308,9 +383,16 @@ export function PasswordField({ label, value, onChange, placeholder, hint }: Pas
 // ---------------------------------------------------------------------------
 
 const FILE_FILTERS: Record<string, { name: string; extensions: string[] }[]> = {
-  image: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp"] }],
+  image: [
+    {
+      name: "图片",
+      extensions: ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp"],
+    },
+  ],
   video: [{ name: "视频", extensions: ["mp4", "mov", "webm", "avi", "mkv"] }],
-  audio: [{ name: "音频", extensions: ["mp3", "wav", "aac", "flac", "ogg", "m4a"] }],
+  audio: [
+    { name: "音频", extensions: ["mp3", "wav", "aac", "flac", "ogg", "m4a"] },
+  ],
 };
 
 async function openFileDialog(accept?: string): Promise<string | null> {
@@ -334,7 +416,9 @@ async function openMultiFileDialog(accept?: string): Promise<string[]> {
     const result = await open({ multiple: true, filters });
     if (Array.isArray(result)) {
       return result
-        .map((r) => (typeof r === "string" ? r : (r as { path?: string }).path ?? ""))
+        .map((r) =>
+          typeof r === "string" ? r : ((r as { path?: string }).path ?? ""),
+        )
         .filter(Boolean);
     }
     if (typeof result === "string") return [result];
@@ -370,7 +454,12 @@ function VarDropdown({
     .map((u) => ({
       ...u,
       fields: u.fields.filter(
-        (f) => !accept || accept === "any" || f.mediaType === accept || f.mediaType === "any" || f.mediaType === "path",
+        (f) =>
+          !accept ||
+          accept === "any" ||
+          f.mediaType === accept ||
+          f.mediaType === "any" ||
+          f.mediaType === "path",
       ),
     }))
     .filter((u) => u.fields.length > 0);
@@ -420,7 +509,15 @@ interface FilePathFieldProps {
 }
 
 /** 文件路径选择器 — 输入框 + 浏览文件 + 引用上游变量 */
-export function FilePathField({ label, value, onChange, placeholder, hint, accept, upstream }: FilePathFieldProps) {
+export function FilePathField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  accept,
+  upstream,
+}: FilePathFieldProps) {
   const [showVars, setShowVars] = useState(false);
 
   const handleBrowse = useCallback(async () => {
@@ -486,7 +583,15 @@ interface FileArrayFieldProps {
 }
 
 /** 文件数组选择器 — 列表 + 添加/移除 */
-export function FileArrayField({ label, value, onChange, hint, accept, upstream, max }: FileArrayFieldProps) {
+export function FileArrayField({
+  label,
+  value,
+  onChange,
+  hint,
+  accept,
+  upstream,
+  max,
+}: FileArrayFieldProps) {
   const [showVars, setShowVars] = useState(false);
 
   const handleBrowse = useCallback(async () => {
@@ -516,7 +621,9 @@ export function FileArrayField({ label, value, onChange, hint, accept, upstream,
     <div className="loop-config-field">
       <span className="loop-config-label">
         {label}
-        {max != null && <span className="loop-config-hint-inline"> (最多 {max} 个)</span>}
+        {max != null && (
+          <span className="loop-config-hint-inline"> (最多 {max} 个)</span>
+        )}
       </span>
       {value.length > 0 && (
         <div className="loop-config-file-list">
@@ -537,7 +644,11 @@ export function FileArrayField({ label, value, onChange, hint, accept, upstream,
         </div>
       )}
       <div className="loop-config-file-row">
-        <button className="loop-config-file-add-btn" onClick={handleBrowse} type="button">
+        <button
+          className="loop-config-file-add-btn"
+          onClick={handleBrowse}
+          type="button"
+        >
           <FolderOpen size={13} />
           <span>添加文件</span>
         </button>

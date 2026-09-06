@@ -23,6 +23,27 @@ fn openai_base(config: &ProviderConfig) -> String {
     openai_compatible_base(raw)
 }
 
+fn build_embedding_request(
+    client: &Client,
+    texts: &[String],
+    model: &str,
+    config: &ProviderConfig,
+) -> Result<reqwest::Request> {
+    let base = openai_base(config);
+    let url = format!("{base}/embeddings");
+    let body = json!({
+        "model": model,
+        "input": texts,
+    });
+    client
+        .post(url)
+        .bearer_auth(config.api_key.trim())
+        .header("content-type", "application/json")
+        .json(&body)
+        .build()
+        .context("build OpenAI-compatible Embedding request")
+}
+
 /// 批量生成文本 embedding 向量。
 ///
 /// 签名对齐 [`crate::google::interactions_http::google_batch_embed`]。
@@ -45,20 +66,10 @@ pub async fn openai_batch_embed(
         model.trim()
     };
 
-    let base = openai_base(config);
-    let url = format!("{base}/embeddings");
-
-    let body = json!({
-        "model": model,
-        "input": texts,
-    });
-
+    let request = build_embedding_request(client, texts, model, config)?;
+    let url = request.url().to_string();
     let resp = client
-        .post(&url)
-        .bearer_auth(config.api_key.trim())
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
+        .execute(request)
         .await
         .with_context(|| format!("连接 OpenAI Embedding API 失败: {url}"))?;
 
@@ -122,5 +133,42 @@ mod tests {
         let result = rt.block_on(openai_batch_embed(&client, &[], "", &config));
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn azure_v1_embedding_request_uses_bearer_contract() {
+        let client = Client::new();
+        let config = ProviderConfig {
+            api_key: "azure-secret".into(),
+            base_url: Some(crate::impls::azure::azure_openai_v1_base(
+                "https://example.openai.azure.com",
+            )),
+            model: "text-embedding-3-small".into(),
+            ..ProviderConfig::default()
+        };
+        let request =
+            build_embedding_request(&client, &["hello".to_string()], &config.model, &config)
+                .expect("embedding request should build");
+        assert_eq!(
+            request.url().as_str(),
+            "https://example.openai.azure.com/openai/v1/embeddings"
+        );
+        assert_eq!(
+            request
+                .headers()
+                .get("authorization")
+                .expect("Authorization header"),
+            "Bearer azure-secret"
+        );
+        assert!(request.headers().get("api-key").is_none());
+        let body: Value = serde_json::from_slice(
+            request
+                .body()
+                .and_then(reqwest::Body::as_bytes)
+                .expect("JSON request body"),
+        )
+        .expect("valid JSON body");
+        assert_eq!(body["model"], "text-embedding-3-small");
+        assert_eq!(body["input"], json!(["hello"]));
     }
 }

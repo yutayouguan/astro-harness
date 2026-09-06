@@ -4,14 +4,14 @@ use chrono::Local;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::schedule::compute_next_run;
+use super::schedule::{compute_next_run, ensure_custom_start};
 
 /// 定时任务定义，持久化在 `~/.astro/cron/jobs.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CronJob {
     /// 唯一 id（UUID 字符串）
     pub id: String,
-    /// 调度表达式：`every:5m` / `every:1h` / 五段 cron（分 时 日 月 周）
+    /// 调度表达式：`every:5m` / `custom:yearly;...` / 五段 cron（分 时 日 月 周）
     pub schedule: String,
     /// 到期时交给 Agent 执行的完整指令
     pub task: String,
@@ -35,7 +35,7 @@ pub struct CronJob {
     /// 上次实际触发时间（手动 touch 或 claim_due）
     #[serde(default)]
     pub last_run_at: Option<String>,
-    /// 下次计划触发时间；`once:` 触发后为 null
+    /// 下次计划触发时间
     #[serde(default)]
     pub next_run_at: Option<String>,
     /// 是否在聊天时间线展示本次执行
@@ -65,7 +65,7 @@ pub struct NewCronJob {
 /// 自然语言 → 定时任务的结构化抽取目标（Extractor `submit`）。
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct CronJobExtract {
-    /// `every:5m` / `every:1h` / 五段 cron / `once:RFC3339`
+    /// `every:5m` / `custom:monthly;...` / 五段 cron
     pub schedule: String,
     /// 到期时交给 Agent 执行的指令
     pub task: String,
@@ -80,8 +80,13 @@ pub fn cron_extract_preamble() -> &'static str {
 规则：
 1. schedule 必须是下列之一：
    - every:Nm / every:Nh / every:Nd（N 为正整数；可选 ;wd=1,2,3 限定周几，0=周日）
+   - custom:hourly;every=N;minute=M
+   - custom:daily;every=N;time=HH:MM
+   - custom:weekly;every=N;wd=1,2,3;time=HH:MM
+   - custom:monthly;every=N;day=D;time=HH:MM
+   - custom:yearly;every=N;month=M;day=D;time=HH:MM
+     （保存时会自动追加 start=YYYY-MM-DDTHH:MM 作为周期相位）
    - 五段 cron：分 时 日 月 周（例如每天 09:00 → 0 9 * * *）
-   - once:RFC3339（必须带时区，如 2026-07-12T15:00:00+08:00）
 2. task 是到期时要执行的完整指令，保留用户意图，不要空。
 3. title 可选，简短中文标题；不确定时可省略。
 4. 不要编造用户没说的调度细节；缺省时间可用每天 09:00。"#
@@ -103,7 +108,9 @@ pub fn normalize_cron_extract(mut draft: CronJobExtract) -> anyhow::Result<CronJ
     if draft.schedule.is_empty() {
         anyhow::bail!("schedule 为空");
     }
-    let _ = compute_next_run(&draft.schedule, Local::now())?;
+    let now = Local::now();
+    draft.schedule = ensure_custom_start(&draft.schedule, now);
+    let _ = compute_next_run(&draft.schedule, now)?;
     if draft.title.is_none() {
         draft.title = Some(title_from_task(&draft.task));
     }

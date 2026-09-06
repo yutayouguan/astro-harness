@@ -19,7 +19,8 @@ export default function LocationA2UISurface({
   const { t } = useI18n();
   const suggestion = useIpCitySuggestion(!disabled);
   const initialFieldValues = useMemo(
-    () => (suggestion.status === "success" ? { city: suggestion.city } : undefined),
+    () =>
+      suggestion.status === "success" ? { city: suggestion.city } : undefined,
     [suggestion.status, suggestion.city],
   );
 

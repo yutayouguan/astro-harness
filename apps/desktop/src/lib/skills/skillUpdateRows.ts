@@ -7,6 +7,35 @@ import type {
   SkillUpdateRow,
 } from "../../types";
 
+export type SkillUpdateSummary = {
+  total: number;
+  tracked: number;
+  outdated: number;
+  current: number;
+  attention: number;
+  noOrigin: number;
+};
+
+export type SkillUpdateVersionPresentation = {
+  installedVersion: string | null;
+  latestVersion: string | null;
+  showVersionFlow: boolean;
+};
+
+/** 不可变地更新正在处理的 Skill 目录集合。 */
+export function setFoldersUpdating(
+  current: ReadonlySet<string>,
+  folders: Iterable<string>,
+  updating: boolean,
+): Set<string> {
+  const next = new Set(current);
+  for (const folder of folders) {
+    if (updating) next.add(folder);
+    else next.delete(folder);
+  }
+  return next;
+}
+
 /** 从路径 id 取文件夹名（与 `skillInstalledMatch` 一致） */
 function folderFromId(id: string): string | undefined {
   const parts = id.split(/[/\\]/).filter(Boolean);
@@ -29,7 +58,10 @@ function originAgentId(record: SkillOriginRecord): string {
   return normalizeAgentId(record.agent_id);
 }
 
-function originMatchesAgent(record: SkillOriginRecord, agentId: string): boolean {
+function originMatchesAgent(
+  record: SkillOriginRecord,
+  agentId: string,
+): boolean {
   return originAgentId(record) === normalizeAgentId(agentId);
 }
 
@@ -38,6 +70,7 @@ export function originMatchesSkill(
   origin: SkillOriginRecord,
   skill: InstalledSkill,
 ): boolean {
+  if (origin.scope !== skill.scope) return false;
   const skillFolder = norm(folderFromId(skill.id));
   const originFolder = norm(origin.folder);
   if (skillFolder && originFolder && skillFolder === originFolder) {
@@ -128,8 +161,34 @@ export function applyCheckResults(
     if (!row.origin) return row;
     const check = byFolder.get(row.origin.folder);
     if (!check) return row;
-    return { ...row, status: check.status };
+    const installedVersion = norm(row.origin.remote_version);
+    const latestVersion = norm(check.remote_version);
+    const status =
+      check.status === "outdated" &&
+      installedVersion !== undefined &&
+      installedVersion === latestVersion
+        ? "current"
+        : check.status;
+    return { ...row, status };
   });
+}
+
+/** 只在已安装版本与最新版本不同时展示版本流转箭头。 */
+export function resolveUpdateVersionPresentation(
+  row: SkillUpdateRow,
+  check: SkillUpdateCheckResult | undefined,
+): SkillUpdateVersionPresentation {
+  const installedVersion = row.origin?.remote_version?.trim() || null;
+  const latestVersion = check?.remote_version?.trim() || null;
+  return {
+    installedVersion,
+    latestVersion,
+    showVersionFlow:
+      row.status === "outdated" &&
+      Boolean(
+        installedVersion && latestVersion && installedVersion !== latestVersion,
+      ),
+  };
 }
 
 /** 按筛选芯片过滤合并行；`updatable` 仅保留远端检查为 outdated 的行 */
@@ -144,4 +203,31 @@ export function filterUpdateRows(
     return rows.filter((r) => r.status === "outdated");
   }
   return rows.filter((r) => r.origin !== null);
+}
+
+/** 更新页摘要计数；unknown/error 合并为需要关注，避免把检查失败误报为最新。 */
+export function summarizeUpdateRows(
+  rows: SkillUpdateRow[],
+): SkillUpdateSummary {
+  return rows.reduce<SkillUpdateSummary>(
+    (summary, row) => {
+      summary.total += 1;
+      if (row.origin) summary.tracked += 1;
+      if (row.status === "outdated") summary.outdated += 1;
+      if (row.status === "current") summary.current += 1;
+      if (row.status === "unknown" || row.status === "error") {
+        summary.attention += 1;
+      }
+      if (row.status === "no_origin") summary.noOrigin += 1;
+      return summary;
+    },
+    {
+      total: 0,
+      tracked: 0,
+      outdated: 0,
+      current: 0,
+      attention: 0,
+      noOrigin: 0,
+    },
+  );
 }

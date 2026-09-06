@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::runtime::{Config, Session, TurnResult};
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 use crate::tasks::TurnInput;
 
 /// 启动一个 Agent Turn 所需的全部参数（线程、运行时配置、邮箱等）。
@@ -23,13 +23,12 @@ pub struct RunAgentTurnRequest {
     pub thread: AgentThreadV2,
     pub runtime: SpawnRuntimeV2Request,
     pub memory_dir: PathBuf,
-    pub chat_override: Option<ChatOverride>,
-    /// Follow-up turns obtain their user input from the durable mailbox at the
-    /// first sampling boundary instead of duplicating it as an initial input.
+    pub responses_override: Option<ResponsesOverride>,
+    /// 后续轮次在首个采样边界从持久化邮箱获取用户输入，
+    /// 而非将其作为初始输入重复传入。
     pub consume_mailbox: bool,
-    /// Independent admission acknowledgement used by spawn.  It is published
-    /// once TurnStarted is durable and the active runtime handle is registered;
-    /// terminal turn completion is deliberately not part of this protocol.
+    /// spawn 使用的独立准入确认。在 TurnStarted 持久化且活跃运行时句柄
+    /// 注册完成后发布；终态 turn 完成有意不属于此协议。
     pub(super) startup_tx: Option<watch::Sender<Option<Result<(), String>>>>,
     pub(super) startup_accept_rx: Option<tokio::sync::oneshot::Receiver<()>>,
     pub(super) unaccepted_spawn_cleanup: Option<Arc<UnacceptedSpawnCleanup>>,
@@ -225,7 +224,7 @@ impl StartTurnOwnerGuard<'_> {
         drop(self.permit.take());
     }
 
-    fn persist_dropped_owner_terminal(&self, close_requested: bool) -> anyhow::Result<()> {
+    async fn persist_dropped_owner_terminal(&self, close_requested: bool) -> anyhow::Result<()> {
         let owns_turn = self
             .manager
             .active_turn_matches(&self.thread_id, &self.turn_id)?;
@@ -233,11 +232,11 @@ impl StartTurnOwnerGuard<'_> {
             anyhow::bail!("cancelled agent turn no longer owns its active runtime generation");
         }
 
-        let events = self.control.status_events(&self.thread_id)?;
+        let events = self.control.status_events(&self.thread_id).await?;
         let last = events.last().map(|event| &event.event);
         let needs_interrupted_event = match last {
-            Some(RunnerEvent::TurnStarted { turn_id }) if turn_id == &self.turn_id => true,
-            Some(RunnerEvent::TurnInterrupted { turn_id, .. }) if turn_id == &self.turn_id => false,
+            Some(RunnerEvent::TurnStarted { turn_id }) if *turn_id == self.turn_id => true,
+            Some(RunnerEvent::TurnInterrupted { turn_id, .. }) if *turn_id == self.turn_id => false,
             Some(RunnerEvent::RuntimeTerminated) if close_requested => return Ok(()),
             _ => anyhow::bail!(
                 "cancelled agent turn no longer has a recoverable durable terminal projection"
@@ -250,28 +249,34 @@ impl StartTurnOwnerGuard<'_> {
             } else {
                 "[astro:system]\nThe previous agent turn was interrupted because its runtime owner was dropped."
             };
-            ensure_interrupted_history_boundary(&self.memory_dir, &self.session_id, content)?;
+            ensure_interrupted_history_boundary(&self.memory_dir, &self.session_id, content)
+                .await?;
         }
         if needs_interrupted_event {
-            self.manager.record_terminal_event(
-                self.control,
-                &self.thread_id,
-                RunnerEvent::TurnInterrupted {
-                    turn_id: self.turn_id.clone(),
-                    reason: if close_requested {
-                        "start_turn owner dropped after runtime termination was requested".into()
-                    } else {
-                        "start_turn future cancelled or owner dropped".into()
+            self.manager
+                .record_terminal_event(
+                    self.control,
+                    &self.thread_id,
+                    RunnerEvent::TurnInterrupted {
+                        turn_id: self.turn_id.clone(),
+                        reason: if close_requested {
+                            "start_turn owner dropped after runtime termination was requested"
+                                .into()
+                        } else {
+                            "start_turn future cancelled or owner dropped".into()
+                        },
                     },
-                },
-            )?;
+                )
+                .await?;
         }
         if close_requested {
-            self.manager.record_terminal_event(
-                self.control,
-                &self.thread_id,
-                RunnerEvent::RuntimeTerminated,
-            )?;
+            self.manager
+                .record_terminal_event(
+                    self.control,
+                    &self.thread_id,
+                    RunnerEvent::RuntimeTerminated,
+                )
+                .await?;
         }
         Ok(())
     }
@@ -283,7 +288,27 @@ impl Drop for StartTurnOwnerGuard<'_> {
             return;
         }
         let close_requested = self.runtime_control.is_closed();
-        let durable_result = self.persist_dropped_owner_terminal(close_requested);
+
+        // Drop 必须在返回前持久化终态，否则观察者可能先收到错误的完成信号。
+        // 不能在系统线程上调用当前 runtime 的 Handle::block_on：
+        // current_thread runtime 会因 Drop 所在线程等待 join 而死锁。为清理任务
+        // 创建独立的 current-thread runtime，使 DB future 始终有自己的驱动器。
+        let durable_result = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(anyhow::Error::from)?;
+                    runtime.block_on(self.persist_dropped_owner_terminal(close_requested))
+                })
+                .join()
+                .unwrap_or_else(|_| {
+                    Err(anyhow::anyhow!(
+                        "persist_dropped_owner_terminal thread panicked"
+                    ))
+                })
+        });
 
         self.manager.run_before_cleanup_hook();
         let active_result = self
@@ -375,8 +400,8 @@ pub struct AgentRuntimeManager {
 }
 
 impl AgentRuntimeManager {
-    /// Process-wide active-turn manager. Thread ids are globally unique and
-    /// every session under one Agent Tree must observe the same acknowledgements.
+    /// 进程级活跃 turn 管理器。Thread id 全局唯一，
+    /// 同一 Agent Tree 下的所有 session 必须观察到相同的确认信号。
     pub fn global() -> Arc<Self> {
         static MANAGER: OnceLock<Arc<AgentRuntimeManager>> = OnceLock::new();
         Arc::clone(MANAGER.get_or_init(|| Arc::new(AgentRuntimeManager::default())))
@@ -412,7 +437,9 @@ impl AgentRuntimeManager {
         self.pause_before_followup_start(&request).await;
         let thread_id = request.thread.thread_id.clone();
         let control = Arc::clone(&request.control);
-        let current = control.resolve_desktop_target(request.thread.canonical_path.as_str())?;
+        let current = control
+            .resolve_desktop_target(request.thread.canonical_path.as_str())
+            .await?;
         if current.status == AgentStatusV2::Shutdown {
             let error =
                 anyhow::anyhow!("cannot start a runtime turn for Shutdown agent {thread_id:?}");
@@ -434,7 +461,7 @@ impl AgentRuntimeManager {
         let interrupt = Arc::new(AgentThreadControl::default());
         interrupt.begin_turn();
         let (terminated_tx, terminated_rx) = watch::channel(None);
-        let status_events = match self.status_events_for_start(&control, &thread_id) {
+        let status_events = match self.status_events_for_start(&control, &thread_id).await {
             Ok(events) => events,
             Err(error) => {
                 self.run_before_cleanup_hook();
@@ -500,13 +527,16 @@ impl AgentRuntimeManager {
             return Err(error);
         }
 
-        if let Err(error) = self.record_terminal_event(
-            &control,
-            &thread_id,
-            RunnerEvent::TurnStarted {
-                turn_id: turn_id.clone(),
-            },
-        ) {
+        if let Err(error) = self
+            .record_terminal_event(
+                &control,
+                &thread_id,
+                RunnerEvent::TurnStarted {
+                    turn_id: turn_id.clone(),
+                },
+            )
+            .await
+        {
             self.run_before_cleanup_hook();
             let active_result = self
                 .remove_active_if_turn(&thread_id, &turn_id)
@@ -536,7 +566,10 @@ impl AgentRuntimeManager {
             interrupt: Arc::new(move || runtime_interrupt.interrupt()),
             terminate: Arc::new(move || runtime_terminate.close()),
         };
-        if let Err(error) = control.register_runtime(&thread_id, runtime_handle.clone()) {
+        if let Err(error) = control
+            .register_runtime(&thread_id, runtime_handle.clone())
+            .await
+        {
             let error = error.context("register agent runtime handle");
             self.finish_failed_start(
                 &control,
@@ -549,7 +582,8 @@ impl AgentRuntimeManager {
                     permit,
                     terminated_tx,
                 },
-            )?;
+            )
+            .await?;
             return Err(error);
         }
         let mut owner_guard = StartTurnOwnerGuard {
@@ -619,6 +653,7 @@ impl AgentRuntimeManager {
                 &request.thread.session_id,
                 "[astro:system]\nThe previous agent turn was interrupted by the parent.",
             )
+            .await
         } else {
             Ok(())
         };
@@ -662,19 +697,28 @@ impl AgentRuntimeManager {
             }
         };
 
-        let durable_result = terminal_boundary_result
-            .and_then(|()| {
-                self.record_terminal_event(&control, &thread_id, event)
-                    .map(|_| ())
-            })
-            .and_then(|()| {
-                if interrupt.is_closed() {
-                    self.record_terminal_event(&control, &thread_id, RunnerEvent::RuntimeTerminated)
+        let durable_result = match terminal_boundary_result {
+            Ok(()) => match self
+                .record_terminal_event(&control, &thread_id, event)
+                .await
+            {
+                Ok(_) => {
+                    if interrupt.is_closed() {
+                        self.record_terminal_event(
+                            &control,
+                            &thread_id,
+                            RunnerEvent::RuntimeTerminated,
+                        )
+                        .await
                         .map(|_| ())
-                } else {
-                    Ok(())
+                    } else {
+                        Ok(())
+                    }
                 }
-            });
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        };
         self.run_before_cleanup_hook();
         let mut active_result = self
             .remove_active_and_take_followup(
@@ -721,7 +765,10 @@ impl AgentRuntimeManager {
                     "cannot start a follow-up after agent runtime shutdown"
                 ))
             } else {
-                match control.drain_mailbox(&pending.request.thread.canonical_path) {
+                match control
+                    .drain_mailbox(&pending.request.thread.canonical_path)
+                    .await
+                {
                     Ok(messages) if messages.is_empty() => {
                         self.complete_starting_request(&pending.request, Ok(()));
                         Ok(())
@@ -759,8 +806,8 @@ impl AgentRuntimeManager {
         expect_terminal_ack("interruption", termination, AgentStatusV2::Interrupted)
     }
 
-    /// Interrupt the active generation when one exists. Idle, completed, and
-    /// not-yet-started threads are idempotent no-ops at the V2 tool boundary.
+    /// 存在活跃生成时中断之。空闲、已完成和尚未启动的线程
+    /// 在 V2 工具边界处为幂等空操作。
     pub async fn interrupt_active_if_any(&self, thread_id: &str) -> anyhow::Result<()> {
         let RuntimeTerminationState::Running {
             control,
@@ -784,17 +831,18 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    /// Advance one thread close until it is either complete, has atomically
-    /// cancelled a Starting slot, or has synchronously sent a termination signal.  The
-    /// caller can safely transfer its subtree admission guard only after the
-    /// `TerminationRequested` result is returned.
+    /// 推进单个线程关闭，直到完成、原子取消 Starting 槽位、
+    /// 或同步发送终止信号。调用方只有在返回 `TerminationRequested`
+    /// 结果后才能安全转移其子树准入守卫。
     pub(super) async fn begin_close_thread(
         &self,
         control: &subagents::AgentControl,
         thread: &AgentThreadV2,
     ) -> anyhow::Result<CloseThreadStart> {
         let thread_id = thread.thread_id.as_str();
-        let current = control.resolve_desktop_target(thread.canonical_path.as_str())?;
+        let current = control
+            .resolve_desktop_target(thread.canonical_path.as_str())
+            .await?;
         match self.request_close_slot(thread_id)? {
             CloseSlotAdmission::TerminationRequested(terminated) => {
                 Ok(CloseThreadStart::TerminationRequested(terminated))
@@ -811,12 +859,13 @@ impl AgentRuntimeManager {
                     return Ok(CloseThreadStart::Complete);
                 }
 
-                // No live runner exists to acknowledge shutdown. The durable
-                // RuntimeTerminated event is the acknowledgement for this idle
-                // generation and atomically closes its spawn edge. Reapplying
-                // it to Shutdown also clears a stale runtime handle.
-                if let Err(error) =
-                    control.record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)
+                // 不存在活跃运行器来确认关闭。持久化的
+                // RuntimeTerminated 事件即为此空闲代际的确认，
+                // 并原子关闭其 spawn 边。重新应用到 Shutdown 状态
+                // 还会清除过期的 runtime handle。
+                if let Err(error) = control
+                    .record_runner_event(thread_id, RunnerEvent::RuntimeTerminated)
+                    .await
                 {
                     self.clear_close_intent(thread_id);
                     return Err(error);
@@ -879,10 +928,9 @@ impl AgentRuntimeManager {
             .unwrap_or_default()
     }
 
-    /// Atomically decide whether a durable follow-up must start immediately or
-    /// be handed off from the current active generation.  The first caller for
-    /// an active turn owns the handoff; concurrent callers join its shared
-    /// result, so one next turn can consume every ordered mailbox message.
+    /// 原子决定持久化 follow-up 是立即启动还是由当前活跃代际交接。
+    /// 活跃 turn 的第一个调用方拥有交接权；并发调用方加入其共享
+    /// 结果，使一个后续 turn 能消费所有有序邮箱消息。
     pub(super) fn request_or_start_followup(
         &self,
         thread_id: &str,
@@ -1218,7 +1266,7 @@ impl AgentRuntimeManager {
     }
 
     #[cfg(test)]
-    fn status_events_for_start(
+    async fn status_events_for_start(
         &self,
         control: &subagents::AgentControl,
         thread_id: &str,
@@ -1226,16 +1274,16 @@ impl AgentRuntimeManager {
         if let Some(message) = self.start_status_failure.lock().unwrap().clone() {
             anyhow::bail!(message);
         }
-        control.status_events(thread_id)
+        control.status_events(thread_id).await
     }
 
     #[cfg(not(test))]
-    fn status_events_for_start(
+    async fn status_events_for_start(
         &self,
         control: &subagents::AgentControl,
         thread_id: &str,
     ) -> anyhow::Result<Vec<subagents::StoredStatusEvent>> {
-        control.status_events(thread_id)
+        control.status_events(thread_id).await
     }
 
     #[cfg(test)]
@@ -1266,7 +1314,7 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
-    fn record_terminal_event(
+    async fn record_terminal_event(
         &self,
         control: &subagents::AgentControl,
         thread_id: &str,
@@ -1281,10 +1329,10 @@ impl AgentRuntimeManager {
         {
             hook(&event)?;
         }
-        control.record_runner_event(thread_id, event)
+        control.record_runner_event(thread_id, event).await
     }
 
-    fn finish_failed_start(
+    async fn finish_failed_start(
         &self,
         control: &subagents::AgentControl,
         thread_id: &str,
@@ -1305,6 +1353,7 @@ impl AgentRuntimeManager {
                     message,
                 },
             )
+            .await
             .map(|_| ())
         } else {
             Ok(())
@@ -1488,30 +1537,44 @@ async fn wait_for_termination(
     }
 }
 
-fn ensure_interrupted_history_boundary(
+async fn ensure_interrupted_history_boundary(
     memory_dir: &std::path::Path,
     session_id: &str,
     content: &str,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))?;
-    let messages = sessions.get_messages(session_id)?;
+    let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await?;
+    let messages = sessions.get_response_items(session_id).await?;
     if messages
         .last()
-        .is_some_and(|message| message.role == "user")
+        .is_some_and(|item| item.role() == Some("user"))
     {
-        sessions.append_message(session::NewMessage {
-            content: Some(content),
-            finish_reason: Some("interrupted"),
-            ..session::NewMessage::empty(session_id, "assistant")
-        })?;
+        let item = agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "assistant".into(),
+            content: vec![agent_protocol::ContentItem::OutputText {
+                text: content.to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: Some(serde_json::json!({
+                "astro_finish_reason": "interrupted",
+            })),
+        };
+        sessions
+            .append_response_item(session::NewResponseItem {
+                session_id,
+                item: &item,
+                token_count: None,
+                finish_reason: None,
+            })
+            .await?;
     }
     Ok(())
 }
 
-pub(super) fn resolve_chat_targets_for_model(
-    targets: &[types::ChatTarget],
+pub(super) fn resolve_model_targets_for_model(
+    targets: &[types::ModelTarget],
     model: Option<&str>,
-) -> anyhow::Result<Vec<types::ChatTarget>> {
+) -> anyhow::Result<Vec<types::ModelTarget>> {
     anyhow::ensure!(!targets.is_empty(), "agent turn has no chat target");
     let Some(model) = model else {
         return Ok(targets.to_vec());
@@ -1546,29 +1609,53 @@ pub(super) fn resolve_chat_targets_for_model(
     Ok(resolved)
 }
 
+fn supports_inherited_service_tier(backend_id: &str) -> bool {
+    matches!(
+        backend_id.trim().to_ascii_lowercase().as_str(),
+        "openai" | "codex"
+    )
+}
+
 async fn run_request(
     request: &RunAgentTurnRequest,
     interrupt: Arc<AgentThreadControl>,
     prior_turn_was_interrupted: bool,
 ) -> anyhow::Result<String> {
+    let targets = resolve_model_targets_for_model(
+        &request.runtime.model_targets,
+        request.runtime.model_request.model.as_deref(),
+    )?;
+    let effective_service_tier = request.runtime.root_service_tier.clone().filter(|_| {
+        targets
+            .first()
+            .is_some_and(|target| supports_inherited_service_tier(&target.backend_id))
+    });
     let mut config = Config::with_defaults(request.memory_dir.clone());
     config.soul = format!(
         "{}\n\n## Subagent developer instructions\n{}",
         config.soul, request.runtime.developer_instructions
     );
+    let mut inherited_provider_params = serde_json::Map::new();
     if let Some(effort) = request.runtime.model_request.reasoning_effort.as_deref() {
-        config.additional_params = serde_json::json!({ "reasoning_effort": effort });
+        inherited_provider_params.insert("reasoning_effort".into(), effort.into());
     }
-    let session = Session::with_session_id_for_agent_thread(
+    if let Some(service_tier) = effective_service_tier.as_deref() {
+        inherited_provider_params.insert("service_tier".into(), service_tier.into());
+    }
+    if !inherited_provider_params.is_empty() {
+        config.additional_params = serde_json::Value::Object(inherited_provider_params);
+    }
+    let mut session = Session::with_session_id_for_agent_thread(
         config,
         request.thread.session_id.clone(),
         &request.runtime.parent_agent_id,
         Arc::clone(&request.control),
         request.thread.canonical_path.clone(),
-    )?;
-    // Runner events choose the semantic boundary kind only. Whether a boundary
-    // is needed is derived idempotently from the hydrated and durable history,
-    // so a failed repair remains retryable after it records TurnErrored.
+    )
+    .await?;
+    // Runner 事件仅选择语义边界类型。是否需要边界由
+    // 水合后的持久化历史幂等推导，因此失败的修复在记录
+    // TurnErrored 后仍可重试。
     if prior_turn_was_interrupted {
         session.ensure_assistant_interrupted_boundary().await?;
     } else {
@@ -1603,15 +1690,22 @@ async fn run_request(
         "startup"
     });
 
-    let targets = resolve_chat_targets_for_model(
-        &request.runtime.chat_targets,
-        request.runtime.model_request.model.as_deref(),
-    )?;
-    session.set_chat_targets(targets.clone());
+    session.set_model_targets(targets.clone());
+    let mut provider_options = session.thread_provider_options();
+    if let Some(effort) = request.runtime.model_request.reasoning_effort.as_deref() {
+        provider_options.reasoning_effort = effort.to_string();
+    }
+    provider_options.service_tier = effective_service_tier;
+    session.set_thread_provider_options(provider_options);
+    if let (Some(spec), Some(primary)) = (request.runtime.model_spec.as_ref(), targets.first()) {
+        if spec.provider_id == primary.backend_id && spec.model_id == primary.model {
+            session.set_model(spec.clone());
+        }
+    }
     let prepared_system_prompt = if request.consume_mailbox {
         let turn = session.prepare_mailbox_turn().await?;
         let system_prompt = match turn {
-            TurnResult::Continue { system_prompt, .. } => system_prompt,
+            TurnResult::Continue { prompt, .. } => prompt,
             TurnResult::BudgetExhausted => anyhow::bail!("conversation turn budget exhausted"),
             TurnResult::Interrupted => anyhow::bail!("follow-up turn interrupted while preparing"),
             other => anyhow::bail!("unexpected follow-up preparation result: {other:?}"),
@@ -1625,16 +1719,16 @@ async fn run_request(
         let _ = started.send(Some(Ok(())));
     }
     let result = if let Some(system_prompt) = prepared_system_prompt {
-        crate::exec::background::run_background_prepared_turn_controlled_with_chat(
+        crate::exec::background::run_background_prepared_turn_controlled_with_responses(
             Arc::clone(&session),
             targets,
             system_prompt,
             Some(Arc::clone(&interrupt)),
-            request.chat_override.clone(),
+            request.responses_override.clone(),
         )
         .await
     } else {
-        crate::exec::background::run_background_multi_turn_controlled_with_chat(
+        crate::exec::background::run_background_multi_turn_controlled_with_responses(
             Arc::clone(&session),
             targets,
             vec![TurnInput {
@@ -1643,20 +1737,12 @@ async fn run_request(
                 client_message_id: None,
             }],
             Some(Arc::clone(&interrupt)),
-            request.chat_override.clone(),
+            request.responses_override.clone(),
         )
         .await
     };
     if result.is_err() || interrupt.is_interrupted() || interrupt.is_closed() {
-        let _ = session.fire_subagent_stop_once(hooks::HookPayload {
-            turn_id: session.current_turn_id().await,
-            agent_id: Some(request.thread.thread_id.clone()),
-            agent_type: Some(request.thread.agent_type.clone()),
-            agent_transcript_path: session.hook_transcript_path(),
-            stop_hook_active: Some(false),
-            detail: format!("path={} terminal=aborted", request.thread.canonical_path),
-            ..Default::default()
-        });
+        let _ = session.run_stop_hook(session.current_turn_id().await, false, None);
     }
     if result.is_err() && !interrupt.is_interrupted() && !interrupt.is_closed() {
         session.ensure_assistant_error_boundary().await?;
@@ -1692,13 +1778,23 @@ mod tests {
 
     use tokio::sync::watch;
 
-    use crate::streaming::ChatOverride;
+    use agent_db::sqlx;
+
+    use crate::streaming::ResponsesOverride;
 
     use super::{
-        sandbox_profile, wait_for_termination, AckSubscribeHook, ActiveAgentTurn,
-        AgentRuntimeManager, CloseThreadStart, RunAgentTurnRequest, RuntimeSlot,
+        sandbox_profile, supports_inherited_service_tier, wait_for_termination, AckSubscribeHook,
+        ActiveAgentTurn, AgentRuntimeManager, CloseThreadStart, RunAgentTurnRequest, RuntimeSlot,
         StartTurnOwnerGuard, StartingAgentTurn,
     };
+
+    #[test]
+    fn inherited_service_tier_is_limited_to_supported_backends() {
+        assert!(supports_inherited_service_tier("openai"));
+        assert!(supports_inherited_service_tier("Codex"));
+        assert!(!supports_inherited_service_tier("deepseek"));
+        assert!(!supports_inherited_service_tier("ollama"));
+    }
 
     #[test]
     fn custom_parent_sandbox_profile_is_preserved_for_child_session() {
@@ -1712,7 +1808,7 @@ mod tests {
     #[tokio::test]
     async fn close_start_reports_starting_as_a_typed_state_without_mutating_durable_status() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = AgentRuntimeManager::default();
         let (result_tx, result_rx) = watch::channel(None);
         let result_observer = result_rx.clone();
@@ -1735,6 +1831,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_desktop_target(thread.canonical_path.as_str())
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::PendingInit
@@ -1750,8 +1847,8 @@ mod tests {
     async fn subtree_close_coordinator_prunes_dropped_root_locks() {
         let dir_a = tempfile::tempdir().unwrap();
         let dir_b = tempfile::tempdir().unwrap();
-        let (control_a, _) = setup(&dir_a, "worker_a");
-        let (control_b, _) = setup(&dir_b, "worker_b");
+        let (control_a, _) = setup(&dir_a, "worker_a").await;
+        let (control_b, _) = setup(&dir_b, "worker_b").await;
         let manager = AgentRuntimeManager::default();
 
         let guard_a = manager
@@ -1769,7 +1866,7 @@ mod tests {
         drop(guard_b);
     }
 
-    fn scripted_chat(reply: &str) -> ChatOverride {
+    fn scripted_responses(reply: &str) -> ResponsesOverride {
         let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
             let reply = reply.clone();
@@ -1784,7 +1881,7 @@ mod tests {
         })
     }
 
-    fn pending_chat() -> ChatOverride {
+    fn pending_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(stream::pending::<anyhow::Result<StreamChunk>>()) as CompletionStream)
@@ -1792,7 +1889,7 @@ mod tests {
         })
     }
 
-    fn barrier_pending_chat(barrier: Arc<tokio::sync::Barrier>) -> ChatOverride {
+    fn barrier_pending_responses(barrier: Arc<tokio::sync::Barrier>) -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             let barrier = Arc::clone(&barrier);
             Box::pin(async move {
@@ -1802,11 +1899,11 @@ mod tests {
         })
     }
 
-    fn gated_scripted_chat(
+    fn gated_scripted_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
         reply: &str,
-    ) -> ChatOverride {
+    ) -> ResponsesOverride {
         let reply = reply.to_string();
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
@@ -1825,10 +1922,10 @@ mod tests {
         })
     }
 
-    fn gated_failing_chat(
+    fn gated_failing_responses(
         entered: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
-    ) -> ChatOverride {
+    ) -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
             let release = Arc::clone(&release);
@@ -1840,12 +1937,14 @@ mod tests {
         })
     }
 
-    fn role_capturing_chat(captured_roles: Arc<std::sync::Mutex<Vec<String>>>) -> ChatOverride {
+    fn role_capturing_responses(
+        captured_roles: Arc<std::sync::Mutex<Vec<String>>>,
+    ) -> ResponsesOverride {
         Arc::new(move |messages, _tools, _config| {
             *captured_roles.lock().unwrap() = messages
-                .iter()
-                .filter(|message| message.role() != providers::types::message::Role::System)
-                .map(|message| message.role().as_str().to_string())
+                .message_roles()
+                .filter(|role| *role != "system")
+                .map(str::to_string)
                 .collect();
             Box::pin(async move {
                 Ok(Box::pin(stream::iter(vec![
@@ -1858,7 +1957,7 @@ mod tests {
         })
     }
 
-    fn history_asserting_chat(saw_structured_tool: Arc<AtomicBool>) -> ChatOverride {
+    fn history_asserting_responses(saw_structured_tool: Arc<AtomicBool>) -> ResponsesOverride {
         Arc::new(move |messages, _tools, _config| {
             let serialized = serde_json::to_string(&messages).unwrap();
             if serialized.contains("call-1") && serialized.contains("tool result") {
@@ -1875,11 +1974,13 @@ mod tests {
         })
     }
 
-    fn setup(
+    async fn setup(
         dir: &tempfile::TempDir,
         task_name: &str,
     ) -> (Arc<AgentControl>, subagents::AgentThreadV2) {
-        let store = AgentGraphStore::open(dir.path().join("agents.db")).unwrap();
+        let store = AgentGraphStore::open(dir.path().join("agents.db"))
+            .await
+            .unwrap();
         let control = AgentControl::open(
             "root".into(),
             store,
@@ -1889,12 +1990,14 @@ mod tests {
                 max_running: 1,
             },
         )
+        .await
         .unwrap();
         let reservation = control
             .reserve_spawn(&AgentPath::root(), task_name)
+            .await
             .unwrap();
         let thread = reservation.thread().clone();
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         (control, thread)
     }
 
@@ -1902,7 +2005,7 @@ mod tests {
         control: Arc<AgentControl>,
         thread: subagents::AgentThreadV2,
         memory_dir: std::path::PathBuf,
-        chat_override: ChatOverride,
+        responses_override: ResponsesOverride,
     ) -> RunAgentTurnRequest {
         RunAgentTurnRequest {
             control,
@@ -1926,21 +2029,23 @@ mod tests {
                 sandbox_mode: Some("read-only".into()),
                 mcp_servers: BTreeMap::new(),
                 skills_config: Vec::new(),
-                chat_targets: vec![types::ChatTarget {
+                model_targets: vec![types::ModelTarget {
                     provider_id: "test".into(),
                     backend_id: "openai".into(),
                     model: "test".into(),
                     api_key: "test".into(),
                     base_url: "http://127.0.0.1.invalid".into(),
-                    api_mode: String::new(),
                 }],
+                model_spec: None,
+                root_service_tier: None,
                 project_root: None,
+                workspace_roots: Vec::new(),
                 hook_runtime: None,
                 hook_bus: None,
                 interrupt_message: true,
             },
             memory_dir,
-            chat_override: Some(chat_override),
+            responses_override: Some(responses_override),
             consume_mailbox: false,
             startup_tx: None,
             startup_accept_rx: None,
@@ -1953,7 +2058,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn completed_turn_releases_runtime_and_execution_but_keeps_identity() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
@@ -1961,7 +2066,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -1984,6 +2089,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Completed {
@@ -1994,6 +2100,7 @@ mod tests {
         drop(permit);
         let events = control
             .status_events(&thread.thread_id)
+            .await
             .unwrap()
             .into_iter()
             .map(|event| event.event)
@@ -2010,7 +2117,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn followup_turn_persists_sequence_marker_before_acknowledging_mailbox() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
         control
             .enqueue_message(
@@ -2021,6 +2128,7 @@ mod tests {
                 },
                 false,
             )
+            .await
             .unwrap();
         control
             .enqueue_message(
@@ -2031,12 +2139,13 @@ mod tests {
                 },
                 false,
             )
+            .await
             .unwrap();
         let mut run = request(
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            scripted_chat("done"),
+            scripted_responses("done"),
         );
         run.consume_mailbox = true;
 
@@ -2047,30 +2156,39 @@ mod tests {
 
         assert!(control
             .drain_mailbox(&thread.canonical_path)
+            .await
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         let user_messages = sessions
-            .get_messages(&thread.session_id)
+            .get_response_items(&thread.session_id)
+            .await
             .unwrap()
             .into_iter()
-            .filter(|message| message.role == "user")
+            .filter(|message| message.role() == Some("user"))
             .collect::<Vec<_>>();
         assert_eq!(user_messages.len(), 1);
         assert_eq!(
-            user_messages[0].content.as_deref(),
-            Some("first follow-up\n\nsecond follow-up")
+            user_messages[0].text(),
+            "first follow-up\n\nsecond follow-up"
         );
-        assert!(user_messages[0].finish_reason.as_deref().is_some_and(
-            |reason| reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
-        ));
+        assert!(user_messages[0]
+            .item
+            .metadata()
+            .and_then(|metadata| metadata.get("astro_memory_marker"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(
+                |marker| marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+            ));
+        assert!(user_messages[0].finish_reason.is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn followup_retry_after_ack_failure_reuses_marker_without_duplicate_user() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
         control
             .enqueue_message(
@@ -2081,23 +2199,30 @@ mod tests {
                 },
                 false,
             )
+            .await
             .unwrap();
-        let graph = rusqlite::Connection::open(dir.path().join("agents.db")).unwrap();
-        graph
-            .execute_batch(
-                "CREATE TRIGGER fail_mailbox_ack
-                 BEFORE UPDATE OF delivery_state ON agent_mailbox
-                 WHEN NEW.delivery_state = 'delivered'
-                 BEGIN
-                   SELECT RAISE(ABORT, 'injected mailbox ack failure');
-                 END;",
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("agents.db").display()
+        ))
+        .await
+        .unwrap();
+        sqlx::raw_sql(
+            "CREATE TRIGGER fail_mailbox_ack
+             BEFORE UPDATE OF delivery_state ON agent_mailbox
+             WHEN NEW.delivery_state = 'delivered'
+             BEGIN
+               SELECT RAISE(ABORT, 'injected mailbox ack failure');
+             END;",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
         let mut first = request(
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            scripted_chat("must not sample"),
+            scripted_responses("must not sample"),
         );
         first.consume_mailbox = true;
         let first_error = AgentRuntimeManager::default()
@@ -2105,18 +2230,20 @@ mod tests {
             .await
             .unwrap_err();
         assert!(format!("{first_error:#}").contains("injected mailbox ack failure"));
-        graph
-            .execute_batch("DROP TRIGGER fail_mailbox_ack;")
+        sqlx::raw_sql("DROP TRIGGER fail_mailbox_ack;")
+            .execute(&pool)
+            .await
             .unwrap();
 
         let retry_thread = control
             .resolve_target(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         let mut retry = request(
             Arc::clone(&control),
             retry_thread,
             memory_dir.clone(),
-            scripted_chat("done"),
+            scripted_responses("done"),
         );
         retry.consume_mailbox = true;
         AgentRuntimeManager::default()
@@ -2126,30 +2253,36 @@ mod tests {
 
         assert!(control
             .drain_mailbox(&thread.canonical_path)
+            .await
             .unwrap()
             .is_empty());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         let user_messages = sessions
-            .get_messages(&thread.session_id)
+            .get_response_items(&thread.session_id)
+            .await
             .unwrap()
             .into_iter()
-            .filter(|message| message.role == "user")
+            .filter(|message| message.role() == Some("user"))
             .collect::<Vec<_>>();
         assert_eq!(user_messages.len(), 1);
-        assert_eq!(
-            user_messages[0].content.as_deref(),
-            Some("retry-safe follow-up")
-        );
-        assert!(user_messages[0].finish_reason.as_deref().is_some_and(
-            |reason| reason.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
-        ));
+        assert_eq!(user_messages[0].text(), "retry-safe follow-up");
+        assert!(user_messages[0]
+            .item
+            .metadata()
+            .and_then(|metadata| metadata.get("astro_memory_marker"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(
+                |marker| marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
+            ));
+        assert!(user_messages[0].finish_reason.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn turn_started_persistence_failure_is_shared_with_all_waiters_after_cleanup() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let persistence_entered = Arc::new(std::sync::Barrier::new(2));
         let persistence_release = Arc::new(std::sync::Barrier::new(2));
@@ -2172,7 +2305,7 @@ mod tests {
             let memory_dir = dir.path().join("memory");
             async move {
                 manager
-                    .start_turn(request(control, thread, memory_dir, pending_chat()))
+                    .start_turn(request(control, thread, memory_dir, pending_responses()))
                     .await
             }
         });
@@ -2238,7 +2371,11 @@ mod tests {
         }
         assert!(!manager.is_running(&thread.thread_id));
         assert!(control.runtime_handle(&thread.thread_id).unwrap().is_none());
-        assert!(control.status_events(&thread.thread_id).unwrap().is_empty());
+        assert!(control
+            .status_events(&thread.thread_id)
+            .await
+            .unwrap()
+            .is_empty());
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         drop(permit);
     }
@@ -2247,7 +2384,7 @@ mod tests {
     async fn recovered_running_turn_inserts_interrupted_boundary_before_follow_up() {
         let dir = tempfile::tempdir().unwrap();
         let graph_path = dir.path().join("agents.db");
-        let store = AgentGraphStore::open(graph_path.clone()).unwrap();
+        let store = AgentGraphStore::open(graph_path.clone()).await.unwrap();
         let initial_control = AgentControl::open(
             "root".into(),
             store,
@@ -2257,12 +2394,14 @@ mod tests {
                 max_running: 1,
             },
         )
+        .await
         .unwrap();
         let reservation = initial_control
             .reserve_spawn(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         let thread = reservation.thread().clone();
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         initial_control
             .record_runner_event(
                 &thread.thread_id,
@@ -2270,27 +2409,34 @@ mod tests {
                     turn_id: "crashed-turn".into(),
                 },
             )
+            .await
             .unwrap();
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions
-            .ensure_session(&thread.session_id, "tauri")
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
             .unwrap();
         sessions
-            .append_message(session::NewMessage {
-                content: Some("unfinished request"),
-                ..session::NewMessage::empty(&thread.session_id, "user")
-            })
+            .ensure_session(&thread.session_id, "tauri")
+            .await
+            .unwrap();
+        let unfinished = agent_protocol::ResponseItem::user_text("unfinished request");
+        sessions
+            .append_response_item(session::NewResponseItem::new(
+                &thread.session_id,
+                &unfinished,
+            ))
+            .await
             .unwrap();
 
         let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at("root", &graph_path)
+            .await
             .unwrap();
         let recovered_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         assert_eq!(recovered_thread.status, AgentStatusV2::Interrupted);
         let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -2299,20 +2445,22 @@ mod tests {
                 Arc::clone(&recovered),
                 recovered_thread,
                 memory_dir,
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
 
-        assert_eq!(
-            captured_roles.lock().unwrap().as_slice(),
-            &["user", "assistant", "user"]
-        );
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
         let roles = sessions
-            .get_messages(&thread.session_id)
+            .get_response_items(&thread.session_id)
+            .await
             .unwrap()
             .into_iter()
-            .map(|message| message.role)
+            .filter_map(|message| message.role().map(str::to_owned))
             .collect::<Vec<_>>();
         assert_eq!(roles, ["user", "assistant", "user", "assistant"]);
     }
@@ -2321,7 +2469,7 @@ mod tests {
     async fn failed_recovered_boundary_is_retried_after_turn_errored() {
         let dir = tempfile::tempdir().unwrap();
         let graph_path = dir.path().join("agents.db");
-        let store = AgentGraphStore::open(graph_path.clone()).unwrap();
+        let store = AgentGraphStore::open(graph_path.clone()).await.unwrap();
         let initial_control = AgentControl::open(
             "root".into(),
             store,
@@ -2331,12 +2479,14 @@ mod tests {
                 max_running: 1,
             },
         )
+        .await
         .unwrap();
         let reservation = initial_control
             .reserve_spawn(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         let thread = reservation.thread().clone();
-        reservation.commit().unwrap();
+        reservation.commit().await.unwrap();
         initial_control
             .record_runner_event(
                 &thread.thread_id,
@@ -2344,48 +2494,63 @@ mod tests {
                     turn_id: "crashed-turn".into(),
                 },
             )
+            .await
             .unwrap();
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let state_path = memory_dir.join("sessions/state.db");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let state_path = memory_dir.join("data/state.db");
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .ensure_session(&thread.session_id, "tauri")
+            .await
             .unwrap();
+        let unfinished = agent_protocol::ResponseItem::user_text("unfinished request");
         sessions
-            .append_message(session::NewMessage {
-                content: Some("unfinished request"),
-                ..session::NewMessage::empty(&thread.session_id, "user")
-            })
+            .append_response_item(session::NewResponseItem::new(
+                &thread.session_id,
+                &unfinished,
+            ))
+            .await
             .unwrap();
-        let raw = rusqlite::Connection::open(&state_path).unwrap();
-        raw.execute_batch(&format!(
+        let raw_pool =
+            agent_db::sqlx::SqlitePool::connect(&format!("sqlite:{}", state_path.display()))
+                .await
+                .unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "CREATE TRIGGER fail_interrupted_boundary
-             BEFORE INSERT ON messages
+             BEFORE INSERT ON response_items
              WHEN NEW.session_id = '{}' AND NEW.role = 'assistant'
-                  AND NEW.finish_reason = 'interrupted'
+                  AND json_extract(
+                    NEW.item_json,
+                    '$.internal_chat_message_metadata_passthrough.astro_finish_reason'
+                  ) = 'interrupted'
              BEGIN
                SELECT RAISE(ABORT, 'injected interrupted boundary failure');
              END;",
             thread.session_id.replace('\'', "''")
-        ))
+        )))
+        .execute(&raw_pool)
+        .await
         .unwrap();
 
         let recovered = crate::exec::agent_control_directory::AgentControlDirectory::global()
             .open_root_at("root", &graph_path)
+            .await
             .unwrap();
         let manager = AgentRuntimeManager::default();
         let recovered_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         let first_error = manager
             .start_turn(request(
                 Arc::clone(&recovered),
                 recovered_thread,
                 memory_dir.clone(),
-                scripted_chat("unreachable"),
+                scripted_responses("unreachable"),
             ))
             .await
             .unwrap_err();
@@ -2395,6 +2560,7 @@ mod tests {
         assert!(matches!(
             recovered
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .last()
                 .map(|event| &event.event),
@@ -2408,31 +2574,36 @@ mod tests {
         let permit = recovered.acquire_execution(&thread.thread_id).unwrap();
         drop(permit);
 
-        raw.execute_batch("DROP TRIGGER fail_interrupted_boundary;")
+        sqlx::raw_sql("DROP TRIGGER fail_interrupted_boundary;")
+            .execute(&raw_pool)
+            .await
             .unwrap();
         let captured_roles = Arc::new(std::sync::Mutex::new(Vec::new()));
         let retry_thread = recovered
             .resolve_target(&AgentPath::root(), "worker")
+            .await
             .unwrap();
         manager
             .start_turn(request(
                 Arc::clone(&recovered),
                 retry_thread,
                 memory_dir,
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
 
-        assert_eq!(
-            captured_roles.lock().unwrap().as_slice(),
-            &["user", "assistant", "user"]
-        );
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
         let roles = sessions
-            .get_messages(&thread.session_id)
+            .get_response_items(&thread.session_id)
+            .await
             .unwrap()
             .into_iter()
-            .map(|message| message.role)
+            .filter_map(|message| message.role().map(str::to_owned))
             .collect::<Vec<_>>();
         assert_eq!(roles, ["user", "assistant", "user", "assistant"]);
         assert!(roles.windows(2).all(|pair| pair[0] != pair[1]));
@@ -2441,7 +2612,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn success_ack_is_published_only_after_runtime_cleanup() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
@@ -2453,7 +2624,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -2509,7 +2680,7 @@ mod tests {
                 Arc::clone(&control),
                 thread,
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -2518,7 +2689,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn cleanup_failures_publish_one_shared_failed_ack_after_best_effort_cleanup() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
@@ -2526,7 +2697,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            gated_scripted_chat(Arc::clone(&entered), Arc::clone(&release), "finished"),
+            gated_scripted_responses(Arc::clone(&entered), Arc::clone(&release), "finished"),
         );
 
         let (run_result, (observed_ack, second_observer)) =
@@ -2561,6 +2732,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Completed {
@@ -2573,7 +2745,7 @@ mod tests {
                 Arc::clone(&control),
                 thread,
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -2582,7 +2754,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn session_construction_failure_records_error_and_cleans_active_state() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "broken");
+        let (control, thread) = setup(&dir, "broken").await;
         let broken_memory = dir.path().join("not-a-directory");
         std::fs::write(&broken_memory, "file").unwrap();
         let manager = AgentRuntimeManager::default();
@@ -2592,7 +2764,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 broken_memory,
-                scripted_chat("unreachable"),
+                scripted_responses("unreachable"),
             ))
             .await
             .unwrap_err();
@@ -2603,6 +2775,7 @@ mod tests {
         assert!(matches!(
             control
                 .resolve_target(&AgentPath::root(), "broken")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Errored { .. }
@@ -2614,7 +2787,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn provider_failure_records_assistant_boundary_before_follow_up() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
         let manager = Arc::new(AgentRuntimeManager::default());
         let entered = Arc::new(tokio::sync::Notify::new());
@@ -2623,7 +2796,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir.clone(),
-            gated_failing_chat(Arc::clone(&entered), Arc::clone(&release)),
+            gated_failing_responses(Arc::clone(&entered), Arc::clone(&release)),
         );
 
         let (run_result, observed_ack) = tokio::join!(manager.start_turn(run), async {
@@ -2641,7 +2814,7 @@ mod tests {
         assert!(matches!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
-                .unwrap()
+                .await.unwrap()
                 .status,
             AgentStatusV2::Errored { message }
                 if message.contains("provider failed before assistant output")
@@ -2653,23 +2826,26 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 memory_dir.clone(),
-                role_capturing_chat(Arc::clone(&captured_roles)),
+                role_capturing_responses(Arc::clone(&captured_roles)),
             ))
             .await
             .unwrap();
 
-        assert_eq!(
-            *captured_roles.lock().unwrap(),
-            vec!["user", "assistant", "user"]
-        );
-        let stored =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        assert!(captured_roles.lock().unwrap().starts_with(&[
+            "user".into(),
+            "assistant".into(),
+            "user".into()
+        ]));
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         assert_eq!(
             stored
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
+                .await
                 .unwrap()
                 .into_iter()
-                .map(|message| message.role)
+                .filter_map(|message| message.role().map(str::to_owned))
                 .collect::<Vec<_>>(),
             vec!["user", "assistant", "user", "assistant"]
         );
@@ -2678,14 +2854,14 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn interrupt_waits_for_durable_turn_interrupted_ack() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let run_manager = Arc::clone(&manager);
         let run = request(
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
 
         let (run_result, interrupted) = tokio::join!(run_manager.start_turn(run), async {
@@ -2698,18 +2874,20 @@ mod tests {
         run_result.unwrap();
         assert_eq!(interrupted.unwrap(), AgentStatusV2::Interrupted);
         assert!(!manager.is_running(&thread.thread_id));
-        let events = control.status_events(&thread.thread_id).unwrap();
+        let events = control.status_events(&thread.thread_id).await.unwrap();
         assert!(matches!(
             events.last().map(|event| &event.event),
             Some(RunnerEvent::TurnInterrupted { .. })
         ));
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
+                .await
                 .unwrap()
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
+                .await
                 .unwrap()
                 .into_iter()
-                .map(|message| message.role)
+                .filter_map(|message| message.role().map(str::to_owned))
                 .collect::<Vec<_>>(),
             vec!["user", "assistant"]
         );
@@ -2718,14 +2896,14 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn interrupt_ack_reports_terminal_persistence_failure() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(2));
         let run = request(
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            barrier_pending_chat(Arc::clone(&barrier)),
+            barrier_pending_responses(Arc::clone(&barrier)),
         );
 
         let (run_result, (interrupt_result, observer_one, observer_two)) =
@@ -2734,6 +2912,7 @@ mod tests {
                 assert_eq!(
                     control
                         .resolve_target(&AgentPath::root(), "worker")
+                        .await
                         .unwrap()
                         .status,
                     AgentStatusV2::Running
@@ -2776,6 +2955,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Running
@@ -2783,6 +2963,7 @@ mod tests {
         assert!(matches!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .last()
                 .map(|event| &event.event),
@@ -2793,14 +2974,14 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn canceled_interrupt_waiter_does_not_consume_runtime_ack() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let run_manager = Arc::clone(&manager);
         let run = request(
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
@@ -2845,7 +3026,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn aborted_start_turn_owner_cleans_runtime_and_allows_follow_up() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(2));
         let owner = tokio::spawn({
@@ -2854,7 +3035,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -2865,6 +3046,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Running
@@ -2884,6 +3066,7 @@ mod tests {
         drop(permit);
         let status_after_abort = control
             .resolve_target(&AgentPath::root(), "worker")
+            .await
             .unwrap()
             .status;
 
@@ -2898,6 +3081,7 @@ mod tests {
         assert!(matches!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .last()
                 .map(|event| &event.event),
@@ -2910,7 +3094,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                scripted_chat("follow-up completed"),
+                scripted_responses("follow-up completed"),
             ))
             .await
             .unwrap();
@@ -2919,6 +3103,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Completed {
@@ -2926,12 +3111,14 @@ mod tests {
             }
         );
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
+                .await
                 .unwrap()
-                .get_messages(&thread.session_id)
+                .get_response_items(&thread.session_id)
+                .await
                 .unwrap()
                 .into_iter()
-                .map(|message| message.role)
+                .filter_map(|message| message.role().map(str::to_owned))
                 .collect::<Vec<_>>(),
             vec!["user", "assistant", "user", "assistant"]
         );
@@ -2940,7 +3127,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn aborted_owner_ack_reports_terminal_persistence_failure() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(2));
         let owner = tokio::spawn({
@@ -2949,7 +3136,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -2977,6 +3164,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Running
@@ -2986,7 +3174,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn terminate_owner_abort_race_durably_shutdowns_and_closes_edge() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let provider_ready = Arc::new(tokio::sync::Barrier::new(2));
         let terminal_entered = Arc::new(tokio::sync::Notify::new());
@@ -3000,7 +3188,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3040,22 +3228,29 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Shutdown
         );
-        let edge_state: String = rusqlite::Connection::open(dir.path().join("agents.db"))
-            .unwrap()
-            .query_row(
-                "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
-                [&thread.thread_id],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let pool = agent_db::sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            dir.path().join("agents.db").display()
+        ))
+        .await
+        .unwrap();
+        let (edge_state,): (String,) = agent_db::sqlx::query_as(
+            "SELECT edge_state FROM agent_spawn_edges WHERE child_thread_id = ?1",
+        )
+        .bind(&thread.thread_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         assert_eq!(edge_state, "closed");
         assert!(matches!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .last()
                 .map(|event| &event.event),
@@ -3066,7 +3261,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn terminate_owner_abort_race_reports_runtime_terminated_failure() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let provider_ready = Arc::new(tokio::sync::Barrier::new(2));
         let terminal_entered = Arc::new(tokio::sync::Notify::new());
@@ -3086,7 +3281,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3114,6 +3309,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Interrupted
@@ -3123,7 +3319,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn interrupt_rejects_shutdown_ack_as_protocol_error() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let provider_ready = Arc::new(tokio::sync::Barrier::new(2));
         let owner = tokio::spawn({
@@ -3132,7 +3328,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3161,6 +3357,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Shutdown
@@ -3170,7 +3367,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn aborted_owner_cleanup_failures_publish_one_shared_failed_ack() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(2));
         let owner = tokio::spawn({
@@ -3179,7 +3376,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&barrier)),
+                barrier_pending_responses(Arc::clone(&barrier)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3211,6 +3408,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Interrupted
@@ -3220,7 +3418,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn stale_owner_drop_preserves_replacement_generation_and_runtime_handle() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = AgentRuntimeManager::default();
         let stale_turn_id = "stale-turn".to_string();
         control
@@ -3230,6 +3428,7 @@ mod tests {
                     turn_id: stale_turn_id.clone(),
                 },
             )
+            .await
             .unwrap();
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         let stale_handle = AgentRuntimeHandle {
@@ -3242,10 +3441,12 @@ mod tests {
         };
         control
             .register_runtime(&thread.thread_id, stale_handle.clone())
+            .await
             .unwrap();
         control.remove_runtime(&thread.thread_id).unwrap();
         control
             .register_runtime(&thread.thread_id, replacement_handle.clone())
+            .await
             .unwrap();
         let replacement_control = Arc::new(AgentThreadControl::default());
         let (_replacement_tx, replacement_rx) = watch::channel(None);
@@ -3301,11 +3502,15 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn stale_starting_token_cannot_claim_or_remove_replacement_reservation() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
-        sessions.ensure_session(&thread.session_id, "test").unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
+        sessions
+            .ensure_session(&thread.session_id, "test")
+            .await
+            .unwrap();
         let manager = AgentRuntimeManager::default();
         let admission = manager
             .request_or_start_followup(
@@ -3314,7 +3519,7 @@ mod tests {
                     Arc::clone(&control),
                     thread.clone(),
                     memory_dir.clone(),
-                    scripted_chat("replacement completed"),
+                    scripted_responses("replacement completed"),
                 ),
             )
             .unwrap();
@@ -3334,7 +3539,7 @@ mod tests {
             Arc::clone(&control),
             thread.clone(),
             memory_dir,
-            scripted_chat("must not run"),
+            scripted_responses("must not run"),
         );
         let (stale_tx, _stale_rx) = watch::channel(None);
         stale.followup_start_tx = Some(stale_tx);
@@ -3354,7 +3559,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn starting_admission_failure_removes_matching_slot_and_shares_error() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = AgentRuntimeManager::default();
         let permit = control.acquire_execution(&thread.thread_id).unwrap();
         let admission = manager
@@ -3364,7 +3569,7 @@ mod tests {
                     Arc::clone(&control),
                     thread.clone(),
                     dir.path().join("memory"),
-                    scripted_chat("must not run"),
+                    scripted_responses("must not run"),
                 ),
             )
             .unwrap();
@@ -3390,14 +3595,14 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn terminate_records_one_turn_terminal_then_runtime_terminated() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let run_manager = Arc::clone(&manager);
         let run = request(
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            pending_chat(),
+            pending_responses(),
         );
 
         let (run_result, (terminate_result, observed_ack)) =
@@ -3420,6 +3625,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Shutdown
@@ -3427,6 +3633,7 @@ mod tests {
         assert_eq!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .into_iter()
                 .map(|event| event.event)
@@ -3447,7 +3654,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn concurrent_terminate_callers_share_one_shutdown_ack() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let provider_ready = Arc::new(tokio::sync::Barrier::new(2));
         let owner = tokio::spawn({
@@ -3456,7 +3663,7 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 dir.path().join("memory"),
-                barrier_pending_chat(Arc::clone(&provider_ready)),
+                barrier_pending_responses(Arc::clone(&provider_ready)),
             );
             async move { manager.start_turn(request).await }
         });
@@ -3482,6 +3689,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Shutdown
@@ -3489,6 +3697,7 @@ mod tests {
         assert_eq!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .into_iter()
                 .filter(|event| matches!(event.event, RunnerEvent::RuntimeTerminated))
@@ -3506,14 +3715,14 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn terminate_ack_reports_runtime_terminated_persistence_failure() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let manager = Arc::new(AgentRuntimeManager::default());
         let barrier = Arc::new(tokio::sync::Barrier::new(2));
         let run = request(
             Arc::clone(&control),
             thread.clone(),
             dir.path().join("memory"),
-            barrier_pending_chat(Arc::clone(&barrier)),
+            barrier_pending_responses(Arc::clone(&barrier)),
         );
 
         let (run_result, terminate_result) = tokio::join!(manager.start_turn(run), async {
@@ -3542,6 +3751,7 @@ mod tests {
         assert_eq!(
             control
                 .resolve_target(&AgentPath::root(), "worker")
+                .await
                 .unwrap()
                 .status,
             AgentStatusV2::Interrupted
@@ -3549,6 +3759,7 @@ mod tests {
         assert!(matches!(
             control
                 .status_events(&thread.thread_id)
+                .await
                 .unwrap()
                 .last()
                 .map(|event| &event.event),
@@ -3559,38 +3770,43 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn follow_up_after_interrupt_hydrates_structured_session_history() {
         let dir = tempfile::tempdir().unwrap();
-        let (control, thread) = setup(&dir, "worker");
+        let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            .await
+            .unwrap();
         sessions
             .create_session("root", "tauri", None, None, None)
+            .await
             .unwrap();
         sessions
             .create_session(&thread.session_id, "tauri", None, None, Some("root"))
+            .await
             .unwrap();
+        let initial = vec![
+            agent_protocol::ResponseItem::user_text("first question"),
+            agent_protocol::ResponseItem::assistant_text("calling tool"),
+            agent_protocol::ResponseItem::FunctionCall {
+                id: None,
+                name: "inspect".into(),
+                namespace: None,
+                arguments: r#"{"path":"a.rs"}"#.into(),
+                encrypted_function_args: None,
+                call_id: "call-1".into(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            agent_protocol::ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: Some("call-1".into()),
+                name: Some("inspect".into()),
+                namespace: None,
+                output: agent_protocol::FunctionCallOutputPayload::from_text("tool result".into()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ];
         sessions
-            .append_message(session::NewMessage {
-                content: Some("first question"),
-                ..session::NewMessage::empty(&thread.session_id, "user")
-            })
-            .unwrap();
-        sessions
-            .append_message(session::NewMessage {
-                content: Some("calling tool"),
-                tool_calls: Some(serde_json::json!([{
-                    "id": "call-1", "name": "inspect", "arguments": {"path": "a.rs"}
-                }])),
-                ..session::NewMessage::empty(&thread.session_id, "assistant")
-            })
-            .unwrap();
-        sessions
-            .append_message(session::NewMessage {
-                content: Some("tool result"),
-                tool_call_id: Some("call-1"),
-                tool_name: Some("inspect"),
-                ..session::NewMessage::empty(&thread.session_id, "tool")
-            })
+            .append_response_items(&thread.session_id, &initial)
+            .await
             .unwrap();
         control
             .record_runner_event(
@@ -3599,6 +3815,7 @@ mod tests {
                     turn_id: "old-turn".into(),
                 },
             )
+            .await
             .unwrap();
         control
             .record_runner_event(
@@ -3608,6 +3825,7 @@ mod tests {
                     reason: "parent interrupt".into(),
                 },
             )
+            .await
             .unwrap();
 
         let saw_structured_tool = Arc::new(AtomicBool::new(false));
@@ -3616,22 +3834,43 @@ mod tests {
                 Arc::clone(&control),
                 thread.clone(),
                 memory_dir,
-                history_asserting_chat(Arc::clone(&saw_structured_tool)),
+                history_asserting_responses(Arc::clone(&saw_structured_tool)),
             ))
             .await
             .unwrap();
 
         assert!(saw_structured_tool.load(Ordering::SeqCst));
-        let stored = sessions.get_messages(&thread.session_id).unwrap();
-        assert_eq!(
-            stored
-                .iter()
-                .filter(|message| message.role != "tool")
-                .map(|message| message.role.as_str())
-                .collect::<Vec<_>>(),
-            vec!["user", "assistant", "user", "assistant"]
-        );
-        assert_eq!(stored[1].tool_calls.as_ref().unwrap()[0]["id"], "call-1");
-        assert_eq!(stored[2].tool_call_id.as_deref(), Some("call-1"));
+        let stored = sessions
+            .get_response_items(&thread.session_id)
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 6);
+        assert!(matches!(
+            &stored[0].item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "user"
+        ));
+        assert!(matches!(
+            &stored[1].item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "assistant"
+        ));
+        assert!(matches!(
+            &stored[2].item,
+            agent_protocol::ResponseItem::FunctionCall { call_id, .. } if call_id == "call-1"
+        ));
+        assert!(matches!(
+            &stored[3].item,
+            agent_protocol::ResponseItem::FunctionCallOutput {
+                call_id: Some(call_id),
+                ..
+            } if call_id == "call-1"
+        ));
+        assert!(matches!(
+            &stored[4].item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "user"
+        ));
+        assert!(matches!(
+            &stored[5].item,
+            agent_protocol::ResponseItem::Message { role, .. } if role == "assistant"
+        ));
     }
 }

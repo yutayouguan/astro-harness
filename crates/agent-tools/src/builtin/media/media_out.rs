@@ -91,7 +91,7 @@ mod tests {
         let name = generated_media_filename(Some("采菌子歌"), "音乐", "mp3");
         assert!(name.starts_with("采菌子歌-"));
         assert!(name.ends_with(".mp3"));
-        // stem-YYYYMMDD-HHMMSS-xxxxxxxx.mp3
+        // 格式：stem-YYYYMMDD-HHMMSS-xxxxxxxx.mp3
         let parts: Vec<_> = name.trim_end_matches(".mp3").rsplitn(3, '-').collect();
         assert_eq!(parts.len(), 3);
         assert_eq!(parts[0].len(), 8); // uuid

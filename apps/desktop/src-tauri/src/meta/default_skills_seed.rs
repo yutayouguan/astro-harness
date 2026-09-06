@@ -1,4 +1,4 @@
-//! 启动时后台补装默认公共 skills → `~/.astro/skills`
+//! 启动时后台补装随应用发布的内置 Skills → `~/.astro/skills`
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -13,7 +13,7 @@ struct Payload {
     failed: Vec<String>,
 }
 
-/// 在后台线程补装缺失的默认技能；有新装时 emit `default-skills-seeded`。
+/// 在后台线程补装缺失的内置技能；有新装时 emit `default-skills-seeded`。
 pub fn spawn_on_startup(app: &AppHandle) {
     static SEED_STARTED: AtomicBool = AtomicBool::new(false);
     if SEED_STARTED
@@ -25,9 +25,12 @@ pub fn spawn_on_startup(app: &AppHandle) {
 
     let handle = app.clone();
     std::thread::spawn(move || {
-        let report = skills::seed_default_public_skills();
+        let report = skills::seed_bundled_skills();
         for name in &report.failed {
             tracing::warn!("default skill seed failed: {name}");
+        }
+        for name in &report.removed {
+            tracing::info!("retired bundled skill removed: {name}");
         }
         if report.installed.is_empty() {
             return;

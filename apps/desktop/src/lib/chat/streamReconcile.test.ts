@@ -7,7 +7,10 @@ import {
 } from "./streamReconcile.ts";
 
 test("canonical snapshot replaces divergent streamed assistant text", () => {
-  assert.equal(reconcileAssistantText("hel world", "hello world"), "hello world");
+  assert.equal(
+    reconcileAssistantText("hel world", "hello world"),
+    "hello world",
+  );
 });
 
 test("buffered parallel draft is consumed by canonical reconciliation", () => {

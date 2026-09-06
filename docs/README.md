@@ -2,9 +2,21 @@
 
 Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。
 
+Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口见 [Agent Harness 总体架构](03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，Responses-only 与原生历史契约见 [Responses 原生 Agent 运行时架构](03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
+
+最新生命周期能力与兼容性变更见 [2026-09-01 Codex 生命周期对齐更新说明](更新说明/2026-09-01-Codex生命周期对齐.md)，包含 Realtime、`ResolveElicitation`、`TurnSettings`、Guardian retry 和独立用户 Shell；Realtime 运输、版本、handoff 与恢复契约见 [Realtime 子系统](realtime-subsystem.md)，上游协议快照见 [OpenAI Realtime API 参考](openai/realtime/README.md)与 [Azure OpenAI Realtime 参考](azure/realtime/README.md)。
+
+> 文档状态：上述三份文档及各 crate README 描述当前实现。`docs/superpowers/plans/`、`docs/superpowers/specs/` 和 `_v0.3规划/` 是历史或目标记录；与当前基线冲突时，不作为运行时契约。
+
 ---
 
 ## 文档目录
+
+### 更新说明
+
+| 文档 | 内容 |
+| ---- | ---- |
+| [2026-09-01-Codex生命周期对齐.md](更新说明/2026-09-01-Codex生命周期对齐.md) | 交互控制面、完整 Realtime 子系统、MCP elicitation、回合内设置、Guardian 单次重试与用户 Shell |
 
 ### 01-需求分析阶段
 
@@ -17,6 +29,7 @@ Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rus
 | [03-需求拆解与功能模块清单.md](01-需求分析阶段/03-需求拆解与功能模块清单.md) | 模块拆分总览（M-01 到 M-38）、功能点优先级、版本迭代规划 |
 | [04-原型图说明文档.md](01-需求分析阶段/04-原型图说明文档.md) | 各页面 ASCII 线框图、交互说明、页面导航关系、设计规范 |
 | [05-用户故事与验收标准.md](01-需求分析阶段/05-用户故事与验收标准.md) | 按 Epic 组织的用户故事（US-001 到 US-116）与具体验收标准 |
+| [06-权限系统改进需求分析.md](01-需求分析阶段/06-权限系统改进需求分析.md) | 对标 Codex 权限系统后的 P0-P5 改进需求（会话缓存、智能审批上下文、渐进信任） |
 
 ### 02-可行性评估阶段
 
@@ -34,7 +47,7 @@ Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rus
 
 | 子目录 | 文件数 | 内容覆盖 |
 | ---- | ---- | ---- |
-| `01-架构设计/` | 10 | 架构总览、Crate 结构、Prompt 工程、系统分层、模块依赖、数据流、部署架构、端到端数据流追踪、ADR |
+| `01-架构设计/` | 12 | 架构总览、Crate 结构、Prompt 工程、系统分层、模块依赖、数据流、部署架构、端到端追踪、ADR、Agent Harness、Responses 原生运行时 |
 | `02-核心功能模块/` | 9 | Provider 系统（含 ImageClient/MusicClient）、MCP/Skills/子 Agent、自我进化、上下文管理、知识库 RAG、会话 Checkpoint |
 | `03-基础设施/` | 8 | 持久化、可观测性、错误处理、人工接管、工具系统、安全（PermissionSet）、隐私合规、成本预算 |
 | `04-数据库设计/` | 4 | Schema（21 表 + 3 虚拟表 + 1 视图）、ER 图、索引（含 unicode61 分词）、迁移策略 |
@@ -58,3 +71,4 @@ Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rus
 | [02-术语统一规范.md](05-质量审查阶段/02-术语统一规范.md) | 项目权威术语表：数据结构、枚举值、命名规范、UI 设计值统一定义 |
 | [03-架构改善建议报告.md](05-质量审查阶段/03-架构改善建议报告.md) | 9 大核心组件架构评审、P0/P1/P2 分级改善建议、8 项设计亮点确认 |
 | [04-架构深度优化建议.md](05-质量审查阶段/04-架构深度优化建议.md) | 7 维度深度差距分析（进化闭环/协作/测试/性能/扩展/安全/可观测） |
+| [05-Agent-Harness文档一致性审查.md](05-质量审查阶段/05-Agent-Harness文档一致性审查.md) | Agent = Model + Harness 基线、跨文档不变量、历史表述和未闭环项审查 |

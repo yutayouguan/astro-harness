@@ -24,10 +24,9 @@
 }
 
 .ui-tip {
-  --ui-tip-bg: #16181d;
-  --ui-tip-fg: #f4f6fb;
-  --ui-tip-border: rgba(255, 255, 255, 0.14);
-  --arrow-size: 7px;
+  --ui-tip-bg: rgba(18, 21, 28, 0.74);
+  --ui-tip-fg: #f7f8fc;
+  --ui-tip-border: rgba(255, 255, 255, 0.2);
   --tip-arrow-x: 50%;
   --tip-arrow-y: 50%;
   position: fixed;
@@ -37,9 +36,11 @@
   max-width: min(280px, calc(100vw - 16px));
   width: max-content;
   padding: 6px 11px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--ui-tip-border);
-  background: var(--ui-tip-bg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 48%),
+    var(--ui-tip-bg);
   color: var(--ui-tip-fg);
   font-size: 12px;
   font-weight: 550;
@@ -47,121 +48,79 @@
   letter-spacing: 0.01em;
   white-space: nowrap;
   text-align: center;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 30px rgba(7, 10, 18, 0.24),
+    0 2px 8px rgba(7, 10, 18, 0.12);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
   opacity: 0;
   transform: translateY(4px) scale(0.96);
   transition:
     opacity 0.14s ease,
-    transform 0.14s ease;
+    transform 0.2s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
   pointer-events: none;
 }
 
 /*
- * 尖角：边框三角外凸。
- * ::after = 描边层（略大），::before = 填充层（与气泡同色）。
+ * 箭头使用与主体相同材质的圆角方块旋转形成，并向主体内压半格。
+ * 它会覆盖主体边框的连接段，避免“两层三角”产生的白缝与外挂感。
  */
-.ui-tip[data-pos]::before,
-.ui-tip[data-pos]::after {
+.ui-tip[data-pos]::before {
   content: "";
   position: absolute;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-color: transparent;
+  width: 11px;
+  height: 11px;
+  border: 0 solid var(--ui-tip-border);
+  border-radius: 2px;
+  background: var(--ui-tip-bg);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
   pointer-events: none;
   box-sizing: border-box;
-}
-
-.ui-tip[data-pos]::before {
-  z-index: 1;
+  z-index: 0;
 }
 
 /* tip 在触发上方：箭头朝下 */
-.ui-tip[data-pos="top"]::after {
-  top: auto;
-  bottom: calc(-1 * (var(--arrow-size) + 1px));
-  left: var(--tip-arrow-x);
-  transform: translateX(-50%);
-  border-width: calc(var(--arrow-size) + 1px);
-  border-top-color: var(--ui-tip-border);
-  border-bottom-width: 0;
-}
-
 .ui-tip[data-pos="top"]::before {
   top: auto;
-  bottom: calc(-1 * var(--arrow-size));
+  bottom: 0;
   left: var(--tip-arrow-x);
-  transform: translateX(-50%);
-  border-width: var(--arrow-size);
-  border-top-color: var(--ui-tip-bg);
-  border-bottom-width: 0;
+  transform: translate(-50%, 50%) rotate(45deg);
+  border-right-width: 1px;
+  border-bottom-width: 1px;
 }
 
 /* tip 在触发下方：箭头朝上 */
-.ui-tip[data-pos="bottom"]::after {
-  top: calc(-1 * (var(--arrow-size) + 1px));
-  bottom: auto;
-  left: var(--tip-arrow-x);
-  transform: translateX(-50%);
-  border-width: calc(var(--arrow-size) + 1px);
-  border-bottom-color: var(--ui-tip-border);
-  border-top-width: 0;
-}
-
 .ui-tip[data-pos="bottom"]::before {
-  top: calc(-1 * var(--arrow-size));
+  top: 0;
   bottom: auto;
   left: var(--tip-arrow-x);
-  transform: translateX(-50%);
-  border-width: var(--arrow-size);
-  border-bottom-color: var(--ui-tip-bg);
-  border-top-width: 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-top-width: 1px;
+  border-left-width: 1px;
 }
 
 /* tip 在触发左侧：箭头朝右 */
-.ui-tip[data-pos="left"]::after {
-  top: var(--tip-arrow-y);
-  right: calc(-1 * (var(--arrow-size) + 1px));
-  left: auto;
-  bottom: auto;
-  transform: translateY(-50%);
-  border-width: calc(var(--arrow-size) + 1px);
-  border-left-color: var(--ui-tip-border);
-  border-right-width: 0;
-}
-
 .ui-tip[data-pos="left"]::before {
   top: var(--tip-arrow-y);
-  right: calc(-1 * var(--arrow-size));
+  right: 0;
   left: auto;
   bottom: auto;
-  transform: translateY(-50%);
-  border-width: var(--arrow-size);
-  border-left-color: var(--ui-tip-bg);
-  border-right-width: 0;
+  transform: translate(50%, -50%) rotate(45deg);
+  border-top-width: 1px;
+  border-right-width: 1px;
 }
 
 /* tip 在触发右侧：箭头朝左（侧栏「文件空间」等） */
-.ui-tip[data-pos="right"]::after {
-  top: var(--tip-arrow-y);
-  left: calc(-1 * (var(--arrow-size) + 1px));
-  right: auto;
-  bottom: auto;
-  transform: translateY(-50%);
-  border-width: calc(var(--arrow-size) + 1px);
-  border-right-color: var(--ui-tip-border);
-  border-left-width: 0;
-}
-
 .ui-tip[data-pos="right"]::before {
   top: var(--tip-arrow-y);
-  left: calc(-1 * var(--arrow-size));
+  left: 0;
   right: auto;
   bottom: auto;
-  transform: translateY(-50%);
-  border-width: var(--arrow-size);
-  border-right-color: var(--ui-tip-bg);
-  border-left-width: 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-bottom-width: 1px;
+  border-left-width: 1px;
 }
 
 .ui-tip[data-show="1"] {
@@ -198,12 +157,13 @@
 }
 
 html[data-theme="light"] .ui-tip {
-  --ui-tip-bg: #ffffff;
+  --ui-tip-bg: rgba(248, 250, 255, 0.72);
   --ui-tip-fg: #1e293b;
-  --ui-tip-border: rgba(15, 23, 42, 0.12);
+  --ui-tip-border: rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.12),
-    0 2px 6px rgba(15, 23, 42, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 12px 32px rgba(43, 57, 88, 0.14),
+    0 2px 8px rgba(43, 57, 88, 0.07);
 }
 
 .ui-tip[data-instant] {
@@ -213,5 +173,24 @@ html[data-theme="light"] .ui-tip {
 @media (prefers-reduced-motion: reduce) {
   .ui-tip {
     transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .ui-tip {
+    --ui-tip-bg: #1d2027;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html[data-theme="light"] .ui-tip {
+    --ui-tip-bg: #f8faff;
+    --ui-tip-border: rgba(30, 41, 59, 0.16);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ui-tip {
+    --ui-tip-border: color-mix(in srgb, currentColor 48%, transparent);
   }
 }

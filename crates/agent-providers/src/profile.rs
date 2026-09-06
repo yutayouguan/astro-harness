@@ -18,8 +18,10 @@ pub enum ApiMode {
 /// 图片生成协议路由。新厂商走 OpenAI 兼容 API 只需设 `OpenAi`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageGenMode {
-    /// OpenAI `POST /images/generations`（OpenAI / Azure / 兼容网关）。
+    /// OpenAI `POST /images/generations`（OpenAI / 兼容网关）。
     OpenAi,
+    /// Azure AI Foundry OpenAI v1 `POST /openai/v1/images/generations`。
+    AzureOpenAiV1,
     /// Google Interactions `POST /v1beta/interactions` with generateImage。
     GoogleInteractions,
     /// MiniMax T2I `POST /v1/text/image`。
@@ -104,7 +106,7 @@ impl AuthKind {
 pub static PROFILES: &[ProviderProfile] = &[
     ProviderProfile {
         id: "openai",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.openai.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["OPENAI_API_KEY"],
@@ -146,7 +148,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "deepseek",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.deepseek.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["DEEPSEEK_API_KEY"],
@@ -209,24 +211,24 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "azure",
-        api_mode: ApiMode::ChatCompletions,
-        default_base_url: "",
-        auth: AuthKind::AzureHeader,
+        api_mode: ApiMode::Responses,
+        default_base_url: "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
+        auth: AuthKind::Bearer,
         env_keys: &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
-        azure_deployment_style: true,
-        default_model: "gpt-5.6",
-        supports_image_gen: false,
-        supports_embedding: false,
-        image_mode: None,
-        default_image_model: "",
+        azure_deployment_style: false,
+        default_model: "gpt-5.6-sol",
+        supports_image_gen: true,
+        supports_embedding: true,
+        image_mode: Some(ImageGenMode::AzureOpenAiV1),
+        default_image_model: "gpt-image-2",
         default_vision_model: "",
         supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
         default_asr_model: "",
-        default_embedding_model: "",
-        supports_responses: false,
+        default_embedding_model: "text-embedding-3-small",
+        supports_responses: true,
     },
     ProviderProfile {
         id: "zhipu",
@@ -251,14 +253,14 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "openrouter",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://openrouter.ai/api/v1",
         auth: AuthKind::Bearer,
         env_keys: &["OPENROUTER_API_KEY"],
         azure_deployment_style: false,
         default_model: "openai/gpt-5.6",
         supports_image_gen: false,
-        supports_embedding: false,
+        supports_embedding: true,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -268,11 +270,11 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "bailian",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         auth: AuthKind::Bearer,
         env_keys: &["DASHSCOPE_API_KEY", "BAILIAN_API_KEY"],
@@ -289,7 +291,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "qwen-asr-v2.5",
         default_embedding_model: "qwen-embedding-v3",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "nvidia",
@@ -356,10 +358,10 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "minimax",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.minimaxi.com/v1",
         auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
         supports_image_gen: true,
@@ -401,7 +403,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         api_mode: ApiMode::AnthropicMessages,
         default_base_url: "https://api.minimaxi.com/anthropic",
         auth: AuthKind::Bearer,
-        env_keys: &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+        env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
         supports_image_gen: false,
@@ -419,12 +421,12 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "mimo",
-        api_mode: ApiMode::ChatCompletions,
+        api_mode: ApiMode::Responses,
         default_base_url: "https://api.xiaomimimo.com/v1",
         auth: AuthKind::Bearer,
         env_keys: &["MIMO_API_KEY"],
         azure_deployment_style: false,
-        default_model: "mimo-v2-flash",
+        default_model: "mimo-v2.5",
         supports_image_gen: false,
         supports_embedding: false,
         image_mode: None,
@@ -436,7 +438,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
+        supports_responses: true,
     },
     ProviderProfile {
         id: "gemini-native",
@@ -472,6 +474,15 @@ pub fn resolve_or_openai_compat(provider_id: &str) -> &'static ProviderProfile {
     resolve(provider_id).unwrap_or(&OPENAI_COMPAT_FALLBACK)
 }
 
+/// 解析最终补全协议：显式配置优先，否则使用 provider profile 默认值。
+pub fn effective_api_mode(provider_id: &str, api_mode: &str) -> ApiMode {
+    match api_mode.trim() {
+        "chat" | "chat_completions" => ApiMode::ChatCompletions,
+        "responses" => ApiMode::Responses,
+        _ => resolve_or_openai_compat(provider_id).api_mode,
+    }
+}
+
 /// custom / 未知 id 的回退 profile（不在 PROFILES 中单独注册）。
 static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     id: "openai",
@@ -480,7 +491,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     auth: AuthKind::Bearer,
     env_keys: &["OPENAI_API_KEY"],
     azure_deployment_style: false,
-    default_model: "gpt-5.6",
+    default_model: "gpt-5.6-sol",
     supports_image_gen: false,
     supports_embedding: false,
     image_mode: None,
@@ -498,8 +509,6 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
 /// 将常见别名规范化为表内 id。
 pub fn normalize_provider_id(provider_id: &str) -> &str {
     match provider_id {
-        "minmax" => "minimax",
-        "minmax-anthropic" => "minimax-anthropic",
         "anthropic" => "claude",
         other => other,
     }
@@ -531,8 +540,6 @@ pub fn read_env_api_key(provider_id: &str) -> Option<String> {
     }
     None
 }
-
-// ─── 动态模型默认值（OpenRouter 驱动）────────────────────
 
 // ─── 动态模型默认值（OpenRouter 驱动）────────────────────
 
@@ -716,11 +723,21 @@ mod tests {
     }
 
     #[test]
-    fn azure_is_chat_completions_with_quirk() {
+    fn azure_defaults_to_openai_v1_responses() {
         let p = resolve("azure").expect("azure");
-        assert_eq!(p.api_mode, ApiMode::ChatCompletions);
-        assert!(p.azure_deployment_style);
-        assert_eq!(p.auth, AuthKind::AzureHeader);
+        assert_eq!(p.api_mode, ApiMode::Responses);
+        assert!(!p.azure_deployment_style);
+        assert_eq!(p.auth, AuthKind::Bearer);
+        assert_eq!(
+            p.default_base_url,
+            "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
+        );
+        assert_eq!(p.default_model, "gpt-5.6-sol");
+        assert!(p.supports_image_gen);
+        assert!(p.supports_embedding);
+        assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
+        assert_eq!(p.default_image_model, "gpt-image-2");
+        assert_eq!(p.default_embedding_model, "text-embedding-3-small");
     }
 
     #[test]
@@ -732,11 +749,38 @@ mod tests {
 
     #[test]
     fn supports_responses_flag() {
-        assert!(resolve("openai").unwrap().supports_responses);
-        assert!(resolve("deepseek").unwrap().supports_responses);
-        assert!(resolve("minimax").unwrap().supports_responses);
+        for id in [
+            "openai",
+            "deepseek",
+            "minimax",
+            "azure",
+            "bailian",
+            "mimo",
+            "openrouter",
+        ] {
+            let profile = resolve(id).unwrap();
+            assert!(profile.supports_responses, "{id} should support Responses");
+            assert_eq!(
+                profile.api_mode,
+                ApiMode::Responses,
+                "{id} should default to Responses"
+            );
+        }
         assert!(!resolve("claude").unwrap().supports_responses);
         assert!(!resolve("google").unwrap().supports_responses);
+    }
+
+    #[test]
+    fn effective_mode_uses_profile_default_and_honors_compatibility_override() {
+        assert_eq!(effective_api_mode("deepseek", ""), ApiMode::Responses);
+        assert_eq!(
+            effective_api_mode("deepseek", "chat_completions"),
+            ApiMode::ChatCompletions
+        );
+        assert_eq!(
+            effective_api_mode("ollama", "responses"),
+            ApiMode::Responses
+        );
     }
 
     #[test]

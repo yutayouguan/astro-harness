@@ -1,0 +1,544 @@
+/* Final sidebar contract: quiet, flush navigation chrome with one stable hierarchy.
+   The outer surface keeps a continuous glass fill without a floating drop shadow;
+   controls inside remain flat so translucent layers do not stack. */
+
+.body-row {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+  --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
+  --sidebar-chrome-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+}
+
+.sidebar {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+  --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
+  --sidebar-chrome-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+  border: 0;
+  border-right: 0.5px solid
+    color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-radius: 0;
+  background: var(--sidebar-chrome-background);
+  box-shadow: none;
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
+  font-optical-sizing: auto;
+}
+
+.sidebar.is-pinned {
+  background: var(--sidebar-chrome-background);
+  box-shadow: none;
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
+}
+
+.sidebar.is-pinned.is-rail-preview {
+  position: absolute;
+  z-index: 60;
+  box-shadow: 12px 0 30px color-mix(in srgb, #0f172a 12%, transparent);
+}
+
+.body-row:has(> .sidebar.is-pinned.is-rail-preview) {
+  padding-left: var(--sidebar-w);
+}
+
+html[data-theme="dark"] .sidebar.is-pinned {
+  background: var(--sidebar-chrome-background);
+}
+
+.sidebar::before,
+.sidebar.is-pinned::before {
+  opacity: 0;
+}
+
+/* Settings keeps the same continuous material while retaining its own navigation layout. */
+.sidebar.is-settings {
+  background: var(--sidebar-chrome-background);
+  box-shadow: none;
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
+}
+
+.sidebar.is-settings::before {
+  opacity: 0;
+}
+
+html[data-theme="dark"] .sidebar.is-settings {
+  background: var(--sidebar-chrome-background);
+}
+
+.sidebar.is-labels {
+  padding-inline: 16px;
+}
+
+.sidebar.is-labels .sidebar-brand {
+  gap: 10px;
+  padding: 0 4px 18px;
+}
+
+.sidebar-logo {
+  width: 30px;
+  height: 30px;
+}
+
+.sidebar-logo svg {
+  width: 23px;
+  height: 23px;
+}
+
+.sidebar-brand-text {
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.sidebar-primary-actions {
+  gap: 4px;
+  margin: 0 0 20px;
+}
+
+.sidebar-new-chat {
+  min-height: 40px;
+  padding-inline: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-size: 14px;
+  font-weight: 560;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar-new-chat:hover,
+.sidebar-new-chat:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: none;
+}
+
+.sidebar-new-chat:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
+  outline-offset: -2px;
+}
+
+html[data-theme="dark"] .sidebar-new-chat,
+html[data-theme="dark"] .sidebar-new-chat:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .sidebar-new-chat:hover {
+  background: color-mix(in srgb, #fff 6%, transparent);
+}
+
+.sidebar.is-labels .sidebar-new-chat .sidebar-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-new-chat-shortcut {
+  display: none;
+  flex: 0 0 auto;
+  min-width: 25px;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: color-mix(in srgb, var(--ink-mute) 80%, transparent);
+  font:
+    600 10px / 1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.sidebar.is-labels .sidebar-new-chat-shortcut {
+  display: inline-block;
+}
+
+.sidebar-global-search .expandable-search-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar-global-search .expandable-search-btn:hover,
+.sidebar-global-search .expandable-search-btn:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: none;
+}
+
+.sidebar-global-search .expandable-search-field {
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar-global-search .expandable-search-field:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 30%,
+    transparent
+  );
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .sidebar-global-search .expandable-search-btn,
+html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
+  border-color: transparent;
+  background: color-mix(in srgb, #fff 4%, transparent);
+  box-shadow: none;
+}
+
+.sidebar-global-search .expandable-search-glyph {
+  color: color-mix(in srgb, var(--ink-mute) 88%, var(--ink));
+}
+
+.sidebar-group-label,
+.sidebar-section-title {
+  color: color-mix(in srgb, var(--ink-mute) 88%, var(--ink));
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.3;
+  letter-spacing: 0.025em;
+}
+
+.sidebar-group-label {
+  margin: 0 4px 6px;
+}
+
+.sidebar-feature-tabs {
+  gap: 2px;
+  margin: 0 0 12px;
+  padding-bottom: 14px;
+}
+
+.sidebar-feature-tab {
+  min-height: 40px;
+  gap: 10px;
+  padding-inline: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar-feature-tab svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.78;
+}
+
+.sidebar-feature-tab:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sidebar-feature-tab.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: none;
+  color: var(--ink);
+  font-weight: 590;
+}
+
+.sidebar-feature-tab.is-active::before {
+  display: none;
+}
+
+.sidebar-projects {
+  gap: 2px;
+  padding-inline: 0;
+}
+
+.sidebar-collapsible-section {
+  min-height: 32px;
+  padding: 14px 4px 5px;
+}
+
+.sidebar-section-header {
+  padding: 14px 4px 5px;
+}
+
+.sidebar-section-toggle {
+  gap: 5px;
+  padding: 3px 0;
+}
+
+.sidebar-section-icon {
+  display: none;
+}
+
+.sidebar-section-toggle:is(:hover, :focus-visible, :active) {
+  background: transparent;
+}
+
+.sidebar-section-chevron {
+  opacity: 0.4;
+}
+
+.sidebar-section-actions {
+  gap: 2px;
+}
+
+.sidebar-collapsible-section:is(:hover, :focus-within)
+  .sidebar-section-chevron {
+  opacity: 0.68;
+}
+
+/* Icon-only mode is a semantic dock: section glyphs replace detached chevrons.
+   Activating one previews the labelled tree without changing the saved preference. */
+.sidebar:not(.is-labels) .sidebar-projects {
+  gap: 6px;
+}
+
+.sidebar:not(.is-labels) .sidebar-collapsible-section {
+  min-height: 38px;
+  padding: 1px 0;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--ink-soft) 88%, transparent);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle:is(:hover, :focus-visible) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.sidebar:not(.is-labels) .sidebar-section-toggle:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 34%, transparent);
+  outline-offset: -2px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar:not(.is-labels) .sidebar-section-chevron {
+  display: none;
+}
+
+.sidebar-add-btn,
+.sidebar-session-filter-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.sidebar-project {
+  gap: 1px;
+}
+
+.sidebar-project-header {
+  min-height: 40px;
+  gap: 2px;
+  padding: 1px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background-color 120ms ease;
+}
+
+.sidebar-project-name {
+  min-height: 36px;
+  gap: 10px;
+  padding: 0 9px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sidebar-project-name:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sidebar-project > .sidebar-sessions {
+  padding-left: 8px;
+}
+
+.sidebar-project > .sidebar-sessions::before {
+  display: none;
+}
+
+.sidebar-sessions {
+  gap: 1px;
+}
+
+.sidebar-session-item {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background-color 120ms ease;
+}
+
+.sidebar-session-item:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  transform: none;
+}
+
+.sidebar-session-item.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: none;
+}
+
+.sidebar-session-main {
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 66px 8px 9px;
+  font-size: 13.5px;
+  font-weight: 450;
+  line-height: 1.3;
+}
+
+.sidebar-session-item.is-active .sidebar-session-main {
+  font-weight: 580;
+}
+
+.sidebar-session-time {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  opacity: 0.58;
+}
+
+.sidebar-session-expand {
+  min-height: 32px;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  font-weight: 540;
+}
+
+.sidebar-session-expand:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sidebar-footer {
+  min-height: 46px;
+  padding: 6px 0 0;
+}
+
+.sidebar-footer::before {
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.sidebar-settings-btn {
+  min-height: 36px;
+  gap: 9px;
+  padding-inline: 9px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 520;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.sidebar-settings-btn svg {
+  flex-basis: 17px;
+}
+
+.sidebar-new-chat:active,
+.sidebar-feature-tab:active,
+.sidebar-project-header:active,
+.sidebar-session-item:active,
+.sidebar-settings-btn:active {
+  transform: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar.is-pinned,
+  .sidebar.is-settings {
+    background: var(--bg1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-new-chat,
+  .sidebar-global-search .expandable-search-btn,
+  .sidebar-global-search .expandable-search-field,
+  .sidebar-feature-tab,
+  .sidebar-section-toggle,
+  .sidebar-project-header,
+  .sidebar-session-item,
+  .sidebar-settings-btn {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .sidebar.is-pinned,
+  .sidebar-feature-tab.is-active,
+  .sidebar-session-item.is-active {
+    border-color: color-mix(in srgb, var(--ink) 34%, transparent);
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar.is-labels {
+    padding-inline: 12px;
+  }
+
+  .sidebar.is-labels .sidebar-brand {
+    padding-inline: 2px;
+  }
+}

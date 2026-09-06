@@ -22,9 +22,6 @@ const AGENT_ID_HEX_LEN: usize = 12;
 /// slug 段最大长度（避免目录名过长）
 const AGENT_ID_SLUG_MAX: usize = 24;
 
-/// 当前激活 Agent 的持久化文件名（位于数据根目录）
-pub(crate) const ACTIVE_AGENT_FILE: &str = "active-agent.json";
-
 /// 用户主目录（跨平台统一入口）。
 ///
 /// - Windows：优先 `USERPROFILE`，再 `HOME`（Git Bash 等）
@@ -105,17 +102,65 @@ pub fn default_memory_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".astro"))
 }
 
+/// 数据库目录：`{base}/data/`（state.db、usage.db、subagents 等）
+pub fn data_dir(base: &Path) -> PathBuf {
+    base.join("data")
+}
+
+pub const SESSION_DB_FILENAME: &str = "state.db";
+pub const USAGE_DB_FILENAME: &str = "usage.db";
+pub const SUBAGENTS_DB_FILENAME: &str = "subagents-v2.db";
+pub const ARTIFACTS_DB_FILENAME: &str = "artifacts.db";
+pub const KNOWLEDGE_DB_FILENAME: &str = "knowledge.db";
+pub const CRON_RUN_DB_FILENAME: &str = "cron_v1.db";
+
+/// 会话、消息与 FTS 投影的 canonical SQLite 路径。
+pub fn session_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(SESSION_DB_FILENAME)
+}
+
+/// 用量事件库的 canonical SQLite 路径。
+pub fn usage_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(USAGE_DB_FILENAME)
+}
+
+/// Agent Graph、mailbox 与状态库的 canonical SQLite 路径。
+pub fn subagents_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(SUBAGENTS_DB_FILENAME)
+}
+
+/// 文件空间索引的 canonical SQLite 路径。
+pub fn artifacts_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(ARTIFACTS_DB_FILENAME)
+}
+
+/// Knowledge Content FTS 的 canonical SQLite 路径。
+pub fn knowledge_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(KNOWLEDGE_DB_FILENAME)
+}
+
+/// Cron 运行记录的 canonical SQLite 路径。
+pub fn cron_run_db_path(base: &Path) -> PathBuf {
+    data_dir(base).join(CRON_RUN_DB_FILENAME)
+}
+
+/// 会话 rollout 目录：`{base}/sessions/rollouts/`
+pub fn rollouts_dir(base: &Path) -> PathBuf {
+    base.join("sessions").join("rollouts")
+}
+
+/// 记忆子系统目录：`{base}/memory/`（dreaming、audit、pending、learning）
+pub fn memory_subsystem_dir(base: &Path) -> PathBuf {
+    base.join("memory")
+}
+
 /// 解析 Agent 工作区路径。
 ///
 /// - `default`（默认）→ `{base}/workspace`（目录名保持 `workspace` 不变）
 /// - 其他 id → `{base}/workspace-{id}`
 pub fn agent_workspace_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    if id == DEFAULT_AGENT_ID {
-        base.join(DEFAULT_AGENT_WORKSPACE_DIR)
-    } else {
-        base.join(format!("workspace-{id}"))
-    }
+    let _ = agent_id;
+    base.join(DEFAULT_AGENT_WORKSPACE_DIR)
 }
 
 /// 默认 Agent 的配置目录名（`agents/default/`），与工作区目录名 `workspace/` 区分。
@@ -126,12 +171,8 @@ pub const DEFAULT_AGENT_CONFIG_DIR: &str = "default";
 /// 默认 Agent（id = `workspace`）的配置目录固定为 `agents/default/`，
 /// 避免与工作区内容目录 `workspace/` 产生歧义。
 pub fn agent_config_dir(base: &Path, agent_id: &str) -> PathBuf {
-    let id = normalize_agent_id(agent_id);
-    if id == DEFAULT_AGENT_ID {
-        base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR)
-    } else {
-        base.join("agents").join(id)
-    }
+    let _ = agent_id;
+    base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR)
 }
 
 /// 从工作区目录名解析 agent id（`workspace` → `"default"`；`workspace-xxx` → `"xxx"`）
@@ -235,30 +276,17 @@ pub fn normalize_agent_id(raw: &str) -> String {
 
 /// 读取当前激活的 Agent id（缺省为 `workspace`）
 pub fn active_agent_id(base: &Path) -> String {
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let Ok(text) = fs::read_to_string(&path) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return DEFAULT_AGENT_ID.to_string();
-    };
-    v.get("id")
-        .and_then(|x| x.as_str())
-        .map(normalize_agent_id)
-        .filter(|id| agent_workspace_dir(base, id).is_dir())
-        .unwrap_or_else(|| DEFAULT_AGENT_ID.to_string())
+    let _ = base;
+    DEFAULT_AGENT_ID.to_string()
 }
 
 /// 设置当前激活的 Agent（目标工作区必须已存在）
 pub fn set_active_agent(base: &Path, agent_id: &str) -> anyhow::Result<String> {
     let id = normalize_agent_id(agent_id);
-    let dir = agent_workspace_dir(base, &id);
-    if !dir.is_dir() {
-        anyhow::bail!("Agent 工作区不存在: {id}");
+    if id != DEFAULT_AGENT_ID {
+        anyhow::bail!("Astro 已切换为单专家模式，仅支持 default");
     }
-    let path = base.join(ACTIVE_AGENT_FILE);
-    let json = serde_json::json!({ "id": id });
-    fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&json)?))?;
+    let _ = base;
     Ok(id)
 }
 
@@ -303,6 +331,7 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
 pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
     fs::create_dir_all(base.join("agents"))?;
+    fs::create_dir_all(data_dir(base))?;
     // 迁移：旧版本默认 Agent 配置目录为 agents/workspace，
     // 新版本改为 agents/default 以避免与工作区内容目录 workspace/ 歧义。
     let old_config = base.join("agents").join(DEFAULT_AGENT_ID);
@@ -310,7 +339,33 @@ pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
     if old_config.is_dir() && !new_config.exists() {
         let _ = fs::rename(&old_config, &new_config);
     }
+
+    // 迁移：记忆相关 → memory/
+    let memory_dir = base.join("memory");
+    migrate_file(base, "dreaming.json", &memory_dir);
+    migrate_dir(base, "audit", &memory_dir);
+    migrate_dir(base, "learning", &memory_dir);
+    migrate_dir(base, "pending", &memory_dir);
+
     Ok(())
+}
+
+fn migrate_file(old_parent: &Path, name: &str, new_parent: &Path) {
+    let old = old_parent.join(name);
+    let new = new_parent.join(name);
+    if old.is_file() && !new.exists() {
+        let _ = fs::create_dir_all(new_parent);
+        let _ = fs::rename(&old, &new);
+    }
+}
+
+fn migrate_dir(old_parent: &Path, name: &str, new_parent: &Path) {
+    let old = old_parent.join(name);
+    let new = new_parent.join(name);
+    if old.is_dir() && !new.exists() {
+        let _ = fs::create_dir_all(new_parent);
+        let _ = fs::rename(&old, &new);
+    }
 }
 
 /// 确保默认工作区基础目录存在（不初始化 SQLite）。
@@ -321,6 +376,17 @@ pub fn ensure_default_workspace_dirs() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn canonical_database_paths_share_data_directory() {
+        let base = Path::new("/tmp/astro-home");
+        let expected = base.join("data");
+        assert_eq!(session_db_path(base), expected.join("state.db"));
+        assert_eq!(usage_db_path(base), expected.join("usage.db"));
+        assert_eq!(subagents_db_path(base), expected.join("subagents-v2.db"));
+        assert_eq!(artifacts_db_path(base), expected.join("artifacts.db"));
+        assert_eq!(knowledge_db_path(base), expected.join("knowledge.db"));
+        assert_eq!(cron_run_db_path(base), expected.join("cron_v1.db"));
+    }
 
     #[test]
     fn display_user_path_uses_tilde_and_forward_slash() {

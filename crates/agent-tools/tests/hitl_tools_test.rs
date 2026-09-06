@@ -3,7 +3,7 @@
 use tempfile::TempDir;
 use tools::{register_all, ToolContext, ToolRegistry};
 
-fn make_ctx(
+async fn make_ctx(
     dir: &TempDir,
 ) -> (
     std::sync::RwLock<memory::MemoryManager>,
@@ -15,8 +15,9 @@ fn make_ctx(
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-    let sessions =
-        session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+    let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        .await
+        .unwrap();
     let targets = tools::ImageGenTargets::default();
     let creds = tools::ModelCredentials::default();
     (
@@ -31,18 +32,20 @@ fn make_ctx(
 #[tokio::test]
 async fn confirm_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -50,10 +53,10 @@ async fn confirm_emits_valid_a2ui_hitl() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -80,19 +83,21 @@ async fn confirm_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -100,10 +105,10 @@ async fn clarify_emits_valid_a2ui_hitl() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -145,19 +150,21 @@ async fn clarify_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn clarify_free_text_step_allows_empty_options() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -165,10 +172,10 @@ async fn clarify_free_text_step_allows_empty_options() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -216,19 +223,21 @@ async fn clarify_free_text_step_allows_empty_options() {
 #[tokio::test]
 async fn clarify_multi_emits_wizard_hitl() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -236,10 +245,10 @@ async fn clarify_multi_emits_wizard_hitl() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -292,19 +301,21 @@ async fn clarify_multi_emits_wizard_hitl() {
 #[tokio::test]
 async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -312,10 +323,10 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -341,19 +352,21 @@ async fn ask_user_location_mode_emits_valid_a2ui_hitl() {
 #[tokio::test]
 async fn present_emits_valid_astro_ui() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -361,10 +374,10 @@ async fn present_emits_valid_astro_ui() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let raw = tools::dispatch_tool(
@@ -392,19 +405,21 @@ async fn present_emits_valid_astro_ui() {
 #[tokio::test]
 async fn ask_user_rejects_mixed_questions_and_body() {
     let dir = TempDir::new().unwrap();
-    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir);
+    let (memory, sessions, targets, workspace, creds) = make_ctx(&dir).await;
     let mut ctx = ToolContext {
         memory: &memory,
         sessions: &sessions,
         memory_dir: dir.path().to_path_buf(),
         workspace_dir: workspace,
         project_root: None,
+        workspace_roots: Vec::new(),
         image_gen_targets: &targets,
 
         session_id: "test".into(),
         turn_id: None,
         credentials: &creds,
-        chat_targets: &[],
+        service_tier: None,
+        model_targets: &[],
         execution: None,
         permission_profile: None,
         skill_config_overrides: &[],
@@ -412,10 +427,10 @@ async fn ask_user_rejects_mixed_questions_and_body() {
         hook_runtime: None,
         workspace_write_grant: false,
         sandbox_policy: None,
-        network_grant: tools::InProcessNetworkGrant::default(),
         managed_network: None,
         context_window: None,
         context_tokens_used: None,
+        tool_registry: None,
     };
 
     let err = tools::dispatch_tool(

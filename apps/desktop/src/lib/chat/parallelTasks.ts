@@ -13,9 +13,10 @@ export type ParallelTaskStatus =
   | "cancelled";
 
 export type ParallelWorktreeInfo = {
+  id: string;
   path: string;
-  repoRoot: string;
-  branch: string;
+  branch?: string | null;
+  headSha: string;
 };
 
 export type ParallelChatTask = {
@@ -43,7 +44,8 @@ export function newParallelTaskId(): string {
 
 /** 仍占用并发槽：执行中或等待用户审批/澄清 */
 export function countRunningParallel(tasks: ParallelChatTask[]): number {
-  return tasks.filter((t) => t.status === "running" || t.status === "waiting").length;
+  return tasks.filter((t) => t.status === "running" || t.status === "waiting")
+    .length;
 }
 
 export function isParallelTaskActive(status: ParallelTaskStatus): boolean {

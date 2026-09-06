@@ -34,33 +34,19 @@ const OUTPUT_SCHEMAS: Partial<Record<NodeType, OutputField[]>> = {
     { key: "path", label: "语音文件", mediaType: "audio" },
     { key: "duration_ms", label: "时长(ms)", mediaType: "any" },
   ],
-  voice_clone: [
-    { key: "path", label: "克隆语音", mediaType: "audio" },
-  ],
-  speech_to_text: [
-    { key: "text", label: "识别文本", mediaType: "text" },
-  ],
-  image_edit: [
-    { key: "path", label: "编辑后图片", mediaType: "image" },
-  ],
-  ai_agent_task: [
-    { key: "text", label: "AI 输出", mediaType: "text" },
-  ],
-  summarization: [
-    { key: "text", label: "摘要", mediaType: "text" },
-  ],
-  translation: [
-    { key: "translation", label: "译文", mediaType: "text" },
-  ],
+  voice_clone: [{ key: "path", label: "克隆语音", mediaType: "audio" }],
+  speech_to_text: [{ key: "text", label: "识别文本", mediaType: "text" }],
+  image_edit: [{ key: "path", label: "编辑后图片", mediaType: "image" }],
+  ai_agent_task: [{ key: "text", label: "AI 输出", mediaType: "text" }],
+  summarization: [{ key: "text", label: "摘要", mediaType: "text" }],
+  translation: [{ key: "translation", label: "译文", mediaType: "text" }],
   parameter_extraction: [
     { key: "result", label: "提取结果", mediaType: "any" },
   ],
   question_classification: [
     { key: "category", label: "分类结果", mediaType: "text" },
   ],
-  sentiment_analysis: [
-    { key: "result", label: "情感分析", mediaType: "text" },
-  ],
+  sentiment_analysis: [{ key: "result", label: "情感分析", mediaType: "text" }],
   document_understanding: [
     { key: "text", label: "文档内容", mediaType: "text" },
   ],
@@ -68,36 +54,28 @@ const OUTPUT_SCHEMAS: Partial<Record<NodeType, OutputField[]>> = {
     { key: "body", label: "响应体", mediaType: "any" },
     { key: "status", label: "状态码", mediaType: "any" },
   ],
-  code: [
-    { key: "result", label: "代码结果", mediaType: "any" },
-  ],
-  set_fields: [
-    { key: "result", label: "字段值", mediaType: "any" },
-  ],
-  format_text: [
-    { key: "text", label: "格式化文本", mediaType: "text" },
-  ],
-  json: [
-    { key: "result", label: "JSON 结果", mediaType: "any" },
-  ],
+  code: [{ key: "result", label: "代码结果", mediaType: "any" }],
+  set_fields: [{ key: "result", label: "字段值", mediaType: "any" }],
+  format_text: [{ key: "text", label: "格式化文本", mediaType: "text" }],
+  json: [{ key: "result", label: "JSON 结果", mediaType: "any" }],
   file_io: [
     { key: "path", label: "文件路径", mediaType: "path" },
     { key: "content", label: "文件内容", mediaType: "text" },
   ],
-  audio_processing: [
-    { key: "path", label: "处理后音频", mediaType: "audio" },
-  ],
+  audio_processing: [{ key: "path", label: "处理后音频", mediaType: "audio" }],
   subtitle_generation: [
     { key: "path", label: "字幕文件", mediaType: "path" },
     { key: "text", label: "字幕文本", mediaType: "text" },
   ],
-  knowledge_retrieval: [
-    { key: "text", label: "检索内容", mediaType: "text" },
-  ],
+  knowledge_retrieval: [{ key: "text", label: "检索内容", mediaType: "text" }],
 };
 
 export function getOutputFields(nodeType: NodeType): OutputField[] {
-  return OUTPUT_SCHEMAS[nodeType] ?? [{ key: "result", label: "输出", mediaType: "any" }];
+  return (
+    OUTPUT_SCHEMAS[nodeType] ?? [
+      { key: "result", label: "输出", mediaType: "any" },
+    ]
+  );
 }
 
 /** 根据 edges 反向遍历找到所有上游节点 */

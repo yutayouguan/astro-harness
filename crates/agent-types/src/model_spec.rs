@@ -1,10 +1,11 @@
 //! Agno 风格模型声明：`provider:model_id` 简写 + 可选采样参数。
 //!
-//! 与运行时 [`crate::ChatTarget`]（含 API key）分离：`ModelSpec` 是「要用哪家模型」的
-//! 声明；凭据由钥匙串 / 环境解析后再 [`ModelSpec::apply_to`] 或 [`ModelSpec::to_chat_target`]。
+//! 与运行时 [`crate::ModelTarget`]（含 API key）分离：`ModelSpec` 是「要用哪家模型」的
+//! 声明；凭据由钥匙串 / 环境解析后再 [`ModelSpec::apply_to`] 或 [`ModelSpec::to_model_target`]。
 
 use crate::auxiliary_target::AuxiliaryTask;
-use crate::chat_target::ChatTarget;
+use crate::model_target::ModelTarget;
+use crate::{ModelProfile, ToolMode, ToolModeFeatureFlags};
 use serde::{Deserialize, Serialize};
 
 /// 模型角色：主聊或辅助任务（对齐 Agno `ModelType`）。
@@ -30,6 +31,12 @@ pub struct ModelSpec {
     /// 可选 max_tokens；`None` 表示沿用默认。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
+    /// 模型目录提供的工具模式；存在时优先于 feature flag。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_mode: Option<ToolMode>,
+    /// 模型目录提供的运行时能力。
+    #[serde(default)]
+    pub profile: ModelProfile,
 }
 
 impl ModelSpec {
@@ -39,6 +46,8 @@ impl ModelSpec {
             model_id: model_id.into(),
             temperature: None,
             max_tokens: None,
+            tool_mode: None,
+            profile: ModelProfile::default(),
         }
     }
 
@@ -50,6 +59,21 @@ impl ModelSpec {
     pub fn with_max_tokens(mut self, n: u32) -> Self {
         self.max_tokens = Some(n);
         self
+    }
+
+    pub fn with_tool_mode(mut self, mode: ToolMode) -> Self {
+        self.tool_mode = Some(mode);
+        self
+    }
+
+    pub fn with_profile(mut self, profile: ModelProfile) -> Self {
+        self.profile = profile;
+        self
+    }
+
+    /// 按“模型目录 > feature flag > Direct”解析请求模式。
+    pub fn requested_tool_mode(&self, features: ToolModeFeatureFlags) -> ToolMode {
+        self.tool_mode.unwrap_or_else(|| features.requested_mode())
     }
 
     /// 解析 `"provider:model_id"` 或 `"provider/model_id"`。
@@ -92,7 +116,7 @@ impl ModelSpec {
     /// 用本规格覆盖 `target` 的 provider/model；保留 api_key / base_url。
     ///
     /// 若 `provider_id` 为空，保留 target 原有 provider。
-    pub fn apply_to(&self, target: &ChatTarget) -> ChatTarget {
+    pub fn apply_to(&self, target: &ModelTarget) -> ModelTarget {
         let provider = if self.provider_id.trim().is_empty() {
             target.backend_id.clone()
         } else {
@@ -103,30 +127,28 @@ impl ModelSpec {
         } else {
             self.model_id.trim().to_string()
         };
-        ChatTarget {
+        ModelTarget {
             provider_id: provider.clone(),
             backend_id: provider,
             model,
             api_key: target.api_key.clone(),
             base_url: target.base_url.clone(),
-            api_mode: String::new(),
         }
     }
 
-    /// 从凭据构造完整 [`ChatTarget`]。
-    pub fn to_chat_target(
+    /// 从凭据构造完整 [`ModelTarget`]。
+    pub fn to_model_target(
         &self,
         api_key: impl Into<String>,
         base_url: impl Into<String>,
-    ) -> ChatTarget {
+    ) -> ModelTarget {
         let provider = self.provider_id.trim().to_string();
-        ChatTarget {
+        ModelTarget {
             provider_id: provider.clone(),
             backend_id: provider,
             model: self.model_id.trim().to_string(),
             api_key: api_key.into(),
             base_url: base_url.into(),
-            api_mode: String::new(),
         }
     }
 }
@@ -155,13 +177,12 @@ mod tests {
 
     #[test]
     fn apply_to_keeps_credentials() {
-        let base = ChatTarget {
+        let base = ModelTarget {
             provider_id: "openai".into(),
             backend_id: "openai".into(),
             model: "old".into(),
             api_key: "sk".into(),
             base_url: "https://api.openai.com/v1".into(),
-            api_mode: String::new(),
         };
         let spec = ModelSpec::parse("claude:opus").unwrap();
         let t = spec.apply_to(&base);
@@ -173,18 +194,27 @@ mod tests {
 
     #[test]
     fn bare_model_keeps_provider_on_apply() {
-        let base = ChatTarget {
+        let base = ModelTarget {
             provider_id: "google".into(),
             backend_id: "google".into(),
             model: "old".into(),
             api_key: "k".into(),
             base_url: "https://generativelanguage.googleapis.com".into(),
-            api_mode: String::new(),
         };
         let t = ModelSpec::parse("gemini-2.5-flash")
             .unwrap()
             .apply_to(&base);
         assert_eq!(t.backend_id, "google");
         assert_eq!(t.model, "gemini-2.5-flash");
+    }
+
+    #[test]
+    fn model_tool_mode_overrides_feature_flags() {
+        let spec = ModelSpec::new("openai", "gpt-test").with_tool_mode(ToolMode::Direct);
+        let features = ToolModeFeatureFlags {
+            code_mode: false,
+            code_mode_only: true,
+        };
+        assert_eq!(spec.requested_tool_mode(features), ToolMode::Direct);
     }
 }

@@ -8,6 +8,16 @@ use futures::StreamExt;
 
 use crate::types::stream::{CompletionStream, StreamChunk};
 
+fn take_complete_line(buf: &mut Vec<u8>) -> Option<String> {
+    let newline = buf.iter().position(|byte| *byte == b'\n')?;
+    let mut line = buf.drain(..=newline).collect::<Vec<_>>();
+    line.pop();
+    if line.last() == Some(&b'\r') {
+        line.pop();
+    }
+    Some(String::from_utf8_lossy(&line).into_owned())
+}
+
 /// SSE 事件提取器：解析 `data:` 负载为零或多个 [`StreamChunk`]。
 pub type ChunkExtract = Arc<dyn Fn(&str) -> Vec<StreamChunk> + Send + Sync>;
 
@@ -22,6 +32,18 @@ pub fn wrap_single_extract(
 pub async fn sse_stream(
     response: reqwest::Response,
     extract: ChunkExtract,
+) -> Result<CompletionStream> {
+    sse_stream_with_terminal(response, extract, false).await
+}
+
+/// Responses streams are successful only after a terminal response event.
+/// A clean TCP EOF before `response.completed`/`response.done`/
+/// `response.incomplete` is still a truncated response and must be surfaced as
+/// an error.
+pub async fn sse_stream_with_terminal(
+    response: reqwest::Response,
+    extract: ChunkExtract,
+    require_terminal: bool,
 ) -> Result<CompletionStream> {
     let status = response.status();
     if !status.is_success() {
@@ -41,24 +63,26 @@ pub async fn sse_stream(
     let stream = futures::stream::unfold(
         (
             byte_stream,
-            String::new(),
+            Vec::<u8>::new(),
+            false,
             false,
             extract,
             VecDeque::<StreamChunk>::new(),
         ),
-        |(mut byte_stream, mut buf, done, extract, mut pending)| async move {
+        move |(mut byte_stream, mut buf, done, mut saw_terminal, extract, mut pending)| async move {
             // 先排空 pending 队列（一个 SSE 事件可产出多个 chunk）
             if let Some(chunk) = pending.pop_front() {
-                return Some((Ok(chunk), (byte_stream, buf, done, extract, pending)));
+                return Some((
+                    Ok(chunk),
+                    (byte_stream, buf, done, saw_terminal, extract, pending),
+                ));
             }
 
             if done {
                 return None;
             }
             loop {
-                if let Some(nl) = buf.find('\n') {
-                    let line = buf[..nl].trim_end_matches('\r').to_string();
-                    buf = buf[nl + 1..].to_string();
+                if let Some(line) = take_complete_line(&mut buf) {
                     let trimmed = line.trim();
                     if trimmed.is_empty() || trimmed.starts_with(':') {
                         continue;
@@ -66,6 +90,12 @@ pub async fn sse_stream(
                     if let Some(data) = trimmed.strip_prefix("data:") {
                         let data = data.trim();
                         if data == "[DONE]" {
+                            if require_terminal && !saw_terminal {
+                                return Some((
+                                    Err(anyhow!("Responses stream ended before a terminal event")),
+                                    (byte_stream, buf, true, saw_terminal, extract, pending),
+                                ));
+                            }
                             return None;
                         }
                         let mut chunks = extract(data);
@@ -80,28 +110,37 @@ pub async fn sse_stream(
                             };
                             return Some((
                                 Err(anyhow!(msg)),
-                                (byte_stream, buf, true, extract, pending),
+                                (byte_stream, buf, true, saw_terminal, extract, pending),
                             ));
                         }
+                        saw_terminal |= chunks
+                            .iter()
+                            .any(|chunk| matches!(chunk, StreamChunk::Done { .. }));
                         let first = chunks.remove(0);
                         for rest in chunks {
                             pending.push_back(rest);
                         }
-                        return Some((Ok(first), (byte_stream, buf, false, extract, pending)));
+                        return Some((
+                            Ok(first),
+                            (byte_stream, buf, false, saw_terminal, extract, pending),
+                        ));
                     }
                     continue;
                 }
 
                 match byte_stream.next().await {
                     Some(Ok(bytes)) => {
-                        buf.push_str(&String::from_utf8_lossy(&bytes));
+                        buf.extend_from_slice(&bytes);
                     }
                     Some(Err(err)) => {
-                        return Some((Err(err.into()), (byte_stream, buf, true, extract, pending)));
+                        return Some((
+                            Err(err.into()),
+                            (byte_stream, buf, true, saw_terminal, extract, pending),
+                        ));
                     }
                     None => {
-                        if !buf.trim().is_empty() {
-                            let line = buf.trim().to_string();
+                        if buf.iter().any(|byte| !byte.is_ascii_whitespace()) {
+                            let line = String::from_utf8_lossy(&buf).trim().to_string();
                             buf.clear();
                             if let Some(data) = line.strip_prefix("data:") {
                                 let data = data.trim();
@@ -115,20 +154,49 @@ pub async fn sse_stream(
                                             };
                                             return Some((
                                                 Err(anyhow!(msg)),
-                                                (byte_stream, buf, true, extract, pending),
+                                                (
+                                                    byte_stream,
+                                                    buf,
+                                                    true,
+                                                    saw_terminal,
+                                                    extract,
+                                                    pending,
+                                                ),
                                             ));
                                         }
+                                        saw_terminal |= chunks
+                                            .iter()
+                                            .any(|chunk| matches!(chunk, StreamChunk::Done { .. }));
                                         let first = chunks.remove(0);
                                         for rest in chunks {
                                             pending.push_back(rest);
                                         }
+                                        if require_terminal && !saw_terminal {
+                                            pending.push_back(StreamChunk::Error(
+                                                "Responses stream ended before a terminal event"
+                                                    .into(),
+                                            ));
+                                        }
                                         return Some((
                                             Ok(first),
-                                            (byte_stream, buf, true, extract, pending),
+                                            (
+                                                byte_stream,
+                                                buf,
+                                                true,
+                                                saw_terminal,
+                                                extract,
+                                                pending,
+                                            ),
                                         ));
                                     }
                                 }
                             }
+                        }
+                        if require_terminal && !saw_terminal {
+                            return Some((
+                                Err(anyhow!("Responses stream ended before a terminal event")),
+                                (byte_stream, buf, true, saw_terminal, extract, pending),
+                            ));
                         }
                         return None;
                     }
@@ -138,4 +206,27 @@ pub async fn sse_stream(
     );
 
     Ok(Box::pin(stream))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_complete_line;
+
+    #[test]
+    fn complete_line_preserves_utf8_split_across_chunks() {
+        let line = "data: {\"delta\":\"中央\"}\n";
+        let chinese_start = line.find('中').expect("fixture contains Chinese text");
+        let split = chinese_start + 1;
+        let bytes = line.as_bytes();
+        let mut buffer = bytes[..split].to_vec();
+
+        assert_eq!(take_complete_line(&mut buffer), None);
+
+        buffer.extend_from_slice(&bytes[split..]);
+        assert_eq!(
+            take_complete_line(&mut buffer).as_deref(),
+            Some("data: {\"delta\":\"中央\"}")
+        );
+        assert!(buffer.is_empty());
+    }
 }

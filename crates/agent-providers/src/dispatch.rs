@@ -7,16 +7,19 @@ use serde_json::Value;
 
 use crate::types::error::{ProviderError, ProviderResult};
 use crate::types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
-use crate::types::message::{Message, ToolDefinition};
-use crate::types::request::{CompletionRequest, ProviderConfig, ThinkingConfig};
+use crate::types::request::{
+    ChatCompletionRequest, PromptCacheConfig, ProviderConfig, ResponsesRequest, ThinkingConfig,
+    ToolChoice,
+};
+use crate::types::request_content::{
+    ChatCompletionMessage, FunctionToolDefinition, ToolDefinition,
+};
 use crate::types::stream::CompletionStream;
 
-/// 协议管线分发。
-///
-/// 接受 `CompletionRequest`，返回 `CompletionStream`。
+/// 非 Agent Chat/Anthropic/Gemini 兼容管线分发。
 pub async fn chat_stream_direct(
     provider: &str,
-    request: CompletionRequest,
+    request: ChatCompletionRequest,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
     let provider = normalize_provider_id(provider);
@@ -24,7 +27,7 @@ pub async fn chat_stream_direct(
     register_provider(&mut reg, provider, config);
 
     let dyn_model = reg
-        .completion_model(provider)
+        .chat_completion_model(provider)
         .ok_or_else(|| ProviderError::UnknownProvider(provider.to_string()))?;
 
     dyn_model
@@ -33,38 +36,188 @@ pub async fn chat_stream_direct(
         .map_err(ProviderError::Other)
 }
 
+/// Agent 原生 Responses 管线分发。
+pub async fn responses_stream_direct(
+    provider: &str,
+    prompt: ResponsesRequest,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    let provider = normalize_provider_id(provider);
+    let mut reg = crate::registry::Registry::new();
+    register_provider(&mut reg, provider, config);
+
+    let dyn_model =
+        reg.responses_model(provider)
+            .ok_or_else(|| ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability: "Agent Responses API".to_string(),
+            })?;
+
+    dyn_model.stream(prompt).await.map_err(ProviderError::Other)
+}
+
 /// 聊天补全 — 接受旧签名（messages + tools JSON + config）。
 ///
 /// 大多数调用者使用此函数。tools 为 OpenAI 格式 JSON。
 pub async fn chat_stream(
     provider: &str,
-    messages: Vec<Message>,
+    messages: Vec<ChatCompletionMessage>,
     tools: Vec<Value>,
     config: &ProviderConfig,
 ) -> ProviderResult<CompletionStream> {
-    let tool_defs: Vec<ToolDefinition> = tools
-        .iter()
-        .filter_map(|t| {
-            let f = t.get("function").unwrap_or(t);
-            Some(ToolDefinition {
-                name: f.get("name")?.as_str()?.to_string(),
-                description: f
-                    .get("description")
-                    .and_then(|d| d.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                parameters: f
-                    .get("parameters")
-                    .cloned()
-                    .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
-            })
-        })
-        .collect();
+    chat_stream_with_tool_policy(provider, messages, tools, config, None, None).await
+}
 
-    let request = CompletionRequest {
+/// Agent-only Responses API entry point.
+///
+/// Unlike [`chat_stream`], this accepts the canonical Responses item history
+/// and refuses providers that do not advertise Responses support. Legacy chat,
+/// Anthropic, Gemini, and Interactions protocols remain available only to
+/// tool-owned callers through their dedicated APIs.
+pub async fn agent_responses_stream(
+    provider: &str,
+    instructions: String,
+    input: Vec<agent_protocol::ResponseItem>,
+    tools: Vec<Value>,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    let provider = normalize_provider_id(provider);
+    if !supports_agent_responses(provider) {
+        return Err(ProviderError::UnsupportedCapability {
+            provider: provider.to_string(),
+            capability: "Agent Responses API".to_string(),
+        });
+    }
+    let config = force_agent_responses_config(config);
+    let mut additional_params = config.additional_params.clone();
+    let prompt_cache = PromptCacheConfig::take_from_additional_params(&mut additional_params)
+        .map_err(|detail| ProviderError::ModelError {
+            provider: provider.to_string(),
+            detail,
+        })?;
+    let has_prompt_cache_controls = prompt_cache.is_some()
+        || additional_params
+            .as_object()
+            .is_some_and(|params| params.keys().any(|key| key.starts_with("prompt_cache_")));
+    if has_prompt_cache_controls {
+        if let Some(capability) = unsupported_prompt_cache_controls(provider, &config.model) {
+            return Err(ProviderError::UnsupportedCapability {
+                provider: provider.to_string(),
+                capability,
+            });
+        }
+    }
+    let tool_definitions = parse_tool_definitions(provider, &tools)?;
+    let request = ResponsesRequest {
         model: config.model.clone(),
-        messages,
+        instructions,
+        input,
+        tools: tool_definitions,
+        tool_choice: None,
+        parallel_tool_calls: None,
+        temperature: Some(config.temperature),
+        max_tokens: Some(config.max_tokens),
+        thinking: Some(ThinkingConfig {
+            enabled: config.thinking_enabled,
+            budget_tokens: None,
+            effort: config.reasoning_effort.clone(),
+        }),
+        prompt_cache,
+        additional_params,
+    };
+    responses_stream_direct(provider, request, &config).await
+}
+
+/// Convenience entry point for Agent-owned one-shot tasks such as title,
+/// compaction, memory review, and smart approval.
+pub async fn agent_responses_prompt(
+    provider: &str,
+    instructions: impl Into<String>,
+    prompt: impl Into<String>,
+    config: &ProviderConfig,
+) -> ProviderResult<CompletionStream> {
+    agent_responses_stream(
+        provider,
+        instructions.into(),
+        vec![agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![agent_protocol::ContentItem::InputText {
+                text: prompt.into(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        Vec::new(),
+        config,
+    )
+    .await
+}
+
+/// Whether a provider may participate in the Agent target/fallback chain.
+pub fn supports_agent_responses(provider: &str) -> bool {
+    let provider = normalize_provider_id(provider);
+    crate::profile::resolve(provider).is_some_and(|profile| profile.supports_responses)
+        || lookup_custom_provider(provider).is_some()
+}
+
+fn force_agent_responses_config(config: &ProviderConfig) -> ProviderConfig {
+    let mut config = config.clone();
+    config.api_mode = "responses".to_string();
+    config
+}
+
+fn parsed_gpt_version(model: &str) -> Option<(u16, u16)> {
+    let lower = model.to_ascii_lowercase();
+    let marker = lower.find("gpt-")?;
+    let version = &lower[marker + 4..];
+    let mut parts = version.split(|ch: char| !ch.is_ascii_digit() && ch != '.');
+    let numeric = parts.find(|part| !part.is_empty())?;
+    let mut numbers = numeric.split('.');
+    let major = numbers.next()?.parse().ok()?;
+    let minor = numbers.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor))
+}
+
+fn unsupported_prompt_cache_controls(provider: &str, model: &str) -> Option<String> {
+    match normalize_provider_id(provider) {
+        "deepseek" => {
+            Some("显式 prompt cache 控制（DeepSeek 上下文缓存由服务端自动管理）".to_string())
+        }
+        "azure" if parsed_gpt_version(model).is_some_and(|version| version < (5, 6)) => Some(
+            format!("GPT-5.6+ prompt cache controls for model `{model}`"),
+        ),
+        _ => None,
+    }
+}
+
+pub(crate) async fn chat_stream_with_tool_policy(
+    provider: &str,
+    messages: Vec<ChatCompletionMessage>,
+    tools: Vec<Value>,
+    config: &ProviderConfig,
+    tool_choice: Option<ToolChoice>,
+    parallel_tool_calls: Option<bool>,
+) -> ProviderResult<CompletionStream> {
+    let mut instructions = String::new();
+    let mut input = Vec::with_capacity(messages.len());
+    for message in messages {
+        match message {
+            ChatCompletionMessage::System { content } if instructions.is_empty() => {
+                instructions = content;
+            }
+            other => input.push(other),
+        }
+    }
+    let tool_defs = parse_tool_definitions(provider, &tools)?;
+
+    let request = ChatCompletionRequest {
+        model: config.model.clone(),
+        instructions,
+        input,
         tools: tool_defs,
+        tool_choice,
+        parallel_tool_calls,
         temperature: Some(config.temperature),
         max_tokens: Some(config.max_tokens),
         thinking: Some(ThinkingConfig {
@@ -79,11 +232,79 @@ pub async fn chat_stream(
     chat_stream_direct(provider, request, config).await
 }
 
+fn parse_tool_definition(value: &Value) -> Option<ToolDefinition> {
+    if let Some(function) = value.get("function") {
+        return parse_function_tool(function);
+    }
+
+    match value.get("type").and_then(Value::as_str) {
+        Some("function") => parse_function_tool(value),
+        Some("custom" | "namespace" | "tool_search" | "web_search") => {
+            serde_json::from_value(value.clone()).ok()
+        }
+        Some(_) => None,
+        None => parse_function_tool(value),
+    }
+}
+
+fn parse_tool_definitions(provider: &str, values: &[Value]) -> ProviderResult<Vec<ToolDefinition>> {
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            parse_tool_definition(value).ok_or_else(|| ProviderError::ModelError {
+                provider: provider.to_string(),
+                detail: format!(
+                    "invalid tool definition at index {index}: type={:?} name={:?}",
+                    value.get("type").and_then(Value::as_str),
+                    value.get("name").and_then(Value::as_str)
+                ),
+            })
+        })
+        .collect()
+}
+
+fn parse_function_tool(value: &Value) -> Option<ToolDefinition> {
+    Some(ToolDefinition::Function(FunctionToolDefinition {
+        name: value.get("name")?.as_str()?.to_string(),
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        parameters: value
+            .get("parameters")
+            .cloned()
+            .unwrap_or(serde_json::json!({"type": "object", "properties": {}})),
+        strict: value
+            .get("strict")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        defer_loading: value.get("defer_loading").and_then(Value::as_bool),
+    }))
+}
+
 /// 图片生成。按 profile 的 `image_mode` 路由到对应 HTTP 模块。
 pub async fn generate_image(
     provider: &str,
     prompt: &str,
     config: &ProviderConfig,
+) -> ProviderResult<Vec<GeneratedImage>> {
+    generate_image_with_options(
+        provider,
+        prompt,
+        config,
+        &crate::types::ImageGenConfig::default(),
+    )
+    .await
+}
+
+/// 图片生成，传递统一尺寸、数量和输出选项。
+pub async fn generate_image_with_options(
+    provider: &str,
+    prompt: &str,
+    config: &ProviderConfig,
+    options: &crate::types::ImageGenConfig,
 ) -> ProviderResult<Vec<GeneratedImage>> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
@@ -93,33 +314,118 @@ pub async fn generate_image(
             provider: provider.to_string(),
             capability: "图片生成".to_string(),
         })?;
+    let count = if options.n == 0 { 1 } else { options.n };
+    if count > 10 {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "图片生成张数 n 必须在 1..=10 之间"
+        )));
+    }
+    if matches!(
+        (options.width, options.height),
+        (Some(_), None) | (None, Some(_))
+    ) {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "图片尺寸必须同时提供 width 和 height"
+        )));
+    }
+    if let Some(format) = options.output_format.as_deref() {
+        if !matches!(
+            format.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "webp"
+        ) {
+            return Err(ProviderError::Other(anyhow::anyhow!(
+                "不支持的图片输出格式: {format}"
+            )));
+        }
+    }
+    if options.output_compression.is_some_and(|value| value > 100) {
+        return Err(ProviderError::Other(anyhow::anyhow!(
+            "output_compression 必须在 0..=100 之间"
+        )));
+    }
     let mut cfg = config.clone();
-    if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
+    if !options.model.trim().is_empty() {
+        cfg.model = options.model.trim().to_string();
+    } else if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
         cfg.model = profile.default_image_model.to_string();
     }
     let client = shared_http_client();
     match mode {
-        crate::profile::ImageGenMode::OpenAi => {
-            Ok(crate::openai::image_http::openai_generate_image(&client, prompt, &cfg).await?)
-        }
+        crate::profile::ImageGenMode::OpenAi => Ok(
+            crate::openai::image_http::openai_generate_image_with_config(
+                &client, prompt, &cfg, options,
+            )
+            .await?,
+        ),
+        crate::profile::ImageGenMode::AzureOpenAiV1 => Ok(
+            crate::openai::image_http::azure_foundry_generate_image_with_config(
+                &client, prompt, &cfg, options,
+            )
+            .await?,
+        ),
         crate::profile::ImageGenMode::GoogleInteractions => {
-            let req = crate::google::interactions_http::InteractionImageRequest {
-                prompt: prompt.to_string(),
-                ..Default::default()
-            };
-            let result =
-                crate::google::interactions_http::google_interactions_image(&client, &cfg, &req)
-                    .await?;
-            Ok(vec![result.image])
+            let aspect_ratio =
+                options
+                    .aspect_ratio
+                    .clone()
+                    .or_else(|| match (options.width, options.height) {
+                        (Some(width), Some(height)) if width > 0 && height > 0 => {
+                            let divisor = gcd(width, height);
+                            Some(format!("{}:{}", width / divisor, height / divisor))
+                        }
+                        _ => None,
+                    });
+            let mime_type = options
+                .output_format
+                .as_deref()
+                .map(|format| match format.to_ascii_lowercase().as_str() {
+                    "png" => "image/png",
+                    "webp" => "image/webp",
+                    _ => "image/jpeg",
+                })
+                .map(str::to_string);
+            let mut images = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                let req = crate::google::interactions_http::InteractionImageRequest {
+                    prompt: prompt.to_string(),
+                    aspect_ratio: aspect_ratio.clone(),
+                    mime_type: mime_type.clone(),
+                    ..Default::default()
+                };
+                let result = crate::google::interactions_http::google_interactions_image(
+                    &client, &cfg, &req,
+                )
+                .await?;
+                images.push(result.image);
+            }
+            Ok(images)
         }
         crate::profile::ImageGenMode::MiniMax => {
             let req = crate::minimax::image_http::MiniMaxImageRequest {
+                model: cfg.model.clone(),
                 prompt: prompt.to_string(),
+                aspect_ratio: options
+                    .aspect_ratio
+                    .clone()
+                    .unwrap_or_else(|| "1:1".to_string()),
+                width: options.width,
+                height: options.height,
+                response_format: "url".to_string(),
+                n: count,
                 ..Default::default()
             };
             Ok(crate::minimax::image_http::minimax_generate_image(&client, &cfg, &req).await?)
         }
     }
+}
+
+fn gcd(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left.max(1)
 }
 
 /// 语音合成（TTS）。
@@ -387,6 +693,15 @@ pub async fn embed(
         });
     }
     let mut cfg = config.clone();
+    if provider == "azure" {
+        let endpoint = cfg
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(profile.default_base_url);
+        cfg.base_url = Some(crate::impls::azure::azure_openai_v1_base(endpoint));
+    }
     if cfg.model.trim().is_empty() && !profile.default_embedding_model.is_empty() {
         cfg.model = profile.default_embedding_model.to_string();
     }
@@ -425,24 +740,31 @@ fn normalize_provider_id(id: &str) -> &str {
     crate::profile::normalize_provider_id(id)
 }
 
-/// 根据 provider id + config.api_mode 注册到注册表。
+/// 是否应使用 Responses API 协议。
+///
+/// 优先级：`config.api_mode` 显式指定 > profile `api_mode` 默认。
+/// - `api_mode == "chat" | "chat_completions"` → 强制 Chat Completions
+/// - `api_mode == "responses"` → 强制 Responses
+/// - `api_mode` 为空 → profile.api_mode 决定
+fn use_responses(provider: &str, config: &ProviderConfig) -> bool {
+    crate::profile::effective_api_mode(provider, &config.api_mode)
+        == crate::profile::ApiMode::Responses
+}
+
+/// 根据 provider id 注册到注册表。
 fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config: &ProviderConfig) {
     let key = &config.api_key;
     let base = config.base_url.as_deref().filter(|s| !s.trim().is_empty());
     let model = &config.model;
-    let responses = config.api_mode == "responses";
+    let responses = use_responses(provider, config);
 
+    // 1) 正常注册（Chat Completions + 全部媒体能力）
     match provider {
         "anthropic" | "claude" => reg.register_anthropic(key, base, model),
         "google" => reg.register_google(key, base, model),
-        "openai" if responses => reg.register_openai_responses(key, base, model),
         "openai" => reg.register_openai(key, base, model),
-        "deepseek" if responses => reg
-            .register_openai_compat_responses::<crate::impls::deepseek::DeepSeek>(
-                "deepseek", key, base, model,
-            ),
         "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
-        "azure" => register_compat::<crate::impls::azure::Azure>(reg, key, base, model),
+        "azure" => reg.register_azure(key, base, model),
         "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
         "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
         "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
@@ -452,10 +774,9 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
         }
         "openrouter" => {
-            register_compat::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
+            register_embedding::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
-        "minimax" | "minmax" if responses => reg.register_minimax_responses(key, base, model),
-        "minimax" | "minmax" => reg.register_minimax(key, base, model),
+        "minimax" => reg.register_minimax(key, base, model),
         "minimax-anthropic" => {
             reg.register_anthropic(key, base, model);
             reg.register_alias("minimax-anthropic", "anthropic");
@@ -469,6 +790,51 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
             } else {
                 register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model);
             }
+        }
+    }
+
+    // 2) Responses 模式：独立挂载 Agent Responses 模型，保留 Chat/media 能力。
+    //    默认由 profile.api_mode 决定；用户可显式覆盖协议模式。
+    if responses {
+        match provider {
+            "openai" => {
+                reg.attach_responses::<crate::impls::openai::OpenAI>(provider, key, base, model)
+            }
+            "deepseek" => {
+                reg.attach_responses::<crate::impls::deepseek::DeepSeek>(provider, key, base, model)
+            }
+            "azure" => {
+                reg.attach_responses::<crate::impls::azure::Azure>(provider, key, base, model)
+            }
+            "bailian" => {
+                reg.attach_responses::<crate::impls::bailian::Bailian>(provider, key, base, model)
+            }
+            "minimax" => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
+                "minimax", key, base, model,
+            ),
+            "mimo" => reg.attach_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
+            "ollama" => {
+                reg.attach_responses::<crate::impls::ollama::Ollama>(provider, key, base, model)
+            }
+            "openrouter" => reg.attach_responses::<crate::impls::openrouter::OpenRouter>(
+                provider, key, base, model,
+            ),
+            "zhipu" => {
+                reg.attach_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model)
+            }
+            "moonshot" => {
+                reg.attach_responses::<crate::impls::moonshot::Moonshot>(provider, key, base, model)
+            }
+            "nvidia" => {
+                reg.attach_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model)
+            }
+            "volcengine" => reg.attach_responses::<crate::impls::volcengine::Volcengine>(
+                provider, key, base, model,
+            ),
+            "hunyuan" => {
+                reg.attach_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model)
+            }
+            _ => {}
         }
     }
 }
@@ -525,6 +891,24 @@ fn register_media<Ext>(
     reg.register_compat_with_media::<Ext>(api_key, base_url, model);
 }
 
+fn register_embedding<Ext>(
+    reg: &mut crate::registry::Registry,
+    api_key: &str,
+    base_url: Option<&str>,
+    model: &str,
+) where
+    Ext: crate::compat::OpenAICompatible
+        + crate::traits::ProviderExt
+        + crate::traits::Capabilities<
+            Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Ext>>,
+            Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>,
+        > + Default
+        + Copy
+        + 'static,
+{
+    reg.register_compat_with_embedding::<Ext>(api_key, base_url, model);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,38 +938,231 @@ mod tests {
         for id in providers {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
+            let registered = reg.get(id).expect("provider should be registered");
             assert!(
-                reg.completion_model(id).is_some(),
-                "provider {id} should have completion model"
+                registered.responses_model().is_some()
+                    || registered.chat_completion_model().is_some(),
+                "provider {id} should have a Responses or compatibility model"
             );
         }
     }
 
     #[test]
-    fn minimax_variant_ids_resolve() {
+    fn openrouter_registers_embedding_and_responses_capabilities() {
+        let mut registry = crate::registry::Registry::new();
+        register_provider(&mut registry, "openrouter", &ProviderConfig::default());
+        let provider = registry.get("openrouter").unwrap();
+        assert!(provider.embedding_model().is_some());
+        assert!(provider.responses_model().is_some());
+        assert!(
+            crate::profile::resolve("openrouter").is_some_and(|profile| profile.supports_embedding)
+        );
+    }
+
+    #[test]
+    fn minimax_anthropic_id_resolves() {
         let config = ProviderConfig::default();
-        for id in ["minimax-anthropic", "minmax", "minmax-anthropic"] {
-            let normalized = normalize_provider_id(id);
-            let mut reg = crate::registry::Registry::new();
-            register_provider(&mut reg, normalized, &config);
+        let id = "minimax-anthropic";
+        let mut reg = crate::registry::Registry::new();
+        register_provider(&mut reg, id, &config);
+        let registered = reg
+            .get(id)
+            .expect("MiniMax Anthropic provider should resolve");
+        assert!(
+            registered.responses_model().is_some() || registered.chat_completion_model().is_some(),
+            "provider {id} should expose a language model"
+        );
+    }
+
+    #[test]
+    fn responses_default_for_supported_providers() {
+        let config = ProviderConfig::default();
+        for id in ["openai", "deepseek", "minimax", "azure", "bailian", "mimo"] {
             assert!(
-                reg.completion_model(normalized).is_some(),
-                "provider alias {id} (normalized to {normalized}) should resolve"
+                use_responses(id, &config),
+                "{id} should default to Responses API"
+            );
+        }
+        for id in ["anthropic", "google", "ollama", "zhipu"] {
+            assert!(
+                !use_responses(id, &config),
+                "{id} should NOT default to Responses API"
             );
         }
     }
 
     #[test]
-    fn responses_mode_routes_correctly() {
-        let mut config = ProviderConfig::default();
-        config.api_mode = "responses".to_string();
-        for id in ["openai", "deepseek", "minimax"] {
+    fn api_mode_override() {
+        let mut chat_config = ProviderConfig::default();
+        chat_config.api_mode = "chat".to_string();
+        assert!(
+            !use_responses("openai", &chat_config),
+            "api_mode=chat forces ChatCompletions"
+        );
+
+        chat_config.api_mode = "chat_completions".to_string();
+        assert!(
+            !use_responses("deepseek", &chat_config),
+            "persisted api_mode=chat_completions forces ChatCompletions"
+        );
+
+        let mut resp_config = ProviderConfig::default();
+        resp_config.api_mode = "responses".to_string();
+        assert!(
+            use_responses("ollama", &resp_config),
+            "api_mode=responses forces Responses"
+        );
+    }
+
+    #[test]
+    fn responses_providers_register_correctly() {
+        let config = ProviderConfig::default();
+        for id in ["openai", "deepseek", "minimax", "mimo"] {
             let mut reg = crate::registry::Registry::new();
             register_provider(&mut reg, id, &config);
             assert!(
-                reg.completion_model(id).is_some(),
-                "provider {id} with api_mode=responses should resolve"
+                reg.responses_model(id).is_some(),
+                "provider {id} (default Responses) should have a Responses model"
             );
+        }
+    }
+
+    #[test]
+    fn parses_responses_native_tool_variants_without_flattening() {
+        let custom = parse_tool_definition(&serde_json::json!({
+            "type": "custom",
+            "name": "apply_patch",
+            "description": "Apply a patch",
+            "format": {
+                "type": "grammar",
+                "syntax": "lark",
+                "definition": "start: /.+/"
+            }
+        }))
+        .unwrap();
+        assert!(matches!(custom, ToolDefinition::Freeform(_)));
+
+        let namespace = parse_tool_definition(&serde_json::json!({
+            "type": "namespace",
+            "name": "clock",
+            "description": "Clock tools",
+            "tools": [{
+                "type": "function",
+                "name": "now",
+                "description": "Current time",
+                "parameters": {"type": "object"},
+                "strict": true
+            }]
+        }))
+        .unwrap();
+        assert!(matches!(namespace, ToolDefinition::Namespace(_)));
+    }
+
+    #[test]
+    fn malformed_tool_definitions_fail_closed() {
+        let error = parse_tool_definitions(
+            "openai",
+            &[
+                serde_json::json!({
+                    "type": "function",
+                    "name": "valid",
+                    "parameters": {"type": "object"}
+                }),
+                serde_json::json!({
+                    "type": "function",
+                    "description": "missing name"
+                }),
+            ],
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, ProviderError::ModelError { .. }));
+        assert!(error.to_string().contains("index 1"));
+    }
+
+    #[test]
+    fn agent_entry_forces_responses_even_with_chat_compat_override() {
+        let config = ProviderConfig {
+            api_mode: "chat_completions".into(),
+            ..ProviderConfig::default()
+        };
+        let config = force_agent_responses_config(&config);
+        assert_eq!(config.api_mode, "responses");
+
+        let mut registry = crate::registry::Registry::new();
+        register_provider(&mut registry, "deepseek", &config);
+        assert!(registry.responses_model("deepseek").is_some());
+    }
+
+    #[tokio::test]
+    async fn agent_entry_rejects_chat_only_provider_without_fallback() {
+        let error = match agent_responses_stream(
+            "anthropic",
+            String::new(),
+            Vec::new(),
+            Vec::new(),
+            &ProviderConfig::default(),
+        )
+        .await
+        {
+            Ok(_) => panic!("chat-only provider must not enter the Agent Responses path"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
+    }
+
+    #[tokio::test]
+    async fn azure_rejects_known_unsupported_prompt_cache_controls_before_http() {
+        let config = ProviderConfig {
+            api_key: "test-key".into(),
+            base_url: Some("https://example.invalid/openai/v1".into()),
+            model: "gpt-5.5".into(),
+            additional_params: serde_json::json!({
+                "prompt_cache_key": "agent:v1",
+                "prompt_cache_options": {"mode": "implicit", "ttl": "30m"}
+            }),
+            ..ProviderConfig::default()
+        };
+        let error =
+            match agent_responses_stream("azure", String::new(), Vec::new(), Vec::new(), &config)
+                .await
+            {
+                Ok(_) => panic!("known pre-5.6 Azure model must be rejected"),
+                Err(error) => error,
+            };
+        assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
+    }
+
+    #[tokio::test]
+    async fn deepseek_rejects_prompt_cache_controls_before_http() {
+        for additional_params in [
+            serde_json::json!({
+                "prompt_cache_key": "agent:v1",
+                "prompt_cache_options": {"mode": "implicit"}
+            }),
+            serde_json::json!({"prompt_cache_retention": "24h"}),
+        ] {
+            let config = ProviderConfig {
+                api_key: "test-key".into(),
+                base_url: Some("https://example.invalid/v1".into()),
+                model: "deepseek-v4-flash".into(),
+                additional_params,
+                ..ProviderConfig::default()
+            };
+            let error = match agent_responses_stream(
+                "deepseek",
+                String::new(),
+                Vec::new(),
+                Vec::new(),
+                &config,
+            )
+            .await
+            {
+                Ok(_) => panic!("DeepSeek prompt cache controls must be rejected before HTTP"),
+                Err(error) => error,
+            };
+            assert!(matches!(error, ProviderError::UnsupportedCapability { .. }));
+            assert!(error.to_string().contains("服务端自动管理"));
         }
     }
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  ChevronDown,
   Feather,
   Flame,
   FoldVertical,
@@ -103,8 +104,16 @@ const BUDGET_META: {
     Icon: Feather,
     fields: [
       { key: "softMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "softHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "softTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "softHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "softTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
   {
@@ -113,8 +122,16 @@ const BUDGET_META: {
     Icon: Scale,
     fields: [
       { key: "mediumMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "mediumHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "mediumTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "mediumHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "mediumTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
   {
@@ -123,8 +140,16 @@ const BUDGET_META: {
     Icon: Flame,
     fields: [
       { key: "hardMaxChars", labelKey: "prefs.context.maxChars", Icon: Hash },
-      { key: "hardHeadChars", labelKey: "prefs.context.headChars", Icon: ArrowUpToLine },
-      { key: "hardTailChars", labelKey: "prefs.context.tailChars", Icon: ArrowDownToLine },
+      {
+        key: "hardHeadChars",
+        labelKey: "prefs.context.headChars",
+        Icon: ArrowUpToLine,
+      },
+      {
+        key: "hardTailChars",
+        labelKey: "prefs.context.tailChars",
+        Icon: ArrowDownToLine,
+      },
     ],
   },
 ];
@@ -217,7 +242,11 @@ export default function CompressionSettingsCard({
   const commit = useCallback(
     async (next: CompressionSettingsDto) => {
       setLocalError(null);
-      if (!(next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio)) {
+      if (
+        !(
+          next.softRatio < next.mediumRatio && next.mediumRatio < next.hardRatio
+        )
+      ) {
         setLocalError(t("prefs.context.invalidOrder"));
         if (settings) setDraft(settings);
         return;
@@ -298,8 +327,12 @@ export default function CompressionSettingsCard({
               <Sparkles size={15} strokeWidth={2.25} />
             </span>
             <span className="prefs-toggle-text">
-              <span className="prefs-toggle-label">{t("prefs.context.enabled")}</span>
-              <span className="prefs-toggle-desc">{t("prefs.context.enabledDesc")}</span>
+              <span className="prefs-toggle-label">
+                {t("prefs.context.enabled")}
+              </span>
+              <span className="prefs-toggle-desc">
+                {t("prefs.context.enabledDesc")}
+              </span>
             </span>
             <button
               type="button"
@@ -354,109 +387,140 @@ export default function CompressionSettingsCard({
             ))}
           </div>
 
-          <SectionHead Icon={SlidersHorizontal}>
-            {t("prefs.context.budgets")}
-          </SectionHead>
-          <div className="prefs-context-budgets">
-            {BUDGET_META.map((group) => {
-              const StageIcon = group.Icon;
-              return (
-                <div
-                  key={group.titleKey}
-                  className="prefs-context-budget-block"
-                  data-stage={group.id}
-                >
-                  <h4 className="prefs-context-budget-title">
-                    <span className="prefs-context-budget-ico" aria-hidden>
-                      <StageIcon size={13} strokeWidth={2.25} />
-                    </span>
-                    {t(group.titleKey)}
-                  </h4>
-                  <div className="prefs-context-grid prefs-context-grid--3">
-                    {group.fields.map(({ key, labelKey, Icon }) => (
-                      <label key={key} className="prefs-context-field">
-                        <span className="prefs-context-label-row">
-                          {Icon && (
-                            <Icon
-                              size={12}
-                              strokeWidth={2.25}
-                              className="prefs-context-field-ico"
-                              aria-hidden
-                            />
-                          )}
-                          <span className="prefs-context-label">{t(labelKey)}</span>
+          <details className="prefs-context-advanced">
+            <summary>
+              <span>
+                <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden />
+                {t("prefs.context.budgets")}
+              </span>
+              <span className="prefs-context-advanced-meta">
+                <small>{t("prefs.context.triggers")}</small>
+                <ChevronDown size={14} strokeWidth={2.25} aria-hidden />
+              </span>
+            </summary>
+
+            <div className="prefs-context-advanced-body">
+              <SectionHead Icon={SlidersHorizontal}>
+                {t("prefs.context.budgets")}
+              </SectionHead>
+              <div className="prefs-context-budgets">
+                {BUDGET_META.map((group) => {
+                  const StageIcon = group.Icon;
+                  return (
+                    <div
+                      key={group.titleKey}
+                      className="prefs-context-budget-block"
+                      data-stage={group.id}
+                    >
+                      <h4 className="prefs-context-budget-title">
+                        <span className="prefs-context-budget-ico" aria-hidden>
+                          <StageIcon size={13} strokeWidth={2.25} />
                         </span>
+                        {t(group.titleKey)}
+                      </h4>
+                      <div className="prefs-context-grid prefs-context-grid--3">
+                        {group.fields.map(({ key, labelKey, Icon }) => (
+                          <label key={key} className="prefs-context-field">
+                            <span className="prefs-context-label-row">
+                              {Icon && (
+                                <Icon
+                                  size={12}
+                                  strokeWidth={2.25}
+                                  className="prefs-context-field-ico"
+                                  aria-hidden
+                                />
+                              )}
+                              <span className="prefs-context-label">
+                                {t(labelKey)}
+                              </span>
+                            </span>
+                            <input
+                              className="aux-number-input"
+                              type="number"
+                              min={0}
+                              step={50}
+                              value={draft[key] as number}
+                              onChange={(e) => {
+                                const n = parseIntDraft(e.target.value);
+                                if (n != null) setField(key, n as never);
+                              }}
+                              onBlur={(e) => commitInt(key, e.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <SectionHead Icon={Shield}>
+                {t("prefs.context.triggers")}
+              </SectionHead>
+              <div className="prefs-context-grid">
+                {OTHER_FIELDS.map(
+                  ({ key, labelKey, hintKey, percent, Icon }) => (
+                    <label
+                      key={key}
+                      className="prefs-context-field prefs-context-field--card"
+                    >
+                      <span className="prefs-context-label-row">
+                        {Icon && (
+                          <span
+                            className="prefs-context-field-badge"
+                            aria-hidden
+                          >
+                            <Icon size={12} strokeWidth={2.25} />
+                          </span>
+                        )}
+                        <span className="prefs-context-label">
+                          {t(labelKey)}
+                        </span>
+                      </span>
+                      {hintKey && (
+                        <span className="prefs-context-hint">{t(hintKey)}</span>
+                      )}
+                      <div className="prefs-context-input-wrap">
                         <input
                           className="aux-number-input"
                           type="number"
                           min={0}
-                          step={50}
-                          value={draft[key] as number}
+                          step={1}
+                          value={
+                            percent
+                              ? pctDraft(draft[key] as number)
+                              : (draft[key] as number)
+                          }
                           onChange={(e) => {
-                            const n = parseIntDraft(e.target.value);
-                            if (n != null) setField(key, n as never);
+                            if (percent) {
+                              const p = parsePct(e.target.value);
+                              if (p != null) setField(key, p as never);
+                            } else {
+                              const n = parseIntDraft(e.target.value);
+                              if (n != null) setField(key, n as never);
+                            }
                           }}
-                          onBlur={(e) => commitInt(key, e.target.value)}
+                          onBlur={(e) => {
+                            if (percent) {
+                              commitRatio(
+                                key as "midRunSummaryRatio",
+                                e.target.value,
+                              );
+                            } else {
+                              commitInt(key, e.target.value);
+                            }
+                          }}
                         />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <SectionHead Icon={Shield}>{t("prefs.context.triggers")}</SectionHead>
-          <div className="prefs-context-grid">
-            {OTHER_FIELDS.map(({ key, labelKey, hintKey, percent, Icon }) => (
-              <label key={key} className="prefs-context-field prefs-context-field--card">
-                <span className="prefs-context-label-row">
-                  {Icon && (
-                    <span className="prefs-context-field-badge" aria-hidden>
-                      <Icon size={12} strokeWidth={2.25} />
-                    </span>
-                  )}
-                  <span className="prefs-context-label">{t(labelKey)}</span>
-                </span>
-                {hintKey && (
-                  <span className="prefs-context-hint">{t(hintKey)}</span>
+                        {percent && (
+                          <span className="prefs-context-suffix">%</span>
+                        )}
+                      </div>
+                    </label>
+                  ),
                 )}
-                <div className="prefs-context-input-wrap">
-                  <input
-                    className="aux-number-input"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={
-                      percent
-                        ? pctDraft(draft[key] as number)
-                        : (draft[key] as number)
-                    }
-                    onChange={(e) => {
-                      if (percent) {
-                        const p = parsePct(e.target.value);
-                        if (p != null) setField(key, p as never);
-                      } else {
-                        const n = parseIntDraft(e.target.value);
-                        if (n != null) setField(key, n as never);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      if (percent) {
-                        commitRatio(
-                          key as "midRunSummaryRatio",
-                          e.target.value,
-                        );
-                      } else {
-                        commitInt(key, e.target.value);
-                      }
-                    }}
-                  />
-                  {percent && <span className="prefs-context-suffix">%</span>}
-                </div>
-              </label>
-            ))}
-          </div>
+              </div>
+            </div>
+          </details>
 
           <div className="prefs-context-actions">
             <button

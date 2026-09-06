@@ -53,6 +53,13 @@ pub(crate) struct ConfirmOutcome {
     pub status: String,
     /// 用户点了「批准并永久放行」时为 `true`（`allow_always` 场景）。
     pub always: bool,
+    /// 用户选择了低风险“同类命令”永久规则。
+    pub command_type: bool,
+}
+
+pub(crate) enum ConfirmPresentation<'a> {
+    Text { title: &'a str, body: &'a str },
+    SandboxRetry { denial_detail: &'a str },
 }
 
 /// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
@@ -63,13 +70,27 @@ pub(crate) async fn park_confirm(
     session: &Session,
     turn_context: &TurnContext,
     tool_call_id: &str,
-    title: &str,
-    body: &str,
+    presentation: ConfirmPresentation<'_>,
     allow_always: bool,
+    command_family: Option<&str>,
 ) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
-    let operations =
-        a2ui::templates::build_confirm_surface_ex(&surface_id, title, body, allow_always);
+    let (message, operations) = match presentation {
+        ConfirmPresentation::Text { title, body } => (
+            title,
+            a2ui::templates::build_confirm_surface_with_rule(
+                &surface_id,
+                title,
+                body,
+                allow_always,
+                command_family,
+            ),
+        ),
+        ConfirmPresentation::SandboxRetry { denial_detail } => (
+            "sandbox_retry",
+            a2ui::templates::build_sandbox_retry_surface(&surface_id, denial_detail),
+        ),
+    };
     let ops_value = serde_json::Value::Array(operations);
     let resolution = park_astro_hitl_resolution(
         gate,
@@ -78,7 +99,7 @@ pub(crate) async fn park_confirm(
         tool_call_id,
         AstroHitlPayload {
             reason: "confirmation".into(),
-            message: title.into(),
+            message: message.into(),
             operations: ops_value,
             response_schema: serde_json::json!({
                 "type": "object",
@@ -88,7 +109,7 @@ pub(crate) async fn park_confirm(
         },
     )
     .await?;
-    let (approved, always) = if resolution.status == "resolved" {
+    let (approved, always, command_type) = if resolution.status == "resolved" {
         let v = serde_json::from_str::<serde_json::Value>(&resolution.payload_json).ok();
         let approved = v
             .as_ref()
@@ -98,14 +119,19 @@ pub(crate) async fn park_confirm(
             .as_ref()
             .and_then(|v| v.get("always").and_then(|x| x.as_bool()))
             .unwrap_or(false);
-        (approved, always)
+        let command_type = v
+            .as_ref()
+            .and_then(|v| v.get("scope").and_then(|x| x.as_str()))
+            == Some("type");
+        (approved, always, command_type)
     } else {
-        (false, false)
+        (false, false, false)
     };
     Some(ConfirmOutcome {
         approved,
         status: resolution.status,
         always: always && approved,
+        command_type: command_type && approved,
     })
 }
 
@@ -171,8 +197,8 @@ async fn park_astro_hitl_resolution(
     Some(resolution)
 }
 
-/// Network host approval request parameters.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 网络主机审批请求参数。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) struct NetworkApprovalRequest {
     pub host: String,
     pub protocol: String,
@@ -181,18 +207,17 @@ pub(crate) struct NetworkApprovalRequest {
     pub command_preview: Option<String>,
 }
 
-/// Result of a network approval HITL interaction.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 网络审批 HITL 交互的结果。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) struct NetworkApprovalOutcome {
     pub decision: crate::control::network_approval::PendingApprovalDecision,
     pub status: String,
 }
 
-/// Show a network host approval surface and wait for the user to decide.
+/// 弹出网络主机审批界面，等待用户决定。
 ///
-/// Returns the scoped decision (once/session/persistent/deny) or `None` if the
-/// event channel is closed.
-#[allow(dead_code)] // wired in Task 5 of inline-managed-network-approval
+/// 返回带作用域的决定（once/session/persistent/deny），若事件通道关闭则返回 `None`。
+#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) async fn park_network_approval(
     gate: &Arc<HitlGate>,
     session: &Session,
@@ -270,6 +295,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "hitl-event-test".into(),
             )
+            .await
             .unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
@@ -329,6 +355,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 format!("net-approval-{scope}"),
             )
+            .await
             .unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
@@ -419,6 +446,7 @@ mod event_tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "net-timeout".into(),
             )
+            .await
             .unwrap(),
         );
         let turn_context = session.create_turn_context("turn-1".into()).await;
@@ -446,7 +474,7 @@ mod event_tests {
             }
         });
 
-        // Cancel instead of resolving — simulates gate cancellation
+        // 取消而非解决 — 模拟 gate 取消
         tokio::time::sleep(Duration::from_millis(50)).await;
         gate.cancel_all().await;
 

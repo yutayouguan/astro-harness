@@ -1,19 +1,20 @@
 //! Tauri IPC 薄封装 → `skills` 领域层
 
 use serde::Serialize;
+use std::path::PathBuf;
 
 use skills::models::SkillOriginRecord;
 use skills::origins::load_origins;
 use skills::{
-    check_updates_for_agent, fetch_detail, install_from_ref, link_skill_to_agent,
-    list_installed_for_agent, list_skill_backups as skills_list_skill_backups, list_skill_files_ex,
-    load_skill_by_name, open_skill_file_externally as open_skill_file_fs,
-    open_skill_folder as open_skill_folder_fs, preview_skill_update as skills_preview_skill_update,
-    read_skill_file_ex, reveal_skill_backup as skills_reveal_skill_backup,
-    reveal_skill_file as reveal_skill_file_fs, search, set_enabled_for_agent,
-    update_all_with_origin, update_installed_skill_ex, update_outdated_skills, InstallOriginHint,
-    InstalledSkill, SkillBackupEntry, SkillBundle, SkillSnapshot, SkillStoreFilter,
-    SkillUpdateCheckResult, SkillUpdateItemResult, SkillUpdatePreview, StoreSkill,
+    check_updates_for_agent, ensure_known_skillhub_origins, fetch_detail, install_from_ref_scoped,
+    link_skill_to_agent, list_installed_scoped_for_agent,
+    list_skill_backups as skills_list_skill_backups, list_skill_files_ex, load_skill_by_name,
+    open_skill_file_externally as open_skill_file_fs, open_skill_folder as open_skill_folder_fs,
+    preview_skill_update as skills_preview_skill_update, read_skill_file_ex,
+    reveal_skill_backup as skills_reveal_skill_backup, reveal_skill_file as reveal_skill_file_fs,
+    search_with_filters, set_enabled_for_agent, update_all_with_origin, update_installed_skill_ex,
+    update_outdated_skills, InstallOriginHint, InstalledSkill, SkillBackupEntry, SkillBundle,
+    SkillSnapshot, SkillUpdateCheckResult, SkillUpdateItemResult, SkillUpdatePreview, StoreSkill,
     StoreSkillDetail, UpdateSkillOpts,
 };
 
@@ -55,11 +56,38 @@ fn origin_agent_id(record: &SkillOriginRecord) -> String {
     }
 }
 
+fn resolve_skill_scope(
+    scope: Option<String>,
+    project_root: Option<String>,
+) -> Result<(String, Option<PathBuf>), String> {
+    let scope = scope
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("global")
+        .to_string();
+    if scope != "global" && scope != "project" {
+        return Err(format!("unsupported Skill scope: {scope}"));
+    }
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(PathBuf::from);
+    let resolved_root = if scope == "project" {
+        explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None))
+    } else {
+        None
+    };
+    Ok((scope, resolved_root))
+}
+
 /// Tauri 命令：list_skill_origins。
 #[tauri::command]
 pub async fn list_skill_origins(
     agent_id: Option<String>,
 ) -> Result<Vec<SkillOriginRecord>, String> {
+    ensure_known_skillhub_origins(agent_id.as_deref()).map_err(|e| e.to_string())?;
     let file = load_origins().map_err(|e| e.to_string())?;
     let filter_agent = normalize_agent_id(agent_id);
     let records = match filter_agent.as_deref() {
@@ -78,9 +106,13 @@ pub async fn list_skill_origins(
 pub fn preview_skill_update(
     folder: String,
     agent_id: Option<String>,
+    scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<SkillUpdatePreview, String> {
     let agent = normalize_agent_id(agent_id);
-    skills_preview_skill_update(agent.as_deref(), &folder).map_err(|e| e.to_string())
+    let (scope, project_root) = resolve_skill_scope(scope, project_root)?;
+    skills_preview_skill_update(agent.as_deref(), &scope, project_root.as_deref(), &folder)
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：update_installed_skill。
@@ -90,10 +122,15 @@ pub async fn update_installed_skill(
     agent_id: Option<String>,
     force: Option<bool>,
     backup_if_dirty: Option<bool>,
+    scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
+    let (scope, project_root) = resolve_skill_scope(scope, project_root)?;
     update_installed_skill_ex(
         agent.as_deref(),
+        &scope,
+        project_root.as_deref(),
         &folder,
         UpdateSkillOpts {
             force: force.unwrap_or(true),
@@ -109,9 +146,12 @@ pub async fn update_installed_skill(
 #[tauri::command]
 pub async fn check_skill_updates(
     agent_id: Option<String>,
+    scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<Vec<SkillUpdateCheckResult>, String> {
     let agent = normalize_agent_id(agent_id);
-    check_updates_for_agent(agent.as_deref())
+    let (scope, project_root) = resolve_skill_scope(scope, project_root)?;
+    check_updates_for_agent(agent.as_deref(), &scope, project_root.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
@@ -121,14 +161,17 @@ pub async fn check_skill_updates(
 pub async fn update_all_skills(
     agent_id: Option<String>,
     only_outdated: Option<bool>,
+    scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<Vec<SkillUpdateItemResult>, String> {
     let agent = normalize_agent_id(agent_id);
+    let (scope, project_root) = resolve_skill_scope(scope, project_root)?;
     if only_outdated.unwrap_or(false) {
-        update_outdated_skills(agent.as_deref())
+        update_outdated_skills(agent.as_deref(), &scope, project_root.as_deref())
             .await
             .map_err(|e| e.to_string())
     } else {
-        update_all_with_origin(agent.as_deref())
+        update_all_with_origin(agent.as_deref(), &scope, project_root.as_deref())
             .await
             .map_err(|e| e.to_string())
     }
@@ -139,27 +182,45 @@ pub async fn update_all_skills(
 pub async fn list_installed_skills(
     agent_id: Option<String>,
     scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<Vec<InstalledSkill>, String> {
     let id = normalize_agent_id(agent_id);
     let scope = scope.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    Ok(list_installed_for_agent(id.as_deref(), scope))
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
+    Ok(list_installed_scoped_for_agent(
+        id.as_deref(),
+        scope,
+        resolved_root.as_deref(),
+    ))
 }
 
 /// Tauri 命令：search_store_skills。
 #[tauri::command]
 pub async fn search_store_skills(
     query: String,
-    store: String,
     limit: Option<usize>,
     page: Option<usize>,
+    sort: Option<String>,
+    category: Option<String>,
+    api_key: Option<String>,
 ) -> Result<Vec<StoreSkill>, String> {
-    let filter =
-        SkillStoreFilter::parse(&store).ok_or_else(|| format!("unknown store: {store}"))?;
     let limit = limit.unwrap_or(24);
     let page = page.unwrap_or(1);
-    search(&query, filter, limit, page)
-        .await
-        .map_err(|e| e.to_string())
+    search_with_filters(
+        &query,
+        limit,
+        page,
+        sort.as_deref(),
+        category.as_deref(),
+        api_key.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：get_store_skill_detail。
@@ -196,18 +257,31 @@ pub async fn install_store_skill(
     install_ref: String,
     agent_id: Option<String>,
     name: Option<String>,
-    store: Option<String>,
-    folder: Option<String>,
+    scope: Option<String>,
+    project_root: Option<String>,
 ) -> Result<String, String> {
     let agent = normalize_agent_id(agent_id);
-    let hint = InstallOriginHint {
-        name,
-        store,
-        folder,
-    };
-    install_from_ref(&install_ref, agent.as_deref(), Some(hint))
-        .await
-        .map_err(|e| e.to_string())
+    let scope = scope
+        .as_deref()
+        .map(str::trim)
+        .filter(|scope| !scope.is_empty())
+        .unwrap_or("global");
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty())
+        .map(PathBuf::from);
+    let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
+    let hint = InstallOriginHint { name };
+    install_from_ref_scoped(
+        &install_ref,
+        agent.as_deref(),
+        Some(hint),
+        scope,
+        resolved_root.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Tauri 命令：get_skill_content。

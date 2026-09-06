@@ -13,13 +13,17 @@ pub mod compression;
 pub mod control;
 /// 执行域聚合模块（cron / subagents / memory_review）。
 pub mod exec;
+/// 可热发现扩展包的 manifest 与 turn 级不可变快照。
+pub use agent_extensions as extensions;
+/// Git worktree 隔离与项目根解析。
+pub use worktree as git_worktree;
 /// 提示词域：上下文、消息转换、hook 与 prompt builder。
 pub mod prompt;
 /// Agent 运行时核心。
 pub mod runtime;
 /// 流式补全与多轮流式迭代抽象。
 pub mod streaming;
-/// Codex-style session task lifecycle.
+/// Session 任务生命周期。
 pub(crate) mod tasks;
 /// 助手回合时间线（astro_timeline_v1）。
 pub mod timeline;
@@ -42,9 +46,9 @@ pub use runtime::{
 };
 /// 流式 API re-export。
 pub use streaming::{
-    run_multi_turn_events_with_chat_fn, run_multi_turn_stream_with_chat_fn, run_thread_turn_events,
-    ChatOverride, ProviderStreamer, StreamedAssistantContent, StreamingChat, StreamingCompletion,
-    StreamingPrompt, ThreadTurnEventArgs,
+    run_multi_turn_events_with_responses_fn, run_multi_turn_stream_with_responses_fn,
+    run_thread_turn_events, ProviderStreamer, ResponsesOverride, ResponsesOverrideInput,
+    StreamedAssistantContent, StreamingResponses, ThreadTurnEventArgs,
 };
 /// 工具注册表（实现位于 `tools` crate）。
 pub use tools::ToolRegistry;

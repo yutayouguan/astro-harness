@@ -25,7 +25,6 @@ pub enum ProviderKind {
     Nvidia,
     Moonshot,
     Volcengine,
-    #[serde(alias = "minmax")]
     Minimax,
     Hunyuan,
     Custom,
@@ -47,7 +46,7 @@ impl ProviderKind {
             "nvidia" => Some(Self::Nvidia),
             "moonshot" => Some(Self::Moonshot),
             "volcengine" => Some(Self::Volcengine),
-            "minimax" | "minmax" => Some(Self::Minimax),
+            "minimax" => Some(Self::Minimax),
             "hunyuan" | "tencent" => Some(Self::Hunyuan),
             "custom" => Some(Self::Custom),
             _ => None,
@@ -125,7 +124,7 @@ impl ProviderKind {
             Self::Deepseek => "https://api.deepseek.com/v1",
             Self::Ollama => "http://localhost:11434/v1",
             Self::Google => "https://generativelanguage.googleapis.com",
-            Self::Azure => "https://YOUR_RESOURCE.openai.azure.com",
+            Self::Azure => "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
             Self::Zhipu => "https://open.bigmodel.cn/api/paas/v4",
             Self::Openrouter => "https://openrouter.ai/api/v1",
             Self::Bailian => "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -146,7 +145,7 @@ impl ProviderKind {
             Self::Deepseek => "deepseek-chat",
             Self::Ollama => "llama3.3",
             Self::Google => "gemini-3.1-ultra",
-            Self::Azure => "gpt-5.6",
+            Self::Azure => "gpt-5.6-sol",
             Self::Zhipu => "glm-5.2-plus",
             Self::Openrouter => "openai/gpt-5.6",
             Self::Bailian => "qwen3.8-max",
@@ -206,7 +205,7 @@ impl ProviderKind {
             Self::Nvidia => &["NVIDIA_API_KEY"],
             Self::Moonshot => &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
             Self::Volcengine => &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
-            Self::Minimax => &["MINIMAX_API_KEY", "MINMAX_API_KEY"],
+            Self::Minimax => &["MINIMAX_API_KEY"],
             Self::Hunyuan => &["HUNYUAN_API_KEY", "TENCENT_API_KEY"],
             Self::Custom => &["CUSTOM_API_KEY", "OPENAI_API_KEY"],
         }
@@ -260,9 +259,9 @@ pub struct ProviderConfig {
     /// 音乐生成模型（空=内置默认；主要 Google）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub music_model: String,
-    /// API 协议模式覆盖。空 = 使用 profile 默认；`"responses"` = Responses API。
+    /// 文本嵌入模型（空=内置默认）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub api_mode: String,
+    pub embedding_model: String,
 }
 
 impl ProviderConfig {
@@ -281,7 +280,7 @@ impl ProviderConfig {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: String::new(),
+            embedding_model: String::new(),
         }
     }
 
@@ -297,6 +296,8 @@ impl ProviderConfig {
 pub struct ProvidersState {
     pub providers: Vec<ProviderConfig>,
     pub active_provider_id: Option<String>,
+    #[serde(default)]
+    pub active_image_provider_id: Option<String>,
 }
 
 impl ProvidersState {
@@ -403,6 +404,17 @@ impl ProvidersState {
                         _ => {}
                     }
                 }
+                ProviderKind::Azure => {
+                    let ep = p.endpoint.trim_end_matches('/');
+                    if ep == "https://YOUR_RESOURCE.openai.azure.com" {
+                        p.endpoint = ProviderKind::Azure.default_endpoint().to_string();
+                        changed = true;
+                    }
+                    if p.model == "gpt-5.6" {
+                        p.model = ProviderKind::Azure.default_model().to_string();
+                        changed = true;
+                    }
+                }
                 _ => {}
             }
         }
@@ -431,6 +443,20 @@ impl ProvidersState {
                 self.active_provider_id = self.providers.first().map(|p| p.id.clone());
                 changed = true;
             }
+        }
+        if self
+            .active_image_provider_id
+            .as_ref()
+            .is_some_and(|active| {
+                !self.providers.iter().any(|provider| {
+                    &provider.id == active
+                        && provider.enabled
+                        && providers::dispatch::supports_image_gen(&toml_backend_id(provider))
+                })
+            })
+        {
+            self.active_image_provider_id = None;
+            changed = true;
         }
         changed
     }
@@ -467,9 +493,7 @@ pub struct ProviderConfigDto {
     pub supports_music: bool,
     pub supports_asr: bool,
     pub supports_embedding: bool,
-    /// 当前 API 协议模式（`"chat_completions"` / `"responses"` 等）。
-    pub api_mode: String,
-    /// 是否支持 Responses API 模式切换。
+    /// 是否可用于 Agent Responses API。
     pub supports_responses_api: bool,
     /// 配置来源：`"builtin"` / `"toml"` / `"user"`。
     pub config_source: String,
@@ -479,6 +503,7 @@ pub struct ProviderConfigDto {
 pub struct ProvidersStateDto {
     pub providers: Vec<ProviderConfigDto>,
     pub active_provider_id: Option<String>,
+    pub active_image_provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -502,7 +527,7 @@ pub struct ProviderConfigInput {
     #[serde(default)]
     pub music_model: String,
     #[serde(default)]
-    pub api_mode: String,
+    pub embedding_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -653,6 +678,7 @@ fn sync_custom_provider_models() {
                         default_enabled: Some(true),
                         mandatory: Some(false),
                         supports_max_tokens: None,
+                        persistent_instructions: None,
                     })
                 } else {
                     None
@@ -660,6 +686,8 @@ fn sync_custom_provider_models() {
                 crate::meta::model_meta::ModelEntryCompat::Full(Box::new(
                     crate::meta::model_meta::ModelInfo {
                         id: m.id.clone(),
+                        profile: types::ModelProfile::default(),
+                        tool_mode: m.tool_mode,
                         display_name: m.display_name.clone(),
                         description: None,
                         canonical_slug: None,
@@ -733,7 +761,9 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home).join(".astro").join("config.toml");
+    let config_path = std::path::PathBuf::from(home)
+        .join(".astro")
+        .join("config.toml");
     let custom = providers::custom::load_custom_providers(&config_path);
     for (id, cfg) in &custom {
         let toml_id = format!("toml:{id}");
@@ -758,7 +788,7 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: "responses".to_string(),
+            embedding_model: String::new(),
         });
     }
 }
@@ -793,22 +823,6 @@ pub(crate) fn resolve_api_key(
 /// 支持 Responses API 切换的厂商（表驱动）。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
     providers::profile::resolve(kind.backend_id()).is_some_and(|p| p.supports_responses)
-}
-
-/// 当前生效的 api_mode 名称（用于前端展示）。
-fn effective_api_mode(kind: ProviderKind, api_mode: &str) -> &'static str {
-    if api_mode == "responses" && supports_responses_toggle(kind) {
-        "responses"
-    } else {
-        let profile = providers::profile::resolve_or_openai_compat(kind.backend_id());
-        match profile.api_mode {
-            providers::ApiMode::ChatCompletions => "chat_completions",
-            providers::ApiMode::AnthropicMessages => "anthropic_messages",
-            providers::ApiMode::Responses => "responses",
-            providers::ApiMode::Interactions => "interactions",
-            providers::ApiMode::GeminiNative => "gemini_native",
-        }
-    }
 }
 
 /// TOML 自定义 provider 用 TOML key 作为 backend_id（dispatch 需要此 ID 命中 custom provider）。
@@ -864,16 +878,18 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
             p.music_model.clone()
         },
         asr_model: profile.default_asr_model.to_string(),
-        embedding_model: profile.default_embedding_model.to_string(),
+        embedding_model: if p.embedding_model.is_empty() {
+            profile.default_embedding_model.to_string()
+        } else {
+            p.embedding_model.clone()
+        },
         supports_image: profile.supports_image_gen,
         supports_video: profile.supports_video(),
         supports_tts: profile.supports_tts(),
         supports_music: profile.supports_music(),
         supports_asr: profile.supports_asr(),
         supports_embedding: profile.supports_embedding,
-        api_mode: effective_api_mode(p.kind, &p.api_mode).to_string(),
-        supports_responses_api: supports_responses_toggle(p.kind)
-            || p.id.starts_with("toml:"),
+        supports_responses_api: supports_responses_toggle(p.kind) || p.id.starts_with("toml:"),
         config_source: if p.id.starts_with("toml:") {
             "toml".to_string()
         } else if p.id.starts_with("prov-") {
@@ -889,6 +905,7 @@ fn to_state_dto(state: &ProvidersState) -> ProvidersStateDto {
     ProvidersStateDto {
         providers: state.providers.iter().map(to_dto).collect(),
         active_provider_id: state.active_provider_id.clone(),
+        active_image_provider_id: state.active_image_provider_id.clone(),
     }
 }
 
@@ -980,7 +997,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
         let fallback = provider
             .fallback
             .into_iter()
-            .take(types::MAX_CHAT_FALLBACKS)
+            .take(types::MAX_MODEL_FALLBACKS)
             .filter(|e| !e.provider_id.trim().is_empty())
             .collect();
         s.providers[idx] = ProviderConfig {
@@ -996,8 +1013,14 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             tts_model: provider.tts_model.trim().to_string(),
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
-            api_mode: provider.api_mode.trim().to_string(),
+            embedding_model: provider.embedding_model.trim().to_string(),
         };
+        if s.active_image_provider_id.as_deref() == Some(s.providers[idx].id.as_str())
+            && (!s.providers[idx].enabled
+                || !providers::dispatch::supports_image_gen(&toml_backend_id(&s.providers[idx])))
+        {
+            s.active_image_provider_id = None;
+        }
         Ok(to_state_dto(s))
     })
 }
@@ -1057,6 +1080,9 @@ pub fn delete_provider(id: String) -> Result<ProvidersStateDto, String> {
         {
             s.active_provider_id = s.providers.first().map(|p| p.id.clone());
         }
+        if s.active_image_provider_id.as_deref() == Some(&id) {
+            s.active_image_provider_id = None;
+        }
         let _ = delete_api_key(&keyring_service_for_provider(&id));
         Ok(to_state_dto(s))
     })
@@ -1066,11 +1092,33 @@ pub fn delete_provider(id: String) -> Result<ProvidersStateDto, String> {
 #[tauri::command]
 pub fn set_active_provider(id: String) -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
-        if !s.providers.iter().any(|p| p.id == id && p.enabled) {
-            return Err("提供商不存在或未启用".to_string());
+        let provider = s
+            .providers
+            .iter()
+            .find(|p| p.id == id && p.enabled)
+            .ok_or_else(|| "提供商不存在或未启用".to_string())?;
+        if !providers::dispatch::supports_agent_responses(&toml_backend_id(provider)) {
+            return Err("该提供商不支持 Agent Responses API".to_string());
         }
         s.active_provider_id = Some(id);
         Ok(to_state_dto(s))
+    })
+}
+
+/// 设置独立的默认图片生成 Provider。
+#[tauri::command]
+pub fn set_active_image_provider(id: String) -> Result<ProvidersStateDto, String> {
+    with_state_mut(|state| {
+        let provider = state
+            .providers
+            .iter()
+            .find(|provider| provider.id == id && provider.enabled)
+            .ok_or_else(|| "提供商不存在或未启用".to_string())?;
+        if !providers::dispatch::supports_image_gen(&toml_backend_id(provider)) {
+            return Err("该提供商不支持图片生成".to_string());
+        }
+        state.active_image_provider_id = Some(id);
+        Ok(to_state_dto(state))
     })
 }
 
@@ -1155,17 +1203,21 @@ pub(crate) fn find_provider_by_backend(backend_id: &str) -> Result<ProviderConfi
 /// 从 providers.json + keyring 展开主目标与聊天后备链（含 primary）。
 ///
 /// - primary：与 `resolve_chat_credentials` 相同的查找规则；`model` 空则用条目默认模型
-/// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_chat_targets` 负责
-pub fn resolve_chat_targets(
+/// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_model_targets` 负责
+pub fn resolve_model_targets(
     primary_provider_id: Option<&str>,
     backend_hint: &str,
     model: &str,
-) -> Result<Vec<types::ChatTarget>, String> {
+) -> Result<Vec<types::ModelTarget>, String> {
     let cfg: ProviderConfig = if let Some(id) = primary_provider_id.filter(|s| !s.is_empty()) {
         find_provider(id)?
     } else {
         find_provider_by_backend(backend_hint)?
     };
+    let primary_backend = toml_backend_id(&cfg);
+    if !providers::dispatch::supports_agent_responses(&primary_backend) {
+        return Err(format!("{} 不支持 Agent Responses API", cfg.display_name));
+    }
 
     let (has, _source, _env, key) = resolve_api_key(&cfg);
     if cfg.kind.requires_api_key() && !has {
@@ -1184,13 +1236,12 @@ pub fn resolve_chat_targets(
         }
     };
 
-    let primary = types::ChatTarget {
+    let primary = types::ModelTarget {
         provider_id: cfg.id.clone(),
-        backend_id: toml_backend_id(&cfg),
+        backend_id: primary_backend,
         model,
         api_key: key.unwrap_or_default(),
         base_url: cfg.endpoint.clone(),
-        api_mode: cfg.api_mode.clone(),
     };
 
     let refs: Vec<types::FallbackRef> = cfg
@@ -1202,7 +1253,7 @@ pub fn resolve_chat_targets(
         })
         .collect();
 
-    let chain = types::expand_chat_targets(&primary, &refs, |id| {
+    let chain = types::expand_model_targets(&primary, &refs, |id| {
         let Ok(p) = find_provider(id) else {
             return None;
         };
@@ -1212,24 +1263,26 @@ pub fn resolve_chat_targets(
         let (_has, _source, _env, key) = resolve_api_key(&p);
         let api_key = key.unwrap_or_default();
         let bid = toml_backend_id(&p);
+        if !providers::dispatch::supports_agent_responses(&bid) {
+            return None;
+        }
         let allow_empty_key = bid == "ollama";
         if api_key.trim().is_empty() && !allow_empty_key {
             return None;
         }
-        Some(types::ChatTarget {
+        Some(types::ModelTarget {
             provider_id: p.id.clone(),
             backend_id: bid,
             model: p.model.clone(),
             api_key,
             base_url: p.endpoint.clone(),
-            api_mode: p.api_mode.clone(),
         })
     });
 
     Ok(chain)
 }
 
-/// 图片生成目标（已开启 + 有 API Key 的 Google / OpenAI）
+/// 图片生成目标（已开启 + 有 API Key 的 Google / OpenAI / Azure / MiniMax）
 #[derive(Debug, Clone, Serialize)]
 pub struct ImageGenTarget {
     pub provider: String,
@@ -1244,14 +1297,15 @@ pub struct ImageGenTarget {
 }
 
 const IMAGE_GEN_NO_PROVIDER_MSG: &str =
-    "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google 或 OpenAI，并配置 API Key。";
+    "未找到可用的图片生成提供商。请在「模型提供商」中开启 Google、OpenAI、Azure 或 MiniMax，并配置 API Key。";
 
 /// 按供应商类型选择默认图片模型（动态优先，硬编码 fallback）。
 fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     // 硬编码 fallback — 仅在缓存为空时使用
     match kind {
-        ProviderKind::Google => Some("nanobanana-v2"),
+        ProviderKind::Google => Some("nano-banana-pro-preview"),
         ProviderKind::Openai => Some("gpt-image-2"),
+        ProviderKind::Azure => Some("gpt-image-2"),
         ProviderKind::Minimax => Some("image-01"),
         _ => None,
     }
@@ -1345,11 +1399,17 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
         .unwrap_or_else(|| kind.default_model().to_string())
 }
 
-/// 从 providers 面板解析图片生成候选：Google 优先，OpenAI 备用。
+/// 从 providers 面板解析图片生成候选：独立生图默认优先，未配置时回退聊天默认。
 pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
     with_state(|s| {
+        let preferred_id = s
+            .active_image_provider_id
+            .as_deref()
+            .or(s.active_provider_id.as_deref());
+        let mut active: Option<ImageGenTarget> = None;
         let mut google: Option<ImageGenTarget> = None;
         let mut openai: Option<ImageGenTarget> = None;
+        let mut azure: Option<ImageGenTarget> = None;
         let mut minimax: Option<ImageGenTarget> = None;
 
         for p in &s.providers {
@@ -1386,20 +1446,31 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
                     default_music_model_for_kind(&p.kind),
                 ),
             };
+            if preferred_id == Some(p.id.as_str()) {
+                active = Some(target);
+                continue;
+            }
             match p.kind {
                 ProviderKind::Google if google.is_none() => google = Some(target),
                 ProviderKind::Openai if openai.is_none() => openai = Some(target),
+                ProviderKind::Azure if azure.is_none() => azure = Some(target),
                 ProviderKind::Minimax if minimax.is_none() => minimax = Some(target),
                 _ => {}
             }
         }
 
         let mut targets = Vec::new();
+        if let Some(a) = active {
+            targets.push(a);
+        }
         if let Some(g) = google {
             targets.push(g);
         }
         if let Some(o) = openai {
             targets.push(o);
+        }
+        if let Some(a) = azure {
+            targets.push(a);
         }
         if let Some(m) = minimax {
             targets.push(m);
@@ -1484,19 +1555,9 @@ fn google_native_endpoint(endpoint: &str) -> String {
     base
 }
 
-const AZURE_API_VERSION: &str = "2024-06-01";
-
 /// 规范化 Anthropic endpoint：剥离用户误加的 `/v1` 后缀，避免拼出 `/v1/v1/messages`。
 fn anthropic_base(endpoint: &str) -> String {
     trim_slash(endpoint).trim_end_matches("/v1").to_string()
-}
-
-/// 规范化 Azure OpenAI endpoint 根路径。
-fn azure_base(endpoint: &str) -> String {
-    trim_slash(endpoint)
-        .trim_end_matches("/openai")
-        .trim_end_matches("/v1")
-        .to_string()
 }
 
 /// 缺少 API Key 时返回可读错误。
@@ -1720,21 +1781,43 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                         max_output_tokens: m["max_output_tokens"].as_u64(),
                         supported_methods: Vec::new(),
                     };
-                    Some(crate::meta::model_meta::enrich_from_id(
+                    let mut info = crate::meta::model_meta::enrich_from_id(
                         &id,
                         kind,
                         if ctx.is_some() { Some(hints) } else { None },
-                    ))
+                    );
+                    if kind == "openai" {
+                        let persistent_instructions = m
+                            .pointer("/model_messages/persistent_instructions")
+                            .or_else(|| m.pointer("/reasoning/persistent_instructions"))
+                            .or_else(|| m.get("persistent_instructions"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::trim)
+                            .filter(|instructions| !instructions.is_empty());
+                        if let Some(instructions) = persistent_instructions {
+                            info.capabilities.reasoning = true;
+                            let reasoning = info.reasoning.get_or_insert_with(Default::default);
+                            if !reasoning
+                                .supported_efforts
+                                .iter()
+                                .any(|effort| effort == "persistent")
+                            {
+                                reasoning.supported_efforts.push("persistent".into());
+                            }
+                            reasoning.persistent_instructions = Some(instructions.into());
+                        }
+                    }
+                    Some(info)
                 })
                 .collect::<Vec<_>>();
             (models, format!("{}:/models", provider.kind.as_str()))
         }
         ProviderKind::Azure => {
-            let base = azure_base(&provider.endpoint);
-            let url = format!("{base}/openai/models?api-version={AZURE_API_VERSION}");
+            let base = providers::impls::azure::azure_openai_v1_base(&provider.endpoint);
+            let url = format!("{base}/models");
             let resp = client
                 .get(&url)
-                .header("api-key", &api_key)
+                .bearer_auth(&api_key)
                 .send()
                 .await
                 .map_err(|e| format!("连接 Azure OpenAI 失败: {e}"))?;
@@ -1758,7 +1841,7 @@ pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, St
                     Some(crate::meta::model_meta::enrich_from_id(&id, kind, None))
                 })
                 .collect::<Vec<_>>();
-            (models, "azure:/openai/models".to_string())
+            (models, "azure:/openai/v1/models".to_string())
         }
     };
 
@@ -1808,22 +1891,6 @@ pub fn cached_model_info(
     }
 }
 
-/// 从 models.json 缓存读取某模型的 context_window（与前端展示同源，不做 128K 臆测）。
-pub fn cached_model_context_window(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.context_window)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
-}
-
-/// 从 models.json 缓存读取某模型的 max_output_tokens（与 context_window 同源）。
-pub fn cached_model_max_output_tokens(provider_id: &str, model_id: &str) -> Option<u32> {
-    cached_model_info(provider_id, model_id)
-        .and_then(|info| info.max_output_tokens)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
-}
-
 /// Tauri 命令：get_cached_provider_models。
 #[tauri::command]
 pub async fn get_cached_provider_models(
@@ -1868,7 +1935,11 @@ async fn probe_one_model(
         reasoning_effort: "high".to_string(),
         additional_params: serde_json::Value::Null,
         previous_interaction_id: None,
-        api_mode: provider.api_mode.clone(),
+        api_mode: if providers::dispatch::supports_agent_responses(probe_id) {
+            "responses".to_string()
+        } else {
+            "chat_completions".to_string()
+        },
     };
     let result = providers::dispatch::verify(probe_id, &model, &config).await;
     ProviderTestResult {
@@ -1940,7 +2011,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_new_kinds_and_minimax_alias() {
+    fn parses_new_kinds() {
         assert_eq!(
             ProviderKind::from_str("openrouter"),
             Some(ProviderKind::Openrouter)
@@ -1962,10 +2033,7 @@ mod tests {
             ProviderKind::from_str("minimax"),
             Some(ProviderKind::Minimax)
         );
-        assert_eq!(
-            ProviderKind::from_str("minmax"),
-            Some(ProviderKind::Minimax)
-        );
+        assert_eq!(ProviderKind::from_str("minmax"), None);
         assert_eq!(ProviderKind::Minimax.as_str(), "minimax");
         assert_eq!(ProviderKind::Bailian.backend_id(), "bailian");
     }
@@ -1976,6 +2044,14 @@ mod tests {
         assert!(!p.enabled);
         assert_eq!(p.kind, ProviderKind::Openrouter);
         assert_eq!(p.endpoint, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn agent_provider_capability_is_responses_only() {
+        assert!(providers::dispatch::supports_agent_responses("deepseek"));
+        assert!(providers::dispatch::supports_agent_responses("openai"));
+        assert!(providers::dispatch::supports_agent_responses("openrouter"));
+        assert!(!providers::dispatch::supports_agent_responses("ollama"));
     }
 
     #[test]
@@ -2061,13 +2137,19 @@ mod tests {
     }
 
     #[test]
-    fn serde_accepts_minmax_alias() {
-        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
-        let p: ProviderConfig = serde_json::from_str(raw).expect("minmax alias");
+    fn serde_uses_minimax_id() {
+        let raw = r#"{"id":"x","kind":"minimax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
+        let p: ProviderConfig = serde_json::from_str(raw).expect("minimax provider id");
         assert_eq!(p.kind, ProviderKind::Minimax);
         assert!(p.fallback.is_empty());
         let out = serde_json::to_value(&p).unwrap();
         assert_eq!(out["kind"], "minimax");
+    }
+
+    #[test]
+    fn serde_rejects_minmax_typo() {
+        let raw = r#"{"id":"x","kind":"minmax","display_name":"M","endpoint":"https://api.minimaxi.com/v1","model":"MiniMax-M2.5","enabled":false}"#;
+        assert!(serde_json::from_str::<ProviderConfig>(raw).is_err());
     }
 
     #[test]
@@ -2092,6 +2174,7 @@ mod tests {
         }"#;
         let provider: ProviderConfig = serde_json::from_str(json).unwrap();
         assert_eq!(provider.music_model, "");
+        assert_eq!(provider.embedding_model, "");
     }
 
     #[test]
@@ -2101,6 +2184,49 @@ mod tests {
             "lyria-3-pro"
         );
         assert_eq!(default_music_model_for_kind(&ProviderKind::Openai), "");
+    }
+
+    #[test]
+    fn azure_image_model_defaults_to_gpt_image_2() {
+        assert_eq!(
+            default_image_model_for_kind(&ProviderKind::Azure),
+            Some("gpt-image-2")
+        );
+    }
+
+    #[test]
+    fn azure_defaults_to_latest_openai_v1_endpoint() {
+        assert_eq!(
+            ProviderKind::Azure.default_endpoint(),
+            "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
+        );
+        assert_eq!(ProviderKind::Azure.default_model(), "gpt-5.6-sol");
+        let provider = ProviderConfig::new(ProviderKind::Azure);
+        let dto = to_dto(&provider);
+        assert!(dto.supports_embedding);
+        assert_eq!(dto.embedding_model, "text-embedding-3-small");
+    }
+
+    #[test]
+    fn providers_state_without_image_default_is_backward_compatible() {
+        let state: ProvidersState =
+            serde_json::from_str(r#"{"providers":[],"active_provider_id":null}"#)
+                .expect("legacy state");
+        assert_eq!(state.active_image_provider_id, None);
+    }
+
+    #[test]
+    fn invalid_image_default_is_cleared() {
+        let mut provider = ProviderConfig::new(ProviderKind::Azure);
+        provider.id = "azure-image".to_string();
+        provider.enabled = false;
+        let mut state = ProvidersState {
+            providers: vec![provider],
+            active_provider_id: None,
+            active_image_provider_id: Some("azure-image".to_string()),
+        };
+        assert!(state.ensure_unique_ids());
+        assert_eq!(state.active_image_provider_id, None);
     }
 
     #[test]
@@ -2139,6 +2265,7 @@ mod tests {
     fn migrate_stale_defaults_updates_known_old_values() {
         let mut s = ProvidersState {
             active_provider_id: None,
+            active_image_provider_id: None,
             providers: vec![
                 ProviderConfig {
                     id: "m1".into(),
@@ -2153,7 +2280,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -2168,7 +2295,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -2183,7 +2310,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
+                    embedding_model: String::new(),
                 },
                 ProviderConfig {
                     id: "g1".into(),
@@ -2198,7 +2325,7 @@ mod tests {
                     tts_model: String::new(),
                     vision_model: String::new(),
                     music_model: String::new(),
-                    api_mode: String::new(),
+                    embedding_model: String::new(),
                 },
             ],
         };

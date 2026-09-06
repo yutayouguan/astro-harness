@@ -1,0 +1,351 @@
+/* 用户与 AI 共用同一层消息玻璃；左右位置与内容结构仍由各自消息行负责。 */
+html[data-theme] .bubble:is(.assistant, .user) {
+  --answer-radius: 16px;
+  --answer-inset-radius: 13px;
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  padding: 18px 20px 16px;
+  border-radius: var(--answer-radius);
+  border: 0.5px solid var(--glass-edge);
+  background: var(--glass-layer, var(--glass-panel));
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
+  color: var(--ink);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.bubble:is(.assistant, .user)::before {
+  content: none;
+}
+
+html[data-theme="light"] .bubble:is(.assistant, .user) {
+  background: var(--glass-layer, var(--glass-panel));
+  border-color: var(--glass-edge);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+}
+
+html[data-theme="dark"] .bubble:is(.assistant, .user) {
+  background: var(--glass-layer, var(--glass-panel));
+  border-color: var(--glass-edge);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+}
+
+html[data-theme] .bubble:is(.assistant, .user):focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 22%,
+    var(--glass-edge)
+  );
+}
+
+/* 时间线是阅读导航，不与内容卡抢视觉重量。 */
+.bubble.assistant .msg-timeline-step {
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 11px;
+}
+
+.bubble.assistant .msg-timeline-rail {
+  padding-top: 9px;
+}
+
+.bubble.assistant
+  .msg-timeline-step:is(
+    .kind-tool,
+    .kind-mcp,
+    .kind-skill,
+    .kind-hook,
+    .kind-memory,
+    .kind-status
+  )
+  .msg-timeline-rail {
+  padding-top: 4px;
+}
+
+.bubble.assistant .msg-timeline-step.kind-reply .msg-timeline-rail {
+  /* 24px icon matches the 24.65px reply line box; align their top edges. */
+  padding-top: 0;
+}
+
+/* The general assistant paragraph rhythm must not indent a reply's first line. */
+.bubble.assistant .msg-timeline-step.kind-reply .msg-md > :first-child {
+  margin-top: 0;
+}
+
+.bubble.assistant .msg-timeline-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    0 2px 7px color-mix(in srgb, var(--tl-tone) 11%, transparent);
+}
+
+.bubble.assistant .msg-timeline-line {
+  width: 1px;
+  min-height: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tl-tone) 38%, transparent),
+    color-mix(in srgb, var(--ink-mute) 16%, transparent)
+  );
+}
+
+.bubble.assistant .msg-timeline-body {
+  padding-bottom: 10px;
+}
+
+.bubble.assistant .msg-timeline-step.is-last .msg-timeline-body {
+  padding-bottom: 1px;
+}
+
+/* 工具步骤保持扁平：时间线负责分组，行本身不再重复做一层卡片。 */
+.bubble.assistant .msg-activity {
+  min-height: 0;
+  padding: 1px 2px 8px;
+  border: 0;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone, var(--accent)) 9%,
+      color-mix(in srgb, var(--ink) 8%, transparent)
+    );
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bubble.assistant .msg-activity-toggle,
+.bubble.assistant .msg-activity-summary,
+.bubble.assistant .msg-activity-group-toggle {
+  min-height: 32px;
+}
+
+/* Input / Output 共用一个内嵌阅读面，避免卡片继续套卡片。 */
+.bubble.assistant .msg-activity-io {
+  gap: 0;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: var(--answer-inset-radius);
+}
+
+.bubble.assistant .msg-activity-io-block {
+  gap: 4px;
+  padding: 9px 11px 10px;
+}
+
+.bubble.assistant .msg-activity-io-block + .msg-activity-io-block {
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone, var(--accent)) 10%,
+      color-mix(in srgb, var(--ink) 9%, transparent)
+    );
+}
+
+html[data-theme="light"] .bubble.assistant .msg-activity-io {
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 12%, rgba(71, 85, 105, 0.18));
+  background:
+    linear-gradient(180deg, rgba(71, 85, 105, 0.052), rgba(255, 255, 255, 0.18)),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 18%,
+      var(--glass-panel, rgba(255, 255, 255, 0.24))
+    );
+  box-shadow:
+    inset 0 2px 5px rgba(71, 85, 105, 0.1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.25), 1.3));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.25), 1.3));
+}
+
+html[data-theme="dark"] .bubble.assistant .msg-activity-io {
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(255, 255, 255, 0.14));
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.02)),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 16%,
+      rgba(18, 16, 32, 0.48)
+    );
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.065);
+}
+
+html[data-theme] .bubble.assistant .msg-activity-detail {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bubble.assistant .msg-activity-title {
+  font-size: 12.75px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+
+.bubble.assistant .msg-activity-meta {
+  gap: 0;
+  line-height: 1.2;
+}
+
+.bubble.assistant .msg-activity-meta > * + * {
+  margin-left: 9px;
+  padding-left: 9px;
+}
+
+.bubble.assistant .msg-md {
+  line-height: 1.7;
+  letter-spacing: -0.004em;
+}
+
+.bubble.assistant .msg-md p {
+  margin: 0.62em 0;
+}
+
+.bubble.assistant .msg-md-codeblock {
+  margin: 0.82em 0;
+  border-radius: 11px;
+}
+
+.bubble.assistant .msg-md-code-header {
+  min-height: 38px;
+  padding: 0 8px 0 14px;
+}
+
+.bubble.assistant .msg-md-pre {
+  padding: 14px 16px 16px;
+}
+
+.bubble.assistant .msg-md-codeblock[data-single-line="true"] .msg-md-pre {
+  padding-block: 13px 15px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .bubble:is(.assistant, .user) {
+    background: rgba(248, 250, 253, 0.98);
+  }
+
+  html[data-theme="light"] .bubble.assistant .msg-activity-io {
+    background: color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 18%,
+      rgba(248, 250, 253, 0.98)
+    );
+  }
+
+  html[data-theme="dark"] .bubble:is(.assistant, .user) {
+    background: rgba(10, 10, 18, 0.96);
+  }
+
+  html[data-theme="dark"] .bubble.assistant .msg-activity-io {
+    background: color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 14%,
+      rgba(18, 16, 32, 0.96)
+    );
+  }
+}
+
+@media (max-width: 700px) {
+  .message-list {
+    padding-inline: 64px 12px;
+  }
+
+  .msg-row {
+    gap: 9px;
+  }
+
+  .msg-row.assistant .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+  }
+
+  .msg-row.assistant .msg-stack {
+    max-width: calc(100% - 37px);
+  }
+
+  html[data-theme] .bubble:is(.assistant, .user) {
+    padding: 13px 13px 12px;
+    border-radius: 14px;
+  }
+
+  .bubble.assistant .msg-timeline-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .bubble.assistant .msg-timeline-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+  }
+
+  .bubble.assistant
+    .msg-timeline-step:is(
+      .kind-tool,
+      .kind-mcp,
+      .kind-skill,
+      .kind-hook,
+      .kind-memory,
+      .kind-status
+    )
+    .msg-timeline-rail {
+    padding-top: 5px;
+  }
+
+  .bubble.assistant .msg-activity {
+    min-height: 0;
+    padding: 1px 0 7px;
+  }
+
+  .bubble.assistant .msg-activity-meta {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .bubble.assistant .msg-activity-summary,
+  .bubble.assistant .msg-activity-toggle {
+    flex-wrap: wrap;
+  }
+
+  .bubble.assistant .msg-activity-meta {
+    width: 100%;
+    margin-top: 2px;
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .bubble.assistant .msg-activity-chevron {
+    position: absolute;
+    top: 13px;
+    right: 11px;
+  }
+
+  .bubble.assistant .msg-activity-toggle {
+    position: relative;
+    padding-right: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme] .bubble:is(.assistant, .user) {
+    transition: none;
+  }
+}

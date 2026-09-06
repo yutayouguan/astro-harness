@@ -151,7 +151,7 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 fn resolve_creds_for_job(
     job: &cron::CronJob,
 ) -> Result<agent::exec::cron::CronExecCredentials, String> {
-    use super::providers::{find_provider, find_provider_by_backend, resolve_chat_targets};
+    use super::providers::{find_provider, find_provider_by_backend, resolve_model_targets};
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
@@ -170,7 +170,7 @@ fn resolve_creds_for_job(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| provider_cfg.model.clone());
 
-    let targets = resolve_chat_targets(
+    let targets = resolve_model_targets(
         Some(provider_cfg.id.as_str()),
         provider_cfg.kind.backend_id(),
         &model,
@@ -382,10 +382,10 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
         // 轮询直到非 running（最长约 10 分钟 + 余量）
         for _ in 0..650 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let Ok(db) = cron::CronRunDb::open_default() else {
+            let Ok(db) = cron::CronRunDb::open_default().await else {
                 continue;
             };
-            let Ok(Some(finished)) = db.get(&run_id) else {
+            let Ok(Some(finished)) = db.get(&run_id).await else {
                 continue;
             };
             if finished.status == "running" {
@@ -436,9 +436,26 @@ pub async fn run_cron_job_now(id: String) -> Result<CronRunDto, String> {
 #[tauri::command]
 pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
-    let row = db.get(&id).map_err(|e| e.to_string())?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    let row = db.get(&id).await.map_err(|e| e.to_string())?;
+    Ok(row.map(run_to_dto))
+}
+
+/// 按会话 id 取对应的定时任务运行记录（供聊天结果卡片使用）。
+#[tauri::command]
+pub async fn get_cron_run_by_session(session_id: String) -> Result<Option<CronRunDto>, String> {
+    bootstrap_workspace()?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    let row = db
+        .get_by_session_id(&session_id)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(row.map(run_to_dto))
 }
 
@@ -446,16 +463,20 @@ pub async fn get_cron_run(id: String) -> Result<Option<CronRunDto>, String> {
 #[tauri::command]
 pub async fn delete_cron_run(id: String) -> Result<bool, String> {
     bootstrap_workspace()?;
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
-    db.delete(&id).map_err(|e| e.to_string())
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    db.delete(&id).await.map_err(|e| e.to_string())
 }
 
 /// 列出定时任务运行记录。
 #[tauri::command]
 pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, String> {
     bootstrap_workspace()?;
-    let _ = agent::exec::cron::reconcile_orphaned_runs();
-    let db = cron::CronRunDb::open_default().map_err(|e| e.to_string())?;
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     let rows = db
         .list_filtered(cron::run_db::CronRunFilters {
             job_id: args.job_id,
@@ -464,6 +485,7 @@ pub async fn list_cron_runs(args: ListCronRunsArgs) -> Result<Vec<CronRunDto>, S
             date_to: args.date_to,
             limit: args.limit,
         })
+        .await
         .map_err(|e| e.to_string())?;
     Ok(rows.into_iter().map(run_to_dto).collect())
 }

@@ -5,16 +5,22 @@ use crate::RolloutItem;
 /// Returns whether an event is part of durable rollout history.
 pub fn should_persist_event_msg(event: &EventMsg) -> bool {
     match event {
-        EventMsg::ItemCompleted(_) => true,
+        EventMsg::ItemCompleted(_)
+        | EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationClosed(_) => true,
         EventMsg::TurnStarted(_)
         | EventMsg::UserInputCommitted(_)
         | EventMsg::TurnComplete(_)
         | EventMsg::TurnAborted(_)
+        | EventMsg::GuardianAssessment(_)
         | EventMsg::TokenCount(_)
         | EventMsg::ContextUsage(_)
         | EventMsg::ThreadSettingsApplied(_)
         | EventMsg::ThreadRolledBack(_) => true,
-        EventMsg::ItemStarted(_)
+        EventMsg::RealtimeConversationSdp(_)
+        | EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_)
+        | EventMsg::ItemStarted(_)
         | EventMsg::AgentMessageContentDelta(_)
         | EventMsg::PlanDelta(_)
         | EventMsg::ReasoningContentDelta(_)
@@ -46,6 +52,8 @@ pub fn is_persisted_rollout_item(item: &RolloutItem) -> bool {
         RolloutItem::EventMsg(event) => should_persist_event_msg(event),
         RolloutItem::SessionMeta(_)
         | RolloutItem::ResponseItem(_)
+        | RolloutItem::RealtimeItem(_)
+        | RolloutItem::TokenUsage(_)
         | RolloutItem::TurnContext(_)
         | RolloutItem::WorldState(_)
         | RolloutItem::Compacted(_)
@@ -60,15 +68,17 @@ mod tests {
         ContextUsageEvent, DeltaEvent, ErrorEvent, EventMsg, ItemEvent, TurnCompleteEvent,
         UserInputCommittedEvent,
     };
-    use agent_protocol::items::{TextItem, TurnItem};
+    use agent_protocol::items::{AgentMessageItem, TurnItem};
 
     #[test]
     fn durable_policy_persists_completed_items_but_not_deltas() {
         let completed = EventMsg::ItemCompleted(ItemEvent {
             turn_id: "turn-1".into(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(AgentMessageItem {
                 id: "item-1".into(),
                 content: "done".into(),
+                delivery: None,
+                questions: None,
             }),
         });
         let delta = EventMsg::AgentMessageContentDelta(DeltaEvent {
@@ -103,6 +113,9 @@ mod tests {
             turn_id: "turn-1".into(),
             context_window: 128_000,
             total_tokens: 42,
+            estimated_total_tokens: 42,
+            source: agent_protocol::ContextUsageSource::LocalEstimate,
+            latest_usage: None,
             segments: Vec::new(),
             updated_at: 123,
             recommend_compact: false,
@@ -122,6 +135,38 @@ mod tests {
     }
 
     #[test]
+    fn realtime_boundaries_are_durable_but_stream_payloads_are_transient() {
+        let started = EventMsg::RealtimeConversationStarted(
+            agent_protocol::RealtimeConversationStartedEvent {
+                realtime_session_id: Some("rt-1".into()),
+                call_id: None,
+                model: "gpt-realtime".into(),
+                version: agent_protocol::RealtimeConversationVersion::V2,
+            },
+        );
+        let payload = EventMsg::RealtimeConversationRealtime(
+            agent_protocol::RealtimeConversationRealtimeEvent {
+                payload: agent_protocol::RealtimeEvent::AudioOut(
+                    agent_protocol::RealtimeAudioFrame {
+                        data: vec![0],
+                        sample_rate: 24_000,
+                        num_channels: 1,
+                        format: agent_protocol::RealtimeAudioFormat::Pcm16,
+                    },
+                ),
+            },
+        );
+        let closed =
+            EventMsg::RealtimeConversationClosed(agent_protocol::RealtimeConversationClosedEvent {
+                reason: Some("requested".into()),
+            });
+
+        assert!(should_persist_event_msg(&started));
+        assert!(!should_persist_event_msg(&payload));
+        assert!(should_persist_event_msg(&closed));
+    }
+
+    #[test]
     fn non_event_rollout_items_are_always_persisted() {
         let item = RolloutItem::TurnContext(serde_json::json!({"turn_id": "turn-1"}));
 
@@ -130,20 +175,23 @@ mod tests {
 
     #[test]
     fn response_items_compare_structurally() {
-        let item = RolloutItem::ResponseItem(types::message::Message::assistant_with_tools(
-            "run it",
-            vec![types::message::ToolCall {
-                id: "call-1".into(),
-                name: "terminal".into(),
-                arguments: serde_json::json!({"command": "pwd"}),
-                signature: Some("sig-1".into()),
-            }],
-        ));
+        let item = RolloutItem::ResponseItem(agent_protocol::ResponseItem::FunctionCall {
+            id: None,
+            name: "exec_command".into(),
+            namespace: None,
+            arguments: "{\"command\":\"pwd\"}".into(),
+            encrypted_function_args: None,
+            call_id: "call-1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        });
         let equal = item.clone();
         let mut changed = item.clone();
-        if let RolloutItem::ResponseItem(message) = &mut changed {
-            message.tool_calls.as_mut().unwrap()[0].arguments =
-                serde_json::json!({"command": "ls"});
+        if let RolloutItem::ResponseItem(agent_protocol::ResponseItem::FunctionCall {
+            arguments,
+            ..
+        }) = &mut changed
+        {
+            *arguments = "{\"command\":\"ls\"}".into();
         }
 
         assert_eq!(item, equal);

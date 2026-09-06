@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
@@ -8,47 +9,106 @@ use crate::model::WorkflowNode;
 const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024; // 10 MB
 const MAX_DELAY_SECONDS: u64 = 86_400; // 24 hours
 
-/// 校验 URL：必须是 http/https，禁止内网和云元数据地址
+/// 校验 URL：必须是 http/https，且 DNS 不得解析到本机、私网或云元数据地址。
 fn validate_url(url: &str) -> Result<()> {
     let parsed: url::Url = url
         .parse()
-        .map_err(|_| anyhow::anyhow!("无效的 URL: {}", url))?;
+        .map_err(|error| anyhow::anyhow!("无效的 URL {url}: {error}"))?;
     match parsed.scheme() {
         "http" | "https" => {}
         s => bail!("不允许的 URL scheme: {s}，仅支持 http/https"),
     }
-    if let Some(host) = parsed.host_str() {
-        let h = host.to_lowercase();
-        // 去掉 IPv6 方括号
-        let h = h.trim_start_matches('[').trim_end_matches(']');
-        if h == "localhost"
-            || h == "127.0.0.1"
-            || h == "::1"
-            || h == "0.0.0.0"
-            || h.starts_with("10.")
-            || h.starts_with("192.168.")
-            || is_172_private(h)
-            || h.starts_with("fc") || h.starts_with("fd")       // IPv6 ULA
-            || h.starts_with("fe80")                              // IPv6 link-local
-            || h.starts_with("::ffff:127.") || h.starts_with("::ffff:10.")
-            || h.starts_with("::ffff:192.168.") || h.starts_with("::ffff:172.")
-            || h == "169.254.169.254"
-            || h.ends_with(".internal")
-            || h.ends_with(".local")
-        {
-            bail!("不允许请求内网地址: {host}");
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("URL 缺少主机名"))?;
+    if is_blocked_host(host) {
+        bail!("不允许请求本机/内网地址: {host}");
+    }
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    let mut resolved = false;
+    for address in (host, port)
+        .to_socket_addrs()
+        .map_err(|error| anyhow::anyhow!("无法解析主机 {host}: {error}"))?
+    {
+        resolved = true;
+        if is_blocked_ip(address.ip()) {
+            bail!("不允许请求解析到私网/本机的地址: {}", address.ip());
         }
+    }
+    if !resolved {
+        bail!("主机未解析到任何地址: {host}");
     }
     Ok(())
 }
 
-fn is_172_private(host: &str) -> bool {
-    if let Some(rest) = host.strip_prefix("172.") {
-        if let Some(octet) = rest.split('.').next().and_then(|s| s.parse::<u8>().ok()) {
-            return (16..=31).contains(&octet);
+fn public_redirect_policy(max_redirects: usize) -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= max_redirects {
+            return attempt.error(std::io::Error::other(format!(
+                "redirect limit exceeded ({max_redirects})"
+            )));
         }
+        match validate_url(attempt.url().as_str()) {
+            Ok(()) => attempt.follow(),
+            Err(error) => attempt.error(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("redirect blocked by network policy: {error}"),
+            )),
+        }
+    })
+}
+
+fn is_blocked_host(host: &str) -> bool {
+    let normalized = host
+        .trim()
+        .trim_matches(|character| matches!(character, '[' | ']'))
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "localhost" | "localhost.localdomain" | "metadata.google.internal"
+        )
+        || normalized.ends_with(".localhost")
+        || normalized.ends_with(".local")
+        || normalized
+            .parse::<IpAddr>()
+            .map(is_blocked_ip)
+            .unwrap_or(false)
+}
+
+fn is_blocked_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => is_blocked_v4(ip),
+        IpAddr::V6(ip) => is_blocked_v6(ip),
     }
-    false
+}
+
+fn is_blocked_v4(ip: Ipv4Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_unspecified()
+        || ip.octets()[0] == 0
+        || (ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000) == 0b0100_0000)
+        || (ip.octets()[0] == 198 && matches!(ip.octets()[1], 18 | 19))
+}
+
+fn is_blocked_v6(ip: Ipv6Addr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() {
+        return true;
+    }
+    let segments = ip.segments();
+    if (segments[0] & 0xfe00) == 0xfc00 || (segments[0] & 0xffc0) == 0xfe80 {
+        return true;
+    }
+    if ip.is_multicast() || (segments[0] == 0x2001 && segments[1] == 0x0db8) {
+        return true;
+    }
+    ip.to_ipv4_mapped().map(is_blocked_v4).unwrap_or(false)
 }
 
 /// 校验文件路径：规范化后必须在用户目录或 ~/.astro 下，禁止 .. 遍历
@@ -136,7 +196,7 @@ impl NodeExecutor for HttpRequestExec {
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(timeout))
-            .redirect(reqwest::redirect::Policy::limited(5))
+            .redirect(public_redirect_policy(5))
             .build()?;
 
         let mut req = match method.to_uppercase().as_str() {
@@ -422,6 +482,7 @@ impl NodeExecutor for SendNotificationExec {
                 validate_url(&url)?;
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(30))
+                    .redirect(public_redirect_policy(5))
                     .build()?;
                 let resp = client
                     .post(&url)
@@ -545,5 +606,31 @@ impl NodeExecutor for FileIoExec {
             }
             _ => bail!("未知文件操作: {}", op),
         }
+    }
+}
+
+#[cfg(test)]
+mod network_tests {
+    use super::*;
+
+    #[test]
+    fn workflow_http_blocks_local_private_and_non_http_targets() {
+        for url in [
+            "http://127.0.0.1/",
+            "http://10.0.0.1/",
+            "http://192.168.1.1/",
+            "http://169.254.169.254/",
+            "http://[::1]/",
+            "file:///etc/passwd",
+        ] {
+            assert!(validate_url(url).is_err(), "expected blocked URL: {url}");
+        }
+    }
+
+    #[test]
+    fn workflow_http_blocks_reserved_ip_ranges() {
+        assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(198, 18, 0, 1))));
+        assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))));
+        assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::LOCALHOST)));
     }
 }

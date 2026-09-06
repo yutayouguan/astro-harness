@@ -17,11 +17,11 @@ const USER_AGENT: &str = concat!(
     "Chrome/122.0.0.0 Safari/537.36"
 );
 
-/// Arguments for the `web_search` tool.
+/// `web_search` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct WebSearchArgs {
     pub query: String,
-    /// Max results (1–10, default 5).
+    /// 最大结果数（1–10，默认 5）。
     #[serde(default)]
     pub max_results: Option<u32>,
 }
@@ -61,49 +61,41 @@ crate::submit_builtin_tool! {
 /// 执行网页搜索并返回格式化的结果文本。
 ///
 /// `query` 不能为空；`max_results` 会被 clamp 到 1–10。
-pub async fn dispatch(ctx: &ToolContext<'_>, args: &WebSearchArgs) -> anyhow::Result<String> {
+pub async fn dispatch(_ctx: &ToolContext<'_>, args: &WebSearchArgs) -> anyhow::Result<String> {
     let query = args.query.trim();
     if query.is_empty() {
         anyhow::bail!("web_search 需要 query");
     }
     let max = args.max_results.unwrap_or(5).clamp(1, 10) as usize;
-    let grant = ctx.effective_in_process_network_grant();
 
     if let Ok(key) = std::env::var("BRAVE_API_KEY") {
         if !key.trim().is_empty() {
-            match brave_search(&key, query, max, &grant).await {
+            match brave_search(&key, query, max).await {
                 Ok(text) => return Ok(text),
                 Err(e) => {
                     // Brave 失败时降级到免费 Bing，避免整次工具报错
-                    let bing = bing_rss_search(query, max, &grant)
-                        .await
-                        .map_err(|bing_err| {
-                            anyhow::anyhow!("Brave Search 失败: {e}; Bing 回退也失败: {bing_err}")
-                        })?;
+                    let bing = bing_rss_search(query, max).await.map_err(|bing_err| {
+                        anyhow::anyhow!("Brave Search 失败: {e}; Bing 回退也失败: {bing_err}")
+                    })?;
                     return Ok(format!("（Brave 失败，已用 Bing 回退）\n\n{bing}"));
                 }
             }
         }
     }
-    bing_rss_search(query, max, &grant).await
+    bing_rss_search(query, max).await
 }
 
-fn http_client(grant: &crate::InProcessNetworkGrant) -> anyhow::Result<reqwest::Client> {
+fn http_client() -> anyhow::Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(20))
-        .redirect(public_redirect_policy(5, grant.clone()))
+        .redirect(public_redirect_policy(5))
         .build()?)
 }
 
 /// 调用 Brave Search API 并格式化网页结果列表。
-async fn brave_search(
-    api_key: &str,
-    query: &str,
-    max: usize,
-    grant: &crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
-    let client = http_client(grant)?;
+async fn brave_search(api_key: &str, query: &str, max: usize) -> anyhow::Result<String> {
+    let client = http_client()?;
     let url = format!(
         "https://api.search.brave.com/res/v1/web/search?q={}&count={}",
         urlencoding::encode(query),
@@ -153,12 +145,8 @@ async fn brave_search(
 }
 
 /// 使用 Bing 公开 RSS 端点搜索（无需 API Key）。
-async fn bing_rss_search(
-    query: &str,
-    max: usize,
-    grant: &crate::InProcessNetworkGrant,
-) -> anyhow::Result<String> {
-    let client = http_client(grant)?;
+async fn bing_rss_search(query: &str, max: usize) -> anyhow::Result<String> {
+    let client = http_client()?;
     let url = format!(
         "https://www.bing.com/search?q={}&format=rss",
         urlencoding::encode(query)
@@ -347,13 +335,7 @@ mod live_tests {
     #[tokio::test]
     #[ignore = "network"]
     async fn bing_rss_live_returns_hits() {
-        let text = bing_rss_search(
-            "OpenAI API",
-            3,
-            &crate::InProcessNetworkGrant::unrestricted(),
-        )
-        .await
-        .expect("bing");
+        let text = bing_rss_search("OpenAI API", 3).await.expect("bing");
         assert!(text.contains("http"), "{text}");
         assert!(!text.contains("未找到结果"), "{text}");
         println!("{text}");

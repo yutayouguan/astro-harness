@@ -32,7 +32,7 @@ pub struct ArtifactDb { conn: Connection, path: PathBuf }
 
 | 方法 | 说明 |
 |---|---|
-| `new(path)` | 打开或创建数据库，旧库缺 `agent_id` 列时自动丢弃重建 |
+| `new(path)` | 创建当前 schema，或打开 schema 版本完全匹配的数据库 |
 | `register(path, source, session_id, message_id, agent_id)` | 登记/UPSERT 文件，返回 `ArtifactRow` |
 | `get_by_path(path)` | 按路径查询单条记录 |
 | `list(category, query, recent_only, limit, include_missing, agent_id)` | 多条件过滤列表查询 |
@@ -52,7 +52,7 @@ pub struct KnowledgeDb { conn: Connection, path: PathBuf }
 
 | 方法 | 说明 |
 |---|---|
-| `open(path)` / `open_default()` | 打开知识库（默认 `~/.astro/sessions/knowledge.db`） |
+| `open(path)` / `open_default()` | 打开知识库（默认 `~/.astro/data/knowledge.db`） |
 | `register(title, path, body, status)` | 登记文档并写入 FTS 正文；同 path 则更新 |
 | `search(query, limit)` | FTS 检索，MATCH 失败时回退 LIKE 子串搜索 |
 | `list(limit)` | 按时间倒序列出文档 |
@@ -74,7 +74,7 @@ pub struct KnowledgeDb { conn: Connection, path: PathBuf }
 
 ## 与其他 crate 的关系
 
-- **`types`**（`agent-types`）-- 依赖 `SqliteStore` trait、`open_wal`、`delete_sqlite_files` 等 SQLite 工具函数
+- **`types`**（`agent-types`）-- 依赖 `SqliteStore` trait 与共享 SQLite 打开约定
 - **`home`**（`agent-home`）-- 使用 `default_memory_dir()` 获取 `~/.astro` 路径、`DEFAULT_AGENT_ID` 常量、`normalize_agent_id` / `agent_id_from_workspace_dir_name`
 - **`agent-core`**（`agent`）-- Agent 运行时在工具执行后调用 `register` 登记写入文件，在 `run_turn` 中使用 `KnowledgeDb` 做上下文召回
 - **`agent-tools`** -- 文件操作工具（write_file 等）完成后调用 `ArtifactDb::register` 入库

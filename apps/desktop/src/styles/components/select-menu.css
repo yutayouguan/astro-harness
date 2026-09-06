@@ -12,21 +12,33 @@
 /* 表单用自定义下拉 — 全宽可点 + 单箭头 chevron；与输入框统一白色调毛玻璃 */
 .select-menu {
   --select-tone: var(--tone, var(--tone-orange, #f59e0b));
-  --select-tone-soft: var(--tone-soft, var(--tone-orange-soft, rgba(245, 158, 11, 0.14)));
+  --select-tone-soft: var(
+    --tone-soft,
+    var(--tone-orange-soft, rgba(245, 158, 11, 0.14))
+  );
   --select-glass-fill:
     linear-gradient(165deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.2)),
     rgba(255, 255, 255, 0.24);
   --select-glass-fill-hover:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.24)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.24)
+    ),
     rgba(255, 255, 255, 0.28);
-  --select-glass-edge: color-mix(in srgb, var(--select-tone) 14%, rgba(255, 255, 255, 0.35));
+  --select-glass-edge: color-mix(
+    in srgb,
+    var(--select-tone) 14%,
+    rgba(255, 255, 255, 0.35)
+  );
   --select-glass-rim:
     inset 0 1px 0 rgba(255, 255, 255, 0.46),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
   --select-glass-shadow:
     0 6px 16px color-mix(in srgb, var(--select-tone) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03);
-  --select-glass-blur: blur(16px) saturate(1.25);
+  --select-glass-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   position: relative;
   width: 100%;
   min-width: 0;
@@ -63,7 +75,11 @@
 .select-menu-trigger:hover:not(:disabled),
 .select-menu.is-open .select-menu-trigger {
   background: var(--select-glass-fill-hover);
-  border-color: color-mix(in srgb, var(--select-tone) 32%, rgba(255, 255, 255, 0.48));
+  border-color: color-mix(
+    in srgb,
+    var(--select-tone) 32%,
+    rgba(255, 255, 255, 0.48)
+  );
   color: color-mix(in srgb, var(--select-tone) 55%, var(--ink));
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--select-tone) 14%, transparent),
@@ -144,7 +160,9 @@
   flex-shrink: 0;
   color: var(--ink-mute);
   opacity: 0.75;
-  transition: transform 0.16s ease, color 0.14s ease, opacity 0.14s ease;
+  transition:
+    color 0.14s ease,
+    opacity 0.14s ease;
 }
 
 .select-menu.is-open .select-menu-chevron,
@@ -152,11 +170,6 @@
 .select-menu-trigger:hover:not(:disabled) .select-menu-chevron {
   color: var(--select-tone);
   opacity: 1;
-}
-
-.select-menu.is-open .select-menu-chevron,
-.select-menu-chevron.is-open {
-  transform: rotate(180deg);
 }
 
 .select-menu-list {
@@ -170,18 +183,26 @@
   max-height: min(260px, 42vh);
   border-radius: 14px;
   transform-origin: top center;
-  animation: select-menu-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
-  border: 1px solid color-mix(in srgb, var(--select-tone) 14%, rgba(255, 255, 255, 0.38));
+  animation: select-menu-in 0.15s
+    var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+  border: 1px solid
+    color-mix(in srgb, var(--select-tone) 14%, rgba(255, 255, 255, 0.38));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.25)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.25)
+    ),
     rgba(255, 255, 255, 0.3);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.12),
     0 2px 8px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     0 0 0 1px color-mix(in srgb, var(--select-tone) 6%, transparent);
-  backdrop-filter: blur(24px) saturate(1.35);
-  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   isolation: isolate;
 }
 
@@ -200,7 +221,15 @@
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    transform 0.18s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.select-menu-option:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
 }
 
 .select-menu-option:hover {
@@ -232,6 +261,30 @@
   color: var(--select-tone);
 }
 
+.select-menu-radio {
+  order: -1;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid color-mix(in srgb, var(--ink-mute) 52%, transparent);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.select-menu-radio > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.select-menu-option.is-active .select-menu-radio {
+  color: var(--select-tone);
+  border-color: currentColor;
+}
+
 .select-menu--sm .select-menu-trigger {
   min-height: 36px;
   width: 100%;
@@ -261,20 +314,31 @@ html[data-theme="dark"] .select-menu {
     linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
     rgba(255, 255, 255, 0.04);
   --select-glass-fill-hover:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.05)
+    ),
     rgba(255, 255, 255, 0.06);
-  --select-glass-edge: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.12));
+  --select-glass-edge: color-mix(
+    in srgb,
+    var(--select-tone) 22%,
+    rgba(255, 255, 255, 0.12)
+  );
   --select-glass-rim:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
   --select-glass-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.4),
-    0 1px 3px rgba(0, 0, 0, 0.24);
+    0 8px 22px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.24);
 }
 
 html[data-theme="dark"] .select-menu-trigger:hover:not(:disabled),
 html[data-theme="dark"] .select-menu.is-open .select-menu-trigger {
-  border-color: color-mix(in srgb, var(--select-tone) 40%, rgba(255, 255, 255, 0.16));
+  border-color: color-mix(
+    in srgb,
+    var(--select-tone) 40%,
+    rgba(255, 255, 255, 0.16)
+  );
   color: color-mix(in srgb, #fff 18%, var(--select-tone));
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--select-tone) 18%, rgba(0, 0, 0, 0.4)),
@@ -288,24 +352,41 @@ html[data-theme="dark"] .select-menu.is-open .select-menu-trigger {
 @keyframes select-menu-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.97) translateY(-4px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes select-menu-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .select-menu-list {
-    animation: none;
+    animation: select-menu-fade-in 0.1s ease-out both;
   }
 }
 
 html[data-theme="dark"] .select-menu-list {
-  border-color: color-mix(in srgb, var(--select-tone) 22%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(
+    in srgb,
+    var(--select-tone) 22%,
+    rgba(255, 255, 255, 0.12)
+  );
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     rgba(14, 12, 28, 0.72);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.5),

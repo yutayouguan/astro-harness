@@ -25,7 +25,11 @@ const OUTPUT_OPTIONS = [
   { value: "json", label: "JSON (含时间戳)" },
 ];
 
-export default function SpeechToTextConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function SpeechToTextConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

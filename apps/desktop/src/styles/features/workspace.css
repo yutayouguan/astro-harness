@@ -19,45 +19,6 @@
   display: none;
 }
 
-/* 页头分段切换：浏览 / 产物 */
-.files-mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 3px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
-  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
-}
-
-.files-mode-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: none;
-  border-radius: 9px;
-  font-size: 12.5px;
-  font-weight: 650;
-  color: var(--ink-mute);
-  background: transparent;
-  cursor: pointer;
-}
-
-.files-mode-tab.is-active {
-  color: var(--tone-purple, #8b5cf6);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.25)),
-    color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
-html[data-theme="dark"] .files-mode-tab.is-active {
-  background: color-mix(in srgb, var(--tone-purple, #8b5cf6) 16%, rgba(255, 255, 255, 0.06));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
-  color: color-mix(in srgb, #fff 18%, var(--tone-purple, #8b5cf6));
-}
-
 .workspace-panel {
   flex: 1;
   min-height: 0;
@@ -113,24 +74,52 @@ html[data-theme="dark"] .files-mode-tab.is-active {
   border: none;
   border-radius: 999px;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.28)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.28)
+    ),
     var(--tone-soft);
   color: var(--tone, var(--tone-purple, #8b5cf6));
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+  box-shadow: 0 2px 10px
+    color-mix(
+      in srgb,
+      var(--tone, var(--tone-purple, #8b5cf6)) 12%,
+      rgba(15, 23, 42, 0.04)
+    );
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.15));
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
 }
 
 .ws-tool-btn:hover:not(:disabled) {
   color: var(--tone, var(--tone-purple, #7c3aed));
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.33)),
-    color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 14%, transparent);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 16%, transparent);
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.33)
+    ),
+    color-mix(
+      in srgb,
+      var(--tone, var(--tone-purple, #8b5cf6)) 14%,
+      transparent
+    );
+  box-shadow: 0 4px 14px
+    color-mix(
+      in srgb,
+      var(--tone, var(--tone-purple, #8b5cf6)) 16%,
+      transparent
+    );
 }
 
 .ws-tool-btn:active:not(:disabled) {
@@ -139,15 +128,26 @@ html[data-theme="dark"] .files-mode-tab.is-active {
 
 .ws-tool-btn.is-active {
   color: #fff;
-  background:
-    linear-gradient(165deg, color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 92%, #fff), var(--tone, var(--tone-purple, #8b5cf6)));
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 28%, transparent);
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 92%, #fff),
+    var(--tone, var(--tone-purple, #8b5cf6))
+  );
+  box-shadow: 0 4px 14px
+    color-mix(
+      in srgb,
+      var(--tone, var(--tone-purple, #8b5cf6)) 28%,
+      transparent
+    );
 }
 
 .ws-tool-btn.is-active:hover:not(:disabled) {
   color: #fff;
-  background:
-    linear-gradient(165deg, var(--tone, var(--tone-purple, #8b5cf6)), color-mix(in srgb, var(--tone, var(--tone-purple, #7c3aed)) 88%, #000));
+  background: linear-gradient(
+    165deg,
+    var(--tone, var(--tone-purple, #8b5cf6)),
+    color-mix(in srgb, var(--tone, var(--tone-purple, #7c3aed)) 88%, #000)
+  );
 }
 
 .ws-tool-btn:disabled {
@@ -165,7 +165,11 @@ html[data-theme="dark"] .files-mode-tab.is-active {
 
 .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.35)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.35)
+    ),
     color-mix(in srgb, #ef4444 14%, transparent);
   color: #b91c1c;
   box-shadow: 0 4px 14px color-mix(in srgb, #ef4444 16%, transparent);
@@ -173,7 +177,11 @@ html[data-theme="dark"] .files-mode-tab.is-active {
 
 html[data-theme="dark"] .ws-tool-btn {
   color: color-mix(in srgb, #fff 28%, var(--tone, var(--tone-purple, #8b5cf6)));
-  background: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 14%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple, #8b5cf6)) 14%,
+    transparent
+  );
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -181,7 +189,11 @@ html[data-theme="dark"] .ws-tool-btn {
 
 html[data-theme="dark"] .ws-tool-btn:hover:not(:disabled) {
   color: color-mix(in srgb, #fff 36%, var(--tone, var(--tone-purple, #8b5cf6)));
-  background: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 22%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple, #8b5cf6)) 22%,
+    transparent
+  );
   box-shadow: none;
 }
 
@@ -217,8 +229,17 @@ html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
 }
 
 .ws-create-input:focus {
-  border-color: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 40%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 12%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple, #8b5cf6)) 40%,
+    transparent
+  );
+  box-shadow: 0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--tone, var(--tone-purple, #8b5cf6)) 12%,
+      transparent
+    );
 }
 
 .ws-path-row {
@@ -234,14 +255,28 @@ html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
 .ws-path-actions {
   --ws-ctrl: 36px;
   --ws-ctrl-radius: 12px;
-  --ws-ctrl-edge: color-mix(in srgb, var(--tone, #8b5cf6) 14%, rgba(255, 255, 255, 0.35));
+  --ws-ctrl-edge: color-mix(
+    in srgb,
+    var(--tone, #8b5cf6) 14%,
+    rgba(255, 255, 255, 0.35)
+  );
   --ws-ctrl-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.13));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 35%,
+      rgba(255, 255, 255, 0.13)
+    );
   --ws-ctrl-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 6px 16px
+    color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  --ws-ctrl-blur: blur(16px) saturate(1.25);
+  --ws-ctrl-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -288,7 +323,10 @@ html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .ws-layout-btn:hover {
@@ -299,7 +337,11 @@ html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
 .ws-layout-btn.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.14)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.14)
+    ),
     color-mix(in srgb, var(--tone-soft) 80%, transparent);
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
@@ -307,13 +349,20 @@ html[data-theme="dark"] .ws-tool-btn.ws-delete-btn:hover:not(:disabled) {
 }
 
 html[data-theme="dark"] .ws-path-actions {
-  --ws-ctrl-edge: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.08));
+  --ws-ctrl-edge: color-mix(
+    in srgb,
+    var(--tone) 22%,
+    rgba(255, 255, 255, 0.08)
+  );
   --ws-ctrl-fill:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.55));
   --ws-ctrl-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.22),
-    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.16),
     var(--glass-rim);
 }
 
@@ -334,29 +383,49 @@ html[data-theme="dark"] .ws-layout-btn:hover {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--tone, #8b5cf6) 14%, rgba(255, 255, 255, 0.35));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #8b5cf6) 14%, rgba(255, 255, 255, 0.35));
   border-radius: 12px;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%),
-    color-mix(in srgb, var(--tone-soft, transparent) 35%, rgba(255, 255, 255, 0.13));
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    ),
+    color-mix(
+      in srgb,
+      var(--tone-soft, transparent) 35%,
+      rgba(255, 255, 255, 0.13)
+    );
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   display: grid;
   place-items: center;
   font-size: 14px;
   box-shadow:
-    0 6px 16px color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
+    0 6px 16px
+    color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.25));
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .ws-icon-btn:hover:not(:disabled) {
   color: var(--tone);
   border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.35));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.37) 0%, rgba(255, 255, 255, 0.14) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.37) 0%,
+      rgba(255, 255, 255, 0.14) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 55%, transparent);
   box-shadow:
     0 10px 22px color-mix(in srgb, var(--tone) 12%, transparent),
@@ -371,7 +440,11 @@ html[data-theme="dark"] .ws-layout-btn:hover {
 html[data-theme="dark"] .ws-icon-btn {
   border-color: color-mix(in srgb, var(--tone) 22%, rgba(255, 255, 255, 0.08));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.015) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.55));
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.22),
@@ -382,7 +455,11 @@ html[data-theme="dark"] .ws-icon-btn {
 html[data-theme="dark"] .ws-icon-btn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--tone) 38%, rgba(255, 255, 255, 0.14));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
     color-mix(in srgb, var(--tone-soft) 50%, rgba(8, 6, 18, 0.45));
   color: color-mix(in srgb, #fff 18%, var(--tone));
 }
@@ -436,7 +513,11 @@ html[data-theme="dark"] .ws-icon-btn:hover:not(:disabled) {
 }
 
 .ws-crumb:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tone, var(--tone-purple, #8b5cf6)) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-purple, #8b5cf6)) 10%,
+    transparent
+  );
   color: var(--ink);
 }
 
@@ -482,7 +563,11 @@ html[data-theme="dark"] .ws-icon-btn:hover:not(:disabled) {
   border: 1px solid var(--chip-border);
   border-radius: 16px;
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.18)
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 4%, transparent);
 }
 
@@ -540,7 +625,11 @@ html[data-theme="dark"] .ws-icon-btn:hover:not(:disabled) {
 
 html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-row {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 8%, transparent);
 }
 
@@ -637,7 +726,11 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
   place-items: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -650,9 +743,17 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
 
   .ws-file-row:hover:not(:disabled) {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.24)),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.45),
+        rgba(255, 255, 255, 0.24)
+      ),
       color-mix(in srgb, var(--tone-purple, #8b5cf6) 6%, transparent);
-    border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 18%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--tone-purple, #8b5cf6) 18%,
+      transparent
+    );
     color: var(--ink);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
   }
@@ -669,9 +770,14 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--ws-tone, var(--tone-purple)) 14%, var(--chip-bg));
+  background: color-mix(
+    in srgb,
+    var(--ws-tone, var(--tone-purple)) 14%,
+    var(--chip-bg)
+  );
   color: var(--ws-tone, var(--tone-purple));
-  border: 1px solid color-mix(in srgb, var(--ws-tone, var(--tone-purple)) 22%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--ws-tone, var(--tone-purple)) 22%, transparent);
 }
 
 .ws-file-glyph svg {
@@ -800,7 +906,11 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
   overflow: hidden;
   flex-shrink: 0;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0.12)
+    ),
     repeating-conic-gradient(#e2e8f0 0% 25%, #f8fafc 0% 50%) 50% / 12px 12px;
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
@@ -820,14 +930,26 @@ html[data-theme="dark"] .ws-file-tree.is-grid .ws-file-delete {
 
 html[data-theme="dark"] .ws-file-thumb {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%) 50% / 12px 12px;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
 html[data-theme="dark"] .ws-file-glyph {
-  background: color-mix(in srgb, var(--ws-tone, var(--tone-purple)) 22%, rgba(255, 255, 255, 0.08));
-  border-color: color-mix(in srgb, var(--ws-tone, var(--tone-purple)) 38%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--ws-tone, var(--tone-purple)) 22%,
+    rgba(255, 255, 255, 0.08)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--ws-tone, var(--tone-purple)) 38%,
+    transparent
+  );
 }
 
 .ws-file-name {
@@ -879,7 +1001,8 @@ html[data-theme="dark"] .ws-file-glyph {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.2)),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, var(--chip-border));
+  border: 1px solid
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, var(--chip-border));
   box-shadow:
     0 1px 4px rgba(15, 23, 42, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -943,7 +1066,11 @@ html[data-theme="dark"] .ws-file-glyph {
 .ws-md-mode.is-active {
   color: var(--tone);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.25)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.52),
+      rgba(255, 255, 255, 0.25)
+    ),
     var(--tone-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
@@ -990,9 +1117,14 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--tone-purple, #8b5cf6) 12%, var(--chip-border));
+  border: 1px solid
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 12%, var(--chip-border));
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(248, 250, 252, 0.92) 100%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(248, 250, 252, 0.92) 100%
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 3%, white);
   box-shadow:
     0 8px 28px rgba(15, 23, 42, 0.06),
@@ -1009,15 +1141,35 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   padding: 8px 14px 16px;
   overflow: auto;
   background:
-    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(236, 72, 153, 0.1), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(124, 58, 237, 0.08), transparent 60%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+    radial-gradient(
+      ellipse 70% 55% at 50% 40%,
+      rgba(236, 72, 153, 0.1),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 80% 80%,
+      rgba(124, 58, 237, 0.08),
+      transparent 60%
+    ),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.06)
+    );
 }
 
 .ws-media-stage[data-kind="video"] {
   background:
-    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(124, 58, 237, 0.14), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 20% 85%, rgba(59, 130, 246, 0.1), transparent 60%),
+    radial-gradient(
+      ellipse 70% 55% at 50% 40%,
+      rgba(124, 58, 237, 0.14),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 20% 85%,
+      rgba(59, 130, 246, 0.1),
+      transparent 60%
+    ),
     linear-gradient(165deg, rgba(15, 23, 42, 0.05), rgba(255, 255, 255, 0.08));
 }
 
@@ -1031,13 +1183,18 @@ html[data-theme="dark"] .ws-md-mode.is-active {
   padding: 14px;
   border-radius: 22px;
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.18)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.18)
+    ),
     repeating-conic-gradient(#eef2f7 0% 25%, #f8fafc 0% 50%) 50% / 16px 16px;
   border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow:
     0 18px 48px rgba(15, 23, 42, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
 }
 
 /* 文件信息内联到返回按钮之后，取消独立信息卡（媒体 / 编辑视图通用） */
@@ -1210,14 +1367,26 @@ html[data-theme="dark"] .ws-md-mode.is-active {
 
 html[data-theme="dark"] .ws-media-stage {
   background:
-    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(236, 72, 153, 0.16), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(124, 58, 237, 0.14), transparent 60%),
+    radial-gradient(
+      ellipse 70% 55% at 50% 40%,
+      rgba(236, 72, 153, 0.16),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 80% 80%,
+      rgba(124, 58, 237, 0.14),
+      transparent 60%
+    ),
     linear-gradient(165deg, rgba(15, 23, 42, 0.35), rgba(15, 23, 42, 0.12));
 }
 
 html[data-theme="dark"] .ws-media-frame {
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.03)
+    ),
     repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%) 50% / 16px 16px;
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
@@ -1237,7 +1406,8 @@ html[data-theme="dark"] .ws-media-frame {
 }
 
 .ws-codemirror .cm-scroller {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 13.5px;
   line-height: 1.75;
   padding: 8px 0 20px;
@@ -1311,7 +1481,11 @@ html[data-theme="dark"] .ws-media-frame {
 }
 
 .ws-editor:focus {
-  border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 40%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone-purple, #8b5cf6) 40%,
+    transparent
+  );
   box-shadow:
     inset 0 1px 2px rgba(15, 23, 42, 0.04),
     0 0 0 3px color-mix(in srgb, var(--tone-purple, #8b5cf6) 12%, transparent);
@@ -1320,24 +1494,44 @@ html[data-theme="dark"] .ws-media-frame {
 @media (hover: hover) and (pointer: fine) {
   html[data-theme="dark"] .ws-file-row:hover:not(:disabled) {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.02)
+      ),
       color-mix(in srgb, var(--tone-purple, #8b5cf6) 10%, transparent);
   }
 }
 
 html[data-theme="dark"] .ws-editor-head {
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 12%, transparent);
-  border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 22%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone-purple, #8b5cf6) 22%,
+    transparent
+  );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="dark"] .ws-editor-wrap {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(15, 23, 42, 0.35) 100%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(15, 23, 42, 0.35) 100%
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 10%, #0f172a);
-  border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 22%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--tone-purple, #8b5cf6) 22%,
+    transparent
+  );
   box-shadow:
     0 8px 28px rgba(0, 0, 0, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -1389,16 +1583,32 @@ html[data-theme="dark"] .ws-save-msg {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--tone-purple, #8b5cf6) 10%, rgba(255, 255, 255, 0.45)) 0%,
-      color-mix(in srgb, var(--tone-purple, #8b5cf6) 4%, rgba(255, 255, 255, 0.26)) 100%
+      color-mix(
+          in srgb,
+          var(--tone-purple, #8b5cf6) 10%,
+          rgba(255, 255, 255, 0.45)
+        )
+        0%,
+      color-mix(
+          in srgb,
+          var(--tone-purple, #8b5cf6) 4%,
+          rgba(255, 255, 255, 0.26)
+        )
+        100%
     ),
-    color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%, transparent);
+    color-mix(
+      in srgb,
+      var(--glass-panel, rgba(255, 255, 255, 0.32)) 78%,
+      transparent
+    );
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 1px 3px rgba(15, 23, 42, 0.04),
     var(--glass-rim);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
 }
 
@@ -1417,8 +1627,16 @@ html[data-theme="dark"] .ws-save-msg {
   border-radius: 11px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 90%, transparent);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.35)),
-    color-mix(in srgb, var(--glass-fill, rgba(255, 255, 255, 0.35)) 70%, transparent);
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.58),
+      rgba(255, 255, 255, 0.35)
+    ),
+    color-mix(
+      in srgb,
+      var(--glass-fill, rgba(255, 255, 255, 0.35)) 70%,
+      transparent
+    );
   color: var(--ink);
   padding: 5px 11px;
   font: inherit;
@@ -1437,9 +1655,17 @@ html[data-theme="dark"] .ws-save-msg {
 }
 
 .ws-batch-bar button:hover {
-  border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, var(--glass-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--tone-purple, #8b5cf6) 28%,
+    var(--glass-edge)
+  );
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.44)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.44)
+    ),
     color-mix(in srgb, var(--tone-purple, #8b5cf6) 8%, transparent);
   box-shadow:
     0 4px 12px rgba(15, 23, 42, 0.08),
@@ -1452,7 +1678,11 @@ html[data-theme="dark"] .ws-save-msg {
 
 .ws-batch-bar button.is-danger {
   color: var(--danger, #e11d48);
-  border-color: color-mix(in srgb, var(--danger, #e11d48) 22%, var(--glass-edge));
+  border-color: color-mix(
+    in srgb,
+    var(--danger, #e11d48) 22%,
+    var(--glass-edge)
+  );
 }
 
 .ws-batch-bar button.is-danger:hover {
@@ -1477,21 +1707,37 @@ html[data-theme="dark"] .ws-batch-bar {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--tone-purple, #a78bfa) 16%, rgba(255, 255, 255, 0.12)) 0%,
-      color-mix(in srgb, var(--tone-purple, #a78bfa) 6%, rgba(255, 255, 255, 0.04)) 100%
+      color-mix(
+          in srgb,
+          var(--tone-purple, #a78bfa) 16%,
+          rgba(255, 255, 255, 0.12)
+        )
+        0%,
+      color-mix(
+          in srgb,
+          var(--tone-purple, #a78bfa) 6%,
+          rgba(255, 255, 255, 0.04)
+        )
+        100%
     ),
     color-mix(in srgb, var(--glass-panel, #1a2238) 78%, #0b1224);
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(22px) saturate(1.35);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
 }
 
 html[data-theme="dark"] .ws-batch-bar button {
   border-color: rgba(255, 255, 255, 0.14);
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.05)
+    ),
     rgba(255, 255, 255, 0.04);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.28),
@@ -1513,7 +1759,11 @@ html[data-theme="dark"] .ws-batch-bar button.is-danger {
 
 html[data-theme="dark"] .ws-batch-bar button.is-danger:hover {
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.04)
+    ),
     rgba(244, 63, 94, 0.16);
   color: #ff8a8a;
 }
@@ -1523,22 +1773,39 @@ html[data-theme="dark"] .ws-batch-bar button.is-danger:hover {
   min-width: 196px;
   padding: 6px;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, var(--menu-glass-border));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--tone-purple, #8b5cf6) 14%,
+      var(--menu-glass-border)
+    );
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-purple-soft, rgba(139, 92, 246, 0.14)) 28%, rgba(255, 255, 255, 0.35)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-purple-soft, rgba(139, 92, 246, 0.14)) 28%,
+          rgba(255, 255, 255, 0.35)
+        )
+        0%,
       rgba(255, 255, 255, 0.18) 55%,
       rgba(255, 255, 255, 0.1) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 48%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(255, 255, 255, 0.26)) 48%,
+      transparent
+    );
   box-shadow:
-    0 18px 48px color-mix(in srgb, var(--tone-purple, #8b5cf6) 10%, rgba(15, 23, 42, 0.14)),
+    0 18px 48px
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 10%, rgba(15, 23, 42, 0.14)),
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 0 0 1px color-mix(in srgb, var(--tone-purple, #8b5cf6) 6%, transparent);
-  backdrop-filter: blur(28px) saturate(1.45);
-  -webkit-backdrop-filter: blur(28px) saturate(1.45);
+  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
+  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.45));
   color: var(--ink);
   isolation: isolate;
 }
@@ -1558,7 +1825,9 @@ html[data-theme="dark"] .ws-batch-bar button.is-danger:hover {
   font-size: 13px;
   font-weight: 550;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .ws-ctx-menu .fs-ctx-item .fs-ctx-ico,
@@ -1590,26 +1859,45 @@ html[data-theme="dark"] .ws-batch-bar button.is-danger:hover {
   height: 1px;
   margin: 5px 8px;
   border: 0;
-  background: color-mix(in srgb, var(--ink, #1e293b) 14%, rgba(148, 163, 184, 0.42));
+  background: color-mix(
+    in srgb,
+    var(--ink, #1e293b) 14%,
+    rgba(148, 163, 184, 0.42)
+  );
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 html[data-theme="dark"] .ws-ctx-menu.fs-ctx-menu {
-  border-color: color-mix(in srgb, var(--tone-purple, #8b5cf6) 24%, var(--menu-glass-border));
+  border-color: color-mix(
+    in srgb,
+    var(--tone-purple, #8b5cf6) 24%,
+    var(--menu-glass-border)
+  );
   background:
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--tone-purple-soft, rgba(139, 92, 246, 0.16)) 36%, rgba(255, 255, 255, 0.08)) 0%,
+      color-mix(
+          in srgb,
+          var(--tone-purple-soft, rgba(139, 92, 246, 0.16)) 36%,
+          rgba(255, 255, 255, 0.08)
+        )
+        0%,
       rgba(255, 255, 255, 0.03) 55%,
       rgba(8, 6, 18, 0.28) 100%
     ),
-    color-mix(in srgb, var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 42%, transparent);
+    color-mix(
+      in srgb,
+      var(--menu-glass-bg, rgba(14, 12, 28, 0.72)) 42%,
+      transparent
+    );
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(30px) saturate(1.5);
-  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
+  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.5));
 }
 
 html[data-theme="dark"] .ws-ctx-menu .fs-ctx-item:hover:not(:disabled) {
@@ -1620,7 +1908,9 @@ html[data-theme="dark"] .ws-ctx-menu .fs-ctx-item.is-danger {
   color: #ff6b6b;
 }
 
-html[data-theme="dark"] .ws-ctx-menu .fs-ctx-item.is-danger:hover:not(:disabled) {
+html[data-theme="dark"]
+  .ws-ctx-menu
+  .fs-ctx-item.is-danger:hover:not(:disabled) {
   background: rgba(244, 63, 94, 0.16);
 }
 
@@ -1644,7 +1934,8 @@ html[data-theme="dark"] .ws-ctx-menu .fs-ctx-sep {
   border-radius: 10px;
   font-size: 13px;
   background: color-mix(in srgb, var(--tone-purple, #8b5cf6) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 28%, transparent);
   color: var(--ink);
 }
 
@@ -1652,7 +1943,8 @@ html[data-theme="dark"] .ws-ctx-menu .fs-ctx-sep {
   flex: 1;
   min-width: 0;
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--tone-purple, #8b5cf6) 40%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--tone-purple, #8b5cf6) 40%, transparent);
   border-radius: 8px;
   padding: 4px 8px;
   font: inherit;
@@ -1671,8 +1963,6 @@ html[data-theme="dark"] .ws-ctx-menu .fs-ctx-sep {
     grid-template-columns: 1fr;
   }
 }
-
-
 
 .ws-tool-btn--text {
   width: auto;

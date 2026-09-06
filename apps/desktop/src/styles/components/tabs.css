@@ -1,0 +1,533 @@
+/* 全局统一分段 Tab —— 与工具栏控件（搜索、视图切换、排序下拉）同一块玻璃。
+
+   玻璃感来自光怎么走，不是靠调透明度：斜向渐变让高光沿对角掠过表面，
+   读起来才是一块有弧度的玻璃；竖直均匀渐变只会读成一层贴膜。选中项额外
+   带一圈 tone 色内描边和 tone 色投影，是玻璃把主题色折射出来的那一层。
+
+   这里是这套材质的唯一定义处，功能页的 --plugins-* 都别名到这里，
+   免得几份拷贝各自漂移。
+
+   ⚠️ 主题色不能写进 :root 的变量里。自定义属性里的 var() 是在**声明处**
+   替换的，所以 `:root { --x: color-mix(..., var(--tone), ...) }` 会把根节点
+   当时的 --tone 焊死；预览抽屉（indigo）、工作区（purple）、洞察页（aurora）
+   这些自己改过 --tone 的面板就再也染不上自己的颜色。
+   因此 :root 里只放与色调无关的量（几何、白色高光、混色百分比），
+   var(--tone) 一律留在下面的规则里，在用它的元素上才解析。
+
+   本文件在 index.css 末尾导入，因此同特异度下覆盖各功能页的旧样式；
+   功能页只保留自己的布局约束（滚动、宽度、装饰层），不再各写一套外观。 */
+
+/* ── 容器：外观 + 标准布局 ───────────────────────────────────── */
+
+.providers-page-tabs,
+.providers-detail-tabs,
+.skills-main-tabs,
+.skills-store-tabs,
+.plugins-scope-tabs,
+.plugins-personal-tabs,
+.cron-tabs,
+.tool-main-tabs,
+.fs-tabs,
+.files-mode-switch,
+.mcp-add-drawer-tabs,
+.loop-config-panel-tabs {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--seg-shell-gap);
+  flex-shrink: 0;
+  width: fit-content;
+  max-width: 100%;
+  min-height: var(--seg-shell-h);
+  padding: var(--seg-shell-pad);
+  border: 1px solid var(--seg-shell-border);
+  border-radius: var(--seg-shell-radius);
+  background: var(--seg-shell-bg);
+  box-shadow: var(--seg-shell-shadow);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
+}
+
+/* 仅取外观：这些容器自带滚动条、固定高度或装饰层，布局由功能页决定 */
+.mem-view-nav,
+.memory-file-tabs,
+.skills-preview-tabs {
+  border: 1px solid var(--seg-shell-border);
+  border-radius: var(--seg-shell-radius);
+  background: var(--seg-shell-bg);
+  box-shadow: var(--seg-shell-shadow);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
+}
+
+/* 原本是下划线式，改为分段式后需要补回与相邻内容的间距 */
+.providers-detail-tabs {
+  margin: 0 0 14px;
+}
+
+.loop-config-panel-tabs {
+  margin: 12px 20px 0;
+}
+
+/* ── 选项 ────────────────────────────────────────────────────── */
+
+.providers-page-tab,
+.providers-detail-tab,
+.skills-main-tab,
+.skills-store-tab,
+.skills-preview-tab,
+.plugins-scope-tab,
+.plugins-personal-tab,
+.cron-tab,
+.tool-main-tab,
+.fs-tab,
+.files-mode-tab,
+.memory-file-tab,
+.mem-view-tab,
+.mcp-add-drawer-tab,
+.loop-config-tab {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--seg-item-gap);
+  min-height: var(--seg-item-h);
+  height: auto;
+  margin: 0;
+  padding: var(--seg-item-pad);
+  border: none;
+  border-radius: var(--seg-item-radius);
+  font-size: var(--seg-item-font);
+  font-weight: var(--seg-item-weight);
+  line-height: 1.2;
+  /* 小号 UI 字在半透明表面上需要一点正字距才立得住 */
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  color: var(--seg-item-color);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    color 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.12s ease-out;
+}
+
+.providers-page-tab > svg,
+.providers-detail-tab > svg,
+.skills-main-tab > svg,
+.skills-store-tab > svg,
+.skills-preview-tab > svg,
+.plugins-scope-tab > svg,
+.plugins-personal-tab > svg,
+.cron-tab > svg,
+.tool-main-tab > svg,
+.fs-tab > svg,
+.files-mode-tab > svg,
+.memory-file-tab > svg,
+.mem-view-tab > svg,
+.mcp-add-drawer-tab > svg,
+.loop-config-tab > svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.providers-page-tab:hover,
+.providers-detail-tab:hover,
+.skills-main-tab:hover,
+.skills-store-tab:hover,
+.skills-preview-tab:hover,
+.plugins-scope-tab:hover,
+.plugins-personal-tab:hover,
+.cron-tab:hover,
+.tool-main-tab:hover,
+.fs-tab:hover,
+.files-mode-tab:hover,
+.memory-file-tab:hover,
+.mem-view-tab:hover,
+.mcp-add-drawer-tab:hover,
+.loop-config-tab:hover {
+  color: var(--seg-item-color-hover);
+  background: var(--seg-item-bg-hover);
+}
+
+.providers-page-tab:hover > svg,
+.providers-detail-tab:hover > svg,
+.skills-main-tab:hover > svg,
+.skills-store-tab:hover > svg,
+.skills-preview-tab:hover > svg,
+.plugins-scope-tab:hover > svg,
+.plugins-personal-tab:hover > svg,
+.cron-tab:hover > svg,
+.tool-main-tab:hover > svg,
+.fs-tab:hover > svg,
+.files-mode-tab:hover > svg,
+.memory-file-tab:hover > svg,
+.mem-view-tab:hover > svg,
+.mcp-add-drawer-tab:hover > svg,
+.loop-config-tab:hover > svg {
+  opacity: 1;
+  transform: none;
+}
+
+.providers-page-tab.is-active,
+.providers-detail-tab.is-active,
+.skills-main-tab.active,
+.skills-store-tab.active,
+.skills-preview-tab.is-active,
+.plugins-scope-tab.is-active,
+.plugins-personal-tab.is-active,
+.cron-tab.is-active,
+.tool-main-tab.active,
+.fs-tab.is-active,
+.files-mode-tab.is-active,
+.memory-file-tab.active,
+.mem-view-tab.active,
+.mcp-add-drawer-tab.active,
+.loop-config-tab.is-active {
+  color: var(--seg-item-color-active);
+  border-color: transparent;
+  background: var(--seg-item-bg-active);
+  box-shadow: var(--seg-item-shadow-active);
+  backdrop-filter: var(--seg-item-blur-active);
+  -webkit-backdrop-filter: var(--seg-item-blur-active);
+}
+
+.providers-page-tab.is-active > svg,
+.providers-detail-tab.is-active > svg,
+.skills-main-tab.active > svg,
+.skills-store-tab.active > svg,
+.skills-preview-tab.is-active > svg,
+.plugins-scope-tab.is-active > svg,
+.plugins-personal-tab.is-active > svg,
+.cron-tab.is-active > svg,
+.tool-main-tab.active > svg,
+.fs-tab.is-active > svg,
+.files-mode-tab.is-active > svg,
+.memory-file-tab.active > svg,
+.mem-view-tab.active > svg,
+.mcp-add-drawer-tab.active > svg,
+.loop-config-tab.is-active > svg {
+  opacity: 1;
+  color: var(--tone);
+}
+
+.providers-page-tab:focus-visible,
+.providers-detail-tab:focus-visible,
+.skills-main-tab:focus-visible,
+.skills-store-tab:focus-visible,
+.skills-preview-tab:focus-visible,
+.plugins-scope-tab:focus-visible,
+.plugins-personal-tab:focus-visible,
+.cron-tab:focus-visible,
+.tool-main-tab:focus-visible,
+.fs-tab:focus-visible,
+.files-mode-tab:focus-visible,
+.memory-file-tab:focus-visible,
+.mem-view-tab:focus-visible,
+.mcp-add-drawer-tab:focus-visible,
+.loop-config-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+/* 反馈落在按下瞬间，而不是抬起后 */
+.providers-page-tab:active,
+.providers-detail-tab:active,
+.skills-main-tab:active,
+.skills-store-tab:active,
+.skills-preview-tab:active,
+.plugins-scope-tab:active,
+.plugins-personal-tab:active,
+.cron-tab:active,
+.tool-main-tab:active,
+.fs-tab:active,
+.files-mode-tab:active,
+.memory-file-tab:active,
+.mem-view-tab:active,
+.mcp-add-drawer-tab:active,
+.loop-config-tab:active {
+  transform: scale(0.97);
+}
+
+/* ── 选项内计数徽标 ──────────────────────────────────────────── */
+
+.skills-main-tab-count,
+.tool-main-tab-count,
+.plugins-personal-tab-count,
+.providers-detail-tab-count,
+.skills-preview-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  box-shadow: none;
+}
+
+.skills-main-tab.active .skills-main-tab-count,
+.tool-main-tab.active .tool-main-tab-count,
+.plugins-personal-tab.is-active .plugins-personal-tab-count,
+.providers-detail-tab.is-active .providers-detail-tab-count,
+.skills-preview-tab.is-active .skills-preview-tab-count {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .providers-page-tab,
+  .providers-detail-tab,
+  .skills-main-tab,
+  .skills-store-tab,
+  .skills-preview-tab,
+  .plugins-scope-tab,
+  .plugins-personal-tab,
+  .cron-tab,
+  .tool-main-tab,
+  .fs-tab,
+  .files-mode-tab,
+  .memory-file-tab,
+  .mem-view-tab,
+  .mcp-add-drawer-tab,
+  .loop-config-tab {
+    transition:
+      background 0.12s ease,
+      color 0.12s ease;
+  }
+
+  .providers-page-tab:active,
+  .providers-detail-tab:active,
+  .skills-main-tab:active,
+  .skills-store-tab:active,
+  .skills-preview-tab:active,
+  .plugins-scope-tab:active,
+  .plugins-personal-tab:active,
+  .cron-tab:active,
+  .tool-main-tab:active,
+  .fs-tab:active,
+  .files-mode-tab:active,
+  .memory-file-tab:active,
+  .mem-view-tab:active,
+  .mcp-add-drawer-tab:active,
+  .loop-config-tab:active {
+    transform: none;
+  }
+}
+
+/* 插件页的第三层来源选择是上下文导航，不再叠一层完整玻璃轨道。 */
+.skills-page .plugins-personal-tabs {
+  gap: 4px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.skills-page .plugins-personal-tab {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 10px;
+}
+
+/* ── 下划线式 personal tabs（第二排） ── */
+.plugins-personal-tabs--underline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.plugins-personal-tab--underline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.plugins-personal-tab--underline::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.plugins-personal-tab--underline:hover {
+  color: var(--text-primary);
+}
+
+.plugins-personal-tab--underline.is-active {
+  color: var(--accent);
+}
+
+.plugins-personal-tab--underline.is-active::after {
+  background: var(--accent);
+}
+
+.plugins-personal-tab-count.is-update {
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+}
+
+.plugins-personal-tab-count.is-muted {
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
+}
+
+.skills-page .plugins-personal-tab.is-import {
+  margin-left: 4px;
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 18%, var(--plugins-shell-border));
+  background: color-mix(in srgb, var(--tone-soft) 38%, transparent);
+}
+
+.skills-page .plugins-personal-tab.is-import:is(:hover, .is-active) {
+  border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+/* 公开 MCP 分类在宽屏换行展示，窄屏退回横向浏览。 */
+.plugins-public-category-row {
+  min-width: 0;
+  padding-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.plugins-public-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 2px 2px;
+  overflow-x: visible;
+  scrollbar-width: none;
+}
+
+.plugins-public-categories::-webkit-scrollbar {
+  display: none;
+}
+
+.plugins-public-category {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--plugins-shell-bg) 74%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.12s ease-out;
+}
+
+.plugins-public-category:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tone) 20%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 44%, transparent);
+}
+
+.plugins-public-category.is-active {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 26%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 32%, transparent);
+}
+
+.plugins-public-category:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.plugins-public-category:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugins-public-category {
+    transition:
+      color 0.12s ease,
+      border-color 0.12s ease,
+      background 0.12s ease;
+  }
+
+  .plugins-public-category:active {
+    transform: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .plugins-public-categories {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .plugins-command-row--primary {
+    align-items: stretch;
+  }
+
+  .plugins-command-divider {
+    display: none;
+  }
+
+  .plugins-command-row--primary .skills-main-tabs,
+  .plugins-command-row--primary .plugins-scope-tabs {
+    width: 100%;
+  }
+
+  .plugins-command-row--primary .skills-main-tab,
+  .plugins-command-row--primary .plugins-scope-tab {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .skills-page .plugins-personal-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .skills-page .plugins-personal-tab {
+    flex: 1 0 auto;
+  }
+}

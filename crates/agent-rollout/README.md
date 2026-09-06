@@ -4,11 +4,11 @@ JSONL append-only 历史记录 -- Thread 历史的权威事实源，负责 rollo
 
 ## 核心职责
 
-1. **Rollout 写入（RolloutRecorder）**：异步 append-only 写入器，通过 unbounded channel + 后台 writer loop 实现无锁高吞吐 JSONL 追加，自动过滤瞬态事件
+1. **Rollout 写入（RolloutRecorder）**：异步 append-only 写入器，每行使用 Codex 的 `timestamp + flattened {type,payload}` 信封，自动过滤瞬态事件
 2. **持久化策略（policy）**：`should_persist_event_msg()` 按事件变体精确划分持久/瞬态边界 -- ItemCompleted、TurnStarted、TurnComplete 等为持久，Delta 增量和 Error 通知为瞬态
 3. **路径管理（path）**：日期分区目录结构（`YYYY/MM/DD/rollout-{timestamp}-{encoded_thread_id}.jsonl`），thread_id 百分号编码防止路径穿越攻击
 4. **历史重建（reconstruction）**：`read_rollout()` / `read_rollout_with_diagnostics()` 逐行解析 JSONL，容忍中间行损坏或末尾截断，保留有效前缀
-5. **统一 Item 模型（RolloutItem）**：7 种变体（SessionMeta / ResponseItem / EventMsg / TurnContext / WorldState / Compacted / InterAgentCommunication）覆盖线程全生命周期数据
+5. **统一 Item 模型（RolloutItem）**：9 种变体覆盖线程全生命周期数据；`ResponseItem` 直接保存 Responses 原生类型，Realtime 与累计 usage 使用独立 durable record
 
 ## 模块结构
 
@@ -19,6 +19,7 @@ JSONL append-only 历史记录 -- Thread 历史的权威事实源，负责 rollo
 | `src/policy.rs` | `should_persist_event_msg()` / `is_persisted_rollout_item()` -- 持久化策略函数 |
 | `src/path.rs` | `new_rollout_path()` / `find_rollout()` -- 路径生成与按 thread_id 查找最新 rollout 文件 |
 | `src/reconstruction.rs` | `read_rollout()` / `read_rollout_with_diagnostics()` / `RolloutRead` -- JSONL 文件读取与容错解析 |
+| `src/response_items.rs` | Responses 原生 item 与 SQLite/UI chat 投影之间的转换与重建 |
 
 ## 核心类型与 API
 
@@ -27,7 +28,9 @@ JSONL append-only 历史记录 -- Thread 历史的权威事实源，负责 rollo
 ```rust
 pub enum RolloutItem {
     SessionMeta(Value),               // 会话元数据
-    ResponseItem(types::message::Message), // LLM 响应消息（含 tool_calls）
+    ResponseItem(agent_protocol::ResponseItem), // Responses 原生消息/调用/输出条目
+    RealtimeItem(agent_protocol::RealtimeItem), // 完整 transcript/session boundary/BEM
+    TokenUsage(agent_protocol::TokenUsageRecord), // latest/cumulative/checkpoint
     EventMsg(agent_protocol::EventMsg),    // 领域事件
     TurnContext(Value),                // 轮次上下文快照
     WorldState(Value),                 // 世界状态快照
@@ -51,7 +54,8 @@ pub enum RolloutItem {
 | 函数 | 说明 |
 |------|------|
 | `should_persist_event_msg(&EventMsg) -> bool` | 判断事件是否持久化（ItemCompleted / TurnStarted / TurnComplete / TurnAborted / TokenCount / ContextUsage / UserInputCommitted / ThreadSettingsApplied / ThreadRolledBack 为 true） |
-| `is_persisted_rollout_item(&RolloutItem) -> bool` | 判断 rollout item 是否持久化（EventMsg 委托上述函数；其余 6 种 item 始终持久） |
+| `latest_token_usage(&[RolloutItem])` | 恢复最新 cumulative usage/checkpoint；fork 不复制父 Thread 的累计值 |
+| `is_persisted_rollout_item(&RolloutItem) -> bool` | 判断 rollout item 是否持久化（EventMsg 委托上述函数；其余 8 种 item 始终持久） |
 
 ### 路径管理（`path.rs`）
 
@@ -73,15 +77,17 @@ pub enum RolloutItem {
 ```
 agent-rollout (本 crate)
   ├── 依赖 agent-protocol → EventMsg 用于持久化策略判断
-  ├── 依赖 types (agent-types) → Message 类型用于 ResponseItem
+  ├── 依赖 agent-protocol → EventMsg、TurnItem 与 canonical ResponseItem
   ├── 被 agent-core 使用 → 运行时写入 rollout 历史
   └── 被 agent-server 使用 → Thread resume 时重建历史
 ```
 
 - **agent-protocol**：`EventMsg` 类型被 `policy.rs` 直接 match 判断持久化
-- **agent-types**：`Message` 类型用于 `RolloutItem::ResponseItem`
-- **agent-core**：运行时在每个 turn 结束时调用 `RolloutRecorder::record()` 写入事件
-- **agent-server**：`ResumeThread` RPC 调用 `read_rollout()` 重建线程历史快照
+- **agent-types**：提供 model target、tool call 和通用运行类型，不定义 Agent history 消息模型
+- **agent-core**：运行时分别写入 `message` / `function_call` / `tool_search_call` / 对应 output
+- **agent-server**：Thread 恢复时先读 rollout，再重建 SQLite 搜索/UI 投影和运行时 history
+
+`ResponseItem` 不经通用消息类型往返后再写入。恢复 Agent sampling 时必须保留原生 item type、call id 和顺序。
 
 ## 测试运行
 
@@ -96,4 +102,4 @@ cargo test -p agent-rollout retains_valid_items
 cargo test -p agent-rollout durable_policy
 ```
 
-> 测试分布：`path.rs`（4 个）、`recorder.rs`（3 个）、`policy.rs`（6 个）、`reconstruction.rs`（3 个），共 16 个单元测试，覆盖路径安全、写入顺序、容错解析与持久化策略。
+> 测试覆盖路径安全、写入顺序、容错解析、持久化策略、Realtime 顺序、Thread settings、usage checkpoint 与 fork 过滤；具体数量以当前测试输出为准。

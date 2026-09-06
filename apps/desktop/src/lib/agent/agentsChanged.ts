@@ -24,7 +24,9 @@ export async function listenAgentsChanged(
 }
 
 /** React：在 Agent 变更时回调（适合刷新 get_config / 切换器） */
-export function useAgentsChanged(onChange: (payload: AgentsChangedPayload) => void): void {
+export function useAgentsChanged(
+  onChange: (payload: AgentsChangedPayload) => void,
+): void {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 

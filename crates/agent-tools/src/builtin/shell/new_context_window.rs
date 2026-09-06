@@ -7,10 +7,10 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `new_context_window` tool.
+/// `new_context_window` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct NewContextWindowArgs {
-    /// Optional reason for requesting context compaction.
+    /// 请求上下文压缩的可选理由。
     #[serde(default)]
     pub reason: Option<String>,
 }

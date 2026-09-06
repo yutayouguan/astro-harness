@@ -45,6 +45,8 @@ pub struct ModelReasoningMeta {
     pub mandatory: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_max_tokens: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistent_instructions: Option<String>,
 }
 
 impl ModelReasoningMeta {
@@ -55,6 +57,7 @@ impl ModelReasoningMeta {
             && self.default_enabled.is_none()
             && self.mandatory.is_none()
             && self.supports_max_tokens.is_none()
+            && self.persistent_instructions.is_none()
     }
 }
 
@@ -92,6 +95,16 @@ pub struct ModelDefaultParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
     pub id: String,
+    /// 模型目录提供的运行时能力契约。
+    #[serde(default)]
+    pub profile: types::ModelProfile,
+    /// 模型目录指定的工具模式；存在时覆盖全局 feature flag。
+    #[serde(
+        default,
+        deserialize_with = "types::deserialize_optional_tool_mode",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tool_mode: Option<types::ToolMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -122,9 +135,16 @@ pub struct ModelInfo {
     pub pricing: Option<ModelPricingMeta>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_parameters: Option<ModelDefaultParams>,
-    /// 元数据来源：api / openrouter / known（可组合）
+    /// 元数据来源：api / openrouter / deepseek_catalog / known（可组合）
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub meta_source: String,
+}
+
+impl ModelInfo {
+    pub fn usable_context_window(&self) -> Option<u64> {
+        self.context_window
+            .map(|window| self.profile.usable_context_window(window))
+    }
 }
 
 /// 兼容旧版 `models: ["id", ...]` 与新版对象数组
@@ -161,6 +181,8 @@ pub struct ApiModelHints {
 pub fn enrich_from_id(id: &str, kind: &str, hints: Option<ApiModelHints>) -> ModelInfo {
     let mut info = ModelInfo {
         id: id.to_string(),
+        profile: types::ModelProfile::default(),
+        tool_mode: None,
         display_name: None,
         description: None,
         canonical_slug: None,
@@ -206,6 +228,16 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
     let retained_display = info.display_name.clone();
     let retained_description = info.description.clone();
     let retained_canonical = info.canonical_slug.clone();
+    let retained_persistent_instructions = if kind == "openai" {
+        info.reasoning
+            .as_ref()
+            .and_then(|reasoning| reasoning.persistent_instructions.as_deref())
+            .map(str::trim)
+            .filter(|instructions| !instructions.is_empty())
+            .map(str::to_string)
+    } else {
+        None
+    };
 
     info.context_window = retained_api_ctx;
     info.max_output_tokens = retained_api_out;
@@ -332,13 +364,96 @@ pub fn enrich_model_info(info: &mut ModelInfo, kind: &str, hints: Option<ApiMode
         sources.push("openrouter");
     }
 
+    if apply_deepseek_official_profile(&kind, &id_lower, info) {
+        sources.push("deepseek_catalog");
+    }
+
     if apply_known_capability_overrides(&kind, &id_lower, info) {
         sources.push("known");
+    }
+    if let Some(instructions) = retained_persistent_instructions {
+        info.capabilities.reasoning = true;
+        let reasoning = info
+            .reasoning
+            .get_or_insert_with(ModelReasoningMeta::default);
+        if !reasoning
+            .supported_efforts
+            .iter()
+            .any(|effort| effort == "persistent")
+        {
+            reasoning.supported_efforts.push("persistent".into());
+        }
+        reasoning.persistent_instructions = Some(instructions);
+        sources.push("api");
     }
 
     sources.sort();
     sources.dedup();
     info.meta_source = sources.join("+");
+}
+
+/// DeepSeek 官方 Codex models.json 中已声明的模型能力。
+fn apply_deepseek_official_profile(kind: &str, id_lower: &str, info: &mut ModelInfo) -> bool {
+    if kind != "deepseek" {
+        return false;
+    }
+    let (display_name, description, vision) = match id_lower {
+        "deepseek-v4-flash" => (
+            "DeepSeek-V4-Flash",
+            "Latest frontier agentic coding model.",
+            false,
+        ),
+        "deepseek-v4-pro" => (
+            "DeepSeek-V4-Pro",
+            "Most capable frontier agentic coding model.",
+            false,
+        ),
+        "deepseek-v4-flash-vision-exp" => (
+            "DeepSeek-V4-Flash-Vision",
+            "Latest frontier agentic coding model with image input.",
+            true,
+        ),
+        _ => return false,
+    };
+
+    info.display_name = Some(display_name.into());
+    info.description = Some(description.into());
+    info.context_window = Some(1_048_576);
+    info.capabilities.tools = true;
+    info.capabilities.reasoning = true;
+    info.capabilities.web = true;
+    info.capabilities.vision = vision;
+    info.capabilities.file = false;
+    info.capabilities.audio_in = false;
+    info.reasoning = Some(ModelReasoningMeta {
+        supported_efforts: vec!["low".into(), "high".into(), "max".into()],
+        default_effort: Some("high".into()),
+        default_enabled: Some(true),
+        mandatory: Some(false),
+        supports_max_tokens: None,
+        persistent_instructions: None,
+    });
+    info.profile = types::ModelProfile {
+        supports_search_tool: true,
+        supports_parallel_tool_calls: true,
+        support_verbosity: true,
+        default_verbosity: Some(types::ModelVerbosity::Low),
+        apply_patch_tool_type: Some(types::ApplyPatchToolType::Freeform),
+        web_search_tool_type: types::WebSearchToolType::Text,
+        input_modalities: if vision {
+            vec![
+                types::ModelInputModality::Text,
+                types::ModelInputModality::Image,
+            ]
+        } else {
+            vec![types::ModelInputModality::Text]
+        },
+        effective_context_window_percent: 95,
+        auto_compact_token_limit: None,
+        supports_reasoning_summaries: true,
+        multi_agent_version: Some(types::ModelMultiAgentVersion::V2),
+    };
+    true
 }
 
 /// 目录漏标补丁：仅覆盖已核实、且运行时协议已支持的能力。
@@ -371,6 +486,7 @@ fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut Model
                     default_enabled: Some(true),
                     mandatory: Some(false),
                     supports_max_tokens: None,
+                    persistent_instructions: None,
                 });
             }
             changed = true;
@@ -438,6 +554,54 @@ fn looks_like_native_web_model(kind: &str, id_lower: &str, info: &ModelInfo) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_catalog_accepts_tool_mode() {
+        let mut info: ModelInfo = serde_json::from_value(serde_json::json!({
+            "id": "gpt-test",
+            "tool_mode": "code_mode_only"
+        }))
+        .unwrap();
+        enrich_model_info(&mut info, "openai", None);
+        assert_eq!(info.tool_mode, Some(types::ToolMode::CodeModeOnly));
+    }
+
+    #[test]
+    fn model_catalog_ignores_unknown_tool_mode() {
+        let info: ModelInfo = serde_json::from_value(serde_json::json!({
+            "id": "gpt-future",
+            "tool_mode": "future_tool_mode"
+        }))
+        .unwrap();
+        assert_eq!(info.tool_mode, None);
+    }
+
+    #[test]
+    fn model_catalog_keeps_persistent_reasoning_only_for_openai() {
+        let value = serde_json::json!({
+            "id": "gpt-test",
+            "reasoning": {
+                "supported_efforts": ["high"],
+                "persistent_instructions": "  keep working  "
+            }
+        });
+        let mut openai: ModelInfo =
+            serde_json::from_value(value.clone()).expect("OpenAI model metadata");
+        enrich_model_info(&mut openai, "openai", None);
+        let reasoning = openai.reasoning.expect("OpenAI persistent metadata");
+        assert_eq!(
+            reasoning.persistent_instructions.as_deref(),
+            Some("keep working")
+        );
+        assert!(reasoning.supported_efforts.contains(&"persistent".into()));
+
+        let mut azure: ModelInfo = serde_json::from_value(value).expect("Azure model metadata");
+        enrich_model_info(&mut azure, "azure", None);
+        assert!(azure
+            .reasoning
+            .as_ref()
+            .is_none_or(|reasoning| reasoning.persistent_instructions.is_none()));
+    }
     use crate::meta::openrouter_meta;
 
     #[test]
@@ -510,7 +674,7 @@ mod tests {
     }
 
     #[test]
-    fn clears_stale_caps_when_openrouter_hits() {
+    fn official_deepseek_catalog_overrides_stale_and_openrouter_caps() {
         openrouter_meta::with_fixture(
             r#"{
               "data": [{
@@ -528,6 +692,8 @@ mod tests {
             || {
                 let mut stale = ModelInfo {
                     id: "deepseek-v4-flash".into(),
+                    profile: types::ModelProfile::default(),
+                    tool_mode: None,
                     display_name: None,
                     description: None,
                     canonical_slug: None,
@@ -548,14 +714,14 @@ mod tests {
                     meta_source: "heuristic+table".into(),
                 };
                 enrich_model_info(&mut stale, "deepseek", None);
-                assert_eq!(stale.context_window, Some(1_000_000));
+                assert_eq!(stale.context_window, Some(1_048_576));
                 assert!(!stale.capabilities.vision);
                 assert!(stale.capabilities.tools);
                 assert!(stale.capabilities.reasoning);
-                assert_eq!(stale.meta_source, "openrouter");
+                assert_eq!(stale.meta_source, "deepseek_catalog+openrouter");
                 let r = stale.reasoning.expect("reasoning meta");
                 assert_eq!(r.default_effort.as_deref(), Some("high"));
-                assert!(r.supported_efforts.iter().any(|e| e == "xhigh"));
+                assert_eq!(r.supported_efforts, ["low", "high", "max"]);
             },
         );
     }
@@ -565,7 +731,51 @@ mod tests {
         openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
             let info = enrich_from_id("deepseek-v4-pro", "deepseek", None);
             assert!(info.capabilities.reasoning);
-            assert_eq!(info.meta_source, "known");
+            assert_eq!(info.context_window, Some(1_048_576));
+            assert_eq!(info.usable_context_window(), Some(996_147));
+            assert_eq!(info.meta_source, "deepseek_catalog");
+            assert!(info.profile.supports_search_tool);
+            assert!(info.profile.supports_parallel_tool_calls);
+            assert!(info.profile.support_verbosity);
+            assert_eq!(
+                info.profile.default_verbosity,
+                Some(types::ModelVerbosity::Low)
+            );
+            assert_eq!(
+                info.profile.apply_patch_tool_type,
+                Some(types::ApplyPatchToolType::Freeform)
+            );
+            assert!(info.profile.supports_reasoning_summaries);
+            assert_eq!(
+                info.profile.multi_agent_version,
+                Some(types::ModelMultiAgentVersion::V2)
+            );
+            assert_eq!(info.profile.effective_context_window_percent, 95);
+            assert_eq!(
+                info.reasoning.unwrap().supported_efforts,
+                ["low", "high", "max"]
+            );
+        });
+    }
+
+    #[test]
+    fn deepseek_official_catalog_distinguishes_vision_model() {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+            let text = enrich_from_id("deepseek-v4-flash", "deepseek", None);
+            let vision = enrich_from_id("deepseek-v4-flash-vision-exp", "deepseek", None);
+            assert!(!text.capabilities.vision);
+            assert_eq!(
+                text.profile.input_modalities,
+                [types::ModelInputModality::Text]
+            );
+            assert!(vision.capabilities.vision);
+            assert_eq!(
+                vision.profile.input_modalities,
+                [
+                    types::ModelInputModality::Text,
+                    types::ModelInputModality::Image,
+                ]
+            );
         });
     }
 

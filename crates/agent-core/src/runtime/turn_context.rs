@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tokio::sync::Notify;
 
@@ -35,6 +35,13 @@ struct TurnInputState {
     in_flight_admissions: usize,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct TurnProviderSettings {
+    pub(crate) targets: Vec<types::ModelTarget>,
+    pub(crate) base_config: providers::ProviderConfig,
+    pub(crate) generation: u64,
+}
+
 /// 输入准入预留凭证，drop 时自动释放 in-flight 计数。
 pub(crate) struct TurnInputReservation {
     turn_context: Arc<TurnContext>,
@@ -64,19 +71,26 @@ impl Drop for ChildPermit {
 /// 单个用户 turn 内所有采样步骤共享的不可变上下文。
 #[derive(Debug)]
 pub struct TurnContext {
-    /// Stable identifier for the active turn.
+    /// 活跃 turn 的稳定标识符。
     pub(crate) sub_id: String,
-    /// One-based user-turn ordinal within the session.
+    /// 会话内从 1 开始的用户轮次序号。
     pub(crate) turn: usize,
-    /// Interaction mode admitted when the turn started.
+    /// turn 开始时准入的交互模式。
     pub(crate) mode: types::InteractionMode,
-    /// Permission profile admitted when the turn started.
+    /// turn 开始时准入的权限配置。
     pub(crate) permission_profile: Option<String>,
-    /// Project root admitted when the turn started.
+    /// turn 开始时准入的项目根路径。
     pub(crate) project_root: Option<PathBuf>,
-    /// User input steered into the active task, consumed before the next sampling request.
+    /// turn 开始时准入的所有可写项目根路径。
+    pub(crate) workspace_roots: Vec<PathBuf>,
+    /// 是否允许该 turn 启动的子进程访问网络。
+    pub(crate) network_access: bool,
+    /// 注入活跃任务的用户输入，在下一次采样请求前被消费。
     input_state: Mutex<TurnInputState>,
     input_notify: Notify,
+    provider_settings: Mutex<Option<TurnProviderSettings>>,
+    /// 在 turn 首个准备边界发现，此后所有 sampling step 共享同一不可变版本。
+    extension_snapshot: OnceLock<Arc<crate::extensions::ExtensionSnapshot>>,
     child_tracker: Arc<ChildTracker>,
     #[cfg(test)]
     preparing_reservation_notify: Notify,
@@ -90,6 +104,7 @@ pub(crate) enum TerminalInputDecision {
 }
 
 impl TurnContext {
+    #[cfg(test)]
     pub(crate) fn new(
         sub_id: String,
         turn: usize,
@@ -97,12 +112,33 @@ impl TurnContext {
         permission_profile: Option<String>,
         project_root: Option<PathBuf>,
     ) -> Self {
+        let workspace_roots = project_root.iter().cloned().collect();
+        Self::new_with_roots(
+            sub_id,
+            turn,
+            mode,
+            permission_profile,
+            project_root,
+            workspace_roots,
+        )
+    }
+
+    pub(crate) fn new_with_roots(
+        sub_id: String,
+        turn: usize,
+        mode: types::InteractionMode,
+        permission_profile: Option<String>,
+        project_root: Option<PathBuf>,
+        workspace_roots: Vec<PathBuf>,
+    ) -> Self {
         Self {
             sub_id,
             turn,
             mode,
             permission_profile,
             project_root,
+            workspace_roots,
+            network_access: true,
             input_state: Mutex::new(TurnInputState {
                 pending: Vec::new(),
                 mailbox_pending: Vec::new(),
@@ -110,6 +146,8 @@ impl TurnContext {
                 in_flight_admissions: 0,
             }),
             input_notify: Notify::new(),
+            provider_settings: Mutex::new(None),
+            extension_snapshot: OnceLock::new(),
             child_tracker: Arc::new(ChildTracker::default()),
             #[cfg(test)]
             preparing_reservation_notify: Notify::new(),
@@ -128,12 +166,140 @@ impl TurnContext {
         self.mode
     }
 
+    /// 获取当前 turn 已冻结的扩展快照。
+    pub fn extension_snapshot(&self) -> Option<Arc<crate::extensions::ExtensionSnapshot>> {
+        self.extension_snapshot.get().cloned()
+    }
+
+    /// 首个调用方发布快照；并发发现时所有调用方最终使用同一个值。
+    pub(crate) fn publish_extension_snapshot(
+        &self,
+        snapshot: Arc<crate::extensions::ExtensionSnapshot>,
+    ) -> Arc<crate::extensions::ExtensionSnapshot> {
+        Arc::clone(self.extension_snapshot.get_or_init(|| snapshot))
+    }
+
+    pub(crate) fn initialize_provider_settings(
+        &self,
+        targets: Vec<types::ModelTarget>,
+        base_config: providers::ProviderConfig,
+    ) {
+        let mut settings = self
+            .provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned");
+        if settings.is_none() {
+            *settings = Some(TurnProviderSettings {
+                targets,
+                base_config,
+                generation: 0,
+            });
+        }
+    }
+
+    pub(crate) fn provider_settings(&self) -> Option<TurnProviderSettings> {
+        self.provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned")
+            .clone()
+    }
+
+    pub(crate) fn apply_settings_update(
+        &self,
+        update: agent_protocol::TurnSettingsUpdate,
+    ) -> agent_protocol::TurnSettingsOutcome {
+        if update.is_empty() {
+            return agent_protocol::TurnSettingsOutcome::Rejected {
+                message: "turn settings update is empty".into(),
+            };
+        }
+        let mut guard = self
+            .provider_settings
+            .lock()
+            .expect("turn provider settings mutex poisoned");
+        let Some(current) = guard.as_ref() else {
+            return agent_protocol::TurnSettingsOutcome::Rejected {
+                message: "turn has not reached provider setup".into(),
+            };
+        };
+        let mut next = current.clone();
+        if let Some(model) = update.model {
+            let model = model.trim();
+            if model.is_empty() {
+                return agent_protocol::TurnSettingsOutcome::Rejected {
+                    message: "model cannot be empty".into(),
+                };
+            }
+            let Some(primary) = next.targets.first_mut() else {
+                return agent_protocol::TurnSettingsOutcome::TargetUnavailable {
+                    message: "active turn has no provider target".into(),
+                };
+            };
+            primary.model = model.to_string();
+            next.base_config.model = model.to_string();
+        }
+        if let Some(reasoning_effort) = update.reasoning_effort {
+            next.base_config.reasoning_effort = reasoning_effort.unwrap_or_default();
+        }
+        if update.reasoning_summary.is_some() || update.service_tier.is_some() {
+            let reasoning_effort = next.base_config.reasoning_effort.clone();
+            let params = match &mut next.base_config.additional_params {
+                serde_json::Value::Null => {
+                    next.base_config.additional_params = serde_json::json!({});
+                    next.base_config.additional_params.as_object_mut().unwrap()
+                }
+                serde_json::Value::Object(params) => params,
+                _ => {
+                    return agent_protocol::TurnSettingsOutcome::Rejected {
+                        message: "provider additional_params must be a JSON object".into(),
+                    };
+                }
+            };
+            if let Some(value) = update.reasoning_summary {
+                let mut reasoning = serde_json::Map::new();
+                if !reasoning_effort.trim().is_empty() {
+                    reasoning.insert("effort".into(), reasoning_effort.into());
+                }
+                if let Some(value) = value {
+                    reasoning.insert("summary".into(), value.into());
+                }
+                params.insert("reasoning".into(), reasoning.into());
+            }
+            if let Some(value) = update.service_tier {
+                match value {
+                    Some(value) => {
+                        params.insert("service_tier".into(), value.into());
+                    }
+                    None => {
+                        params.remove("service_tier");
+                    }
+                }
+            }
+        }
+        next.generation = current.generation.wrapping_add(1);
+        *guard = Some(next);
+        agent_protocol::TurnSettingsOutcome::Applied
+    }
+
     pub fn permission_profile(&self) -> Option<&str> {
         self.permission_profile.as_deref()
     }
 
     pub fn project_root(&self) -> Option<&Path> {
         self.project_root.as_deref()
+    }
+
+    pub fn workspace_roots(&self) -> &[PathBuf] {
+        &self.workspace_roots
+    }
+
+    pub(crate) fn with_network_access(mut self, allowed: bool) -> Self {
+        self.network_access = allowed;
+        self
+    }
+
+    pub(crate) fn network_access(&self) -> bool {
+        self.network_access
     }
 
     /// 注册一个子任务并返回存活凭证。
@@ -153,6 +319,10 @@ impl TurnContext {
             }
             changed.await;
         }
+    }
+
+    pub(crate) fn has_live_children(&self) -> bool {
+        self.child_tracker.active.load(Ordering::Acquire) != 0
     }
 
     /// 等待 turn 准备完成后获取输入预留，admission 关闭则返回 None。
@@ -269,7 +439,7 @@ impl TurnContext {
         self.input_notify.notify_waiters();
     }
 
-    /// Atomically close steering only when neither queue nor an admission is pending.
+    /// 仅当队列和准入均无待处理时，原子地关闭输入引导。
     #[cfg(test)]
     pub(crate) fn close_if_no_pending_input(&self) -> bool {
         let mut state = self
@@ -316,7 +486,7 @@ impl TurnContext {
         }
     }
 
-    /// Test helper retaining the original queue-only assertion surface.
+    /// 测试辅助方法，保留原始的仅队列断言接口。
     #[cfg(test)]
     pub(crate) async fn take_pending_input_or_close(&self) -> Vec<QueuedTurnInput> {
         match self.wait_for_terminal_input().await {
@@ -508,5 +678,136 @@ mod tests {
         assert!(!turn_context.close_if_no_pending_input());
         turn_context.retract_input(&unrelated);
         assert!(turn_context.close_if_no_pending_input());
+    }
+
+    #[test]
+    fn turn_settings_apply_atomically_to_next_provider_snapshot() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        turn_context.initialize_provider_settings(
+            vec![types::ModelTarget {
+                provider_id: "provider".into(),
+                backend_id: "openai".into(),
+                model: "old-model".into(),
+                api_key: "secret".into(),
+                base_url: String::new(),
+            }],
+            providers::ProviderConfig {
+                model: "old-model".into(),
+                reasoning_effort: "high".into(),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            turn_context.apply_settings_update(agent_protocol::TurnSettingsUpdate {
+                model: Some("new-model".into()),
+                reasoning_effort: Some(None),
+                reasoning_summary: Some(Some("concise".into())),
+                service_tier: Some(Some("priority".into())),
+            }),
+            agent_protocol::TurnSettingsOutcome::Applied
+        );
+        let snapshot = turn_context.provider_settings().unwrap();
+        assert_eq!(snapshot.generation, 1);
+        assert_eq!(snapshot.targets[0].model, "new-model");
+        assert_eq!(snapshot.base_config.model, "new-model");
+        assert!(snapshot.base_config.reasoning_effort.is_empty());
+        assert_eq!(
+            snapshot.base_config.additional_params["reasoning"]["summary"],
+            "concise"
+        );
+        assert_eq!(
+            snapshot.base_config.additional_params["service_tier"],
+            "priority"
+        );
+    }
+
+    #[test]
+    fn rejected_turn_settings_leave_the_snapshot_unchanged() {
+        let turn_context = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            None,
+        );
+        turn_context.initialize_provider_settings(
+            vec![types::ModelTarget {
+                provider_id: "provider".into(),
+                backend_id: "openai".into(),
+                model: "old-model".into(),
+                api_key: "secret".into(),
+                base_url: String::new(),
+            }],
+            providers::ProviderConfig {
+                model: "old-model".into(),
+                additional_params: serde_json::json!(["not", "an", "object"]),
+                ..Default::default()
+            },
+        );
+
+        assert!(matches!(
+            turn_context.apply_settings_update(agent_protocol::TurnSettingsUpdate {
+                model: Some("new-model".into()),
+                reasoning_summary: Some(Some("concise".into())),
+                ..Default::default()
+            }),
+            agent_protocol::TurnSettingsOutcome::Rejected { .. }
+        ));
+        let snapshot = turn_context.provider_settings().unwrap();
+        assert_eq!(snapshot.generation, 0);
+        assert_eq!(snapshot.targets[0].model, "old-model");
+        assert_eq!(snapshot.base_config.model, "old-model");
+    }
+
+    #[test]
+    fn extension_snapshot_publishes_only_the_first_value() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home/.astro");
+        let project = root.path().join("project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let loaded = agent_config::loader::load_local_config(
+            &agent_config::loader::LocalConfigOptions::new(&home, &project),
+        )
+        .unwrap();
+        let effective = loaded.resolve();
+        let snapshot = |version: &str| {
+            Arc::new(
+                crate::extensions::discover_extension_snapshot(
+                    &crate::extensions::ExtensionDiscoveryOptions::new(
+                        &home,
+                        &project,
+                        effective.raw().clone(),
+                        version,
+                    ),
+                )
+                .unwrap(),
+            )
+        };
+        let first = snapshot("config-v1");
+        let second = snapshot("config-v2");
+        assert_ne!(first.version(), second.version());
+        let first_version = first.version().to_string();
+        let turn = TurnContext::new(
+            "turn-1".into(),
+            1,
+            types::InteractionMode::Agent,
+            None,
+            Some(project),
+        );
+
+        let published = turn.publish_extension_snapshot(first);
+        let repeated = turn.publish_extension_snapshot(second);
+
+        assert_eq!(published.version(), first_version);
+        assert_eq!(repeated.version(), first_version);
+        assert!(Arc::ptr_eq(&published, &repeated));
     }
 }

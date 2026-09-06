@@ -33,34 +33,34 @@ pub enum AskUserMode {
     Location,
 }
 
-/// One question step in `question` mode.
+/// `question` 模式下的单个提问步骤。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskQuestion {
-    /// Answer key; defaults to `q0` / `q1` …
+    /// 回答键名；默认 `q0` / `q1` ...
     #[serde(default)]
     pub id: Option<String>,
     pub question: String,
-    /// Preset options; empty means free-text input only.
+    /// 预设选项；为空表示仅自由文本输入。
     #[serde(default)]
     pub options: Vec<String>,
 }
 
-/// Arguments for the `ask_user` tool.
+/// `ask_user` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AskUserArgs {
-    /// `question` | `confirm` | `location`. Omit only when unambiguous (question vs confirm).
+    /// `question` | `confirm` | `location`。仅当无歧义时可省略（question vs confirm）。
     #[serde(default)]
     pub mode: Option<AskUserMode>,
-    /// Question mode: one or more steps.
+    /// question 模式：一个或多个步骤。
     #[serde(default)]
     pub questions: Vec<AskQuestion>,
-    /// Wizard title (question) or confirmation card title (confirm).
+    /// 向导标题（question）或确认卡标题（confirm）。
     #[serde(default)]
     pub title: Option<String>,
-    /// Confirm mode only: body text.
+    /// 仅 confirm 模式：正文文本。
     #[serde(default)]
     pub body: Option<String>,
-    /// Location mode: why location is needed (optional; default copy when empty).
+    /// location 模式：说明为何需要位置（可选；为空时使用默认文案）。
     #[serde(default)]
     pub message: Option<String>,
 }
@@ -120,7 +120,7 @@ fn has_location_hint(parsed: &AskUserArgs) -> bool {
         .is_some_and(|s| !s.is_empty())
 }
 
-/// Resolve mode; explicit `mode` wins; omitted mode must be unambiguous (never infers location).
+/// 解析 mode；显式 `mode` 优先；省略时须无歧义（永不推断为 location）。
 pub(crate) fn resolve_ask_user_mode(parsed: &AskUserArgs) -> anyhow::Result<AskUserMode> {
     let has_q = has_usable_questions(&parsed.questions);
     let has_b = has_body(parsed);

@@ -8,10 +8,17 @@ pub const MCP_TOOLSET: &str = "mcp";
 /// 限定工具名前缀。
 pub const MCP_PREFIX: &str = "mcp__";
 
-/// 生成 LLM 可见的限定工具名（自动 sanitize `server_id`）。
+/// 生成 Responses API 原生 MCP 命名空间。
+pub fn tool_namespace(server_id: &str) -> String {
+    format!("{MCP_PREFIX}{}", sanitize_server_id(server_id))
+}
+
+/// 生成 Hub 内部的唯一执行键（自动 sanitize `server_id` 和 `tool_name`）。
+///
+/// 模型侧使用 `tool_namespace(server_id)` 与原生子工具名的结构化组合。
 pub fn qualify_tool_name(server_id: &str, tool_name: &str) -> String {
-    let sid = sanitize_server_id(server_id);
-    format!("{MCP_PREFIX}{sid}__{tool_name}")
+    let tn = sanitize_tool_name(tool_name);
+    format!("{}__{tn}", tool_namespace(server_id))
 }
 
 /// 解析限定名 → `(server_id, native_tool_name)`；非 MCP 名返回 `None`。
@@ -25,9 +32,26 @@ pub fn is_mcp_tool_name(name: &str) -> bool {
     name.starts_with(MCP_PREFIX) && name[MCP_PREFIX.len()..].contains("__")
 }
 
-/// 确保 `server_id` 不含 `__`，避免限定名歧义。
+/// 确保 `server_id` 不含 `__`，避免限定名歧义；非法字符替换为 `_`。
 pub fn sanitize_server_id(id: &str) -> String {
-    id.replace("__", "_")
+    sanitize_name_chars(&id.replace("__", "_"))
+}
+
+/// 确保工具名仅含 `[a-zA-Z0-9_-]`，其余字符替换为 `_`。
+pub fn sanitize_tool_name(name: &str) -> String {
+    sanitize_name_chars(name)
+}
+
+fn sanitize_name_chars(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -39,6 +63,11 @@ mod tests {
         let q = qualify_tool_name("srv1", "read_file");
         assert_eq!(q, "mcp__srv1__read_file");
         assert_eq!(parse_qualified_name(&q), Some(("srv1", "read_file")));
+    }
+
+    #[test]
+    fn native_namespace_keeps_the_server_boundary() {
+        assert_eq!(tool_namespace("my.server"), "mcp__my_server");
     }
 
     #[test]
@@ -58,5 +87,23 @@ mod tests {
     fn rejects_non_mcp() {
         assert!(parse_qualified_name("web_search").is_none());
         assert!(!is_mcp_tool_name("web_search"));
+    }
+
+    #[test]
+    fn sanitizes_dots_in_tool_name() {
+        let q = qualify_tool_name("srv", "search.documents");
+        assert_eq!(q, "mcp__srv__search_documents");
+    }
+
+    #[test]
+    fn sanitizes_special_chars_in_tool_name() {
+        let q = qualify_tool_name("srv", "ns:read/file");
+        assert_eq!(q, "mcp__srv__ns_read_file");
+    }
+
+    #[test]
+    fn sanitizes_dots_in_server_id() {
+        let q = qualify_tool_name("my.server", "tool");
+        assert_eq!(q, "mcp__my_server__tool");
     }
 }

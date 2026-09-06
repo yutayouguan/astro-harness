@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -30,14 +37,17 @@ function visibleTreeRoots(state: AgentTreeState) {
   return state.roots.flatMap((node) =>
     node.thread.canonicalPath === "/root" && node.thread.parentThreadId === null
       ? node.children
-      : [node]);
+      : [node],
+  );
 }
 
 export function useSubagentThreads(rootSessionId?: string | null) {
   const root = rootSessionId?.trim() ?? "";
   const [rootLifecycle] = useState(createAgentTreeRootLifecycle);
 
-  const [state, setStateValue] = useState<AgentTreeState>(() => emptyStateFor(root));
+  const [state, setStateValue] = useState<AgentTreeState>(() =>
+    emptyStateFor(root),
+  );
   const [error, setError] = useState<string | null>(null);
   const [loadingState, setLoadingState] = useState(Boolean(root));
   const [initializedState, setInitializedState] = useState(false);
@@ -96,9 +106,10 @@ export function useSubagentThreads(rootSessionId?: string | null) {
       if (snapshot.rootThreadId !== root) {
         throw new Error("agent tree snapshot belongs to another root session");
       }
-      const previous = stateRef.current.rootThreadId === root
-        ? stateRef.current
-        : EMPTY_AGENT_TREE;
+      const previous =
+        stateRef.current.rootThreadId === root
+          ? stateRef.current
+          : EMPTY_AGENT_TREE;
       const next = fromSnapshotWithBufferedEvents(
         snapshot,
         previous,
@@ -188,7 +199,10 @@ export function useSubagentThreads(rootSessionId?: string | null) {
         });
         return;
       }
-      const next = reduceAgentThreadEvent(stateRef.current, classification.changed);
+      const next = reduceAgentThreadEvent(
+        stateRef.current,
+        classification.changed,
+      );
       if (next !== stateRef.current && isCurrent()) commitState(next);
     };
 
@@ -222,19 +236,24 @@ export function useSubagentThreads(rootSessionId?: string | null) {
     };
   }, [commitState, refresh, root, rootLifecycle]);
 
-  const markRead = useCallback((path: string) => {
-    const currentRoot = rootLifecycle.current().root;
-    if (!currentRoot || stateRef.current.rootThreadId !== currentRoot) return;
-    const next = markThreadRead(stateRef.current, path);
-    if (next !== stateRef.current) commitState(next);
-  }, [commitState, rootLifecycle]);
+  const markRead = useCallback(
+    (path: string) => {
+      const currentRoot = rootLifecycle.current().root;
+      if (!currentRoot || stateRef.current.rootThreadId !== currentRoot) return;
+      const next = markThreadRead(stateRef.current, path);
+      if (next !== stateRef.current) commitState(next);
+    },
+    [commitState, rootLifecycle],
+  );
 
-  const projectedState = state.rootThreadId === root
-    ? state
-    : emptyStateFor(root);
+  const projectedState =
+    state.rootThreadId === root ? state : emptyStateFor(root);
   const initialized = projectedState === state && initializedState;
   const loading = Boolean(root) && (projectedState !== state || loadingState);
-  const roots = useMemo(() => visibleTreeRoots(projectedState), [projectedState]);
+  const roots = useMemo(
+    () => visibleTreeRoots(projectedState),
+    [projectedState],
+  );
   const threads = useMemo(
     () => flattenAgentTree(roots).map((node) => node.thread),
     [roots],

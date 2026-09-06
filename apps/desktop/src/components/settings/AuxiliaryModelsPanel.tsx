@@ -101,27 +101,30 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
       ];
 }
 
-export default function AuxiliaryModelsPanel({ active, embedded = false, tone }: Props) {
+export default function AuxiliaryModelsPanel({
+  active,
+  embedded = false,
+  tone,
+}: Props) {
   const { t } = useI18n();
-  const {
-    loading,
-    error,
-    settings,
-    setRoute,
-    resetRoute,
-    resetAll,
-    reload,
-  } = useAuxiliarySettings(active);
-  const [providersState, setProvidersState] = useState<ProvidersStateDto | null>(null);
+  const { loading, error, settings, setRoute, resetRoute, resetAll, reload } =
+    useAuxiliarySettings(active);
+  const [providersState, setProvidersState] =
+    useState<ProvidersStateDto | null>(null);
   const [providersLoading, setProvidersLoading] = useState(false);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<AuxiliaryTaskId | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState("");
-  const [modelsByProvider, setModelsByProvider] = useState<Record<string, ModelInfo[]>>({});
+  const [modelsByProvider, setModelsByProvider] = useState<
+    Record<string, ModelInfo[]>
+  >({});
   const [loadingModelsFor, setLoadingModelsFor] = useState<string | null>(null);
 
   const enabledProviders = useMemo(
-    () => (providersState?.providers ?? []).filter((p) => p.enabled),
+    () =>
+      (providersState?.providers ?? []).filter(
+        (p) => p.enabled && p.supports_responses_api === true,
+      ),
     [providersState],
   );
 
@@ -130,7 +133,9 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
     const providerId =
       settings?.activeProviderId ?? providersState?.active_provider_id ?? null;
     if (!providerId) return null;
-    const provider = (providersState?.providers ?? []).find((p) => p.id === providerId);
+    const provider = (providersState?.providers ?? []).find(
+      (p) => p.id === providerId,
+    );
     const model = (settings?.activeModel || provider?.model || "").trim();
     if (!provider || !model) return null;
     return {
@@ -141,8 +146,12 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
   }, [providersState, settings?.activeModel, settings?.activeProviderId]);
 
   const taskRows = useMemo(() => {
-    const byId = new Map((settings?.tasks ?? []).map((task) => [task.id, task]));
-    return TASKS.map((task) => byId.get(task.id)).filter(Boolean) as AuxiliaryTaskDto[];
+    const byId = new Map(
+      (settings?.tasks ?? []).map((task) => [task.id, task]),
+    );
+    return TASKS.map((task) => byId.get(task.id)).filter(
+      Boolean,
+    ) as AuxiliaryTaskDto[];
   }, [settings]);
 
   const resolveRouteLabel = useCallback(
@@ -165,7 +174,9 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
     (row: AuxiliaryTaskDto | undefined, isAuto: boolean) => {
       if (isAuto) return Boolean(primaryRoute);
       if (!row || !primaryRoute) return false;
-      return row.provider === primaryRoute.id && row.model === primaryRoute.model;
+      return (
+        row.provider === primaryRoute.id && row.model === primaryRoute.model
+      );
     },
     [primaryRoute],
   );
@@ -179,9 +190,14 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
     [enabledProviders],
   );
 
-  const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
+  const selectedProvider = enabledProviders.find(
+    (p) => p.id === selectedProviderId,
+  );
   const selectedModels = selectedProvider
-    ? ensureDefaultModel(modelsByProvider[selectedProvider.id] ?? [], selectedProvider.model)
+    ? ensureDefaultModel(
+        modelsByProvider[selectedProvider.id] ?? [],
+        selectedProvider.model,
+      )
     : [];
   const modelOptions = selectedModels.map((m) => ({
     value: m.id,
@@ -206,49 +222,51 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
     void loadProviders();
   }, [loadProviders]);
 
-  const loadModels = useCallback(
-    async (provider: ProviderDto) => {
-      setLoadingModelsFor(provider.id);
+  const loadModels = useCallback(async (provider: ProviderDto) => {
+    setLoadingModelsFor(provider.id);
+    try {
+      let models: ModelInfo[] = [];
       try {
-        let models: ModelInfo[] = [];
-        try {
-          const cached = await invoke<ProviderModelsResult | null>(
-            "get_cached_provider_models",
-            { id: provider.id },
-          );
-          if (cached?.models?.length) models = cached.models;
-        } catch {
-          // Cache miss is expected for newly added providers.
-        }
-        if (models.length === 0) {
-          const fresh = await invoke<ProviderModelsResult>("list_provider_models", {
-            id: provider.id,
-          });
-          models = fresh.models ?? [];
-        }
-        setModelsByProvider((prev) => ({
-          ...prev,
-          [provider.id]: ensureDefaultModel(models, provider.model),
-        }));
-      } catch (err) {
-        setProvidersError(err instanceof Error ? err.message : String(err));
-        setModelsByProvider((prev) => ({
-          ...prev,
-          [provider.id]: ensureDefaultModel([], provider.model),
-        }));
-      } finally {
-        setLoadingModelsFor(null);
+        const cached = await invoke<ProviderModelsResult | null>(
+          "get_cached_provider_models",
+          { id: provider.id },
+        );
+        if (cached?.models?.length) models = cached.models;
+      } catch {
+        // Cache miss is expected for newly added providers.
       }
-    },
-    [],
-  );
+      if (models.length === 0) {
+        const fresh = await invoke<ProviderModelsResult>(
+          "list_provider_models",
+          {
+            id: provider.id,
+          },
+        );
+        models = fresh.models ?? [];
+      }
+      setModelsByProvider((prev) => ({
+        ...prev,
+        [provider.id]: ensureDefaultModel(models, provider.model),
+      }));
+    } catch (err) {
+      setProvidersError(err instanceof Error ? err.message : String(err));
+      setModelsByProvider((prev) => ({
+        ...prev,
+        [provider.id]: ensureDefaultModel([], provider.model),
+      }));
+    } finally {
+      setLoadingModelsFor(null);
+    }
+  }, []);
 
   const beginEdit = useCallback(
     (row: AuxiliaryTaskDto) => {
       const nextProviderId =
         row.provider !== "auto"
           ? row.provider
-          : providersState?.active_provider_id ?? enabledProviders[0]?.id ?? "";
+          : (providersState?.active_provider_id ??
+            enabledProviders[0]?.id ??
+            "");
       setEditingTask(row.id);
       setSelectedProviderId(nextProviderId);
       const provider = enabledProviders.find((p) => p.id === nextProviderId);
@@ -337,7 +355,9 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
             </p>
           </div>
           <div className="aux-list-head-actions">
-            {providersLoading && <span className="aux-muted">{t("aux.loading")}</span>}
+            {providersLoading && (
+              <span className="aux-muted">{t("aux.loading")}</span>
+            )}
             {embedded ? actionButtons : null}
           </div>
         </div>
@@ -356,7 +376,9 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
                 <div className="aux-task-main">
                   <div className="aux-task-titleline">
                     <h3>{t(task.labelKey)}</h3>
-                    <span className={`aux-route-pill${isAuto ? " is-auto" : ""}`}>
+                    <span
+                      className={`aux-route-pill${isAuto ? " is-auto" : ""}`}
+                    >
                       {isAuto ? t("aux.auto") : t("aux.custom")}
                     </span>
                   </div>
@@ -375,10 +397,14 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
                     usesPrimaryModel(row, isAuto)) && (
                     <div className="aux-task-hints">
                       {task.id === "compaction" && (
-                        <span className="aux-hint">{t("aux.compactionThresholdHint")}</span>
+                        <span className="aux-hint">
+                          {t("aux.compactionThresholdHint")}
+                        </span>
                       )}
                       {task.id === "background_review" && (
-                        <span className="aux-hint">{t("aux.backgroundReviewHint")}</span>
+                        <span className="aux-hint">
+                          {t("aux.backgroundReviewHint")}
+                        </span>
                       )}
                       {usesPrimaryModel(row, isAuto) && (
                         <span className="aux-hint aux-hint-cost">
@@ -402,7 +428,10 @@ export default function AuxiliaryModelsPanel({ active, embedded = false, tone }:
                         value=""
                         options={modelOptions}
                         onChange={handleModelChange}
-                        disabled={!selectedProvider || loadingModelsFor === selectedProvider?.id}
+                        disabled={
+                          !selectedProvider ||
+                          loadingModelsFor === selectedProvider?.id
+                        }
                         placeholder={
                           loadingModelsFor === selectedProvider?.id
                             ? t("aux.loadingModels")

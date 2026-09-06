@@ -20,7 +20,6 @@ pub enum SandboxMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApprovalPolicy {
-    Untrusted,
     #[default]
     OnRequest,
     Never,
@@ -118,6 +117,31 @@ pub struct FilesystemPolicy {
     pub glob_scan_max_depth: Option<u32>,
 }
 
+/// Managed network requirement that annotates matching HTTP requests.
+///
+/// Header values are intentionally omitted from `Debug` output because they may
+/// contain credentials. The CONNECT-only local proxy retains these rules for a
+/// transport capable of observing HTTP request metadata; it does not inspect TLS.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkHeaderInjection {
+    pub host: String,
+    pub methods: Vec<String>,
+    pub path_prefixes: Vec<String>,
+    pub headers: BTreeMap<String, String>,
+}
+
+impl std::fmt::Debug for NetworkHeaderInjection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NetworkHeaderInjection")
+            .field("host", &self.host)
+            .field("methods", &self.methods)
+            .field("path_prefixes", &self.path_prefixes)
+            .field("header_names", &self.headers.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
 /// 本地命令网络边界。域名规则仅在命令网络代理启用时具有限制作用。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct NetworkPolicy {
@@ -129,6 +153,8 @@ pub struct NetworkPolicy {
     pub unix_sockets: BTreeMap<String, NetworkAccess>,
     #[serde(default)]
     pub allow_local_binding: bool,
+    #[serde(default)]
+    pub header_injections: Vec<NetworkHeaderInjection>,
 }
 
 /// 命名 permission profile。审批策略和审批人不属于 profile。

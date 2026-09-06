@@ -2,12 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { layoutAnchoredMenu } from "./anchoredMenuLayout.ts";
 
-function rect(
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-) {
+function rect(left: number, top: number, width: number, height: number) {
   return {
     left,
     top,

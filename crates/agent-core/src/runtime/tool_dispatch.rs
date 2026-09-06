@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use mcp::{call_tool_with_peer, is_mcp_tool_name};
+use mcp::is_mcp_tool_name;
 use session::ConversationStore;
 use tokio_util::sync::CancellationToken;
-use tools::{dispatch_tool, DynToolHandler, ToolContext};
+use tools::ToolContext;
 
 use super::{AgentLoop, StepContext, ToolInvocation};
 
@@ -14,7 +14,7 @@ use super::{AgentLoop, StepContext, ToolInvocation};
 pub enum ToolCallError {
     /// 用户或上层触发了取消。
     Cancelled,
-    /// A sandboxed process was denied and retains its structured output for retry.
+    /// 沙箱进程被拒绝，保留其结构化输出以供重试。
     SandboxDenied(sandbox::SandboxErr),
     /// 工具深度耗尽。
     DepthExhausted(super::turn_budget::MaxDepthError),
@@ -64,22 +64,32 @@ impl From<super::turn_budget::MaxDepthError> for ToolCallError {
 pub(crate) struct ToolExecutionGrants {
     pub(crate) workspace_write: bool,
     pub(crate) sandbox_policy: Option<sandbox::SandboxPolicy>,
-    pub(crate) network: tools::InProcessNetworkGrant,
     pub(crate) managed_network: Option<std::sync::Arc<network_proxy::StartedNetworkProxy>>,
 }
 
 impl AgentLoop {
-    /// 按名称分发工具调用：MCP 走 Hub，内置工具走 [`dispatch_tool`]。
+    /// 按名称将调用分发给 Step 冻结的 [`tools::CoreToolRuntime`]。
     ///
     /// 调用前刷新 gate 与 MCP 注册；未启用或不存在的工具直接 bail。
-    /// MCP 工具通过克隆 `Arc<TokioMutex<McpHub>>` 构造动态 handler。
+    /// MCP 与内置工具都由 `ToolRegistry` 持有类型擦除运行时。
     async fn dispatch_named_tool(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
         step_context: Option<&super::StepContext>,
     ) -> anyhow::Result<types::ToolOutput> {
+        let call_name = name;
+        let registered_name = step_context
+            .and_then(|step_context| {
+                step_context
+                    .tool_router
+                    .registered_name(namespace, call_name)
+            })
+            .unwrap_or(call_name)
+            .to_string();
+        let name = registered_name.as_str();
         let (agent_id, workspace_dir) = {
             let memory = self.memory();
             (memory.agent_id.clone(), memory.workspace_dir.clone())
@@ -100,53 +110,13 @@ impl AgentLoop {
             self.attach_mcp_tools().await;
         }
 
-        let allowed = step_context.map_or_else(
-            || {
-                self.services
-                    .tool_registry
-                    .read()
-                    .expect("tool registry lock poisoned")
-                    .is_tool_allowed(name)
-            },
-            |step_context| step_context.tool_router.has_tool(name),
-        );
-
-        // 在构造 ToolContext 之前，从 Hub 解析 peer（lock → resolve → release）
-        // 构建 MCP 动态 handler，持有 Peer（Send + Sync），无需跨 await 持锁。
-        let mcp_handler: Option<DynToolHandler> = if is_mcp_tool_name(name) {
-            let (peer, native, timeout_secs) = self.mcp_hub.lock().await.resolve_tool_peer(name)?;
-            let qname = name.to_string();
-            Some(std::sync::Arc::new(
-                move |_name: &str, args: &serde_json::Value| {
-                    let peer = peer.clone();
-                    let qname = qname.clone();
-                    let native = native.clone();
-                    let a = args.clone();
-                    Box::pin(async move {
-                        call_tool_with_peer(&peer, &qname, &native, &a, timeout_secs).await
-                    })
-                        as std::pin::Pin<
-                            Box<
-                                dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>>
-                                    + Send,
-                            >,
-                        >
-                },
-            ))
-        } else {
-            None
-        };
-        let dynamic_handler = mcp_handler.or_else(|| {
-            step_context.map_or_else(
-                || {
-                    self.services
-                        .tool_registry
-                        .read()
-                        .expect("tool registry lock poisoned")
-                        .dynamic_handler(name)
-                },
-                |step_context| step_context.tool_router.dynamic_handler(name),
-            )
+        let live_registry = step_context.is_none().then(|| {
+            (*self
+                .services
+                .tool_registry
+                .read()
+                .expect("tool registry lock poisoned"))
+            .clone()
         });
 
         skills::set_workspace_override(&workspace_dir);
@@ -160,15 +130,37 @@ impl AgentLoop {
         let execution = Some(self.execution());
         let hook_runtime = Some(self.hook_runtime());
         let hook_bus = Some(self.hook_bus());
-        let (project_root, permission_profile, model_ctx, skill_config_overrides) = {
+        let (project_root, workspace_roots, permission_profile, model_ctx, skill_config_overrides) = {
             let state = self.lock_state();
             (
                 state.project_root.clone(),
+                state.workspace_roots.clone(),
                 state.permission_profile.clone(),
                 state.model_ctx.clone(),
                 state.skill_config_overrides.clone(),
             )
         };
+        let skill_config_overrides = step_context
+            .and_then(|step| step.turn.extension_snapshot())
+            .map(|snapshot| snapshot.skill_configs().to_vec())
+            .unwrap_or(skill_config_overrides);
+        let mut service_tier = step_context
+            .and_then(|step| step.turn.provider_settings())
+            .and_then(|settings| {
+                settings
+                    .base_config
+                    .additional_params
+                    .get("service_tier")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            });
+        if self.services.agent_path == subagents::AgentPath::root() {
+            self.services
+                .agent_control
+                .set_root_service_tier(service_tier.clone());
+        } else if let Some(root_service_tier) = self.services.agent_control.root_service_tier() {
+            service_tier = Some(root_service_tier);
+        }
         let mut ctx = ToolContext {
             memory: &self.services.memory,
             sessions,
@@ -177,11 +169,15 @@ impl AgentLoop {
             project_root: step_context
                 .and_then(|step_context| step_context.turn.project_root().map(ToOwned::to_owned))
                 .or(project_root),
+            workspace_roots: step_context
+                .map(|step_context| step_context.turn.workspace_roots().to_vec())
+                .unwrap_or(workspace_roots),
             image_gen_targets: &model_ctx.image_gen_targets,
             session_id,
             turn_id,
             credentials: &model_ctx.credentials,
-            chat_targets: &model_ctx.chat_targets,
+            service_tier,
+            model_targets: &model_ctx.model_targets,
             execution,
             permission_profile: step_context
                 .and_then(|step_context| step_context.turn.permission_profile().map(str::to_string))
@@ -191,12 +187,25 @@ impl AgentLoop {
             hook_runtime,
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
-            network_grant: grants.network,
             managed_network: grants.managed_network,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: Some(&self.services.tool_registry),
         };
-        dispatch_tool(|_| allowed, &mut ctx, name, args, dynamic_handler.as_ref()).await
+        match step_context {
+            Some(step_context) => {
+                step_context
+                    .tool_router
+                    .dispatch(&mut ctx, namespace, call_name, args)
+                    .await
+            }
+            None => {
+                live_registry
+                    .expect("live registry captured without StepContext")
+                    .dispatch(&mut ctx, name, args)
+                    .await
+            }
+        }
     }
 
     /// 同步执行工具调用：multi-thread runtime 使用 `block_in_place`；current-thread
@@ -209,6 +218,7 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
         self.handle_tool_call_scoped(
+            None,
             name,
             args,
             ToolExecutionGrants::default(),
@@ -217,7 +227,7 @@ impl AgentLoop {
         )
     }
 
-    /// Execute one call against the exact sampling step that advertised it.
+    /// 针对发布该工具的确切采样步骤执行一次调用。
     pub(crate) fn handle_tool_invocation(
         self: &Arc<Self>,
         invocation: ToolInvocation,
@@ -225,7 +235,7 @@ impl AgentLoop {
         self.handle_tool_invocation_with_once_grants(invocation, ToolExecutionGrants::default())
     }
 
-    /// Execute one step-bound invocation with grants scoped to this attempt.
+    /// 执行一次绑定到采样步骤的调用，授权范围限于本次尝试。
     pub(crate) fn handle_tool_invocation_with_once_grants(
         self: &Arc<Self>,
         invocation: ToolInvocation,
@@ -238,6 +248,7 @@ impl AgentLoop {
             "dispatch tool invocation"
         );
         self.handle_tool_call_scoped(
+            invocation.tool_namespace.as_deref(),
             &invocation.tool_name,
             &invocation.payload,
             grants,
@@ -248,6 +259,7 @@ impl AgentLoop {
 
     fn handle_tool_call_scoped(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
@@ -262,6 +274,7 @@ impl AgentLoop {
                 ) =>
             {
                 let fut = self.handle_tool_call_async_scoped(
+                    namespace,
                     name,
                     args,
                     grants,
@@ -278,6 +291,7 @@ impl AgentLoop {
                             .build()
                             .map_err(|e| ToolCallError::Execution(e.into()))?;
                         rt.block_on(self.handle_tool_call_async_scoped(
+                            namespace,
                             name,
                             args,
                             grants,
@@ -298,6 +312,7 @@ impl AgentLoop {
                     .build()
                     .map_err(|e| ToolCallError::Execution(e.into()))?;
                 rt.block_on(self.handle_tool_call_async_scoped(
+                    namespace,
                     name,
                     args,
                     grants,
@@ -318,6 +333,7 @@ impl AgentLoop {
         args: &serde_json::Value,
     ) -> Result<types::ToolOutput, ToolCallError> {
         self.handle_tool_call_async_scoped(
+            None,
             name,
             args,
             ToolExecutionGrants::default(),
@@ -329,6 +345,7 @@ impl AgentLoop {
 
     async fn handle_tool_call_async_scoped(
         &self,
+        namespace: Option<&str>,
         name: &str,
         args: &serde_json::Value,
         grants: ToolExecutionGrants,
@@ -340,27 +357,23 @@ impl AgentLoop {
         }
         self.increment_tool_round().await?;
         let turn_id = self.current_turn_id().await;
-        // 可拦截：PluginHookBus 优先
-        let bus_out = self.fire_hook(
-            ::hooks::PRE_TOOL_USE,
-            ::hooks::HookPayload {
-                session_id: self.session_id.clone(),
-                turn_id,
-                tool_name: Some(name.into()),
-                tool_input: Some(args.clone()),
-                detail: format!("{name} {args}"),
-                ..Default::default()
-            },
+        let display_name = types::ToolName::new(namespace, name).wire_name();
+        let pre_tool_use = self.pre_tool_use_request(
+            turn_id,
+            display_name.clone(),
+            format!("direct:{display_name}"),
+            args.clone(),
         );
+        let pre_tool_use = self.run_pre_tool_use_hook(pre_tool_use);
         let mut args_owned = args.clone();
-        match bus_out {
-            ::hooks::HookOutcome::Block(reason) => {
-                return Ok(format!("[blocked by hook] {reason}").into());
-            }
-            ::hooks::HookOutcome::Modify(v) => {
-                args_owned = v;
-            }
-            _ => {}
+        if pre_tool_use.should_block {
+            let reason = pre_tool_use
+                .block_reason
+                .unwrap_or_else(|| "PreToolUse hook blocked tool execution".into());
+            return Ok(format!("[blocked by hook] {reason}").into());
+        }
+        if let Some(updated_input) = pre_tool_use.updated_input {
+            args_owned = updated_input;
         }
         if self.cancel.is_cancelled() || cancellation_token.is_cancelled() {
             return Err(ToolCallError::Cancelled);
@@ -386,17 +399,32 @@ impl AgentLoop {
             },
             |step_context| {
                 (
-                    step_context.tool_router.has_tool(name),
-                    step_context.tool_router.has_tool("skills"),
+                    step_context.tool_router.has_tool(namespace, name),
+                    step_context.tool_router.has_tool(None, "skills"),
                 )
             },
         );
-        let (exec_name, exec_args) = if !is_mcp_tool_name(name)
+        let skill_is_enabled = step_context
+            .as_ref()
+            .and_then(|step| step.turn.extension_snapshot())
+            .map_or_else(
+                || {
+                    skills::list_installed()
+                        .into_iter()
+                        .any(|skill| skill.name == name && skill.enabled)
+                },
+                |snapshot| {
+                    snapshot
+                        .skill_index()
+                        .iter()
+                        .any(|(skill, _)| skill == name)
+                },
+            );
+        let (exec_name, exec_args) = if namespace.is_none()
+            && !is_mcp_tool_name(name)
             && !has_tool
             && skills_allowed
-            && skills::list_installed()
-                .into_iter()
-                .any(|s| s.name == name && s.enabled)
+            && skill_is_enabled
         {
             (
                 "skills",
@@ -409,23 +437,25 @@ impl AgentLoop {
         } else {
             (name, args_owned)
         };
-        if let Err(msg) = tools::check_tool_call(interaction_mode, exec_name, &exec_args) {
+        let exec_namespace = (exec_name != "skills").then_some(namespace).flatten();
+        let policy_name = step_context
+            .as_ref()
+            .and_then(|step| step.tool_router.registered_name(exec_namespace, exec_name))
+            .unwrap_or(exec_name);
+        if let Err(msg) = tools::check_tool_call(interaction_mode, policy_name, &exec_args) {
             return Ok(msg.into());
         }
-        if step_context
-            .as_ref()
-            .is_some_and(|step_context| !step_context.advertises_tool(exec_name))
-        {
-            return Ok(format!(
-                "工具 `{exec_name}` 不在生成本次调用的 StepContext 中，已拒绝执行。"
-            )
-            .into());
-        }
         let raw_result = self
-            .dispatch_named_tool(exec_name, &exec_args, grants, step_context.as_deref())
+            .dispatch_named_tool(
+                exec_namespace,
+                exec_name,
+                &exec_args,
+                grants,
+                step_context.as_deref(),
+            )
             .await?;
         if exec_name == "skills" {
-            self.activate_skill_toolsets_from_args(&exec_args);
+            self.activate_skill_toolsets_from_args(&exec_args, step_context.as_deref());
         }
         // KeyChoice：`confirm` 是关键决策闸口，记一笔供学习闭环。
         if exec_name == "confirm"
@@ -451,16 +481,20 @@ impl AgentLoop {
                 .with_session(self.session_id.clone()),
             );
         }
-        if super::tool_writes_disk(exec_name, &exec_args) {
+        if super::tool_writes_disk(policy_name, &exec_args) {
             self.lock_state().turn.mark_wrote_disk();
         }
         Ok(self
-            .finalize_tool_call_result(exec_name, &exec_args, raw_result)
+            .finalize_tool_call_result(policy_name, &exec_args, raw_result)
             .await)
     }
 
     /// `skills` 工具成功加载后：按 frontmatter `astro_tools` additive 放宽 toolset。
-    fn activate_skill_toolsets_from_args(&self, args: &serde_json::Value) {
+    fn activate_skill_toolsets_from_args(
+        &self,
+        args: &serde_json::Value,
+        step_context: Option<&StepContext>,
+    ) {
         let Some(skill_id) = args
             .get("skill_id")
             .and_then(|v| v.as_str())
@@ -472,7 +506,14 @@ impl AgentLoop {
         // 优先复用 skills 工具刚加载过的结果，避免二次扫描 + 读盘。
         let astro_tools = match skills::recent_astro_tools(skill_id) {
             Some(tools) => tools,
-            None => match skills::load_skill_by_name(skill_id) {
+            None => match step_context
+                .and_then(|step| step.turn.extension_snapshot())
+                .map_or_else(
+                    || skills::load_skill_by_name(skill_id),
+                    |snapshot| {
+                        skills::load_skill_by_name_with_config(skill_id, snapshot.skill_configs())
+                    },
+                ) {
                 Ok(loaded) => loaded.metadata.astro_tools,
                 Err(_) => return,
             },
@@ -516,33 +557,53 @@ impl AgentLoop {
                 types::ToolOutput::Media { assets, .. } => {
                     types::ToolOutput::Media { text: s, assets }
                 }
+                types::ToolOutput::FileChanges { changes, .. } => {
+                    types::ToolOutput::FileChanges { text: s, changes }
+                }
                 _ => types::ToolOutput::from(s),
             },
             _ => raw_result,
         };
-        let post = self.fire_post_tool_use_hook(::hooks::HookPayload {
-            session_id: self.session_id.clone(),
+        let post = self.post_tool_use_request(
             turn_id,
-            tool_name: Some(name.into()),
-            tool_input: Some(args_owned.clone()),
-            tool_response: Some(serde_json::Value::String(result.text().to_string())),
-            detail: {
-                let preview: String = result.text().chars().take(200).collect();
-                format!("{name} → {preview}")
-            },
-            ..Default::default()
-        });
+            name,
+            format!("direct:{name}"),
+            args_owned.clone(),
+            serde_json::Value::String(result.text().to_string()),
+        );
+        let post = self.run_post_tool_use_hook(post);
         let mut model_text = result.text().to_string();
-        if let Some(reason) = post.block_reason {
-            model_text = format!("Tool result blocked by PostToolUse hook: {reason}");
+        if post.should_block {
+            model_text = format!(
+                "Tool result blocked by PostToolUse hook: {}",
+                post.feedback_message
+                    .as_deref()
+                    .unwrap_or("hook requested blocking")
+            );
         }
         if !post.additional_contexts.is_empty() {
             model_text.push_str("\n\n[PostToolUse additional context]\n");
             model_text.push_str(&post.additional_contexts.join("\n\n"));
         }
-        if !post.feedback_messages.is_empty() {
-            model_text.push_str("\n\n[PostToolUse feedback]\n");
-            model_text.push_str(&post.feedback_messages.join("\n\n"));
+        if !post.should_block {
+            if let Some(feedback) = post.feedback_message {
+                model_text.push_str("\n\n[PostToolUse feedback]\n");
+                model_text.push_str(&feedback);
+            }
+        }
+        let output_token_limit = self
+            .services
+            .tool_registry
+            .read()
+            .expect("tool registry lock poisoned")
+            .get(name)
+            .and_then(|entry| entry.output_token_limit);
+        if let Some(tokens) = output_token_limit {
+            let max_bytes = tokens
+                .saturating_mul(24)
+                .div_ceil(5)
+                .min(types::MAX_TOOL_RESULT_BYTES);
+            model_text = types::truncate_tool_result(&model_text, max_bytes);
         }
         if model_text == result.text() {
             result
@@ -551,6 +612,10 @@ impl AgentLoop {
                 types::ToolOutput::Media { assets, .. } => types::ToolOutput::Media {
                     text: model_text,
                     assets,
+                },
+                types::ToolOutput::FileChanges { changes, .. } => types::ToolOutput::FileChanges {
+                    text: model_text,
+                    changes,
                 },
                 _ => types::ToolOutput::from(model_text),
             }
@@ -568,6 +633,7 @@ mod tests {
         let session = AgentLoop::new(super::super::Config::with_defaults(
             dir.path().to_path_buf(),
         ))
+        .await
         .unwrap();
         let bus = session.hook_bus();
         bus.register(::hooks::POST_TOOL_USE, |_| {
@@ -594,6 +660,41 @@ mod tests {
         assert!(output.text().contains("safe replacement context"));
         assert!(output.text().contains("review this failure"));
         assert!(!output.text().contains("raw side-effect result"));
+    }
+
+    #[tokio::test]
+    async fn mcp_output_limit_is_reapplied_after_post_tool_hooks() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = AgentLoop::new(super::super::Config::with_defaults(
+            dir.path().to_path_buf(),
+        ))
+        .await
+        .unwrap();
+        session
+            .services
+            .tool_registry
+            .write()
+            .unwrap()
+            .register(types::ToolEntry {
+                name: "mcp__demo__read".into(),
+                toolset: mcp::MCP_TOOLSET.into(),
+                output_token_limit: Some(1),
+                ..types::ToolEntry::lifecycle_defaults()
+            });
+        session.hook_bus().register(::hooks::POST_TOOL_USE, |_| {
+            ::hooks::HookOutcome::InjectContext("hook-expanded-context".repeat(20))
+        });
+
+        let output = session
+            .finalize_tool_call_result(
+                "mcp__demo__read",
+                &serde_json::json!({}),
+                types::ToolOutput::from("short"),
+            )
+            .await;
+
+        assert!(output.text().starts_with("short"));
+        assert!(output.text().contains("[truncated]"));
     }
 
     #[test]

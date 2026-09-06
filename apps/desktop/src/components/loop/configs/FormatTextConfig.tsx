@@ -9,7 +9,13 @@ interface ConfigProps {
   aiModel?: string;
 }
 
-export default function FormatTextConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function FormatTextConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

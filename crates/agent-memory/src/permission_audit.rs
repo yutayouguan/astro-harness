@@ -66,6 +66,9 @@ pub struct PermissionAuditEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
     pub capabilities: Vec<PermissionAuditCapability>,
+    /// 审批决策理由（smart approval 模型返回或人工审批标记），最长 500 字符。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
     pub created_at: String,
 }
 
@@ -95,6 +98,7 @@ impl PermissionAuditEvent {
                 .iter()
                 .map(summarize_capability)
                 .collect(),
+            reasoning: None,
             created_at: Utc::now().to_rfc3339(),
         }
     }
@@ -111,6 +115,17 @@ impl PermissionAuditEvent {
 
     pub fn with_duration_ms(mut self, duration_ms: u64) -> Self {
         self.duration_ms = Some(duration_ms);
+        self
+    }
+
+    pub fn with_reasoning(mut self, reasoning: impl Into<String>) -> Self {
+        let text = reasoning.into();
+        self.reasoning = Some(if text.chars().count() > 500 {
+            let truncated: String = text.chars().take(500).collect();
+            format!("{truncated}...")
+        } else {
+            text
+        });
         self
     }
 }
@@ -169,7 +184,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
 }
 
 fn audit_dir(base: &Path) -> PathBuf {
-    base.join("audit")
+    base.join("memory").join("audit")
 }
 
 pub fn permission_audit_path(base: &Path) -> PathBuf {
@@ -341,7 +356,7 @@ mod tests {
             session_id: "session-1".into(),
             turn_id: Some("turn-1".into()),
             tool_call_id: "call-1".into(),
-            tool_name: "terminal".into(),
+            tool_name: "exec_command".into(),
             summary: "run command".into(),
             capabilities: vec![PermissionCapability::ProcessSpawn {
                 program: "/bin/sh".into(),

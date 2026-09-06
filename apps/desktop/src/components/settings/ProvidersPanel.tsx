@@ -17,7 +17,6 @@ import {
   CircleDollarSign,
   ExternalLink,
   Eye,
-  EyeOff,
   FileText,
   Globe,
   GripVertical,
@@ -30,9 +29,9 @@ import {
   LoaderCircle,
   MessageCircle,
   Mic,
+  MoreHorizontal,
   Music,
   Plus,
-  Power,
   RefreshCw,
   Save,
   Search,
@@ -48,11 +47,13 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { Eye as EyeData, EyeOff as EyeOffData } from "lucide";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
-import { SelectMenu } from "../ui/SelectMenu";
+import { Button, IconButton, PopoverSurface, SelectMenu, Surface } from "../ui";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
@@ -85,13 +86,13 @@ import type {
 } from "../../types";
 
 /** 聊天后备链上限（与后端 / expand 一致） */
-const MAX_CHAT_FALLBACKS = 3;
+const MAX_MODEL_FALLBACKS = 3;
 
 /** 规范化草稿中的后备列表（截断 + 空 model → null） */
 function normalizeFallback(
   entries: ProviderFallbackEntry[] | undefined | null,
 ): ProviderFallbackEntry[] {
-  return (entries ?? []).slice(0, MAX_CHAT_FALLBACKS).map((e) => {
+  return (entries ?? []).slice(0, MAX_MODEL_FALLBACKS).map((e) => {
     const model = e.model?.trim();
     return {
       provider_id: e.provider_id,
@@ -104,7 +105,11 @@ function trimSlash(s: string): string {
   return s.replace(/\/+$/, "");
 }
 
-function resolveEndpointPreview(kind: string, endpoint: string, apiMode?: string): string {
+function resolveEndpointPreview(
+  kind: string,
+  endpoint: string,
+  apiMode?: string,
+): string {
   const base = trimSlash(endpoint.trim());
   if (!base) return "";
   if (apiMode === "responses") {
@@ -186,7 +191,7 @@ type Draft = {
   tts_model: string;
   music_model: string;
   vision_model: string;
-  api_mode: string;
+  embedding_model: string;
 };
 
 type DetailTab = "chat" | "models" | "media" | "voice" | "embedding";
@@ -198,7 +203,7 @@ const MEDIA_MODEL_DEFAULTS: Record<
   { image: string; video: string; tts: string; music: string; vision: string }
 > = {
   google: {
-    image: "gemini-3.1-flash-image",
+    image: "nano-banana-pro-preview",
     video: "veo-3.1-generate-preview",
     tts: "gemini-3.1-flash-tts-preview",
     music: "lyria-3-clip-preview",
@@ -211,6 +216,13 @@ const MEDIA_MODEL_DEFAULTS: Record<
     music: "",
     vision: "gpt-4o",
   },
+  azure: {
+    image: "gpt-image-2",
+    video: "",
+    tts: "",
+    music: "",
+    vision: "",
+  },
   minimax: {
     image: "image-01",
     video: "MiniMax-H3",
@@ -221,7 +233,13 @@ const MEDIA_MODEL_DEFAULTS: Record<
 };
 
 function supportsMediaModels(p: ProviderDto): boolean {
-  return !!(p.supports_image || p.supports_video || p.supports_tts || p.supports_music || p.supports_asr);
+  return !!(
+    p.supports_image ||
+    p.supports_video ||
+    p.supports_tts ||
+    p.supports_music ||
+    p.supports_asr
+  );
 }
 
 function supportsVoice(p: ProviderDto): boolean {
@@ -244,7 +262,7 @@ function draftFromProvider(p: ProviderDto): Draft {
     tts_model: p.tts_model?.trim() ?? "",
     music_model: p.music_model?.trim() ?? "",
     vision_model: p.vision_model?.trim() ?? "",
-    api_mode: p.api_mode ?? "",
+    embedding_model: p.embedding_model?.trim() ?? "",
   };
 }
 
@@ -266,7 +284,7 @@ function providerSaveInput(
     tts_model: draft.tts_model.trim(),
     music_model: draft.music_model.trim(),
     vision_model: draft.vision_model.trim(),
-    api_mode: draft.api_mode,
+    embedding_model: draft.embedding_model.trim(),
   };
 }
 
@@ -301,14 +319,18 @@ function IconInfo(props: SVGProps<SVGSVGElement>) {
   return <Info size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
-/** 显示密钥图标 */
-function IconEye(props: SVGProps<SVGSVGElement>) {
-  return <Eye size={14} strokeWidth={2} aria-hidden {...props} />;
-}
-
-/** 隐藏密钥图标 */
-function IconEyeOff(props: SVGProps<SVGSVGElement>) {
-  return <EyeOff size={14} strokeWidth={2} aria-hidden {...props} />;
+/** 密钥可见性图标（显示 / 隐藏之间 morph） */
+function IconKeyVisibility({ visible }: { visible: boolean }) {
+  return (
+    <MorphToggleIcon
+      active={visible}
+      activeIcon={EyeOffData}
+      inactiveIcon={EyeData}
+      size={14}
+      strokeWidth={2}
+      aria-hidden
+    />
+  );
 }
 
 /** 掩码展示 API Key（保留首尾若干字符） */
@@ -335,11 +357,6 @@ function IconSave(props: SVGProps<SVGSVGElement>) {
 /** 设为默认 */
 function IconStar(props: SVGProps<SVGSVGElement>) {
   return <Star size={16} strokeWidth={2} aria-hidden {...props} />;
-}
-
-/** 启用/停用 */
-function IconPower(props: SVGProps<SVGSVGElement>) {
-  return <Power size={16} strokeWidth={2} aria-hidden {...props} />;
 }
 
 /** 删除供应商 */
@@ -390,7 +407,12 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const addKindOptions = useMemo(
-    () => ADD_KINDS.map((k) => ({ value: k, label: t(kindLabelKey(k)), icon: <ProviderBrandIcon kind={k} /> })),
+    () =>
+      ADD_KINDS.map((k) => ({
+        value: k,
+        label: t(kindLabelKey(k)),
+        icon: <ProviderBrandIcon kind={k} />,
+      })),
     [t],
   );
   const [state, setState] = useState<ProvidersStateDto | null>(null);
@@ -404,6 +426,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [providerActionsOpen, setProviderActionsOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingAll, setTestingAll] = useState(false);
   const [listingModelsRequest, setListingModelsRequest] = useState<{
@@ -454,6 +477,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const modelsRequestRef = useRef(0);
   const healthRunRef = useRef(0);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const providerActionsAnchorRef = useRef<HTMLButtonElement | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
   selectedIdRef.current = selectedId;
@@ -466,28 +490,31 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     [onStateChange],
   );
 
-  const checkProviderHealth = useCallback(async (provider: ProviderDto, runId?: number) => {
-    if (!provider.enabled) return;
-    // 需要密钥却未配置 → 视为健康检查失败
-    if (provider.kind !== "ollama" && !provider.has_api_key) {
-      if (runId !== undefined && runId !== healthRunRef.current) return;
-      setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
-      return;
-    }
-    setHealthById((prev) => ({ ...prev, [provider.id]: "checking" }));
-    try {
-      // 用拉取模型列表做轻量连通性探测（不消耗生成额度）
-      await invoke<ProviderModelsResult>("list_provider_models", {
-        id: provider.id,
-      });
-      // 关闭后忽略过期结果，避免又把灰点刷成红/绿
-      if (runId !== undefined && runId !== healthRunRef.current) return;
-      setHealthById((prev) => ({ ...prev, [provider.id]: "ok" }));
-    } catch {
-      if (runId !== undefined && runId !== healthRunRef.current) return;
-      setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
-    }
-  }, []);
+  const checkProviderHealth = useCallback(
+    async (provider: ProviderDto, runId?: number) => {
+      if (!provider.enabled) return;
+      // 需要密钥却未配置 → 视为健康检查失败
+      if (provider.kind !== "ollama" && !provider.has_api_key) {
+        if (runId !== undefined && runId !== healthRunRef.current) return;
+        setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
+        return;
+      }
+      setHealthById((prev) => ({ ...prev, [provider.id]: "checking" }));
+      try {
+        // 用拉取模型列表做轻量连通性探测（不消耗生成额度）
+        await invoke<ProviderModelsResult>("list_provider_models", {
+          id: provider.id,
+        });
+        // 关闭后忽略过期结果，避免又把灰点刷成红/绿
+        if (runId !== undefined && runId !== healthRunRef.current) return;
+        setHealthById((prev) => ({ ...prev, [provider.id]: "ok" }));
+      } catch {
+        if (runId !== undefined && runId !== healthRunRef.current) return;
+        setHealthById((prev) => ({ ...prev, [provider.id]: "fail" }));
+      }
+    },
+    [],
+  );
 
   const runHealthChecks = useCallback(
     (providers: ProviderDto[]) => {
@@ -549,8 +576,14 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     return t("providers.statusChecking");
   };
 
-  const selected =
-    state?.providers.find((p) => p.id === selectedId) ?? null;
+  const selected = state?.providers.find((p) => p.id === selectedId) ?? null;
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selected || !draft) return false;
+    return (
+      JSON.stringify(providerSaveInput(selected, draft)) !==
+      JSON.stringify(providerSaveInput(selected, draftFromProvider(selected)))
+    );
+  }, [draft, selected]);
   const listingModels = isMediaModelsRequestLoading(
     selected?.id ?? null,
     modelsRequestRef.current,
@@ -590,6 +623,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     setExpandedModelId(null);
     setShowAddModel(false);
     setCustomModelInput("");
+    setProviderActionsOpen(false);
     setError(null);
     autoFetchIdRef.current = null;
 
@@ -634,23 +668,29 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     selected?.tts_model,
     selected?.music_model,
     selected?.vision_model,
+    selected?.embedding_model,
   ]);
 
   const mediaOptions = useCallback(
     (capability: MediaCapabilityKey, defaultModelId: string) =>
-      buildMediaModelOptions(models, capability, defaultModelId).map((option) => ({
-        value: option.value,
-        label:
-          option.value === ""
-            ? t("providers.mediaDefaultOption", { model: option.modelId })
-            : option.modelId,
-        icon: option.value ? <ModelBrandIcon modelId={option.modelId} /> : undefined,
-      })),
+      buildMediaModelOptions(models, capability, defaultModelId).map(
+        (option) => ({
+          value: option.value,
+          label:
+            option.value === ""
+              ? t("providers.mediaDefaultOption", { model: option.modelId })
+              : option.modelId,
+          icon: option.value ? (
+            <ModelBrandIcon modelId={option.modelId} />
+          ) : undefined,
+        }),
+      ),
     [models, t],
   );
 
   useEffect(() => {
-    if (sanitizeModelsProviderId !== selected?.id || !selected || !draft) return;
+    if (sanitizeModelsProviderId !== selected?.id || !selected || !draft)
+      return;
     const defaults = MEDIA_MODEL_DEFAULTS[selected.kind];
     if (!defaults) return;
     setDraft((current) => {
@@ -669,20 +709,18 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
           current.vision_model,
           buildMediaModelOptions(models, "vision", defaults.vision),
         ),
-        video_model:
-          selected.supports_video
-            ? sanitizeMediaModelValue(
-                current.video_model,
-                buildMediaModelOptions(models, "video_gen", defaults.video),
-              )
-            : "",
-        music_model:
-          selected.supports_music
-            ? sanitizeMediaModelValue(
-                current.music_model,
-                buildMediaModelOptions(models, "music_gen", defaults.music),
-              )
-            : "",
+        video_model: selected.supports_video
+          ? sanitizeMediaModelValue(
+              current.video_model,
+              buildMediaModelOptions(models, "video_gen", defaults.video),
+            )
+          : "",
+        music_model: selected.supports_music
+          ? sanitizeMediaModelValue(
+              current.music_model,
+              buildMediaModelOptions(models, "music_gen", defaults.music),
+            )
+          : "",
       };
       return JSON.stringify(next) === JSON.stringify(current) ? current : next;
     });
@@ -783,7 +821,23 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     if (!isTauri()) return;
     setError(null);
     try {
-      const next = await invoke<ProvidersStateDto>("set_active_provider", { id });
+      const next = await invoke<ProvidersStateDto>("set_active_provider", {
+        id,
+      });
+      applyState(next);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const setImageActive = async (id: string) => {
+    if (!isTauri()) return;
+    setError(null);
+    try {
+      const next = await invoke<ProvidersStateDto>(
+        "set_active_image_provider",
+        { id },
+      );
       applyState(next);
     } catch (err) {
       setError(String(err));
@@ -900,7 +954,10 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
         const el = listRef.current;
         if (el) {
           el.classList.add("is-settled");
-          const onEnd = () => { el.classList.remove("is-settled"); el.removeEventListener("animationend", onEnd); };
+          const onEnd = () => {
+            el.classList.remove("is-settled");
+            el.removeEventListener("animationend", onEnd);
+          };
           el.addEventListener("animationend", onEnd);
         }
       }
@@ -941,11 +998,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
         setError("删除未生效，请重试");
         return;
       }
-      setSelectedId(
-        next.active_provider_id ??
-        next.providers[0]?.id ??
-        null,
-      );
+      setSelectedId(next.active_provider_id ?? next.providers[0]?.id ?? null);
     } catch (err) {
       setError(String(err));
     }
@@ -1036,9 +1089,12 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
           provider: providerSaveInput(provider, draft),
         }).then(applyState);
       }
-      const result = await invoke<ProviderModelsResult>("list_provider_models", {
-        id: provider.id,
-      });
+      const result = await invoke<ProviderModelsResult>(
+        "list_provider_models",
+        {
+          id: provider.id,
+        },
+      );
       const decision = evaluateMediaModelsResult(
         selectedIdRef.current,
         modelsRequestRef.current,
@@ -1063,8 +1119,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     } finally {
       if (isCurrentRequest()) {
         setListingModelsRequest((current) =>
-          current?.providerId === provider.id &&
-          current.requestId === requestId
+          current?.providerId === provider.id && current.requestId === requestId
             ? null
             : current,
         );
@@ -1161,10 +1216,13 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     // 先清空旧延时，批量结果回来后一次性写入
     setModelLatencies({});
     try {
-      const results = await invoke<ProviderTestResult[]>("test_provider_models", {
-        id: selected.id,
-        models: models.map((m) => m.id),
-      });
+      const results = await invoke<ProviderTestResult[]>(
+        "test_provider_models",
+        {
+          id: selected.id,
+          models: models.map((m) => m.id),
+        },
+      );
       const next: Record<string, ModelLatency> = {};
       for (const result of results) {
         next[result.model] = { ok: result.ok, latency_ms: result.latency_ms };
@@ -1266,6 +1324,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
   const enabledCount = state?.providers.filter((p) => p.enabled).length ?? 0;
   const total = state?.providers.length ?? 0;
   const isActive = state?.active_provider_id === selected?.id;
+  const isImageActive = state?.active_image_provider_id === selected?.id;
   const needsKey = selected?.kind !== "ollama";
   const filteredModels = useMemo(() => {
     const q = modelFilter.trim().toLowerCase();
@@ -1296,12 +1355,13 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
     state?.providers.filter(
       (p) =>
         p.enabled &&
+        p.supports_responses_api === true &&
         p.id !== selected?.id &&
         !fallbackEntries.some((f) => f.provider_id === p.id),
     ) ?? [];
 
   const addFallback = (providerId: string) => {
-    if (!providerId || fallbackEntries.length >= MAX_CHAT_FALLBACKS) return;
+    if (!providerId || fallbackEntries.length >= MAX_MODEL_FALLBACKS) return;
     setDraft((d) =>
       d
         ? {
@@ -1309,7 +1369,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
             fallback: [
               ...d.fallback,
               { provider_id: providerId, model: null },
-            ].slice(0, MAX_CHAT_FALLBACKS),
+            ].slice(0, MAX_MODEL_FALLBACKS),
           }
         : d,
     );
@@ -1317,9 +1377,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
 
   const removeFallback = (index: number) => {
     setDraft((d) =>
-      d
-        ? { ...d, fallback: d.fallback.filter((_, i) => i !== index) }
-        : d,
+      d ? { ...d, fallback: d.fallback.filter((_, i) => i !== index) } : d,
     );
   };
 
@@ -1328,9 +1386,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
       if (!d) return d;
       const trimmed = model.trim();
       const next = d.fallback.map((entry, i) =>
-        i === index
-          ? { ...entry, model: trimmed ? trimmed : null }
-          : entry,
+        i === index ? { ...entry, model: trimmed ? trimmed : null } : entry,
       );
       return { ...d, fallback: next };
     });
@@ -1408,7 +1464,11 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
 
   return (
     <div className="providers-page" data-tone={tone ?? "cyan"}>
-      <div className="providers-page-tabs" role="tablist" aria-label={t("providers.pageTabs")}>
+      <div
+        className="providers-page-tabs"
+        role="tablist"
+        aria-label={t("providers.pageTabs")}
+      >
         <button
           type="button"
           role="tab"
@@ -1434,1409 +1494,1771 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
       {pageTab === "auxiliary" ? (
         <AuxiliaryModelsPanel active={active} embedded tone={tone} />
       ) : (
-      <div className="providers-layout">
-        <aside className="providers-pane providers-pane-list">
-          <div className="providers-pane-head">
-            <h2>{t("providers.listTitle")}</h2>
-            <p>
-              {t("providers.listSub", {
-                count: String(enabledCount),
-                total: String(total),
-              })}
-            </p>
-          </div>
-
-          <ul
-            className={`providers-list ${drag ? "is-reordering" : ""}`}
-            ref={listRef}
+        <div className="providers-layout">
+          <Surface
+            variant="card"
+            className="providers-pane providers-pane-list"
+            role="complementary"
           >
-            {loading && !state && (
-              <li className="providers-empty">{t("skills.refreshing")}</li>
-            )}
-            {state?.providers
-            .slice()
-            .sort((a, b) => {
-              const rank = (p: typeof a) => {
-                if (!p.enabled) return 2;
-                const h = healthById[p.id];
-                if (h === "ok") return 0;
-                return 1;
-              };
-              return rank(a) - rank(b);
-            })
-            .map((p, index) => {
-              const activeDefault = state.active_provider_id === p.id;
-              const isDragging = drag?.id === p.id;
-              const showInsertBefore =
-                !!drag &&
-                drag.insertIndex === index &&
-                drag.fromIndex !== drag.insertIndex;
-              return (
-                <li
-                  key={p.id}
-                  data-provider-id={p.id}
-                  className={isDragging ? "is-dragging" : ""}
-                >
-                  {showInsertBefore && (
-                    <div className="providers-drop-indicator" aria-hidden />
-                  )}
-                  <button
-                    type="button"
-                    className={`providers-list-item ${selectedId === p.id ? "is-selected" : ""}`}
-                    onClick={() => {
-                      if (drag) return;
-                      setSelectedId(p.id);
-                    }}
-                  >
-                    <span
-                      className="providers-drag-handle"
-                      title={t("providers.dragToReorder")}
-                      aria-label={t("providers.dragToReorder")}
-                      onPointerDown={(e) =>
-                        onDragHandlePointerDown(e, p, index)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <IconGrip />
-                    </span>
-                    <span className="providers-list-icon" aria-hidden>
-                      <ProviderBrandIcon kind={p.kind} />
-                    </span>
-                    <span className="providers-list-text">
-                      <span className="providers-list-name">
-                        {p.display_name}
-                        {activeDefault && (
-                          <span className="providers-badge">
-                            {t("providers.active")}
-                          </span>
-                        )}
-                      </span>
-                      <span className="providers-list-model">{p.model}</span>
-                    </span>
-                    <span
-                      className={`providers-status-dot ${statusDotClass(p.enabled, healthById[p.id])}`}
-                      title={statusDotTitle(p.enabled, healthById[p.id])}
-                    />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-
-          {drag &&
-            state &&
-            createPortal(
-              (() => {
-                const p = state.providers.find((x) => x.id === drag.id);
-                if (!p) return null;
-                const activeDefault = state.active_provider_id === p.id;
-                return (
-                  <div
-                    className="providers-drag-ghost"
-                    style={{
-                      width: drag.width,
-                      height: drag.height,
-                      transform: `translate(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px)`,
-                    }}
-                  >
-                    <div className="providers-list-item is-ghost">
-                      <span className="providers-drag-handle is-visible">
-                        <IconGrip />
-                      </span>
-                      <span className="providers-list-icon" aria-hidden>
-                        <ProviderBrandIcon kind={p.kind} />
-                      </span>
-                      <span className="providers-list-text">
-                        <span className="providers-list-name">
-                          {p.display_name}
-                          {activeDefault && (
-                            <span className="providers-badge">
-                              {t("providers.active")}
-                            </span>
-                          )}
-                        </span>
-                        <span className="providers-list-model">{p.model}</span>
-                      </span>
-                      <span
-                        className={`providers-status-dot ${statusDotClass(p.enabled, healthById[p.id])}`}
-                      />
-                    </div>
-                  </div>
-                );
-              })(),
-              document.body,
-            )}
-
-          <div className="providers-add-row">
-            <div className="providers-kind-picker">
-              <SelectMenu
-                className="providers-kind-select"
-                value={addKind}
-                aria-label={t("providers.add")}
-                openDirection="up"
-                onChange={(v) => setAddKind(v as ProviderKindId)}
-                options={addKindOptions}
-              />
+            <div className="providers-pane-head">
+              <h2>{t("providers.listTitle")}</h2>
+              <p>
+                {t("providers.listSub", {
+                  count: String(enabledCount),
+                  total: String(total),
+                })}
+              </p>
             </div>
-            <button
-              type="button"
-              className="providers-icon-btn providers-add-btn"
-              title={t("providers.add")}
-              aria-label={t("providers.add")}
-              onClick={() => void addProvider()}
+
+            <ul
+              className={`providers-list ${drag ? "is-reordering" : ""}`}
+              ref={listRef}
             >
-              <IconPlus />
-            </button>
-          </div>
-        </aside>
-
-        <section className="providers-pane providers-pane-detail">
-          <div className="providers-pane-head">
-            <div className="providers-pane-head-text">
-              <h2>{t("providers.detailTitle")}</h2>
-              <p>{t("providers.detailSub")}</p>
-            </div>
-            {selected && draft && (
-              <div className="providers-pane-head-actions">
-                <button
-                  type="button"
-                  className="providers-icon-btn is-primary"
-                  disabled={saving}
-                  title={saving ? t("providers.saving") : t("providers.save")}
-                  aria-label={saving ? t("providers.saving") : t("providers.save")}
-                  onClick={() => void saveDraft()}
-                >
-                  {saving ? <IconLoader className="is-spin" /> : <IconSave />}
-                </button>
-                {!isActive && draft.enabled && (
-                  <button
-                    type="button"
-                    className="providers-icon-btn"
-                    title={t("providers.setActive")}
-                    aria-label={t("providers.setActive")}
-                    onClick={() => void setActive(selected.id)}
-                  >
-                    <IconStar />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="providers-icon-btn is-danger"
-                  title={t("providers.delete")}
-                  aria-label={t("providers.delete")}
-                  onClick={() => void deleteProvider()}
-                >
-                  <IconTrash />
-                </button>
-                <button
-                  type="button"
-                  className={`providers-icon-btn ${draft.enabled ? "is-active" : ""}`}
-                  aria-pressed={draft.enabled}
-                  title={
-                    draft.enabled
-                      ? t("providers.enabled")
-                      : t("providers.disabled")
-                  }
-                  aria-label={
-                    draft.enabled
-                      ? t("providers.enabled")
-                      : t("providers.disabled")
-                  }
-                  disabled={saving}
-                  onClick={() => void toggleEnabled()}
-                >
-                  <IconPower />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {!selected || !draft ? (
-            <EmptyIllustration
-              scene="providers"
-              className="providers-empty-illust"
-              title={t("providers.emptySelect")}
-            />
-          ) : (
-            <div
-              className={`providers-form ${detailTab === "models" ? "is-fill" : ""}`.trim()}
-            >
-              <div className="providers-form-head">
-                <span className="providers-form-icon" aria-hidden>
-                  <ProviderBrandIcon kind={selected.kind} />
-                </span>
-                <div className="providers-form-head-text">
-                  <h3>
-                    {selected.display_name}
-                    {isActive && (
-                      <span className="providers-badge">
-                        {t("providers.active")}
-                      </span>
-                    )}
-                  </h3>
-                  <p className="providers-form-kind">
-                    {t(kindLabelKey(selected.kind))}
-                  </p>
-                </div>
-              </div>
-
-              <div className="providers-detail-tabs" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={detailTab === "chat"}
-                  className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
-                  onClick={() => setDetailTab("chat")}
-                >
-                  <MessageCircle size={14} strokeWidth={2} aria-hidden />
-                  {t("providers.tabChat")}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={detailTab === "models"}
-                  className={`providers-detail-tab ${detailTab === "models" ? "is-active" : ""}`}
-                  onClick={() => setDetailTab("models")}
-                >
-                  <Layers size={14} strokeWidth={2} aria-hidden />
-                  {t("providers.tabModels")}
-                  {models.length > 0 ? (
-                    <span className="providers-detail-tab-count">{models.length}</span>
-                  ) : null}
-                </button>
-                {supportsMediaModels(selected) ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailTab === "media"}
-                    className={`providers-detail-tab ${detailTab === "media" ? "is-active" : ""}`}
-                    onClick={() => setDetailTab("media")}
-                  >
-                    <Image size={14} strokeWidth={2} aria-hidden />
-                    {t("providers.tabMedia")}
-                  </button>
-                ) : null}
-                {supportsVoice(selected) ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailTab === "voice"}
-                    className={`providers-detail-tab ${detailTab === "voice" ? "is-active" : ""}`}
-                    onClick={() => setDetailTab("voice")}
-                  >
-                    <Mic size={14} strokeWidth={2} aria-hidden />
-                    {t("providers.tabVoice")}
-                  </button>
-                ) : null}
-                {supportsEmbedding(selected) ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={detailTab === "embedding"}
-                    className={`providers-detail-tab ${detailTab === "embedding" ? "is-active" : ""}`}
-                    onClick={() => setDetailTab("embedding")}
-                  >
-                    <Layers size={14} strokeWidth={2} aria-hidden />
-                    {t("providers.tabEmbedding")}
-                  </button>
-                ) : null}
-              </div>
-
-              {detailTab === "chat" && (
-              <>
-              <div className="providers-form-grid">
-                <label className="providers-field">
-                  <span className="providers-field-label">
-                    <IconTag />
-                    {t("providers.displayName")}
-                  </span>
-                  <input
-                    type="text"
-                    value={draft.display_name}
-                    onChange={(e) =>
-                      setDraft((d) =>
-                        d ? { ...d, display_name: e.target.value } : d,
-                      )
-                    }
-                  />
-                </label>
-
-                <label className="providers-field">
-                  <span className="providers-field-label">
-                    <IconBox />
-                    {t("providers.model")}
-                  </span>
-                  <input
-                    type="text"
-                    value={draft.model}
-                    onChange={(e) =>
-                      setDraft((d) =>
-                        d ? { ...d, model: e.target.value } : d,
-                      )
-                    }
-                  />
-                </label>
-                {selected.kind === "volcengine" && (
-                  <p className="providers-field-hint">{t("providers.volcengineModelHint")}</p>
-                )}
-
-                <label className="providers-field providers-field-span">
-                  <span className="providers-field-label">
-                    <IconLink />
-                    {t("providers.endpoint")}
-                    {selected.kind === "google" &&
-                      /\/v1beta\/openai(?:\/|$)/.test(draft.endpoint.trim()) && (
-                        <span
-                          className="providers-badge providers-badge--deprecated"
-                          title={t("providers.googleOpenaiCompatDeprecated")}
-                        >
-                          {t("providers.googleOpenaiCompatDeprecated")}
-                        </span>
-                      )}
-                  </span>
-                  <input
-                    type="url"
-                    value={draft.endpoint}
-                    onChange={(e) =>
-                      setDraft((d) =>
-                        d ? { ...d, endpoint: e.target.value } : d,
-                      )
-                    }
-                  />
-                </label>
-                {draft.endpoint.trim() && (
-                  <p className="providers-field-hint">
-                    → {resolveEndpointPreview(selected.kind, draft.endpoint, draft.api_mode)}
-                  </p>
-                )}
-
-                {selected.supports_responses_api && (
-                  <label className="providers-field providers-field-span">
-                    <span className="providers-field-label">
-                      <Zap size={14} />
-                      API 模式
-                    </span>
-                    <SelectMenu
-                      value={draft.api_mode === "responses" ? "responses" : "chat_completions"}
-                      onChange={(v) =>
-                        setDraft((d) =>
-                          d ? { ...d, api_mode: v === "responses" ? "responses" : "" } : d,
-                        )
-                      }
-                      options={[
-                        { value: "chat_completions", label: "Chat Completions" },
-                        { value: "responses", label: "Responses API" },
-                      ]}
-                    />
-                  </label>
-                )}
-              </div>
-
-              <div className="providers-fallback-block">
-                <div className="providers-fallback-head">
-                  <h4 className="providers-block-title">
-                    <IconWaypoints />
-                    聊天后备
-                  </h4>
-                  <span className="providers-fallback-count">
-                    {fallbackEntries.length}/{MAX_CHAT_FALLBACKS}
-                  </span>
-                </div>
-                <p className="providers-fallback-hint">
-                  {fallbackEntries.length === 0
-                    ? `失败时按序切换 · 最多 ${MAX_CHAT_FALLBACKS} 个`
-                    : `失败时按序切换`}
-                </p>
-                {fallbackEntries.length > 0 && (
-                  <ul className="providers-fallback-list">
-                    {fallbackEntries.map((entry, index) => {
-                      const options = fallbackModelsById[entry.provider_id] ?? [];
-                      const fallbackProvider = state?.providers.find(
-                        (p) => p.id === entry.provider_id,
-                      );
-                      const defaultModel = fallbackProvider?.model?.trim() || "";
-                      const selectedModel = entry.model?.trim() || "";
-                      const knownIds = new Set(options.map((m) => m.id));
-                      const orphanSelected =
-                        selectedModel && !knownIds.has(selectedModel)
-                          ? selectedModel
-                          : null;
-                      return (
-                      <li key={`${entry.provider_id}-${index}`} className="providers-fallback-row">
-                        <span className="providers-fallback-brand" aria-hidden>
-                          {fallbackProvider ? (
-                            <ProviderBrandIcon kind={fallbackProvider.kind} />
-                          ) : (
-                            <IconLayers />
-                          )}
-                        </span>
-                        <span className="providers-fallback-name" title={entry.provider_id}>
-                          {providerLabel(entry.provider_id)}
-                        </span>
-                        <SelectMenu
-                          className="providers-fallback-model"
-                          value={selectedModel}
-                          placeholder={t("providers.fallback.defaultModel")}
-                          aria-label={t("providers.fallback.modelOverride", { name: providerLabel(entry.provider_id) })}
-                          onChange={(v) => updateFallbackModel(index, v)}
-                          options={[
-                            {
-                              value: "",
-                              label: defaultModel
-                                ? `默认（${defaultModel}）`
-                                : "默认模型",
-                            },
-                            ...(orphanSelected
-                              ? [
-                                  {
-                                    value: orphanSelected,
-                                    label: orphanSelected,
-                                    icon: (
-                                      <ModelBrandIcon modelId={orphanSelected} />
-                                    ),
-                                  },
-                                ]
-                              : []),
-                            ...options.map((m) => ({
-                              value: m.id,
-                              label: m.display_name?.trim()
-                                ? `${m.display_name} (${m.id})`
-                                : m.id,
-                              icon: <ModelBrandIcon modelId={m.id} />,
-                            })),
-                          ]}
-                        />
-                        <button
-                          type="button"
-                          className="providers-icon-btn"
-                          title={t("providers.fallback.removeTitle")}
-                          aria-label={t("providers.fallback.removeAriaLabel", { name: providerLabel(entry.provider_id) })}
-                          onClick={() => removeFallback(index)}
-                        >
-                          <IconTrash />
-                        </button>
-                      </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                {fallbackEntries.length < MAX_CHAT_FALLBACKS && (
-                  <div className="providers-fallback-add">
-                    <span className="providers-fallback-add-icon" aria-hidden>
-                      <IconPlus />
-                    </span>
-                    <SelectMenu
-                      className="providers-fallback-add-select"
-                      value=""
-                      aria-label={t("providers.fallback.addAriaLabel")}
-                      disabled={fallbackCandidateProviders.length === 0}
-                      placeholder={
-                        fallbackCandidateProviders.length === 0
-                          ? t("providers.fallback.noneAvailable")
-                          : t("providers.fallback.addPlaceholder")
-                      }
-                      onChange={addFallback}
-                      options={fallbackCandidateProviders.map((p) => ({
-                        value: p.id,
-                        label: p.display_name,
-                        icon: <ProviderBrandIcon kind={p.kind} />,
-                      }))}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="providers-key-block">
-                <div className="providers-key-head">
-                  <h4 className="providers-block-title">
-                    <IconKey />
-                    {t("providers.apiKey")}
-                  </h4>
-                  {needsKey && selected.official_key_url && (
-                    <button
-                      type="button"
-                      className="providers-key-link"
-                      onClick={() => void openOfficialKey()}
-                    >
-                      {t("providers.getOfficialKey")}
-                    </button>
-                  )}
-                </div>
-                {!needsKey ? (
-                  <p className="providers-key-hint">
-                    {t("providers.noKeyRequired")}
-                  </p>
-                ) : (
-                  <>
-                    <div className="providers-key-row">
-                      <div className="providers-key-input-wrap">
-                        <input
-                          type="text"
-                          className="providers-key-input"
-                          value={apiKeyDisplayValue}
-                          readOnly={!apiKeyDirty && !!storedApiKey}
-                          onChange={(e) => {
-                            setApiKeyDirty(true);
-                            setApiKeyInput(e.target.value);
-                          }}
-                          onFocus={() => {
-                            if (!apiKeyDirty && storedApiKey) {
-                              setApiKeyDirty(true);
-                              setApiKeyInput(storedApiKey);
-                            }
-                          }}
-                          onBlur={() => {
-                            if (
-                              apiKeyDirty &&
-                              storedApiKey &&
-                              apiKeyInput.trim() === storedApiKey.trim()
-                            ) {
-                              setApiKeyDirty(false);
-                              setApiKeyInput("");
-                            }
-                          }}
-                          placeholder={t("providers.apiKeyPlaceholder")}
-                          autoComplete="off"
-                          spellCheck={false}
-                        />
-                        {storedApiKey && !apiKeyDirty && (
-                          <button
-                            type="button"
-                            className="providers-key-eye"
-                            title={
-                              showApiKey
-                                ? t("providers.hideKey")
-                                : t("providers.showKey")
-                            }
-                            aria-label={
-                              showApiKey
-                                ? t("providers.hideKey")
-                                : t("providers.showKey")
-                            }
-                            onClick={() => setShowApiKey((v) => !v)}
-                          >
-                            {showApiKey ? <IconEyeOff /> : <IconEye />}
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="providers-icon-btn is-primary"
-                        disabled={!canSaveApiKey || saving}
-                        title={t("providers.saveKey")}
-                        aria-label={t("providers.saveKey")}
-                        onClick={() => void saveApiKey()}
-                      >
-                        {saving ? <IconLoader className="is-spin" /> : <IconSave />}
-                      </button>
-                      <button
-                        type="button"
-                        className={`providers-icon-btn ${testing ? "is-busy" : ""}`}
-                        disabled={testing || !selected.has_api_key}
-                        title={testing ? t("providers.testing") : t("providers.test")}
-                        aria-label={testing ? t("providers.testing") : t("providers.test")}
-                        aria-busy={testing}
-                        onClick={() => void testConnection()}
-                      >
-                        {testing ? <IconLoader className="is-spin" /> : <IconStethoscope />}
-                      </button>
-                      {selected.key_source === "keyring" && (
-                        <button
-                          type="button"
-                          className="providers-icon-btn"
-                          title={t("providers.clearKey")}
-                          aria-label={t("providers.clearKey")}
-                          onClick={() => void clearApiKey()}
-                        >
-                          <IconTrash />
-                        </button>
-                      )}
-                    </div>
-                    {testResult && (
-                      <p
-                        className={`providers-test-result ${testResult.ok ? "ok" : "fail"}`}
-                      >
-                        {testResult.ok
-                          ? t("providers.testOk", {
-                              ms: String(testResult.latency_ms),
-                            })
-                          : t("providers.testFail", {
-                              ms: String(testResult.latency_ms),
-                            })}
-                        <span className="providers-test-model">
-                          {" "}
-                          · {testResult.model}
-                        </span>
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-
-              </>
+              {loading && !state && (
+                <li className="providers-empty">{t("skills.refreshing")}</li>
               )}
-
-              {detailTab === "models" && (
-              <div className="providers-models-panel">
-              <div className="providers-models-block">
-                <div className="providers-models-head">
-                  <div className="providers-models-title-row">
-                    <h4 className="providers-block-title">
-                      <IconLayers />
-                      {t("providers.modelsTitle")}
-                    </h4>
-                    {models.length > 0 && (
-                      <span className="providers-models-count">
-                        {filteredModels.length}
-                      </span>
-                    )}
-                    {modelsLatency != null && (
-                      <span
-                        className="providers-models-latency"
-                        title={t("providers.modelsLatency", {
-                          ms: String(modelsLatency),
-                        })}
-                      >
-                        {modelsLatency} ms
-                      </span>
-                    )}
-                  </div>
-                  <div className="providers-models-toolbar">
-                    <button
-                      type="button"
-                      className={`providers-icon-btn ${testingAll ? "is-busy" : ""}`}
-                      disabled={
-                        testingAll ||
-                        testing ||
-                        models.length === 0 ||
-                        (needsKey && !selected.has_api_key)
-                      }
-                      title={t("providers.healthCheck")}
-                      aria-label={t("providers.healthCheck")}
-                      aria-busy={testingAll}
-                      onClick={() => void testAllModels()}
+              {state?.providers
+                .slice()
+                .sort((a, b) => {
+                  const rank = (p: typeof a) => {
+                    if (!p.enabled) return 2;
+                    const h = healthById[p.id];
+                    if (h === "ok") return 0;
+                    return 1;
+                  };
+                  return rank(a) - rank(b);
+                })
+                .map((p, index) => {
+                  const activeDefault = state.active_provider_id === p.id;
+                  const isDragging = drag?.id === p.id;
+                  const showInsertBefore =
+                    !!drag &&
+                    drag.insertIndex === index &&
+                    drag.fromIndex !== drag.insertIndex;
+                  return (
+                    <li
+                      key={p.id}
+                      data-provider-id={p.id}
+                      className={isDragging ? "is-dragging" : ""}
                     >
-                      <IconStethoscope />
-                    </button>
-                    <button
-                      type="button"
-                      className={`providers-icon-btn ${showFilter ? "is-active" : ""}`}
-                      disabled={models.length === 0}
-                      title={t("providers.toggleSearch")}
-                      aria-label={t("providers.toggleSearch")}
-                      aria-pressed={showFilter}
-                      onClick={() => setShowFilter((v) => !v)}
-                    >
-                      <IconSearch />
-                    </button>
-                    <button
-                      type="button"
-                      className={`providers-icon-btn ${sortByNewest ? "is-active" : ""}`}
-                      disabled={models.length === 0}
-                      title={t("providers.sortNewest")}
-                      aria-label={t("providers.sortNewest")}
-                      aria-pressed={sortByNewest}
-                      onClick={() => setSortByNewest((v) => !v)}
-                    >
-                      <IconSortNewest />
-                    </button>
-                    <button
-                      type="button"
-                      className={`providers-icon-btn ${onlyThisWeek ? "is-active" : ""}`}
-                      disabled={models.length === 0}
-                      title={t("providers.filterThisWeek")}
-                      aria-label={t("providers.filterThisWeek")}
-                      aria-pressed={onlyThisWeek}
-                      onClick={() => setOnlyThisWeek((v) => !v)}
-                    >
-                      <IconThisWeek />
-                    </button>
-                    {!needsKey && (
+                      {showInsertBefore && (
+                        <div className="providers-drop-indicator" aria-hidden />
+                      )}
                       <button
                         type="button"
-                        className={`providers-icon-btn ${testing ? "is-busy" : ""}`}
-                        disabled={testing || testingAll}
-                        title={testing ? t("providers.testing") : t("providers.test")}
-                        aria-label={testing ? t("providers.testing") : t("providers.test")}
-                        aria-busy={testing}
-                        onClick={() => void testConnection()}
+                        className={`providers-list-item ${selectedId === p.id ? "is-selected" : ""}`}
+                        onClick={() => {
+                          if (drag) return;
+                          setSelectedId(p.id);
+                        }}
                       >
-                        {testing ? <IconLoader className="is-spin" /> : <IconStethoscope />}
+                        <span
+                          className="providers-drag-handle"
+                          title={t("providers.dragToReorder")}
+                          aria-label={t("providers.dragToReorder")}
+                          onPointerDown={(e) =>
+                            onDragHandlePointerDown(e, p, index)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconGrip />
+                        </span>
+                        <span className="providers-list-icon" aria-hidden>
+                          <ProviderBrandIcon kind={p.kind} />
+                        </span>
+                        <span className="providers-list-text">
+                          <span className="providers-list-name">
+                            {p.display_name}
+                            {activeDefault && (
+                              <span className="providers-badge">
+                                {t("providers.active")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="providers-list-model">
+                            {p.model}
+                          </span>
+                        </span>
+                        <span
+                          className={`providers-status-dot ${statusDotClass(p.enabled, healthById[p.id])}`}
+                          title={statusDotTitle(p.enabled, healthById[p.id])}
+                        />
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className={`providers-icon-btn is-primary ${listingModels ? "is-busy" : ""}`}
-                      disabled={
-                        listingModels || (needsKey && !selected.has_api_key)
-                      }
-                      title={
-                        listingModels
-                          ? t("providers.listingModels")
-                          : t("providers.refreshModels")
-                      }
-                      aria-label={
-                        listingModels
-                          ? t("providers.listingModels")
-                          : t("providers.refreshModels")
-                      }
-                      aria-busy={listingModels}
-                      onClick={() => void listModels()}
-                    >
-                      {listingModels ? (
-                        <IconLoader className="is-spin" />
-                      ) : (
-                        <IconRefresh />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className={`providers-icon-btn ${showAddModel ? "is-active" : ""}`}
-                      title={t("providers.addModel")}
-                      aria-label={t("providers.addModel")}
-                      aria-pressed={showAddModel}
-                      onClick={() => {
-                        setShowAddModel((v) => !v);
-                        setShowFilter(false);
+                    </li>
+                  );
+                })}
+            </ul>
+
+            {drag &&
+              state &&
+              createPortal(
+                (() => {
+                  const p = state.providers.find((x) => x.id === drag.id);
+                  if (!p) return null;
+                  const activeDefault = state.active_provider_id === p.id;
+                  return (
+                    <div
+                      className="providers-drag-ghost"
+                      style={{
+                        width: drag.width,
+                        height: drag.height,
+                        transform: `translate(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px)`,
                       }}
                     >
-                      <IconPlus />
-                    </button>
-                  </div>
-                </div>
+                      <div className="providers-list-item is-ghost">
+                        <span className="providers-drag-handle is-visible">
+                          <IconGrip />
+                        </span>
+                        <span className="providers-list-icon" aria-hidden>
+                          <ProviderBrandIcon kind={p.kind} />
+                        </span>
+                        <span className="providers-list-text">
+                          <span className="providers-list-name">
+                            {p.display_name}
+                            {activeDefault && (
+                              <span className="providers-badge">
+                                {t("providers.active")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="providers-list-model">
+                            {p.model}
+                          </span>
+                        </span>
+                        <span
+                          className={`providers-status-dot ${statusDotClass(p.enabled, healthById[p.id])}`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })(),
+                document.body,
+              )}
 
-                {(showFilter || modelFilter) && (
-                  <input
-                    type="search"
-                    className="providers-model-filter"
-                    value={modelFilter}
-                    onChange={(e) => setModelFilter(e.target.value)}
-                    placeholder={t("providers.modelFilter")}
-                    disabled={models.length === 0}
-                    autoFocus={showFilter}
-                  />
-                )}
+            <div className="providers-add-row">
+              <div className="providers-kind-picker">
+                <SelectMenu
+                  className="providers-kind-select"
+                  value={addKind}
+                  aria-label={t("providers.add")}
+                  openDirection="up"
+                  onChange={(v) => setAddKind(v as ProviderKindId)}
+                  options={addKindOptions}
+                />
+              </div>
+              <IconButton
+                variant="primary"
+                className="providers-pane-action providers-add-btn"
+                title={t("providers.add")}
+                aria-label={t("providers.add")}
+                onClick={() => void addProvider()}
+              >
+                <IconPlus />
+              </IconButton>
+            </div>
+          </Surface>
 
-                {showAddModel && (
-                  <form
-                    className="providers-add-model-row"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      addCustomModel();
+          <section className="providers-pane providers-pane-detail">
+            <div className="providers-pane-head">
+              <div className="providers-pane-head-text">
+                <h2>{t("providers.detailTitle")}</h2>
+                <p>{t("providers.detailSub")}</p>
+              </div>
+              {selected && draft && (
+                <div className="providers-pane-head-actions">
+                  <button
+                    type="button"
+                    role="switch"
+                    className="providers-enabled-control"
+                    aria-checked={draft.enabled}
+                    aria-label={t("providers.enable")}
+                    title={
+                      draft.enabled
+                        ? t("providers.disable")
+                        : t("providers.enable")
+                    }
+                    disabled={saving}
+                    onClick={() => void toggleEnabled()}
+                  >
+                    <span className="providers-enabled-control-label">
+                      {draft.enabled
+                        ? t("providers.enabled")
+                        : t("providers.disabled")}
+                    </span>
+                    <span className="providers-switch-track" aria-hidden>
+                      <span className="providers-switch-thumb" />
+                    </span>
+                  </button>
+                  <IconButton
+                    ref={providerActionsAnchorRef}
+                    variant="ghost"
+                    className={`providers-pane-action providers-more-action ${providerActionsOpen ? "is-active" : ""}`}
+                    title={t("providers.moreActions")}
+                    aria-label={t("providers.moreActions")}
+                    aria-haspopup="menu"
+                    aria-expanded={providerActionsOpen}
+                    onClick={() => setProviderActionsOpen((open) => !open)}
+                  >
+                    <MoreHorizontal size={18} strokeWidth={2} aria-hidden />
+                  </IconButton>
+                  <PopoverSurface
+                    open={providerActionsOpen}
+                    onClose={() => setProviderActionsOpen(false)}
+                    anchorRef={providerActionsAnchorRef}
+                    placement="below"
+                    align="end"
+                    minWidth={190}
+                    className="providers-actions-menu"
+                    role="menu"
+                    aria-label={t("providers.moreActions")}
+                    onKeyDown={(event) => {
+                      if (
+                        !["ArrowDown", "ArrowUp", "Home", "End"].includes(
+                          event.key,
+                        )
+                      ) {
+                        return;
+                      }
+                      const items = Array.from(
+                        event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                          '[role="menuitem"]:not(:disabled)',
+                        ),
+                      );
+                      if (items.length === 0) return;
+                      event.preventDefault();
+                      const current = items.indexOf(
+                        document.activeElement as HTMLButtonElement,
+                      );
+                      const next =
+                        event.key === "Home"
+                          ? 0
+                          : event.key === "End"
+                            ? items.length - 1
+                            : event.key === "ArrowDown"
+                              ? (current + 1 + items.length) % items.length
+                              : (current - 1 + items.length) % items.length;
+                      items[next]?.focus();
                     }}
                   >
-                    <input
-                      type="text"
-                      className="providers-model-filter"
-                      value={customModelInput}
-                      onChange={(e) => setCustomModelInput(e.target.value)}
-                      placeholder={t("providers.addModelPlaceholder")}
-                      autoFocus
-                      spellCheck={false}
-                    />
+                    {!isActive &&
+                    draft.enabled &&
+                    selected.supports_responses_api ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="providers-actions-menu-item"
+                        onClick={() => {
+                          setProviderActionsOpen(false);
+                          void setActive(selected.id);
+                        }}
+                      >
+                        <IconStar />
+                        <span>{t("providers.setActive")}</span>
+                      </button>
+                    ) : null}
+                    {!isImageActive &&
+                    draft.enabled &&
+                    selected.supports_image ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="providers-actions-menu-item"
+                        onClick={() => {
+                          setProviderActionsOpen(false);
+                          void setImageActive(selected.id);
+                        }}
+                      >
+                        <Image size={16} strokeWidth={2} aria-hidden />
+                        <span>{t("providers.setImageActive")}</span>
+                      </button>
+                    ) : null}
                     <button
-                      type="submit"
-                      className="providers-icon-btn is-primary"
-                      disabled={!customModelInput.trim()}
-                      title={t("providers.addModelConfirm")}
-                      aria-label={t("providers.addModelConfirm")}
+                      type="button"
+                      role="menuitem"
+                      className="providers-actions-menu-item is-danger"
+                      onClick={() => {
+                        setProviderActionsOpen(false);
+                        void deleteProvider();
+                      }}
                     >
-                      <IconPlus />
+                      <IconTrash />
+                      <span>{t("providers.delete")}</span>
                     </button>
-                  </form>
-                )}
-
-                {listingModels && models.length === 0 ? (
-                  <div className="providers-models-empty">
-                    <p>{t("providers.listingModels")}</p>
-                  </div>
-                ) : models.length === 0 ? (
-                  <div className="providers-models-empty">
-                    <p>{t("providers.modelsEmpty")}</p>
-                  </div>
-                ) : filteredModels.length === 0 ? (
-                  <div className="providers-models-empty">
-                    <p>{t("providers.modelsNoMatch")}</p>
-                  </div>
-                ) : (
-                  <ul className="providers-models-list">
-                    {filteredModels.map((m) => {
-                      const isCurrent = draft.model === m.id;
-                      const latency = modelLatencies[m.id];
-                      const caps = m.capabilities;
-                      const ctxLabel = formatContextWindow(m.context_window);
-                      const priceLabel = formatModelPrice(m.pricing);
-                      const cutoffLabel = formatKnowledgeCutoff(m.knowledge_cutoff);
-                      const expired = Boolean(m.expiration_date?.trim());
-                      const createdLabel = formatModelCreated(m.created);
-                      const isNewThisWeek = isModelCreatedWithinDays(m.created, 7);
-                      const hfId = m.hugging_face_id?.trim() || null;
-                      const moderated = m.is_moderated === true;
-                      const expanded = expandedModelId === m.id;
-                      const displayName = m.display_name?.trim() || null;
-                      const activeCaps = listActiveModelCaps(caps);
-                      const hasDetail =
-                        Boolean(m.description?.trim()) ||
-                        Boolean(createdLabel) ||
-                        Boolean(cutoffLabel) ||
-                        Boolean(m.expiration_date?.trim()) ||
-                        Boolean(ctxLabel) ||
-                        Boolean(priceLabel) ||
-                        Boolean(hfId) ||
-                        moderated ||
-                        Boolean(latency) ||
-                        activeCaps.length > 0;
-                      const capIcons = (
-                        <span className="providers-model-caps" aria-label="capabilities">
-                          {caps.vision && (
-                            <span className="providers-cap vision" title={t("providers.cap.vision")}>
-                              <Eye size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.file && (
-                            <span className="providers-cap file" title={t("providers.cap.file")}>
-                              <FileText size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.audio_in && (
-                            <span className="providers-cap audio-in" title={t("providers.cap.audioIn")}>
-                              <Mic size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.web && (
-                            <span className="providers-cap web" title={t("providers.cap.web")}>
-                              <Globe size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.reasoning && (
-                            <span className="providers-cap reasoning" title={t("providers.cap.reasoning")}>
-                              <Lightbulb size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.tools && (
-                            <span className="providers-cap tools" title={t("providers.cap.tools")}>
-                              <Wrench size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.image_gen && (
-                            <span className="providers-cap image-gen" title={t("providers.cap.imageGen")}>
-                              <Image size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.video_gen && (
-                            <span className="providers-cap video-gen" title={t("providers.cap.videoGen")}>
-                              <Video size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.audio_gen && (
-                            <span className="providers-cap audio-gen" title={t("providers.cap.audioGen")}>
-                              <Mic size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                          {caps.music_gen && (
-                            <span className="providers-cap music-gen" title={t("providers.cap.musicGen")}>
-                              <Music size={14} strokeWidth={2} aria-hidden />
-                            </span>
-                          )}
-                        </span>
-                      );
-                      return (
-                        <li
-                          key={m.id}
-                          className={`providers-model-row ${isCurrent ? "is-current" : ""} ${expired ? "is-expiring" : ""} ${expanded ? "is-expanded" : ""}`}
-                        >
-                          <div className="providers-model-main">
-                            <label className="providers-model-pick">
-                              <input
-                                type="radio"
-                                className="providers-model-radio"
-                                name="providers-model-select"
-                                checked={isCurrent}
-                                onChange={() => void useModel(m.id, m.expiration_date)}
-                                title={t("providers.useModel")}
-                                aria-label={`${t("providers.useModel")}: ${m.id}`}
-                              />
-                              <ModelBrandIcon modelId={m.id} className="providers-model-icon" />
-                              <span className="providers-model-text">
-                                <span className="providers-model-id" title={displayName ?? m.id}>
-                                  {m.id}
-                                </span>
-                                {displayName && displayName !== m.id ? (
-                                  <span className="providers-model-display" title={displayName}>
-                                    {displayName}
-                                  </span>
-                                ) : null}
-                              </span>
-                              {expired && (
-                                <span
-                                  className="providers-model-badge is-expiring"
-                                  title={`${t("providers.expiration")}: ${m.expiration_date}`}
-                                >
-                                  {t("providers.expiring")}
-                                </span>
-                              )}
-                              {isNewThisWeek && (
-                                <span
-                                  className="providers-model-badge is-new"
-                                  title={
-                                    createdLabel
-                                      ? `${t("providers.created")}: ${createdLabel}`
-                                      : t("providers.newThisWeek")
-                                  }
-                                >
-                                  {t("providers.newThisWeek")}
-                                </span>
-                              )}
-                            </label>
-                            {capIcons}
-                            <span className="providers-model-actions">
-                              {hasDetail ? (
-                                <button
-                                  type="button"
-                                  className={`providers-icon-btn ${expanded ? "is-active" : ""}`}
-                                  title={
-                                    expanded
-                                      ? t("providers.hideModelDetails")
-                                      : t("providers.showModelDetails")
-                                  }
-                                  aria-label={
-                                    expanded
-                                      ? t("providers.hideModelDetails")
-                                      : t("providers.showModelDetails")
-                                  }
-                                  aria-expanded={expanded}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setExpandedModelId((id) =>
-                                      id === m.id ? null : m.id,
-                                    );
-                                  }}
-                                >
-                                  <IconInfo />
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className={`providers-icon-btn ${testing && isCurrent ? "is-busy" : ""}`}
-                                disabled={testing || testingAll}
-                                title={t("providers.test")}
-                                aria-label={`${t("providers.test")}: ${m.id}`}
-                                onClick={() => {
-                                  void (async () => {
-                                    const ok = await useModel(
-                                      m.id,
-                                      m.expiration_date,
-                                    );
-                                    if (!ok) return;
-                                    void testConnection(m.id);
-                                  })();
-                                }}
-                              >
-                                <IconStethoscope />
-                              </button>
-                            </span>
-                          </div>
-                          {expanded ? (
-                            <div className="providers-model-detail">
-                              {m.description?.trim() ? (
-                                <p className="providers-model-desc">
-                                  {m.description.trim()}
-                                </p>
-                              ) : null}
-
-                              <div className="providers-model-meta-grid">
-                                {createdLabel ? (
-                                  <div className="providers-meta-chip">
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <Calendar size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.created")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {createdLabel}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {cutoffLabel ? (
-                                  <div
-                                    className="providers-meta-chip"
-                                    title={m.knowledge_cutoff ?? undefined}
-                                  >
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <BookOpen size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.knowledgeCutoff")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {cutoffLabel}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {m.expiration_date?.trim() ? (
-                                  <div className="providers-meta-chip is-warn">
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <Timer size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.expiration")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {m.expiration_date}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {ctxLabel ? (
-                                  <div className="providers-meta-chip">
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <Layers size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.contextWindow")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {ctxLabel}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {priceLabel ? (
-                                  <div className="providers-meta-chip">
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <CircleDollarSign size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.pricePerM")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {priceLabel}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {moderated ? (
-                                  <div className="providers-meta-chip">
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <ShieldCheck size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.moderated")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {t("providers.yes")}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                                {hfId ? (
-                                  <a
-                                    className="providers-meta-chip is-link"
-                                    href={`https://huggingface.co/${hfId}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    title={`${t("providers.huggingFace")}: ${hfId}`}
-                                  >
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <ExternalLink size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.huggingFace")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">{hfId}</span>
-                                    </span>
-                                  </a>
-                                ) : null}
-                                {latency ? (
-                                  <div
-                                    className={`providers-meta-chip ${latency.ok ? "is-ok" : "is-fail"}`}
-                                  >
-                                    <span className="providers-meta-chip-icon" aria-hidden>
-                                      <Stethoscope size={14} strokeWidth={2} />
-                                    </span>
-                                    <span className="providers-meta-chip-body">
-                                      <span className="providers-meta-chip-label">
-                                        {t("providers.test")}
-                                      </span>
-                                      <span className="providers-meta-chip-value">
-                                        {latency.latency_ms < 0
-                                          ? "—"
-                                          : `${latency.latency_ms} ms`}
-                                      </span>
-                                    </span>
-                                  </div>
-                                ) : null}
-                              </div>
-
-                              {activeCaps.length > 0 ? (
-                                <div className="providers-model-cap-section">
-                                  <div className="providers-model-cap-heading">
-                                    {t("providers.capabilities")}
-                                  </div>
-                                  <div className="providers-model-cap-pills">
-                                    {caps.tools ? (
-                                      <span className="providers-cap-pill tools">
-                                        <Wrench size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.tools")}
-                                      </span>
-                                    ) : null}
-                                    {caps.reasoning ? (
-                                      <span className="providers-cap-pill reasoning">
-                                        <Lightbulb size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.reasoning")}
-                                      </span>
-                                    ) : null}
-                                    {caps.vision ? (
-                                      <span className="providers-cap-pill vision">
-                                        <Eye size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.vision")}
-                                      </span>
-                                    ) : null}
-                                    {caps.file ? (
-                                      <span className="providers-cap-pill file">
-                                        <FileText size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.file")}
-                                      </span>
-                                    ) : null}
-                                    {caps.audio_in ? (
-                                      <span className="providers-cap-pill audio-in">
-                                        <Mic size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.audioIn")}
-                                      </span>
-                                    ) : null}
-                                    {caps.web ? (
-                                      <span className="providers-cap-pill web">
-                                        <Globe size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.web")}
-                                      </span>
-                                    ) : null}
-                                    {caps.image_gen ? (
-                                      <span className="providers-cap-pill image-gen">
-                                        <Image size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.imageGen")}
-                                      </span>
-                                    ) : null}
-                                    {caps.video_gen ? (
-                                      <span className="providers-cap-pill video-gen">
-                                        <Video size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.videoGen")}
-                                      </span>
-                                    ) : null}
-                                    {caps.audio_gen ? (
-                                      <span className="providers-cap-pill audio-gen">
-                                        <Mic size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.audioGen")}
-                                      </span>
-                                    ) : null}
-                                    {caps.music_gen ? (
-                                      <span className="providers-cap-pill music-gen">
-                                        <Music size={13} strokeWidth={2} aria-hidden />
-                                        {t("providers.cap.musicGen")}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-              </div>
-              )}
-
-              {detailTab === "media" && supportsMediaModels(selected) && (
-                <div className="providers-media-panel">
-                  <p className="providers-field-hint providers-media-hint">
-                    {t("providers.mediaHint")}
-                  </p>
-                  <div className="providers-form-grid">
-                    <label className="providers-field providers-field-span">
-                      <span className="providers-field-label">
-                        <IconBox />
-                        {t("providers.imageModel")}
-                      </span>
-                      <SelectMenu
-                        className="providers-media-model-select"
-                        value={draft.image_model}
-                        aria-label={t("providers.imageModel")}
-                        onChange={(value) =>
-                          setDraft((current) =>
-                            current ? { ...current, image_model: value } : current,
-                          )
-                        }
-                        options={mediaOptions(
-                          "image_gen",
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.image ?? "",
-                        )}
-                      />
-                    </label>
-                    {selected.supports_video ? (
-                      <label className="providers-field providers-field-span">
-                        <span className="providers-field-label">
-                          <IconBox />
-                          {t("providers.videoModel")}
-                        </span>
-                        <SelectMenu
-                          className="providers-media-model-select"
-                          value={draft.video_model}
-                          aria-label={t("providers.videoModel")}
-                          onChange={(value) =>
-                            setDraft((current) =>
-                              current ? { ...current, video_model: value } : current,
-                            )
-                          }
-                          options={mediaOptions(
-                            "video_gen",
-                            MEDIA_MODEL_DEFAULTS[selected.kind]?.video ?? "",
-                          )}
-                        />
-                      </label>
-                    ) : null}
-                    {selected.supports_music ? (
-                      <label className="providers-field providers-field-span">
-                        <span className="providers-field-label">
-                          <IconBox />
-                          {t("providers.musicModel")}
-                        </span>
-                        <SelectMenu
-                          className="providers-media-model-select"
-                          value={draft.music_model}
-                          aria-label={t("providers.musicModel")}
-                          onChange={(value) =>
-                            setDraft((current) =>
-                              current ? { ...current, music_model: value } : current,
-                            )
-                          }
-                          options={mediaOptions(
-                            "music_gen",
-                            MEDIA_MODEL_DEFAULTS[selected.kind]?.music ?? "",
-                          )}
-                        />
-                      </label>
-                    ) : null}
-                    <label className="providers-field providers-field-span">
-                      <span className="providers-field-label">
-                        <IconBox />
-                        {t("providers.visionModel")}
-                      </span>
-                      <SelectMenu
-                        className="providers-media-model-select"
-                        value={draft.vision_model}
-                        aria-label={t("providers.visionModel")}
-                        onChange={(value) =>
-                          setDraft((current) =>
-                            current ? { ...current, vision_model: value } : current,
-                          )
-                        }
-                        options={mediaOptions(
-                          "vision",
-                          MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? "",
-                        )}
-                      />
-                    </label>
-                  </div>
+                  </PopoverSurface>
                 </div>
               )}
+            </div>
 
-              {detailTab === "voice" && supportsVoice(selected) && (
-                <div className="providers-media-panel">
-                  <p className="providers-field-hint providers-media-hint">
-                    {t("providers.voiceHint")}
-                  </p>
-                  <div className="providers-form-grid">
-                    {selected.supports_tts ? (
+            {!selected || !draft ? (
+              <EmptyIllustration
+                scene="providers"
+                className="providers-empty-illust"
+                title={t("providers.emptySelect")}
+              />
+            ) : (
+              <div
+                className={`providers-form ${detailTab === "models" ? "is-fill" : ""}`.trim()}
+              >
+                <div className="providers-form-head">
+                  <span className="providers-form-icon" aria-hidden>
+                    <ProviderBrandIcon kind={selected.kind} />
+                  </span>
+                  <div className="providers-form-head-text">
+                    <h3>
+                      {selected.display_name}
+                      {isActive && (
+                        <span className="providers-badge">
+                          {t("providers.active")}
+                        </span>
+                      )}
+                      {isImageActive && (
+                        <span className="providers-badge">
+                          {t("providers.imageActive")}
+                        </span>
+                      )}
+                    </h3>
+                    <p className="providers-form-kind">
+                      {t(kindLabelKey(selected.kind))}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="providers-detail-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "chat"}
+                    className={`providers-detail-tab ${detailTab === "chat" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("chat")}
+                  >
+                    <MessageCircle size={14} strokeWidth={2} aria-hidden />
+                    {t("providers.tabChat")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={detailTab === "models"}
+                    className={`providers-detail-tab ${detailTab === "models" ? "is-active" : ""}`}
+                    onClick={() => setDetailTab("models")}
+                  >
+                    <Layers size={14} strokeWidth={2} aria-hidden />
+                    {t("providers.tabModels")}
+                    {models.length > 0 ? (
+                      <span className="providers-detail-tab-count">
+                        {models.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  {supportsMediaModels(selected) ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailTab === "media"}
+                      className={`providers-detail-tab ${detailTab === "media" ? "is-active" : ""}`}
+                      onClick={() => setDetailTab("media")}
+                    >
+                      <Image size={14} strokeWidth={2} aria-hidden />
+                      {t("providers.tabMedia")}
+                    </button>
+                  ) : null}
+                  {supportsVoice(selected) ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailTab === "voice"}
+                      className={`providers-detail-tab ${detailTab === "voice" ? "is-active" : ""}`}
+                      onClick={() => setDetailTab("voice")}
+                    >
+                      <Mic size={14} strokeWidth={2} aria-hidden />
+                      {t("providers.tabVoice")}
+                    </button>
+                  ) : null}
+                  {supportsEmbedding(selected) ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={detailTab === "embedding"}
+                      className={`providers-detail-tab ${detailTab === "embedding" ? "is-active" : ""}`}
+                      onClick={() => setDetailTab("embedding")}
+                    >
+                      <Layers size={14} strokeWidth={2} aria-hidden />
+                      {t("providers.tabEmbedding")}
+                    </button>
+                  ) : null}
+                </div>
+
+                {detailTab === "chat" && (
+                  <>
+                    <div className="providers-form-grid">
+                      <label className="providers-field">
+                        <span className="providers-field-label">
+                          <IconTag />
+                          {t("providers.displayName")}
+                        </span>
+                        <input
+                          type="text"
+                          value={draft.display_name}
+                          onChange={(e) =>
+                            setDraft((d) =>
+                              d ? { ...d, display_name: e.target.value } : d,
+                            )
+                          }
+                        />
+                      </label>
+
+                      <label className="providers-field">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.model")}
+                        </span>
+                        <input
+                          type="text"
+                          value={draft.model}
+                          onChange={(e) =>
+                            setDraft((d) =>
+                              d ? { ...d, model: e.target.value } : d,
+                            )
+                          }
+                        />
+                      </label>
+                      {selected.kind === "volcengine" && (
+                        <p className="providers-field-hint">
+                          {t("providers.volcengineModelHint")}
+                        </p>
+                      )}
+
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconLink />
+                          {t("providers.endpoint")}
+                          {selected.kind === "google" &&
+                            /\/v1beta\/openai(?:\/|$)/.test(
+                              draft.endpoint.trim(),
+                            ) && (
+                              <span
+                                className="providers-badge providers-badge--deprecated"
+                                title={t(
+                                  "providers.googleOpenaiCompatDeprecated",
+                                )}
+                              >
+                                {t("providers.googleOpenaiCompatDeprecated")}
+                              </span>
+                            )}
+                        </span>
+                        <input
+                          type="url"
+                          value={draft.endpoint}
+                          onChange={(e) =>
+                            setDraft((d) =>
+                              d ? { ...d, endpoint: e.target.value } : d,
+                            )
+                          }
+                        />
+                      </label>
+                      {draft.endpoint.trim() && (
+                        <p className="providers-field-hint">
+                          →{" "}
+                          {resolveEndpointPreview(
+                            selected.kind,
+                            draft.endpoint,
+                            selected.supports_responses_api
+                              ? "responses"
+                              : undefined,
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="providers-fallback-block">
+                      <div className="providers-fallback-head">
+                        <h4 className="providers-block-title">
+                          <IconWaypoints />
+                          聊天后备
+                        </h4>
+                        <span className="providers-fallback-count">
+                          {fallbackEntries.length}/{MAX_MODEL_FALLBACKS}
+                        </span>
+                      </div>
+                      <p className="providers-fallback-hint">
+                        {fallbackEntries.length === 0
+                          ? `失败时按序切换 · 最多 ${MAX_MODEL_FALLBACKS} 个`
+                          : `失败时按序切换`}
+                      </p>
+                      {fallbackEntries.length > 0 && (
+                        <ul className="providers-fallback-list">
+                          {fallbackEntries.map((entry, index) => {
+                            const options =
+                              fallbackModelsById[entry.provider_id] ?? [];
+                            const fallbackProvider = state?.providers.find(
+                              (p) => p.id === entry.provider_id,
+                            );
+                            const defaultModel =
+                              fallbackProvider?.model?.trim() || "";
+                            const selectedModel = entry.model?.trim() || "";
+                            const knownIds = new Set(options.map((m) => m.id));
+                            const orphanSelected =
+                              selectedModel && !knownIds.has(selectedModel)
+                                ? selectedModel
+                                : null;
+                            return (
+                              <li
+                                key={`${entry.provider_id}-${index}`}
+                                className="providers-fallback-row"
+                              >
+                                <span
+                                  className="providers-fallback-brand"
+                                  aria-hidden
+                                >
+                                  {fallbackProvider ? (
+                                    <ProviderBrandIcon
+                                      kind={fallbackProvider.kind}
+                                    />
+                                  ) : (
+                                    <IconLayers />
+                                  )}
+                                </span>
+                                <span
+                                  className="providers-fallback-name"
+                                  title={entry.provider_id}
+                                >
+                                  {providerLabel(entry.provider_id)}
+                                </span>
+                                <SelectMenu
+                                  className="providers-fallback-model"
+                                  value={selectedModel}
+                                  placeholder={t(
+                                    "providers.fallback.defaultModel",
+                                  )}
+                                  aria-label={t(
+                                    "providers.fallback.modelOverride",
+                                    { name: providerLabel(entry.provider_id) },
+                                  )}
+                                  onChange={(v) =>
+                                    updateFallbackModel(index, v)
+                                  }
+                                  options={[
+                                    {
+                                      value: "",
+                                      label: defaultModel
+                                        ? `默认（${defaultModel}）`
+                                        : "默认模型",
+                                    },
+                                    ...(orphanSelected
+                                      ? [
+                                          {
+                                            value: orphanSelected,
+                                            label: orphanSelected,
+                                            icon: (
+                                              <ModelBrandIcon
+                                                modelId={orphanSelected}
+                                              />
+                                            ),
+                                          },
+                                        ]
+                                      : []),
+                                    ...options.map((m) => ({
+                                      value: m.id,
+                                      label: m.display_name?.trim()
+                                        ? `${m.display_name} (${m.id})`
+                                        : m.id,
+                                      icon: <ModelBrandIcon modelId={m.id} />,
+                                    })),
+                                  ]}
+                                />
+                                <button
+                                  type="button"
+                                  className="providers-icon-btn"
+                                  title={t("providers.fallback.removeTitle")}
+                                  aria-label={t(
+                                    "providers.fallback.removeAriaLabel",
+                                    { name: providerLabel(entry.provider_id) },
+                                  )}
+                                  onClick={() => removeFallback(index)}
+                                >
+                                  <IconTrash />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {fallbackEntries.length < MAX_MODEL_FALLBACKS && (
+                        <div className="providers-fallback-add">
+                          <span
+                            className="providers-fallback-add-icon"
+                            aria-hidden
+                          >
+                            <IconPlus />
+                          </span>
+                          <SelectMenu
+                            className="providers-fallback-add-select"
+                            value=""
+                            aria-label={t("providers.fallback.addAriaLabel")}
+                            disabled={fallbackCandidateProviders.length === 0}
+                            placeholder={
+                              fallbackCandidateProviders.length === 0
+                                ? t("providers.fallback.noneAvailable")
+                                : t("providers.fallback.addPlaceholder")
+                            }
+                            onChange={addFallback}
+                            options={fallbackCandidateProviders.map((p) => ({
+                              value: p.id,
+                              label: p.display_name,
+                              icon: <ProviderBrandIcon kind={p.kind} />,
+                            }))}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="providers-key-block">
+                      <div className="providers-key-head">
+                        <h4 className="providers-block-title">
+                          <IconKey />
+                          {t("providers.apiKey")}
+                        </h4>
+                        {needsKey && selected.official_key_url && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="providers-key-link"
+                            onClick={() => void openOfficialKey()}
+                          >
+                            {t("providers.getOfficialKey")}
+                          </Button>
+                        )}
+                      </div>
+                      {!needsKey ? (
+                        <p className="providers-key-hint">
+                          {t("providers.noKeyRequired")}
+                        </p>
+                      ) : (
+                        <>
+                          <div className="providers-key-row">
+                            <div className="providers-key-input-wrap">
+                              <input
+                                type="text"
+                                className="providers-key-input"
+                                value={apiKeyDisplayValue}
+                                readOnly={!apiKeyDirty && !!storedApiKey}
+                                onChange={(e) => {
+                                  setApiKeyDirty(true);
+                                  setApiKeyInput(e.target.value);
+                                }}
+                                onFocus={() => {
+                                  if (!apiKeyDirty && storedApiKey) {
+                                    setApiKeyDirty(true);
+                                    setApiKeyInput(storedApiKey);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (
+                                    apiKeyDirty &&
+                                    storedApiKey &&
+                                    apiKeyInput.trim() === storedApiKey.trim()
+                                  ) {
+                                    setApiKeyDirty(false);
+                                    setApiKeyInput("");
+                                  }
+                                }}
+                                placeholder={t("providers.apiKeyPlaceholder")}
+                                autoComplete="off"
+                                spellCheck={false}
+                              />
+                              {storedApiKey && !apiKeyDirty && (
+                                <button
+                                  type="button"
+                                  className="providers-key-eye"
+                                  title={
+                                    showApiKey
+                                      ? t("providers.hideKey")
+                                      : t("providers.showKey")
+                                  }
+                                  aria-label={
+                                    showApiKey
+                                      ? t("providers.hideKey")
+                                      : t("providers.showKey")
+                                  }
+                                  onClick={() => setShowApiKey((v) => !v)}
+                                >
+                                  <IconKeyVisibility visible={showApiKey} />
+                                </button>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="providers-icon-btn is-primary"
+                              disabled={!canSaveApiKey || saving}
+                              title={t("providers.saveKey")}
+                              aria-label={t("providers.saveKey")}
+                              onClick={() => void saveApiKey()}
+                            >
+                              {saving ? (
+                                <IconLoader className="is-spin" />
+                              ) : (
+                                <IconSave />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className={`providers-icon-btn ${testing ? "is-busy" : ""}`}
+                              disabled={testing || !selected.has_api_key}
+                              title={
+                                testing
+                                  ? t("providers.testing")
+                                  : t("providers.test")
+                              }
+                              aria-label={
+                                testing
+                                  ? t("providers.testing")
+                                  : t("providers.test")
+                              }
+                              aria-busy={testing}
+                              onClick={() => void testConnection()}
+                            >
+                              {testing ? (
+                                <IconLoader className="is-spin" />
+                              ) : (
+                                <IconStethoscope />
+                              )}
+                            </button>
+                            {selected.key_source === "keyring" && (
+                              <button
+                                type="button"
+                                className="providers-icon-btn"
+                                title={t("providers.clearKey")}
+                                aria-label={t("providers.clearKey")}
+                                onClick={() => void clearApiKey()}
+                              >
+                                <IconTrash />
+                              </button>
+                            )}
+                          </div>
+                          {testResult && (
+                            <p
+                              className={`providers-test-result ${testResult.ok ? "ok" : "fail"}`}
+                            >
+                              {testResult.ok
+                                ? t("providers.testOk", {
+                                    ms: String(testResult.latency_ms),
+                                  })
+                                : t("providers.testFail", {
+                                    ms: String(testResult.latency_ms),
+                                  })}
+                              <span className="providers-test-model">
+                                {" "}
+                                · {testResult.model}
+                              </span>
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {detailTab === "models" && (
+                  <div className="providers-models-panel">
+                    <div className="providers-models-block">
+                      <div className="providers-models-head">
+                        <div className="providers-models-title-row">
+                          <h4 className="providers-block-title">
+                            <IconLayers />
+                            {t("providers.modelsTitle")}
+                          </h4>
+                          {models.length > 0 && (
+                            <span className="providers-models-count">
+                              {filteredModels.length}
+                            </span>
+                          )}
+                          {modelsLatency != null && (
+                            <span
+                              className="providers-models-latency"
+                              title={t("providers.modelsLatency", {
+                                ms: String(modelsLatency),
+                              })}
+                            >
+                              {modelsLatency} ms
+                            </span>
+                          )}
+                        </div>
+                        <div className="providers-models-toolbar">
+                          <button
+                            type="button"
+                            className={`providers-icon-btn ${testingAll ? "is-busy" : ""}`}
+                            disabled={
+                              testingAll ||
+                              testing ||
+                              models.length === 0 ||
+                              (needsKey && !selected.has_api_key)
+                            }
+                            title={t("providers.healthCheck")}
+                            aria-label={t("providers.healthCheck")}
+                            aria-busy={testingAll}
+                            onClick={() => void testAllModels()}
+                          >
+                            <IconStethoscope />
+                          </button>
+                          <button
+                            type="button"
+                            className={`providers-icon-btn ${showFilter ? "is-active" : ""}`}
+                            disabled={models.length === 0}
+                            title={t("providers.toggleSearch")}
+                            aria-label={t("providers.toggleSearch")}
+                            aria-pressed={showFilter}
+                            onClick={() => setShowFilter((v) => !v)}
+                          >
+                            <IconSearch />
+                          </button>
+                          <button
+                            type="button"
+                            className={`providers-icon-btn ${sortByNewest ? "is-active" : ""}`}
+                            disabled={models.length === 0}
+                            title={t("providers.sortNewest")}
+                            aria-label={t("providers.sortNewest")}
+                            aria-pressed={sortByNewest}
+                            onClick={() => setSortByNewest((v) => !v)}
+                          >
+                            <IconSortNewest />
+                          </button>
+                          <button
+                            type="button"
+                            className={`providers-icon-btn ${onlyThisWeek ? "is-active" : ""}`}
+                            disabled={models.length === 0}
+                            title={t("providers.filterThisWeek")}
+                            aria-label={t("providers.filterThisWeek")}
+                            aria-pressed={onlyThisWeek}
+                            onClick={() => setOnlyThisWeek((v) => !v)}
+                          >
+                            <IconThisWeek />
+                          </button>
+                          {!needsKey && (
+                            <button
+                              type="button"
+                              className={`providers-icon-btn ${testing ? "is-busy" : ""}`}
+                              disabled={testing || testingAll}
+                              title={
+                                testing
+                                  ? t("providers.testing")
+                                  : t("providers.test")
+                              }
+                              aria-label={
+                                testing
+                                  ? t("providers.testing")
+                                  : t("providers.test")
+                              }
+                              aria-busy={testing}
+                              onClick={() => void testConnection()}
+                            >
+                              {testing ? (
+                                <IconLoader className="is-spin" />
+                              ) : (
+                                <IconStethoscope />
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={`providers-icon-btn is-primary ${listingModels ? "is-busy" : ""}`}
+                            disabled={
+                              listingModels ||
+                              (needsKey && !selected.has_api_key)
+                            }
+                            title={
+                              listingModels
+                                ? t("providers.listingModels")
+                                : t("providers.refreshModels")
+                            }
+                            aria-label={
+                              listingModels
+                                ? t("providers.listingModels")
+                                : t("providers.refreshModels")
+                            }
+                            aria-busy={listingModels}
+                            onClick={() => void listModels()}
+                          >
+                            {listingModels ? (
+                              <IconLoader className="is-spin" />
+                            ) : (
+                              <IconRefresh />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className={`providers-icon-btn ${showAddModel ? "is-active" : ""}`}
+                            title={t("providers.addModel")}
+                            aria-label={t("providers.addModel")}
+                            aria-pressed={showAddModel}
+                            onClick={() => {
+                              setShowAddModel((v) => !v);
+                              setShowFilter(false);
+                            }}
+                          >
+                            <IconPlus />
+                          </button>
+                        </div>
+                      </div>
+
+                      {(showFilter || modelFilter) && (
+                        <input
+                          type="search"
+                          className="providers-model-filter"
+                          value={modelFilter}
+                          onChange={(e) => setModelFilter(e.target.value)}
+                          placeholder={t("providers.modelFilter")}
+                          disabled={models.length === 0}
+                          autoFocus={showFilter}
+                        />
+                      )}
+
+                      {showAddModel && (
+                        <form
+                          className="providers-add-model-row"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            addCustomModel();
+                          }}
+                        >
+                          <input
+                            type="text"
+                            className="providers-model-filter"
+                            value={customModelInput}
+                            onChange={(e) =>
+                              setCustomModelInput(e.target.value)
+                            }
+                            placeholder={t("providers.addModelPlaceholder")}
+                            autoFocus
+                            spellCheck={false}
+                          />
+                          <button
+                            type="submit"
+                            className="providers-icon-btn is-primary"
+                            disabled={!customModelInput.trim()}
+                            title={t("providers.addModelConfirm")}
+                            aria-label={t("providers.addModelConfirm")}
+                          >
+                            <IconPlus />
+                          </button>
+                        </form>
+                      )}
+
+                      {listingModels && models.length === 0 ? (
+                        <div className="providers-models-empty">
+                          <p>{t("providers.listingModels")}</p>
+                        </div>
+                      ) : models.length === 0 ? (
+                        <div className="providers-models-empty">
+                          <p>{t("providers.modelsEmpty")}</p>
+                        </div>
+                      ) : filteredModels.length === 0 ? (
+                        <div className="providers-models-empty">
+                          <p>{t("providers.modelsNoMatch")}</p>
+                        </div>
+                      ) : (
+                        <ul className="providers-models-list">
+                          {filteredModels.map((m) => {
+                            const isCurrent = draft.model === m.id;
+                            const latency = modelLatencies[m.id];
+                            const caps = m.capabilities;
+                            const ctxLabel = formatContextWindow(
+                              m.context_window,
+                            );
+                            const priceLabel = formatModelPrice(m.pricing);
+                            const cutoffLabel = formatKnowledgeCutoff(
+                              m.knowledge_cutoff,
+                            );
+                            const expired = Boolean(m.expiration_date?.trim());
+                            const createdLabel = formatModelCreated(m.created);
+                            const isNewThisWeek = isModelCreatedWithinDays(
+                              m.created,
+                              7,
+                            );
+                            const hfId = m.hugging_face_id?.trim() || null;
+                            const moderated = m.is_moderated === true;
+                            const expanded = expandedModelId === m.id;
+                            const displayName = m.display_name?.trim() || null;
+                            const activeCaps = listActiveModelCaps(caps);
+                            const hasDetail =
+                              Boolean(m.description?.trim()) ||
+                              Boolean(createdLabel) ||
+                              Boolean(cutoffLabel) ||
+                              Boolean(m.expiration_date?.trim()) ||
+                              Boolean(ctxLabel) ||
+                              Boolean(priceLabel) ||
+                              Boolean(hfId) ||
+                              moderated ||
+                              Boolean(latency) ||
+                              activeCaps.length > 0;
+                            const capIcons = (
+                              <span
+                                className="providers-model-caps"
+                                aria-label="capabilities"
+                              >
+                                {caps.vision && (
+                                  <span
+                                    className="providers-cap vision"
+                                    title={t("providers.cap.vision")}
+                                  >
+                                    <Eye
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.file && (
+                                  <span
+                                    className="providers-cap file"
+                                    title={t("providers.cap.file")}
+                                  >
+                                    <FileText
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.audio_in && (
+                                  <span
+                                    className="providers-cap audio-in"
+                                    title={t("providers.cap.audioIn")}
+                                  >
+                                    <Mic
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.web && (
+                                  <span
+                                    className="providers-cap web"
+                                    title={t("providers.cap.web")}
+                                  >
+                                    <Globe
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.reasoning && (
+                                  <span
+                                    className="providers-cap reasoning"
+                                    title={t("providers.cap.reasoning")}
+                                  >
+                                    <Lightbulb
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.tools && (
+                                  <span
+                                    className="providers-cap tools"
+                                    title={t("providers.cap.tools")}
+                                  >
+                                    <Wrench
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.image_gen && (
+                                  <span
+                                    className="providers-cap image-gen"
+                                    title={t("providers.cap.imageGen")}
+                                  >
+                                    <Image
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.video_gen && (
+                                  <span
+                                    className="providers-cap video-gen"
+                                    title={t("providers.cap.videoGen")}
+                                  >
+                                    <Video
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.audio_gen && (
+                                  <span
+                                    className="providers-cap audio-gen"
+                                    title={t("providers.cap.audioGen")}
+                                  >
+                                    <Mic
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                                {caps.music_gen && (
+                                  <span
+                                    className="providers-cap music-gen"
+                                    title={t("providers.cap.musicGen")}
+                                  >
+                                    <Music
+                                      size={14}
+                                      strokeWidth={2}
+                                      aria-hidden
+                                    />
+                                  </span>
+                                )}
+                              </span>
+                            );
+                            return (
+                              <li
+                                key={m.id}
+                                className={`providers-model-row ${isCurrent ? "is-current" : ""} ${expired ? "is-expiring" : ""} ${expanded ? "is-expanded" : ""}`}
+                              >
+                                <div className="providers-model-main">
+                                  <label className="providers-model-pick">
+                                    <input
+                                      type="radio"
+                                      className="providers-model-radio"
+                                      name="providers-model-select"
+                                      checked={isCurrent}
+                                      onChange={() =>
+                                        void useModel(m.id, m.expiration_date)
+                                      }
+                                      title={t("providers.useModel")}
+                                      aria-label={`${t("providers.useModel")}: ${m.id}`}
+                                    />
+                                    <ModelBrandIcon
+                                      modelId={m.id}
+                                      className="providers-model-icon"
+                                    />
+                                    <span className="providers-model-text">
+                                      <span
+                                        className="providers-model-id"
+                                        title={displayName ?? m.id}
+                                      >
+                                        {m.id}
+                                      </span>
+                                      {displayName && displayName !== m.id ? (
+                                        <span
+                                          className="providers-model-display"
+                                          title={displayName}
+                                        >
+                                          {displayName}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    {expired && (
+                                      <span
+                                        className="providers-model-badge is-expiring"
+                                        title={`${t("providers.expiration")}: ${m.expiration_date}`}
+                                      >
+                                        {t("providers.expiring")}
+                                      </span>
+                                    )}
+                                    {isNewThisWeek && (
+                                      <span
+                                        className="providers-model-badge is-new"
+                                        title={
+                                          createdLabel
+                                            ? `${t("providers.created")}: ${createdLabel}`
+                                            : t("providers.newThisWeek")
+                                        }
+                                      >
+                                        {t("providers.newThisWeek")}
+                                      </span>
+                                    )}
+                                  </label>
+                                  {capIcons}
+                                  <span className="providers-model-actions">
+                                    {hasDetail ? (
+                                      <button
+                                        type="button"
+                                        className={`providers-icon-btn ${expanded ? "is-active" : ""}`}
+                                        title={
+                                          expanded
+                                            ? t("providers.hideModelDetails")
+                                            : t("providers.showModelDetails")
+                                        }
+                                        aria-label={
+                                          expanded
+                                            ? t("providers.hideModelDetails")
+                                            : t("providers.showModelDetails")
+                                        }
+                                        aria-expanded={expanded}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setExpandedModelId((id) =>
+                                            id === m.id ? null : m.id,
+                                          );
+                                        }}
+                                      >
+                                        <IconInfo />
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      className={`providers-icon-btn ${testing && isCurrent ? "is-busy" : ""}`}
+                                      disabled={testing || testingAll}
+                                      title={t("providers.test")}
+                                      aria-label={`${t("providers.test")}: ${m.id}`}
+                                      onClick={() => {
+                                        void (async () => {
+                                          const ok = await useModel(
+                                            m.id,
+                                            m.expiration_date,
+                                          );
+                                          if (!ok) return;
+                                          void testConnection(m.id);
+                                        })();
+                                      }}
+                                    >
+                                      <IconStethoscope />
+                                    </button>
+                                  </span>
+                                </div>
+                                {expanded ? (
+                                  <div className="providers-model-detail">
+                                    {m.description?.trim() ? (
+                                      <p className="providers-model-desc">
+                                        {m.description.trim()}
+                                      </p>
+                                    ) : null}
+
+                                    <div className="providers-model-meta-grid">
+                                      {createdLabel ? (
+                                        <div className="providers-meta-chip">
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <Calendar
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.created")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {createdLabel}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {cutoffLabel ? (
+                                        <div
+                                          className="providers-meta-chip"
+                                          title={
+                                            m.knowledge_cutoff ?? undefined
+                                          }
+                                        >
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <BookOpen
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.knowledgeCutoff")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {cutoffLabel}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {m.expiration_date?.trim() ? (
+                                        <div className="providers-meta-chip is-warn">
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <Timer size={14} strokeWidth={2} />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.expiration")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {m.expiration_date}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {ctxLabel ? (
+                                        <div className="providers-meta-chip">
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <Layers size={14} strokeWidth={2} />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.contextWindow")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {ctxLabel}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {priceLabel ? (
+                                        <div className="providers-meta-chip">
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <CircleDollarSign
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.pricePerM")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {priceLabel}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {moderated ? (
+                                        <div className="providers-meta-chip">
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <ShieldCheck
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.moderated")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {t("providers.yes")}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {hfId ? (
+                                        <a
+                                          className="providers-meta-chip is-link"
+                                          href={`https://huggingface.co/${hfId}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          title={`${t("providers.huggingFace")}: ${hfId}`}
+                                        >
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <ExternalLink
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.huggingFace")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {hfId}
+                                            </span>
+                                          </span>
+                                        </a>
+                                      ) : null}
+                                      {latency ? (
+                                        <div
+                                          className={`providers-meta-chip ${latency.ok ? "is-ok" : "is-fail"}`}
+                                        >
+                                          <span
+                                            className="providers-meta-chip-icon"
+                                            aria-hidden
+                                          >
+                                            <Stethoscope
+                                              size={14}
+                                              strokeWidth={2}
+                                            />
+                                          </span>
+                                          <span className="providers-meta-chip-body">
+                                            <span className="providers-meta-chip-label">
+                                              {t("providers.test")}
+                                            </span>
+                                            <span className="providers-meta-chip-value">
+                                              {latency.latency_ms < 0
+                                                ? "—"
+                                                : `${latency.latency_ms} ms`}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {activeCaps.length > 0 ? (
+                                      <div className="providers-model-cap-section">
+                                        <div className="providers-model-cap-heading">
+                                          {t("providers.capabilities")}
+                                        </div>
+                                        <div className="providers-model-cap-pills">
+                                          {caps.tools ? (
+                                            <span className="providers-cap-pill tools">
+                                              <Wrench
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.tools")}
+                                            </span>
+                                          ) : null}
+                                          {caps.reasoning ? (
+                                            <span className="providers-cap-pill reasoning">
+                                              <Lightbulb
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.reasoning")}
+                                            </span>
+                                          ) : null}
+                                          {caps.vision ? (
+                                            <span className="providers-cap-pill vision">
+                                              <Eye
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.vision")}
+                                            </span>
+                                          ) : null}
+                                          {caps.file ? (
+                                            <span className="providers-cap-pill file">
+                                              <FileText
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.file")}
+                                            </span>
+                                          ) : null}
+                                          {caps.audio_in ? (
+                                            <span className="providers-cap-pill audio-in">
+                                              <Mic
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.audioIn")}
+                                            </span>
+                                          ) : null}
+                                          {caps.web ? (
+                                            <span className="providers-cap-pill web">
+                                              <Globe
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.web")}
+                                            </span>
+                                          ) : null}
+                                          {caps.image_gen ? (
+                                            <span className="providers-cap-pill image-gen">
+                                              <Image
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.imageGen")}
+                                            </span>
+                                          ) : null}
+                                          {caps.video_gen ? (
+                                            <span className="providers-cap-pill video-gen">
+                                              <Video
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.videoGen")}
+                                            </span>
+                                          ) : null}
+                                          {caps.audio_gen ? (
+                                            <span className="providers-cap-pill audio-gen">
+                                              <Mic
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.audioGen")}
+                                            </span>
+                                          ) : null}
+                                          {caps.music_gen ? (
+                                            <span className="providers-cap-pill music-gen">
+                                              <Music
+                                                size={13}
+                                                strokeWidth={2}
+                                                aria-hidden
+                                              />
+                                              {t("providers.cap.musicGen")}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === "media" && supportsMediaModels(selected) && (
+                  <div className="providers-media-panel">
+                    <p className="providers-field-hint providers-media-hint">
+                      {t("providers.mediaHint")}
+                    </p>
+                    <div className="providers-form-grid">
                       <label className="providers-field providers-field-span">
                         <span className="providers-field-label">
                           <IconBox />
-                          {t("providers.ttsModel")}
+                          {t("providers.imageModel")}
                         </span>
                         <SelectMenu
                           className="providers-media-model-select"
-                          value={draft.tts_model}
-                          aria-label={t("providers.ttsModel")}
+                          value={draft.image_model}
+                          aria-label={t("providers.imageModel")}
                           onChange={(value) =>
                             setDraft((current) =>
-                              current ? { ...current, tts_model: value } : current,
+                              current
+                                ? { ...current, image_model: value }
+                                : current,
                             )
                           }
                           options={mediaOptions(
-                            "audio_gen",
-                            MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? "",
+                            "image_gen",
+                            MEDIA_MODEL_DEFAULTS[selected.kind]?.image ?? "",
                           )}
                         />
                       </label>
-                    ) : null}
-                    {selected.supports_asr ? (
+                      {selected.supports_video ? (
+                        <label className="providers-field providers-field-span">
+                          <span className="providers-field-label">
+                            <IconBox />
+                            {t("providers.videoModel")}
+                          </span>
+                          <SelectMenu
+                            className="providers-media-model-select"
+                            value={draft.video_model}
+                            aria-label={t("providers.videoModel")}
+                            onChange={(value) =>
+                              setDraft((current) =>
+                                current
+                                  ? { ...current, video_model: value }
+                                  : current,
+                              )
+                            }
+                            options={mediaOptions(
+                              "video_gen",
+                              MEDIA_MODEL_DEFAULTS[selected.kind]?.video ?? "",
+                            )}
+                          />
+                        </label>
+                      ) : null}
+                      {selected.supports_music ? (
+                        <label className="providers-field providers-field-span">
+                          <span className="providers-field-label">
+                            <IconBox />
+                            {t("providers.musicModel")}
+                          </span>
+                          <SelectMenu
+                            className="providers-media-model-select"
+                            value={draft.music_model}
+                            aria-label={t("providers.musicModel")}
+                            onChange={(value) =>
+                              setDraft((current) =>
+                                current
+                                  ? { ...current, music_model: value }
+                                  : current,
+                              )
+                            }
+                            options={mediaOptions(
+                              "music_gen",
+                              MEDIA_MODEL_DEFAULTS[selected.kind]?.music ?? "",
+                            )}
+                          />
+                        </label>
+                      ) : null}
                       <label className="providers-field providers-field-span">
                         <span className="providers-field-label">
                           <IconBox />
-                          {t("providers.asrModel")}
+                          {t("providers.visionModel")}
+                        </span>
+                        <SelectMenu
+                          className="providers-media-model-select"
+                          value={draft.vision_model}
+                          aria-label={t("providers.visionModel")}
+                          onChange={(value) =>
+                            setDraft((current) =>
+                              current
+                                ? { ...current, vision_model: value }
+                                : current,
+                            )
+                          }
+                          options={mediaOptions(
+                            "vision",
+                            MEDIA_MODEL_DEFAULTS[selected.kind]?.vision ?? "",
+                          )}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === "voice" && supportsVoice(selected) && (
+                  <div className="providers-media-panel">
+                    <p className="providers-field-hint providers-media-hint">
+                      {t("providers.voiceHint")}
+                    </p>
+                    <div className="providers-form-grid">
+                      {selected.supports_tts ? (
+                        <label className="providers-field providers-field-span">
+                          <span className="providers-field-label">
+                            <IconBox />
+                            {t("providers.ttsModel")}
+                          </span>
+                          <SelectMenu
+                            className="providers-media-model-select"
+                            value={draft.tts_model}
+                            aria-label={t("providers.ttsModel")}
+                            onChange={(value) =>
+                              setDraft((current) =>
+                                current
+                                  ? { ...current, tts_model: value }
+                                  : current,
+                              )
+                            }
+                            options={mediaOptions(
+                              "audio_gen",
+                              MEDIA_MODEL_DEFAULTS[selected.kind]?.tts ?? "",
+                            )}
+                          />
+                        </label>
+                      ) : null}
+                      {selected.supports_asr ? (
+                        <label className="providers-field providers-field-span">
+                          <span className="providers-field-label">
+                            <IconBox />
+                            {t("providers.asrModel")}
+                          </span>
+                          <input
+                            className="providers-input"
+                            value={selected.asr_model ?? ""}
+                            readOnly
+                            placeholder="—"
+                          />
+                          <span className="providers-field-hint">
+                            {t("providers.asrModelHint")}
+                          </span>
+                        </label>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === "embedding" && supportsEmbedding(selected) && (
+                  <div className="providers-media-panel">
+                    <p className="providers-field-hint providers-media-hint">
+                      {t("providers.embeddingHint")}
+                    </p>
+                    <div className="providers-form-grid">
+                      <label className="providers-field providers-field-span">
+                        <span className="providers-field-label">
+                          <IconBox />
+                          {t("providers.embeddingModel")}
                         </span>
                         <input
                           className="providers-input"
-                          value={selected.asr_model ?? ""}
-                          readOnly
-                          placeholder="—"
+                          value={draft.embedding_model}
+                          onChange={(e) =>
+                            setDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    embedding_model: e.target.value,
+                                  }
+                                : current,
+                            )
+                          }
+                          placeholder={
+                            selected.embedding_model || "embedding model"
+                          }
                         />
                         <span className="providers-field-hint">
-                          {t("providers.asrModelHint")}
+                          {t("providers.embeddingModelHint")}
                         </span>
                       </label>
-                    ) : null}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {detailTab === "embedding" && supportsEmbedding(selected) && (
-                <div className="providers-media-panel">
-                  <p className="providers-field-hint providers-media-hint">
-                    {t("providers.embeddingHint")}
-                  </p>
-                  <div className="providers-form-grid">
-                    <label className="providers-field providers-field-span">
-                      <span className="providers-field-label">
-                        <IconBox />
-                        {t("providers.embeddingModel")}
-                      </span>
-                      <input
-                        className="providers-input"
-                        value={draft.model}
-                        onChange={(e) =>
-                          setDraft((current) =>
-                            current ? { ...current, model: e.target.value } : current,
-                          )
-                        }
-                        placeholder={selected.embedding_model || "embedding model"}
-                      />
-                      <span className="providers-field-hint">
-                        {t("providers.embeddingModelHint")}
-                      </span>
-                    </label>
-                  </div>
+                <div className="providers-form-actions">
+                  <span
+                    className="providers-form-save-state"
+                    aria-live="polite"
+                  >
+                    {hasUnsavedChanges ? t("providers.unsavedChanges") : ""}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!hasUnsavedChanges || saving}
+                    onClick={() => {
+                      setDraft(draftFromProvider(selected));
+                      setError(null);
+                    }}
+                  >
+                    {t("providers.discardChanges")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="providers-save-action"
+                    busy={saving}
+                    busyLabel={t("providers.saving")}
+                    disabled={!hasUnsavedChanges}
+                    onClick={() => void saveDraft()}
+                  >
+                    <IconSave />
+                    <span>{t("providers.saveChanges")}</span>
+                  </Button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {error && <p className="providers-error">{error}</p>}
-        </section>
-      </div>
+            {error && <p className="providers-error">{error}</p>}
+          </section>
+        </div>
       )}
     </div>
   );

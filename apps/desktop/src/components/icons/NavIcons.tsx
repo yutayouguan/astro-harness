@@ -46,11 +46,18 @@ function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
   return Children.map(children, (child) => {
     if (!isValidElement<PaintedProps>(child)) return child;
 
-    const cls = typeof child.props.className === "string" ? child.props.className : "";
+    const cls =
+      typeof child.props.className === "string" ? child.props.className : "";
     const nextChildren =
-      child.props.children != null ? paintDetailChildren(child.props.children, paint) : child.props.children;
+      child.props.children != null
+        ? paintDetailChildren(child.props.children, paint)
+        : child.props.children;
 
-    if (cls.includes("nav-icon-cutout") || cls.includes("nav-icon-hole") || cls.includes("nav-icon-stroke")) {
+    if (
+      cls.includes("nav-icon-cutout") ||
+      cls.includes("nav-icon-hole") ||
+      cls.includes("nav-icon-stroke")
+    ) {
       return cloneElement(child as ReactElement<PaintedProps>, {
         fill: "none",
         stroke: paint,
@@ -76,7 +83,9 @@ function paintDetailChildren(children: ReactNode, paint: string): ReactNode {
     }
 
     if (nextChildren !== child.props.children) {
-      return cloneElement(child as ReactElement<PaintedProps>, { children: nextChildren });
+      return cloneElement(child as ReactElement<PaintedProps>, {
+        children: nextChildren,
+      });
     }
 
     return child;
@@ -99,14 +108,19 @@ function NavIconBase({ children, style, ...props }: IconProps) {
       strokeLinejoin="round"
       aria-hidden
       {...props}
-      style={{ ["--nav-grad-paint" as string]: paint, ...style } as CSSProperties}
+      style={
+        { ["--nav-grad-paint" as string]: paint, ...style } as CSSProperties
+      }
       fill="none"
       stroke={paint}
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--nav-grad-top, currentColor)" />
-          <stop offset="100%" stopColor="var(--nav-grad-bottom, currentColor)" />
+          <stop
+            offset="100%"
+            stopColor="var(--nav-grad-bottom, currentColor)"
+          />
         </linearGradient>
       </defs>
       {paintDetailChildren(children, paint)}
@@ -119,9 +133,10 @@ export function IconChat(props: IconProps) {
   return (
     <NavIconBase {...props}>
       <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      <path className="nav-icon-cutout" d="M8 12h.01" />
-      <path className="nav-icon-cutout" d="M12 12h.01" />
-      <path className="nav-icon-cutout" d="M16 12h.01" />
+      {/* v.01 撑开包围盒：零高包围盒会让渐变描边整条不渲染 */}
+      <path className="nav-icon-cutout" d="M8 12h.01v.01" />
+      <path className="nav-icon-cutout" d="M12 12h.01v.01" />
+      <path className="nav-icon-cutout" d="M16 12h.01v.01" />
     </NavIconBase>
   );
 }
@@ -199,26 +214,39 @@ export function IconSparkles(props: IconProps) {
   );
 }
 
-/** 智能流程 — 流程菱形 + 内嵌播放键：决策引擎 × 自动执行 */
+/** 智能流程 — 圆形本体内嵌流程连线：上游节点经折线接到下游节点 */
 export function IconLoop(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      {/* 菱形主体（流程图决策符号） */}
-      <path d="M12 2 22 12 12 22 2 12Z" strokeLinejoin="round" />
-      {/* 内嵌播放三角（选中时镂空） */}
-      <path className="nav-icon-cutout" d="M10 8.5v7l6-3.5z" />
+      <circle cx="12" cy="12" r="8.6" />
+      <path className="nav-icon-cutout" d="M9.8 9.2h2a2 2 0 0 1 2 2v2.5" />
+      <circle className="nav-icon-cutout" cx="8.2" cy="9.2" r="1.6" />
+      <circle className="nav-icon-cutout" cx="13.8" cy="15.3" r="1.6" />
     </NavIconBase>
   );
 }
 
-/** 定时任务 — 默认空心+勾线稿；选中表盘填实，勾变透镜镂空 */
+/** 插件 — 圆形本体内嵌插头，选中时插头变透镜镂空 */
+export function IconPlugin(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      {/* 插脚与电线合并进带宽度的路径：渐变描边对零宽包围盒不渲染 */}
+      <path className="nav-icon-cutout" d="M9.7 7.9v2.3M14.3 7.9v2.3" />
+      <path
+        className="nav-icon-cutout"
+        d="M8.5 10.4h7v1.9a3.5 3.5 0 0 1-7 0zM12 15.8v2.1"
+      />
+    </NavIconBase>
+  );
+}
+
+/** 定时任务 — 时钟：表盘 + 指针，指针在选中时变透镜镂空 */
 export function IconCron(props: IconProps) {
   return (
     <NavIconBase {...props}>
-      <circle cx="12" cy="13" r="8" />
-      <path className="nav-icon-stroke" d="M9 3.2 7.2 5.6" />
-      <path className="nav-icon-stroke" d="M15 3.2 16.8 5.6" />
-      <path className="nav-icon-cutout" d="m9.2 13.1 1.9 1.9 3.8-4" />
+      <circle cx="12" cy="12" r="8.6" />
+      <path className="nav-icon-cutout" d="M12 7.6V12h3.4" />
     </NavIconBase>
   );
 }
@@ -266,6 +294,26 @@ export function IconProviders(props: IconProps) {
   return (
     <NavIconBase {...props}>
       <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+    </NavIconBase>
+  );
+}
+
+/** 上下文与压缩 — 两层内容栈，避免三层图标在小尺寸下显得过密。 */
+export function IconContext(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+      <path className="nav-icon-stroke" d="m3 13 9 5 9-5" />
+    </NavIconBase>
+  );
+}
+
+/** 诊断 — 统一圆角轮廓中的状态脉冲。 */
+export function IconDiagnostics(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path className="nav-icon-cutout" d="M7 12h2l1.5-3 3 6 1.5-3h2" />
     </NavIconBase>
   );
 }
@@ -334,6 +382,19 @@ export function IconGlobe(props: IconProps) {
   );
 }
 
+/** 浏览器设置 */
+export function IconBrowser(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <circle className="nav-icon-stroke" cx="12" cy="12" r="9" />
+      <path
+        className="nav-icon-stroke"
+        d="M3.5 9h17M3.5 15h17M12 3c2.2 2.45 3.35 5.45 3.35 9S14.2 18.55 12 21M12 3C9.8 5.45 8.65 8.45 8.65 12S9.8 18.55 12 21"
+      />
+    </NavIconBase>
+  );
+}
+
 /** 展开侧栏 */
 export function IconPanelOpen(props: IconProps) {
   return (
@@ -359,7 +420,12 @@ export function IconSidebarLabels(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
       <rect width="18" height="18" x="3" y="3" rx="3" />
-      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
+      <path
+        d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"
+        fill="currentColor"
+        opacity="0.25"
+        stroke="none"
+      />
       <path d="M9 3v18" />
       <path d="M13 8h5M13 12h5M13 16h3" />
     </ChromeIconBase>
@@ -371,7 +437,12 @@ export function IconSidebarIcons(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
       <rect width="18" height="18" x="3" y="3" rx="3" />
-      <path d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="currentColor" opacity="0.25" stroke="none" />
+      <path
+        d="M6 3h3v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"
+        fill="currentColor"
+        opacity="0.25"
+        stroke="none"
+      />
       <path d="M9 3v18" />
     </ChromeIconBase>
   );
@@ -414,17 +485,6 @@ export function IconCollapse(props: IconProps) {
 
 /** 新建会话 */
 export function IconNewChat(props: IconProps) {
-  return (
-    <ChromeIconBase {...props}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M12 7v6" />
-      <path d="M9 10h6" />
-    </ChromeIconBase>
-  );
-}
-
-/** 新建 Agent */
-export function IconNewSession(props: IconProps) {
   return (
     <ChromeIconBase {...props}>
       <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092a10 10 0 1 0-4.777-4.719" />

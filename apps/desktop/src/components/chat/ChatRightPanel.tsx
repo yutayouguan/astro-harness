@@ -1,28 +1,45 @@
-// 聊天右侧栏（会话 / 任务监控 / 上下文等 Tab）。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+// 聊天悬浮侧栏（摘要 / 上下文 / 分支）；文件预览在内嵌项目工作台。
 import {
-  Activity,
-  Bot,
-  Eye,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  GitBranch,
+  LayoutDashboard,
   Layers,
-  MessagesSquare,
   PanelRight,
   X,
   type LucideIcon,
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { ChatMessage } from "../../types";
+import type { ConversationEntry } from "../../types";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
-import type { GeneratingPreview } from "../../hooks/chat/useGeneratingPreview";
-import ChatSessionList from "./ChatSessionList";
-import ChatAgentInfo from "./ChatAgentInfo";
+import {
+  CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  CHAT_RIGHT_PANEL_MIN_WIDTH,
+  CHAT_RIGHT_PANEL_WIDTH_KEY,
+  clampChatRightPanelWidth,
+  maxChatRightPanelWidth,
+  parseStoredChatRightPanelWidth,
+} from "../../lib/ui/chatRightPanelWidth";
 import ContextExplorer from "./ContextExplorer";
-import GeneratingPreviewPanel from "./GeneratingPreviewPanel";
 import TaskMonitorPanel from "./TaskMonitorPanel";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import ChatAgentInfo from "./ChatAgentInfo";
+import BranchGraphPanel from "./BranchGraphPanel";
+import MotionSwitch from "../ui/MotionSwitch";
+import SubagentActivityBar from "./SubagentActivityBar";
+import SubagentsPanel from "./SubagentsPanel";
+import type { AgentThread, AgentTreeNode } from "../../hooks/chat/subagentTree";
 
-export type ChatRightTab = "sessions" | "monitor" | "context" | "preview" | "agent";
+export type ChatRightTab = "summary" | "context" | "branches";
 
 /** 右侧栏入参 */
 type Props = {
@@ -41,42 +58,41 @@ type Props = {
   contextUsage?: ContextUsageSnapshot | null;
   /** 模型上下文窗口；未知时回落 128000 */
   contextWindow?: number;
-  onOpenSession: (sessionId: string) => void;
-  /** 新建空白会话 */
-  onNewSession: () => void;
-  /** 新建 Agent 引导 */
-  onNewAgent: () => void;
-  /** 删除当前会话前取消流 */
-  onPrepareDeleteCurrentSession?: () => void | Promise<void>;
-  /** 当前会话被删除后清理本地状态 */
-  onClearDeletedCurrentSession?: () => void | Promise<void>;
-  onOpenMemory: () => void;
-  onOpenSkills: () => void;
-  /** 正在流式输出的会话 id；无流式时为 null */
-  streamingSessionId?: string | null;
-  /** 生成中的文件实时预览（preview Tab） */
-  generatingPreview?: GeneratingPreview | null;
   /** 聊天消息列表（任务监控 Tab 使用） */
-  messages?: ChatMessage[];
+  messages?: ConversationEntry[];
   /** 是否正在流式输出 */
   streaming?: boolean;
+  subagentRoots: AgentTreeNode[];
+  subagentThreads: AgentThread[];
+  subagentRootServiceTier?: string | null;
+  subagentError?: string | null;
+  subagentsLoading: boolean;
+  subagentsInitialized: boolean;
+  onRefreshSubagents: () => Promise<void>;
+  onMarkSubagentRead: (canonicalPath: string) => void;
+  onOpenSession: (sessionId: string) => void | Promise<void>;
+  onOpenSideSession: (sessionId: string) => void | Promise<void>;
+  /** 在某轮之前分支后，把原始输入回填到输入框 */
+  onPrefillInput?: (text: string) => void;
+  onOpenMemory: () => void;
+  onOpenSkills: () => void;
+  onWidthChange?: (width: number) => void;
 };
 
 const TAB_KEYS: Record<ChatRightTab, MessageKey> = {
-  sessions: "chat.rightPanel.sessions",
-  monitor: "chat.rightPanel.monitor",
+  summary: "chat.rightPanel.summary",
   context: "chat.rightPanel.context",
-  preview: "chat.rightPanel.preview",
-  agent: "chat.rightPanel.agent",
+  branches: "chat.rightPanel.branches",
 };
 
 const TAB_ICONS: Record<ChatRightTab, LucideIcon> = {
-  sessions: MessagesSquare,
-  monitor: Activity,
+  summary: LayoutDashboard,
   context: Layers,
-  preview: Eye,
-  agent: Bot,
+  branches: GitBranch,
 };
+
+const RESIZE_KEYBOARD_STEP = 16;
+const RESIZE_KEYBOARD_LARGE_STEP = 48;
 
 export default function ChatRightPanel({
   tab,
@@ -87,51 +103,191 @@ export default function ChatRightPanel({
   tokenUsage: _tokenUsage = null,
   contextUsage = null,
   contextWindow = 0,
-  onOpenSession,
-  onNewSession,
-  onNewAgent,
-  onPrepareDeleteCurrentSession,
-  onClearDeletedCurrentSession,
-  onOpenMemory,
-  onOpenSkills,
-  streamingSessionId = null,
-  generatingPreview = null,
   messages = [],
   streaming = false,
+  subagentRoots,
+  subagentThreads,
+  subagentRootServiceTier = null,
+  subagentError = null,
+  subagentsLoading,
+  subagentsInitialized,
+  onRefreshSubagents,
+  onMarkSubagentRead,
+  onOpenSession,
+  onOpenSideSession,
+  onPrefillInput,
+  onOpenMemory,
+  onOpenSkills,
+  onWidthChange,
 }: Props) {
   const { t } = useI18n();
-  const tabs: ChatRightTab[] = ["sessions", "monitor", "context", "preview", "agent"];
+  const reducedMotion = useReducedMotion();
+  const tabs: ChatRightTab[] = ["summary", "context", "branches"];
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
-  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
-
-  const closeWithAnim = useCallback(() => {
-    const el = panelRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      onClose();
-      return;
+  const panelWidthRef = useRef(CHAT_RIGHT_PANEL_DEFAULT_WIDTH);
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const [indicator, setIndicator] = useState({
+    left: 0,
+    width: 0,
+    ready: false,
+  });
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      return parseStoredChatRightPanelWidth(
+        localStorage.getItem(CHAT_RIGHT_PANEL_WIDTH_KEY),
+      );
+    } catch {
+      return CHAT_RIGHT_PANEL_DEFAULT_WIDTH;
     }
-    el.classList.add("is-closing");
-    let done = false;
-    const finish = () => { if (done) return; done = true; onClose(); };
-    el.addEventListener("animationend", finish, { once: true });
-    setTimeout(finish, 160);
-  }, [onClose]);
+  });
+  const [maxPanelWidth, setMaxPanelWidth] = useState(
+    CHAT_RIGHT_PANEL_DEFAULT_WIDTH,
+  );
+  const [resizing, setResizing] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [selectedSubagentPath, setSelectedSubagentPath] = useState<
+    string | null
+  >(null);
+
+  panelWidthRef.current = panelWidth;
+
+  useEffect(() => {
+    onWidthChange?.(panelWidth);
+  }, [onWidthChange, panelWidth]);
+
+  useEffect(() => {
+    if (tab !== "summary") {
+      setSubagentsOpen(false);
+      setSelectedSubagentPath(null);
+    }
+  }, [tab]);
+
+  const containerWidth = useCallback(() => {
+    const width =
+      panelRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+    return width > 0 ? width : Number.POSITIVE_INFINITY;
+  }, []);
+
+  const updatePanelWidth = useCallback(
+    (nextWidth: number, persist = false) => {
+      const next = clampChatRightPanelWidth(nextWidth, containerWidth());
+      panelWidthRef.current = next;
+      setPanelWidth(next);
+      if (persist) {
+        try {
+          localStorage.setItem(CHAT_RIGHT_PANEL_WIDTH_KEY, String(next));
+        } catch {
+          // Storage can be unavailable in private or locked-down webviews.
+        }
+      }
+    },
+    [containerWidth],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeWithAnim();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closeWithAnim]);
+  }, [onClose]);
+
+  useLayoutEffect(() => {
+    const container = panelRef.current?.parentElement;
+    if (!container) return;
+
+    const syncBounds = () => {
+      const width = container.getBoundingClientRect().width;
+      if (width <= 0) return;
+      const nextMax = maxChatRightPanelWidth(width);
+      setMaxPanelWidth(nextMax);
+      const nextWidth = clampChatRightPanelWidth(panelWidthRef.current, width);
+      panelWidthRef.current = nextWidth;
+      setPanelWidth(nextWidth);
+    };
+
+    syncBounds();
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncBounds)
+        : null;
+    observer?.observe(container);
+    window.addEventListener("resize", syncBounds);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncBounds);
+    };
+  }, []);
+
+  const finishResize = useCallback((pointerId: number) => {
+    if (resizeRef.current?.pointerId !== pointerId) return;
+    resizeRef.current = null;
+    setResizing(false);
+    try {
+      localStorage.setItem(
+        CHAT_RIGHT_PANEL_WIDTH_KEY,
+        String(panelWidthRef.current),
+      );
+    } catch {
+      // Storage can be unavailable in private or locked-down webviews.
+    }
+  }, []);
+
+  const onResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth:
+        panelRef.current?.getBoundingClientRect().width ??
+        panelWidthRef.current,
+    };
+    setResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = resizeRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    updatePanelWidth(drag.startWidth + drag.startX - event.clientX);
+  };
+
+  const onResizePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    finishResize(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onResizeKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey
+      ? RESIZE_KEYBOARD_LARGE_STEP
+      : RESIZE_KEYBOARD_STEP;
+    let nextWidth: number | null = null;
+    if (event.key === "ArrowLeft") nextWidth = panelWidthRef.current + step;
+    else if (event.key === "ArrowRight")
+      nextWidth = panelWidthRef.current - step;
+    else if (event.key === "Home") nextWidth = CHAT_RIGHT_PANEL_MIN_WIDTH;
+    else if (event.key === "End") nextWidth = maxPanelWidth;
+    if (nextWidth == null) return;
+    event.preventDefault();
+    updatePanelWidth(nextWidth, true);
+  };
 
   useLayoutEffect(() => {
     const root = tabsRef.current;
     if (!root) return;
 
     const sync = () => {
-      const active = root.querySelector<HTMLElement>(".chat-right-tab.is-active");
+      const active = root.querySelector<HTMLElement>(
+        ".chat-right-tab.is-active",
+      );
       if (!active) return;
       const inset = Math.round(active.offsetWidth * 0.16);
       setIndicator({
@@ -142,7 +298,8 @@ export default function ChatRightPanel({
     };
 
     sync();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
     ro?.observe(root);
     window.addEventListener("resize", sync);
     return () => {
@@ -153,13 +310,62 @@ export default function ChatRightPanel({
 
   return (
     <>
-      <button
+      <motion.button
         type="button"
         className="chat-right-backdrop"
         aria-label={t("chat.rightPanel.close")}
-        onClick={closeWithAnim}
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reducedMotion ? 0.12 : 0.16, ease: "easeOut" }}
       />
-      <aside ref={panelRef} className="chat-right-panel" aria-label={t("chat.rightPanel.title")}>
+      <motion.aside
+        ref={panelRef}
+        className={`chat-right-panel${resizing ? " is-resizing" : ""}`}
+        aria-label={t("chat.rightPanel.title")}
+        style={
+          { "--chat-right-panel-width": `${panelWidth}px` } as CSSProperties
+        }
+        initial={
+          reducedMotion ? { opacity: 0 } : { opacity: 0, x: 12, scale: 0.98 }
+        }
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        exit={
+          reducedMotion
+            ? { opacity: 0, transition: { duration: 0.12 } }
+            : {
+                opacity: 0,
+                x: 12,
+                scale: 0.985,
+                transition: { duration: 0.16, ease: "easeOut" },
+              }
+        }
+        transition={{
+          duration: reducedMotion ? 0.12 : 0.24,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      >
+        <button
+          type="button"
+          className="chat-right-resizer"
+          role="separator"
+          aria-label={t("chat.rightPanel.resize")}
+          aria-orientation="vertical"
+          aria-valuemin={Math.min(CHAT_RIGHT_PANEL_MIN_WIDTH, maxPanelWidth)}
+          aria-valuemax={maxPanelWidth}
+          aria-valuenow={panelWidth}
+          title={t("chat.rightPanel.resize")}
+          onDoubleClick={() =>
+            updatePanelWidth(CHAT_RIGHT_PANEL_DEFAULT_WIDTH, true)
+          }
+          onKeyDown={onResizeKeyDown}
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          onPointerCancel={(event) => finishResize(event.pointerId)}
+          onLostPointerCapture={(event) => finishResize(event.pointerId)}
+        />
         <div className="chat-right-header">
           <h2 className="chat-right-title">
             <PanelRight size={17} strokeWidth={1.75} aria-hidden />
@@ -168,7 +374,7 @@ export default function ChatRightPanel({
           <button
             type="button"
             className="chat-right-close"
-            onClick={closeWithAnim}
+            onClick={onClose}
             title={t("chat.rightPanel.close")}
             aria-label={t("chat.rightPanel.close")}
           >
@@ -202,53 +408,92 @@ export default function ChatRightPanel({
           })}
         </div>
         <div className="chat-right-body">
-          <AnimatedSwitch
+          <MotionSwitch
             switchKey={tab}
             className="anim-switch--fill"
             variant="fade"
-            mode="enter"
           >
-            {tab === "sessions" && (
-              <ChatSessionList
-                activeSessionId={sessionId}
-                streamingSessionId={streamingSessionId}
-                onOpenSession={onOpenSession}
-                onNewSession={onNewSession}
-                onNewAgent={onNewAgent}
-                onPrepareDeleteCurrentSession={onPrepareDeleteCurrentSession}
-                onClearDeletedCurrentSession={onClearDeletedCurrentSession}
-              />
-            )}
-            {tab === "monitor" && (
-              <TaskMonitorPanel
-                messages={messages}
-                streaming={streaming}
-              />
-            )}
+            {tab === "summary" &&
+              (subagentsOpen ? (
+                <SubagentsPanel
+                  embedded
+                  open
+                  rootSessionId={sessionId}
+                  roots={subagentRoots}
+                  threads={subagentThreads}
+                  initialTarget={selectedSubagentPath}
+                  streamError={subagentError}
+                  loading={subagentsLoading}
+                  initialized={subagentsInitialized}
+                  refreshThreads={onRefreshSubagents}
+                  markRead={onMarkSubagentRead}
+                  onClose={() => {
+                    setSubagentsOpen(false);
+                    setSelectedSubagentPath(null);
+                  }}
+                />
+              ) : (
+                <div className="chat-summary-panel">
+                  <ChatAgentInfo
+                    variant="summary"
+                    sessionId={sessionId}
+                    turnId={turnId}
+                    contextUsage={contextUsage}
+                    contextWindow={contextWindow}
+                    onOpenMemory={onOpenMemory}
+                    onOpenSkills={onOpenSkills}
+                    onOpenContextTab={() => onTabChange("context")}
+                  />
+                  <SubagentActivityBar
+                    rootSessionId={sessionId}
+                    rootServiceTier={subagentRootServiceTier}
+                    roots={subagentRoots}
+                    onRefresh={onRefreshSubagents}
+                    showEmpty
+                    onOpenPanel={() => {
+                      setSelectedSubagentPath(null);
+                      setSubagentsOpen(true);
+                    }}
+                    onOpenThread={(canonicalPath) => {
+                      onMarkSubagentRead(canonicalPath);
+                      setSelectedSubagentPath(canonicalPath);
+                      setSubagentsOpen(true);
+                    }}
+                  />
+                  <TaskMonitorPanel messages={messages} streaming={streaming} />
+                </div>
+              ))}
             {tab === "context" && (
-              <ContextExplorer
-                snapshot={contextUsage}
-                windowTokens={contextWindow}
-                sessionLabel={sessionId ?? "—"}
-              />
+              <div className="chat-context-stack">
+                <ContextExplorer
+                  snapshot={contextUsage}
+                  windowTokens={contextWindow}
+                  sessionLabel={sessionId ?? "—"}
+                />
+                <ChatAgentInfo
+                  variant="context"
+                  sessionId={sessionId}
+                  turnId={turnId}
+                  contextUsage={contextUsage}
+                  contextWindow={contextWindow}
+                  onOpenMemory={onOpenMemory}
+                  onOpenSkills={onOpenSkills}
+                  onOpenContextTab={() => onTabChange("context")}
+                />
+              </div>
             )}
-            {tab === "preview" && (
-              <GeneratingPreviewPanel preview={generatingPreview} />
-            )}
-            {tab === "agent" && (
-              <ChatAgentInfo
+            {tab === "branches" && (
+              <BranchGraphPanel
                 sessionId={sessionId}
-                turnId={turnId}
-                contextUsage={contextUsage}
-                contextWindow={contextWindow}
-                onOpenMemory={onOpenMemory}
-                onOpenSkills={onOpenSkills}
-                onOpenContextTab={() => onTabChange("context")}
+                streaming={streaming}
+                onOpenSession={onOpenSession}
+                onOpenSideSession={onOpenSideSession}
+                onPrefillInput={onPrefillInput}
               />
             )}
-          </AnimatedSwitch>
+          </MotionSwitch>
         </div>
-      </aside>
+      </motion.aside>
     </>
   );
 }

@@ -111,7 +111,7 @@ mod tests {
         assert!(should_refund_tool_round(&["code_exec"]));
         assert!(should_refund_tool_round(&["code_exec", "code_exec"]));
         assert!(!should_refund_tool_round(&[]));
-        assert!(!should_refund_tool_round(&["terminal"]));
-        assert!(!should_refund_tool_round(&["code_exec", "terminal"]));
+        assert!(!should_refund_tool_round(&["exec_command"]));
+        assert!(!should_refund_tool_round(&["code_exec", "exec_command"]));
     }
 }

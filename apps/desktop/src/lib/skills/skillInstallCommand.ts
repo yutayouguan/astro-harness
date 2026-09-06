@@ -1,19 +1,11 @@
 /** Skill 安装命令拼装。 */
 import type { StoreSkill } from "../../types";
 
-const SKILLHUB_INSTALL_DOC = "https://skillhub.cn/install/skillhub.md";
+export type SkillInstallTarget = "global" | "project";
 
-function parseSkillsDotSh(
-  skill: StoreSkill,
-): { source: string; skillId: string } | null {
-  const fromId = skill.id.match(/^skillsdotsh:(.+)\/([^/]+)$/);
-  if (fromId) return { source: fromId[1], skillId: fromId[2] };
-
-  const fromHome = skill.homepage?.match(/skills\.sh\/(.+)\/([^/?#]+)/);
-  if (fromHome) return { source: fromHome[1], skillId: fromHome[2] };
-
-  return null;
-}
+export type StoreInstallCommandOptions = {
+  contextual?: boolean;
+};
 
 /** 安装引用用的 owner/slug（来自 id `skillhub:owner/slug`） */
 function skillhubOwnerSlug(skill: StoreSkill): string {
@@ -33,78 +25,58 @@ function skillhubDetailSlug(skill: StoreSkill): string {
 }
 
 /** 生成可粘贴给 Agent / 终端的安装命令或 Prompt */
-export function storeInstallCommand(skill: StoreSkill): string {
-  if (skill.store === "skillsdotsh") {
-    const parsed = parseSkillsDotSh(skill);
-    if (parsed) {
-      return `npx skills add ${parsed.source}/${parsed.skillId}`;
-    }
-    if (skill.install_ref) {
-      return `npx skills add ${skill.install_ref}`;
-    }
-  }
-
-  if (skill.store === "skillhub") {
-    const ownerSlug = skillhubOwnerSlug(skill);
-    const installHint = skill.install_ref || `skillhub:${ownerSlug}`;
-    const detailUrl = `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
-    // 一键安装由 Astro 走 api.skillhub.cn 文件 API；提示给 Agent 时仍给可操作引用
-    return (
-      `请帮我安装 SkillHub 技能「${skill.name}」\n` +
-      `- 安装引用：${installHint}\n` +
-      `- 文档：${SKILLHUB_INSTALL_DOC}\n` +
-      `- 详情：${detailUrl}\n`
-    );
-  }
-
-  if (skill.store === "clawhub") {
-    const installHint = skill.install_ref || `clawhub:${skill.name}`;
-    const detailUrl =
-      skill.homepage ||
-      `https://clawhub.ai/s/skills/${skill.id.replace(/^clawhub:/, "")}`;
-    return (
-      `请帮我安装 ClawHub 技能「${skill.name}」\n` +
-      `- 安装命令：npx --yes clawhub@latest install ${installHint.replace(/^clawhub:/, "")}\n` +
-      `- 安装引用：${installHint}\n` +
-      `- 详情：${detailUrl}\n`
-    );
-  }
-
+export function storeInstallCommand(
+  skill: StoreSkill,
+  target: SkillInstallTarget = "global",
+  options: StoreInstallCommandOptions = {},
+): string {
+  const ownerSlug = skillhubOwnerSlug(skill);
+  const installHint = skill.install_ref || `skillhub:${ownerSlug}`;
+  const detailUrl = `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
+  const targetPath =
+    target === "project" ? "<当前项目>/.astro/skills" : "~/.astro/skills";
+  const apiKeyNote =
+    skill.requires_api_key === true
+      ? "- 凭据：安装后读取 SKILL.md 确认准确的 API Key 名称；不要让我在对话中粘贴密钥，也不要把密钥写入 Skill 或项目文件。\n"
+      : "";
+  const subject = options.contextual
+    ? "这个 SkillHub 技能"
+    : `SkillHub 技能「${skill.name}」`;
   return (
-    `请帮我安装这个 Skill：\n` +
-    `- 名称：${skill.name}\n` +
-    `- 来源：${skill.source}\n` +
-    `- 安装引用：${skill.install_ref}\n` +
-    (skill.homepage ? `- 主页：${skill.homepage}\n` : "")
+    `请通过 Astro 内置的 request_plugin_install 工具安装${subject}；如果该工具尚未加载，先用 tool_search 搜索并激活它。不要运行 SkillHub CLI，也不要安装到 .agents、.codex 或 ./skills。\n` +
+    `- 安装引用：${installHint}\n` +
+    `- 安装作用域：${target}\n` +
+    `- 目标目录：${targetPath}\n` +
+    `- 工具参数：skill_id=${ownerSlug}，install_ref=${installHint}，scope=${target}，requires_api_key=${skill.requires_api_key === true}\n` +
+    apiKeyNote +
+    `- 详情：${detailUrl}\n`
+  );
+}
+
+/** 安装完成后，让 Agent 只检查凭据要求，不在对话或文件中收集密钥。 */
+export function storeConfigureCommand(
+  skill: StoreSkill,
+  target: SkillInstallTarget,
+  options: StoreInstallCommandOptions = {},
+): string {
+  const folder = skillhubDetailSlug(skill);
+  const skillPath =
+    target === "project"
+      ? `<当前项目>/.astro/skills/${folder}/SKILL.md`
+      : `~/.astro/skills/${folder}/SKILL.md`;
+  const subject = options.contextual
+    ? "这个 SkillHub 技能"
+    : `SkillHub 技能「${skill.name}」`;
+  return (
+    `${subject}已经安装。\n` +
+    `请读取 ${skillPath}，确认它实际需要的凭据名称、申请地址和配置方式，并用简短步骤告诉我。\n` +
+    "不要要求我在对话中粘贴 API Key，不要把密钥写入 Skill、项目文件或日志；如果当前 Astro 没有对应的安全凭据入口，请明确说明，不要假装已经配置完成。\n"
   );
 }
 
 export function storeSkillDetailUrl(skill: StoreSkill): string | null {
-  if (skill.store === "skillsdotsh") {
-    const parsed = parseSkillsDotSh(skill);
-    if (parsed) {
-      return `https://www.skills.sh/${parsed.source}/${parsed.skillId}`;
-    }
-    if (skill.homepage) {
-      return skill.homepage.replace(
-        "https://skills.sh/",
-        "https://www.skills.sh/",
-      );
-    }
-  }
-
-  if (skill.store === "skillhub") {
-    // 勿用 homepage（api.skillhub.cn/...）或 owner/slug：官网详情路由仅为 /skills/:slug
-    return `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
-  }
-
-  if (skill.store === "clawhub") {
-    if (skill.homepage) return skill.homepage;
-    const slug = skill.id.replace(/^clawhub:/, "").split("--").pop() || skill.name;
-    return `https://clawhub.ai/s/skills/${slug}`;
-  }
-
-  return skill.homepage;
+  // 勿用 homepage（api.skillhub.cn/...）或 owner/slug：官网详情路由仅为 /skills/:slug。
+  return `https://skillhub.cn/skills/${skillhubDetailSlug(skill)}`;
 }
 
 export function storeCardDescription(

@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use agent_config::loader::{load_local_config, LocalConfigOptions};
@@ -18,9 +19,9 @@ use home::{default_memory_dir, ensure_default_workspace_dirs};
 use crate::names::sanitize_server_id;
 use types::{McpToolAnnotations, McpToolApprovalMode};
 
-/// MCP server 启动默认超时（秒），与 Codex 默认值一致。
+/// MCP server 启动默认超时（秒）。
 pub const DEFAULT_STARTUP_TIMEOUT_SECS: u64 = 10;
-/// MCP 工具调用默认超时（秒），与 Codex 默认值一致。
+/// MCP 工具调用默认超时（秒）。
 pub const DEFAULT_TOOL_TIMEOUT_SECS: u64 = 60;
 /// MCP server 启动超时允许范围。
 pub const STARTUP_TIMEOUT_SECS_RANGE: std::ops::RangeInclusive<u64> = 1..=120;
@@ -44,7 +45,7 @@ pub enum McpTransportType {
 pub enum McpHttpAuth {
     /// 标准 MCP OAuth 2.1 Authorization Code + PKCE。
     OAuth,
-    /// Codex 第一方 ChatGPT 会话认证；Astro 当前不具备该信任通道。
+    /// 第一方 ChatGPT 会话认证；Astro 当前不具备该信任通道。
     Chatgpt,
 }
 
@@ -114,7 +115,7 @@ pub struct DiscoveredTool {
     pub annotations: McpToolAnnotations,
 }
 
-/// 单工具配置。布尔值兼容 Astro 旧开关，table 支持 Codex `approval_mode`。
+/// 单工具配置。布尔值兼容 Astro 旧开关，table 支持 `approval_mode`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum McpToolConfig {
@@ -129,6 +130,13 @@ pub struct McpToolSettings {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_mode: Option<McpToolApprovalMode>,
+    /// 该工具文本输出的 token 预算，必须为正整数。
+    #[serde(
+        default,
+        alias = "outputTokenLimit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_token_limit: Option<NonZeroUsize>,
 }
 
 impl McpToolConfig {
@@ -156,11 +164,27 @@ impl McpToolConfig {
         }
     }
 
+    pub fn with_output_token_limit(self, limit: Option<NonZeroUsize>) -> Self {
+        match self {
+            Self::Enabled(enabled) if limit.is_some() => Self::Settings(McpToolSettings {
+                enabled: (!enabled).then_some(false),
+                approval_mode: None,
+                output_token_limit: limit,
+            }),
+            Self::Enabled(enabled) => Self::Enabled(enabled),
+            Self::Settings(mut settings) => {
+                settings.output_token_limit = limit;
+                Self::Settings(settings)
+            }
+        }
+    }
+
     pub fn from_parts(enabled: bool, approval_mode: Option<McpToolApprovalMode>) -> Self {
         match approval_mode {
             Some(approval_mode) => Self::Settings(McpToolSettings {
                 enabled: (!enabled).then_some(false),
                 approval_mode: Some(approval_mode),
+                output_token_limit: None,
             }),
             None => Self::Enabled(enabled),
         }
@@ -206,7 +230,7 @@ pub struct McpServerConfig {
     /// HTTP Header 名到本地环境变量名的映射。
     #[serde(default, alias = "env_http_headers", alias = "envHttpHeaders")]
     pub env_http_headers: HashMap<String, String>,
-    /// HTTP 认证方式；缺省时与 Codex 一致，优先匿名连接，401 后提示 OAuth 登录。
+    /// HTTP 认证方式；缺省时优先匿名连接，401 后提示 OAuth 登录。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<McpHttpAuth>,
     #[serde(default = "default_true")]
@@ -300,6 +324,16 @@ impl McpServerConfig {
             .get(tool_name)
             .and_then(McpToolConfig::approval_mode)
             .unwrap_or(self.default_tools_approval_mode)
+    }
+
+    pub fn tool_output_token_limit(&self, tool_name: &str) -> Option<usize> {
+        self.tools
+            .get(tool_name)
+            .and_then(|config| match config {
+                McpToolConfig::Enabled(_) => None,
+                McpToolConfig::Settings(settings) => settings.output_token_limit,
+            })
+            .map(NonZeroUsize::get)
     }
 
     /// 应用默认值与安全边界后的启动超时。
@@ -404,7 +438,7 @@ struct TomlMcpServer {
     disabled_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "is_auto_approval_mode")]
     default_tools_approval_mode: McpToolApprovalMode,
-    /// Astro 逐工具开关兼容旧 bool；table 同时承载 Codex approval_mode。
+    /// Astro 逐工具开关兼容旧 bool；table 同时承载 approval_mode。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     tools: HashMap<String, McpToolConfig>,
     /// UI 使用的发现缓存；后续可迁移到独立 runtime state。
@@ -591,7 +625,7 @@ fn merge_servers(
     Ok(())
 }
 
-/// Decode an inline Codex `mcp_servers` table from a custom agent file.
+/// Decode an inline `mcp_servers` table from a custom agent file.
 /// The resulting configs are an overlay; callers decide which inherited layer
 /// they replace.
 pub fn decode_inline_mcp_servers(
@@ -606,6 +640,20 @@ pub fn decode_inline_mcp_servers(
         let config = server.into_config(id.clone())?;
         decoded.insert(config.id.clone(), config);
     }
+    Ok(decoded.into_values().collect())
+}
+
+/// 从已经完成分层解析的配置快照解码 MCP Server。
+///
+/// 与 [`load_mcp_servers_layered`] 不同，本函数不再访问文件系统，供 turn/request
+/// 级不可变配置快照复用，避免在同一边界内二次读盘产生 TOCTOU 漂移。
+pub fn decode_mcp_servers_from_value(config: &toml::Value) -> anyhow::Result<Vec<McpServerConfig>> {
+    let root: McpTomlRoot = config
+        .clone()
+        .try_into()
+        .context("decode MCP servers from effective config")?;
+    let mut decoded = BTreeMap::new();
+    merge_servers(&mut decoded, root.mcp_servers)?;
     Ok(decoded.into_values().collect())
 }
 
@@ -638,10 +686,51 @@ pub fn load_mcp_servers() -> anyhow::Result<Vec<McpServerConfig>> {
     load_mcp_servers_layered(None)
 }
 
+/// 读取单一配置层，不进行跨层合并。
+pub fn load_mcp_servers_scoped(
+    scope: &str,
+    project_root: Option<&Path>,
+) -> anyhow::Result<Vec<McpServerConfig>> {
+    if scope == "builtin" {
+        return Ok(Vec::new());
+    }
+    let path = match scope {
+        "project" => {
+            let root = project_root
+                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
+            mcp_config_path_for_project(root)
+        }
+        _ => mcp_config_path_global(),
+    };
+    let root: McpTomlRoot = read_toml_value(&path)?
+        .try_into()
+        .with_context(|| format!("decode MCP config {}", path.display()))?;
+    let mut merged = BTreeMap::new();
+    merge_servers(&mut merged, root.mcp_servers)?;
+    Ok(merged.into_values().collect())
+}
+
 /// 将服务器列表写入统一的 `~/.astro/config.toml`。
 pub fn save_mcp_servers(servers: &[McpServerConfig]) -> anyhow::Result<()> {
+    save_mcp_servers_scoped("global", None, servers)
+}
+
+/// 将服务器列表写回指定可编辑层；builtin 永远只读。
+pub fn save_mcp_servers_scoped(
+    scope: &str,
+    project_root: Option<&Path>,
+    servers: &[McpServerConfig],
+) -> anyhow::Result<()> {
     ensure_default_workspace_dirs()?;
-    let path = mcp_config_path_global();
+    let path = match scope {
+        "builtin" => anyhow::bail!("builtin MCP servers are read-only"),
+        "project" => {
+            let root = project_root
+                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
+            mcp_config_path_for_project(root)
+        }
+        _ => mcp_config_path_global(),
+    };
     let mut root = read_toml_value(&path)?;
     let table = root
         .as_table_mut()
@@ -741,7 +830,7 @@ mod tests {
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn decodes_inline_codex_agent_mcp_servers() {
+    fn decodes_inline_agent_mcp_servers() {
         let value: toml::Value = r#"
 [mcp_servers.docs]
 url = "https://example.invalid/mcp"
@@ -766,6 +855,25 @@ enabled_tools = ["search"]
             decoded[0].enabled_tools.as_ref().unwrap(),
             &vec!["search".to_string()]
         );
+    }
+
+    #[test]
+    fn decodes_servers_from_an_effective_config_snapshot() {
+        let value: toml::Value = r#"
+model = "gpt"
+[extensions.demo]
+enabled = true
+[mcp_servers.docs]
+url = "https://example.invalid/mcp"
+"#
+        .parse()
+        .unwrap();
+
+        let decoded = decode_mcp_servers_from_value(&value).unwrap();
+
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].id, "docs");
+        assert_eq!(decoded[0].url, "https://example.invalid/mcp");
     }
 
     #[test]
@@ -836,7 +944,7 @@ enabled_tools = ["search"]
     }
 
     #[test]
-    fn codex_approval_modes_and_legacy_boolean_tools_coexist() {
+    fn approval_modes_and_legacy_boolean_tools_coexist() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -849,6 +957,7 @@ default_tools_approval_mode = "writes"
 
 [mcp_servers.docs.tools.read]
 approval_mode = "approve"
+output_token_limit = 300
 
 [mcp_servers.docs.tools.publish]
 enabled = false
@@ -871,6 +980,7 @@ tools = { read = true, write = false }
             docs.tool_approval_mode("read"),
             McpToolApprovalMode::Approve
         );
+        assert_eq!(docs.tool_output_token_limit("read"), Some(300));
         assert_eq!(
             docs.tool_approval_mode("publish"),
             McpToolApprovalMode::Prompt
@@ -884,6 +994,7 @@ tools = { read = true, write = false }
         save_mcp_servers(&loaded).unwrap();
         let reloaded = load_mcp_servers().unwrap();
         let docs = reloaded.iter().find(|server| server.id == "docs").unwrap();
+        assert_eq!(docs.tool_output_token_limit("read"), Some(300));
         assert_eq!(
             docs.tool_approval_mode("read"),
             McpToolApprovalMode::Approve
@@ -1054,7 +1165,7 @@ command = "project-command"
     }
 
     #[test]
-    fn codex_timeout_aliases_are_preserved() {
+    fn timeout_aliases_are_preserved() {
         let cfg: McpServerConfig = serde_json::from_str(
             r#"{
                 "id": "x",
@@ -1074,7 +1185,7 @@ command = "project-command"
     }
 
     #[test]
-    fn codex_environment_reference_fields_roundtrip_in_toml() {
+    fn environment_reference_fields_roundtrip_in_toml() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
@@ -1232,7 +1343,7 @@ command = "must-not-load"
     }
 
     #[test]
-    fn codex_and_agent_private_config_paths_are_not_inputs() {
+    fn dotcodex_and_agent_private_config_paths_are_not_inputs() {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());

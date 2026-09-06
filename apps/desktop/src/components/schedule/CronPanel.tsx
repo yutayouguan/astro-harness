@@ -1,19 +1,24 @@
 /** 定时任务面板：任务列表、运行记录与创建抽屉。 */
-import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SVGProps,
+} from "react";
 import { createPortal } from "react-dom";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
 import {
   BookOpen,
-  Bot,
   BrainCircuit,
   CalendarClock,
   CalendarPlus,
-  Check,
   CheckCircle2,
+  ChevronRight,
   CircleAlert,
   Clock3,
-  Copy,
   Eye,
   EyeOff,
   Film,
@@ -22,6 +27,7 @@ import {
   Heart,
   History,
   Languages,
+  LayoutTemplate,
   ListTodo,
   ListTree,
   LoaderCircle,
@@ -30,149 +36,126 @@ import {
   Phone,
   Server,
   Stethoscope,
-  TerminalSquare,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
+import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
-import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
-import { useActiveAgent } from "../../hooks/app/useActiveAgent";
-import { normalizeAgentId } from "../../types/agent";
-import type { ChatHistoryDto, ChatMessage } from "../../types";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
+import type { ResponseItemHistoryDto, ConversationEntry } from "../../types";
+import MotionSwitch from "../ui/MotionSwitch";
 import ExpandableSearch from "../ui/ExpandableSearch";
-import MsgActivity from "../chat/MsgActivity";
-import { ChatMarkdown } from "../chat/ChatMarkdown";
 import {
   CreateCronDialog,
   type CronPrefill,
   type ProviderOpt,
 } from "./CreateCronDialog";
+import {
+  CronTaskDetailDrawer,
+  CronRunDetailDrawer,
+  type CronJobDto,
+  type CronRunDto,
+} from "./CronRunDetailDrawer";
 import { GlassDatePicker } from "./GlassDatePicker";
-import { SelectMenu } from "../ui/SelectMenu";
+import { SelectMenu } from "../ui";
 import { EmptyIllustration } from "../../illustrations";
 
+export type { CronJobDto } from "./CronRunDetailDrawer";
+
 type CronTemplate = {
+  id: string;
   icon: LucideIcon;
-  title: string;
-  desc: string;
-  task: string;
+  titleKey: MessageKey;
+  descKey: MessageKey;
+  taskKey: MessageKey;
   schedule: string;
 };
 
 const CRON_TEMPLATES: CronTemplate[] = [
   {
+    id: "news",
     icon: Newspaper,
-    title: "每日 AI 新闻推送",
-    desc: "关注当天 AI 领域的重要动态",
-    task: "请搜索并汇总今天 AI 领域最重要的 3-5 条新闻，包括大模型发布、重要论文、行业动态等。用简洁的中文摘要呈现，每条附上关键要点。",
+    titleKey: "cron.tpl.news.title",
+    descKey: "cron.tpl.news.desc",
+    taskKey: "cron.tpl.news.task",
     schedule: "0 8 * * *",
   },
   {
+    id: "words",
     icon: Languages,
-    title: "每日 5 个英语单词",
-    desc: "每天推荐 5 个高频实用英语单词",
-    task: "请推荐 5 个高频实用英语单词，包含音标、中文释义、例句和记忆技巧。难度适中，适合日常和职场使用。",
+    titleKey: "cron.tpl.words.title",
+    descKey: "cron.tpl.words.desc",
+    taskKey: "cron.tpl.words.task",
     schedule: "0 9 * * *",
   },
   {
+    id: "story",
     icon: BookOpen,
-    title: "每日儿童睡前故事",
-    desc: "生成 3-5 分钟可读的温和睡前故事",
-    task: "请为 4-8 岁的孩子生成一个原创睡前故事，约 500 字，主题温馨正面，语言生动易懂，结尾安宁祥和。",
+    titleKey: "cron.tpl.story.title",
+    descKey: "cron.tpl.story.desc",
+    taskKey: "cron.tpl.story.task",
     schedule: "0 20 * * *",
   },
   {
+    id: "weekly",
     icon: ListTodo,
-    title: "每周工作周报",
-    desc: "每周五汇总仓库 PR 与 Issue 进展",
-    task: "请帮我生成本周工作周报模板：列出本周完成的主要工作、遇到的问题、下周计划。用 Markdown 格式输出。",
+    titleKey: "cron.tpl.weekly.title",
+    descKey: "cron.tpl.weekly.desc",
+    taskKey: "cron.tpl.weekly.task",
     schedule: "0 17 * * 5",
   },
   {
+    id: "movie",
     icon: Film,
-    title: "经典电影推荐",
-    desc: "推荐一部高分经典电影",
-    task: "请推荐一部经典高分电影，包含：电影名称、年份、导演、豆瓣/IMDb 评分、剧情简介（不剧透）、推荐理由。每次推荐不同的电影。",
+    titleKey: "cron.tpl.movie.title",
+    descKey: "cron.tpl.movie.desc",
+    taskKey: "cron.tpl.movie.task",
     schedule: "0 12 * * *",
   },
   {
+    id: "history",
     icon: GraduationCap,
-    title: "历史上的今天",
-    desc: "从科技、文化等领域挑选历史事件",
-    task: "请介绍今天在历史上发生的 2-3 件有趣或重要的事件，涵盖科技、文化、体育等不同领域。每件事用 2-3 句话简述，附上年份。",
+    titleKey: "cron.tpl.history.title",
+    descKey: "cron.tpl.history.desc",
+    taskKey: "cron.tpl.history.task",
     schedule: "0 8 * * *",
   },
   {
+    id: "family",
     icon: Heart,
-    title: "父母联系提醒",
-    desc: "每周日提醒你给家人打电话",
-    task: "提醒：今天是周日，记得给爸妈打个电话或发个消息，聊聊近况。可以问问他们身体状况、最近在忙什么、有没有什么需要帮忙的。",
+    titleKey: "cron.tpl.family.title",
+    descKey: "cron.tpl.family.desc",
+    taskKey: "cron.tpl.family.task",
     schedule: "0 10 * * 0",
   },
   {
+    id: "health",
     icon: Stethoscope,
-    title: "健康日报",
-    desc: "每天提醒你关注健康与运动",
-    task: "每日健康提醒：1) 今天喝够 8 杯水了吗？2) 起身活动一下，做 5 分钟拉伸 3) 注意用眼休息，远眺 20 秒 4) 今天有安排运动吗？建议至少 30 分钟有氧运动。",
+    titleKey: "cron.tpl.health.title",
+    descKey: "cron.tpl.health.desc",
+    taskKey: "cron.tpl.health.task",
     schedule: "0 10 * * *",
   },
   {
+    id: "meeting",
     icon: Phone,
-    title: "会议前准备",
-    desc: "工作日每天早上提醒你整理议题",
-    task: "会议准备提醒：你有一个即将开始的会议。请提前准备：1) 回顾会议议程 2) 整理需要汇报的进展 3) 准备需要讨论的问题 4) 确认所需材料已就绪。",
+    titleKey: "cron.tpl.meeting.title",
+    descKey: "cron.tpl.meeting.desc",
+    taskKey: "cron.tpl.meeting.task",
     schedule: "0 9 * * 1-5",
   },
   {
+    id: "interview",
     icon: BrainCircuit,
-    title: "面试准备提醒",
-    desc: "工作日每 2 小时复习大模型面试要点",
-    task: "每两小时提醒我复习关于大模型的项目亮点、技术难点、常见问答，并生成 3 个模拟面试问题。",
+    titleKey: "cron.tpl.interview.title",
+    descKey: "cron.tpl.interview.desc",
+    taskKey: "cron.tpl.interview.task",
     schedule: "every:2h;wd=1,2,3,4,5",
   },
 ];
-
-/** 定时任务 DTO（与 Rust cron 序列化对齐） */
-export type CronJobDto = {
-  id: string;
-  /** 调度表达式（every:… 或五段 cron） */
-  schedule: string;
-  /** 触发时交给 Agent 的任务描述 */
-  task: string;
-  title: string;
-  agent_id: string;
-  provider_id: string | null;
-  model: string | null;
-  enabled: boolean;
-  created_at: string;
-  last_run_at: string | null;
-  next_run_at: string | null;
-  /** 是否在聊天侧展示运行摘要 */
-  show_in_chat: boolean;
-};
-
-/** 单次运行记录 */
-type CronRunDto = {
-  id: string;
-  job_id: string;
-  title: string;
-  agent_id: string;
-  schedule: string;
-  task: string;
-  fired_at: string;
-  finished_at: string | null;
-  status: string;
-  summary: string;
-  output: string;
-  error: string | null;
-  session_id: string | null;
-  /** due / manual 等触发来源 */
-  trigger: string;
-};
 
 /** 顶栏：任务列表 / 运行历史 */
 type TabId = "jobs" | "history";
@@ -247,11 +230,14 @@ function formatDayLabel(key: string, locale: "zh" | "en"): string {
 }
 
 /** 运行状态归一化为展示种类 */
-function runStatusKind(status: string): "success" | "failure" | "running" | "other" {
+function runStatusKind(
+  status: string,
+): "success" | "failure" | "running" | "other" {
   const s = status.toLowerCase();
   if (s === "success" || s === "ok" || s === "completed") return "success";
   if (s === "failure" || s === "failed" || s === "error") return "failure";
-  if (s === "running" || s === "in_progress" || s === "pending") return "running";
+  if (s === "running" || s === "in_progress" || s === "pending")
+    return "running";
   return "other";
 }
 
@@ -265,42 +251,16 @@ function RunStatusIcon({ status }: { status: string }) {
     return <CircleAlert size={12} strokeWidth={2.4} aria-hidden />;
   }
   if (kind === "running") {
-    return <LoaderCircle size={12} strokeWidth={2.4} className="is-spin" aria-hidden />;
+    return (
+      <LoaderCircle
+        size={12}
+        strokeWidth={2.4}
+        className="is-spin"
+        aria-hidden
+      />
+    );
   }
   return <Clock3 size={12} strokeWidth={2.4} aria-hidden />;
-}
-
-/** 复制运行日志按钮 */
-function CopyLogButton({ text }: { text: string }) {
-  const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = useCallback(async () => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* ignore */
-    }
-  }, [text]);
-
-  return (
-    <button
-      type="button"
-      className={`cron-run-drawer-copy ${copied ? "is-copied" : ""}`}
-      onClick={() => void onCopy()}
-      aria-label={copied ? t("chat.copied") : t("chat.copy")}
-      title={copied ? t("chat.copied") : t("chat.copy")}
-    >
-      {copied ? (
-        <Check size={13} strokeWidth={2.4} aria-hidden />
-      ) : (
-        <Copy size={13} strokeWidth={2.2} aria-hidden />
-      )}
-    </button>
-  );
 }
 
 /** 拉取定时任务运行记录（兼容两种 invoke 参数形态） */
@@ -327,7 +287,14 @@ async function fetchCronRuns(filters: {
 /** 更多操作（三点） */
 function IconMore(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      {...props}
+    >
       <circle cx="5" cy="12" r="1.8" />
       <circle cx="12" cy="12" r="1.8" />
       <circle cx="19" cy="12" r="1.8" />
@@ -338,7 +305,18 @@ function IconMore(props: SVGProps<SVGSVGElement>) {
 /** 立即运行 */
 function IconPlay(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
     </svg>
   );
@@ -347,7 +325,18 @@ function IconPlay(props: SVGProps<SVGSVGElement>) {
 /** 编辑任务 */
 function IconEdit(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
@@ -357,7 +346,18 @@ function IconEdit(props: SVGProps<SVGSVGElement>) {
 /** 运行历史 */
 function IconHistory(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
       <path d="M14 2v6h6" />
       <circle cx="12" cy="15" r="3" />
@@ -369,7 +369,18 @@ function IconHistory(props: SVGProps<SVGSVGElement>) {
 /** 定时任务卡片主图标 */
 function IconCronGlyph(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M9 3.2 7.2 5.6" />
       <path d="M15 3.2 16.8 5.6" />
       <circle cx="12" cy="13" r="8" />
@@ -381,7 +392,18 @@ function IconCronGlyph(props: SVGProps<SVGSVGElement>) {
 /** 删除 */
 function IconTrash(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M3 6h18" />
       <path d="M8 6V4h8v2" />
       <path d="M19 6l-1 14H6L5 6" />
@@ -393,7 +415,18 @@ function IconTrash(props: SVGProps<SVGSVGElement>) {
 /** 画廊视图 */
 function IconViewGallery(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <rect x="3" y="3" width="7" height="7" rx="1.5" />
       <rect x="14" y="3" width="7" height="7" rx="1.5" />
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
@@ -405,7 +438,18 @@ function IconViewGallery(props: SVGProps<SVGSVGElement>) {
 /** 列表视图 */
 function IconViewList(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M8 6h13M8 12h13M8 18h13" />
       <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
       <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -417,7 +461,18 @@ function IconViewList(props: SVGProps<SVGSVGElement>) {
 /** 详情分栏视图 */
 function IconViewDetail(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <rect x="3" y="4" width="8" height="16" rx="1.5" />
       <rect x="13" y="4" width="8" height="16" rx="1.5" />
     </svg>
@@ -427,7 +482,18 @@ function IconViewDetail(props: SVGProps<SVGSVGElement>) {
 /** 调度时间元信息 */
 function IconSchedule(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
@@ -437,23 +503,21 @@ function IconSchedule(props: SVGProps<SVGSVGElement>) {
 /** 上次运行元信息 */
 function IconLastRun(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
       <path d="M3 12a9 9 0 1 0 3-6.7" />
       <path d="M3 4v5h5" />
       <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
-/** Agent / 模型元信息 */
-function IconAgentModel(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
-      <rect x="5" y="8" width="14" height="10" rx="3" />
-      <path d="M12 4v4" />
-      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
-      <path d="M9 18v2M15 18v2" />
     </svg>
   );
 }
@@ -467,11 +531,12 @@ export default function CronPanel({
   const { t, locale } = useI18n();
   const confirm = useConfirm();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
-  const { agents, activeAgentId: agentId } = useActiveAgent();
+  const agentId = "default";
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJobDto | null>(null);
   const [prefill, setPrefill] = useState<CronPrefill | null>(null);
   const [menuJobId, setMenuJobId] = useState<string | null>(null);
@@ -482,15 +547,17 @@ export default function CronPanel({
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [detailRuns, setDetailRuns] = useState<CronRunDto[]>([]);
   const [detailRunsLoading, setDetailRunsLoading] = useState(false);
+  const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
+  const [drawerJobRuns, setDrawerJobRuns] = useState<CronRunDto[]>([]);
+  const [drawerJobRunsLoading, setDrawerJobRunsLoading] = useState(false);
 
   const [filterJobId, setFilterJobId] = useState("");
-  const [filterAgentId, setFilterAgentId] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [historyRuns, setHistoryRuns] = useState<CronRunDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [drawerRun, setDrawerRun] = useState<CronRunDto | null>(null);
-  const [drawerMessages, setDrawerMessages] = useState<ChatMessage[]>([]);
+  const [drawerMessages, setDrawerMessages] = useState<ConversationEntry[]>([]);
   const [drawerTraceLoading, setDrawerTraceLoading] = useState(false);
 
   const pageRef = useRef<HTMLDivElement | null>(null);
@@ -552,7 +619,7 @@ export default function CronPanel({
     try {
       const runs = await fetchCronRuns({
         jobId: filterJobId,
-        agentId: filterAgentId,
+        agentId: "default",
         dateFrom: filterDateFrom,
         dateTo: filterDateTo,
       });
@@ -563,7 +630,7 @@ export default function CronPanel({
     } finally {
       setHistoryLoading(false);
     }
-  }, [filterJobId, filterAgentId, filterDateFrom, filterDateTo]);
+  }, [filterJobId, filterDateFrom, filterDateTo]);
 
   const loadDetailRuns = useCallback(async (jobId: string) => {
     if (!isTauri()) {
@@ -572,13 +639,34 @@ export default function CronPanel({
     }
     setDetailRunsLoading(true);
     try {
-      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", { id: jobId });
+      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", {
+        id: jobId,
+      });
       setDetailRuns(runs);
     } catch (err) {
       setError(String(err));
       setDetailRuns([]);
     } finally {
       setDetailRunsLoading(false);
+    }
+  }, []);
+
+  const loadDrawerJobRuns = useCallback(async (jobId: string) => {
+    if (!isTauri()) {
+      setDrawerJobRuns([]);
+      return;
+    }
+    setDrawerJobRunsLoading(true);
+    try {
+      const runs = await invoke<CronRunDto[]>("list_cron_job_runs", {
+        id: jobId,
+      });
+      setDrawerJobRuns(runs);
+    } catch (err) {
+      setError(String(err));
+      setDrawerJobRuns([]);
+    } finally {
+      setDrawerJobRunsLoading(false);
     }
   }, []);
 
@@ -639,9 +727,7 @@ export default function CronPanel({
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     const raf = requestAnimationFrame(() => {
-      menuRef.current
-        ?.querySelector<HTMLElement>('[role="menuitem"]')
-        ?.focus();
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     });
     return () => {
       cancelAnimationFrame(raf);
@@ -653,7 +739,7 @@ export default function CronPanel({
   const filteredJobs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return jobs.filter((j) => {
-      if (normalizeAgentId(j.agent_id) !== normalizeAgentId(agentId)) return false;
+      if (j.agent_id !== agentId && j.agent_id !== "workspace") return false;
       if (!q) return true;
       return (
         j.title.toLowerCase().includes(q) ||
@@ -668,6 +754,10 @@ export default function CronPanel({
     () => filteredJobs.find((j) => j.id === selectedDetailId) ?? null,
     [filteredJobs, selectedDetailId],
   );
+  const drawerJob = useMemo(
+    () => jobs.find((job) => job.id === drawerJobId) ?? null,
+    [jobs, drawerJobId],
+  );
 
   useEffect(() => {
     if (jobsView !== "detail") return;
@@ -676,7 +766,10 @@ export default function CronPanel({
       setDetailRuns([]);
       return;
     }
-    if (!selectedDetailId || !filteredJobs.some((j) => j.id === selectedDetailId)) {
+    if (
+      !selectedDetailId ||
+      !filteredJobs.some((j) => j.id === selectedDetailId)
+    ) {
       setSelectedDetailId(filteredJobs[0].id);
     }
   }, [jobsView, filteredJobs, selectedDetailId]);
@@ -686,13 +779,11 @@ export default function CronPanel({
     void loadDetailRuns(selectedDetailId);
   }, [jobsView, selectedDetailId, loadDetailRuns]);
 
-  const agentName = useCallback(
-    (id: string) => {
-      const normalized = normalizeAgentId(id);
-      return agents.find((a) => a.id === normalized)?.name ?? t("cron.agent.default");
-    },
-    [agents, t],
-  );
+  useEffect(() => {
+    if (!drawerJobId) return;
+    setDrawerJobRuns([]);
+    void loadDrawerJobRuns(drawerJobId);
+  }, [drawerJobId, loadDrawerJobRuns]);
 
   const providerName = useCallback(
     (id: string | null) => {
@@ -721,14 +812,6 @@ export default function CronPanel({
     [jobs, t],
   );
 
-  const agentFilterOptions = useMemo(
-    () => [
-      { value: "", label: t("cron.history.filterAgent") },
-      ...agents.map((a) => ({ value: a.id, label: a.name })),
-    ],
-    [agents, t],
-  );
-
   const toggleEnabled = async (job: CronJobDto) => {
     if (!isTauri()) return;
     const next = !job.enabled;
@@ -751,9 +834,7 @@ export default function CronPanel({
       }
     } catch (err) {
       setJobs((prev) =>
-        prev.map((j) =>
-          j.id === job.id ? { ...j, enabled: job.enabled } : j,
-        ),
+        prev.map((j) => (j.id === job.id ? { ...j, enabled: job.enabled } : j)),
       );
       setError(String(err));
     }
@@ -766,11 +847,18 @@ export default function CronPanel({
     setError(null);
     try {
       const row = await invoke<CronRunDto>("run_cron_job_now", { id: job.id });
-      setDrawerMessages([]);
-      setDrawerRun(row);
+      if (drawerJobId === job.id) {
+        setDrawerJobRuns((current) => [
+          row,
+          ...current.filter((run) => run.id !== row.id),
+        ]);
+      }
       await loadJobs();
       if (jobsView === "detail" && selectedDetailId === job.id) {
         void loadDetailRuns(job.id);
+      }
+      if (drawerJobId === job.id) {
+        void loadDrawerJobRuns(job.id);
       }
       if (activeTab === "history") {
         void loadHistoryRuns();
@@ -802,6 +890,10 @@ export default function CronPanel({
       }
       if (selectedDetailId === job.id) {
         setSelectedDetailId(null);
+      }
+      if (drawerJobId === job.id) {
+        setDrawerJobId(null);
+        setDrawerJobRuns([]);
       }
       await loadJobs();
       if (activeTab === "history") {
@@ -835,9 +927,13 @@ export default function CronPanel({
         setDrawerMessages([]);
       }
       setDetailRuns((prev) => prev.filter((r) => r.id !== run.id));
+      setDrawerJobRuns((prev) => prev.filter((r) => r.id !== run.id));
       setHistoryRuns((prev) => prev.filter((r) => r.id !== run.id));
       if (jobsView === "detail" && selectedDetailId === run.job_id) {
         void loadDetailRuns(run.job_id);
+      }
+      if (drawerJobId === run.job_id) {
+        void loadDrawerJobRuns(run.job_id);
       }
       if (activeTab === "history") {
         void loadHistoryRuns();
@@ -858,6 +954,15 @@ export default function CronPanel({
     setDrawerRun(run);
   }, []);
 
+  const openJobDrawer = useCallback(
+    (job: CronJobDto) => {
+      closeMenu();
+      setDrawerJobRuns([]);
+      setDrawerJobId(job.id);
+    },
+    [closeMenu],
+  );
+
   // 执行记录抽屉：轮询 run 状态 + session 历史（对齐 Tracing 步骤）
   useEffect(() => {
     if (!drawerRun || !isTauri()) return;
@@ -868,24 +973,28 @@ export default function CronPanel({
 
     const refresh = async () => {
       try {
-        const latest = await invoke<CronRunDto | null>("get_cron_run", { id: runId });
+        const latest = await invoke<CronRunDto | null>("get_cron_run", {
+          id: runId,
+        });
         if (cancelled) return;
         if (latest) setDrawerRun(latest);
 
         const sessionId = latest?.session_id ?? sid;
         if (sessionId) {
           setDrawerTraceLoading(true);
-          const hist = await invoke<ChatHistoryDto>("get_chat_history", {
-            sessionId,
-            limit: 200,
-          });
+          const hist = await invoke<ResponseItemHistoryDto>(
+            "get_chat_history",
+            {
+              sessionId,
+              limit: 200,
+            },
+          );
           if (cancelled) return;
-          setDrawerMessages(mapHistoryMessages(hist.messages ?? []));
+          setDrawerMessages(projectResponseItemsToEntries(hist.items ?? []));
           setDrawerTraceLoading(false);
         }
 
-        const stillRunning =
-          (latest?.status || "").toLowerCase() === "running";
+        const stillRunning = (latest?.status || "").toLowerCase() === "running";
         if (!stillRunning && timer != null) {
           window.clearInterval(timer);
           timer = null;
@@ -950,7 +1059,9 @@ export default function CronPanel({
         <article
           key={job.id}
           role="listitem"
-          className={`cron-card ${job.enabled ? "is-enabled" : "is-disabled"}`}
+          className={`cron-card ${job.enabled ? "is-enabled" : "is-disabled"} ${
+            drawerJobId === job.id ? "is-detail-open" : ""
+          }`}
           style={{ animationDelay: `${0.04 + index * 0.05}s` }}
         >
           <header className="cron-card-top">
@@ -968,7 +1079,18 @@ export default function CronPanel({
                 {job.enabled ? t("cron.statusOn") : t("cron.statusOff")}
               </span>
             </div>
-            {renderJobActions(job)}
+            <div className="cron-card-actions-cluster">
+              {renderJobActions(job)}
+              <button
+                type="button"
+                className="cron-card-detail-btn"
+                onClick={() => openJobDrawer(job)}
+                title={t("cron.view.detail")}
+                aria-label={`${t("cron.view.detail")}: ${job.title}`}
+              >
+                <ChevronRight size={17} strokeWidth={2.4} aria-hidden />
+              </button>
+            </div>
           </header>
           <p className="cron-card-task">{job.task}</p>
           <div className="cron-card-meta">
@@ -993,10 +1115,6 @@ export default function CronPanel({
               </div>
             </div>
             <div className="cron-card-meta-tags">
-              <span className="cron-card-tag is-agent">
-                <IconAgentModel />
-                {agentName(job.agent_id)}
-              </span>
               {job.model ? (
                 <span className="cron-card-tag is-model" title={job.model}>
                   {job.model}
@@ -1062,7 +1180,9 @@ export default function CronPanel({
           <>
             <header className="cron-job-detail-head">
               <div>
-                <h3 className="cron-job-detail-title">{selectedDetailJob.title}</h3>
+                <h3 className="cron-job-detail-title">
+                  {selectedDetailJob.title}
+                </h3>
                 <span
                   className={`cron-card-status ${selectedDetailJob.enabled ? "is-on" : "is-off"}`}
                 >
@@ -1088,14 +1208,9 @@ export default function CronPanel({
                   <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
                   {t("cron.field.schedule")}
                 </span>
-                <span>{formatScheduleLabel(selectedDetailJob.schedule, locale)}</span>
-              </div>
-              <div className="cron-job-detail-meta-item">
-                <span className="cron-job-detail-label">
-                  <Bot size={12} strokeWidth={2.2} aria-hidden />
-                  {t("cron.field.agent")}
+                <span>
+                  {formatScheduleLabel(selectedDetailJob.schedule, locale)}
                 </span>
-                <span>{agentName(selectedDetailJob.agent_id)}</span>
               </div>
               <div className="cron-job-detail-meta-item">
                 <span className="cron-job-detail-label">
@@ -1120,14 +1235,20 @@ export default function CronPanel({
                   )}
                   {t("cron.detail.showInChat")}
                 </span>
-                <span>{selectedDetailJob.show_in_chat ? t("cron.yes") : t("cron.no")}</span>
+                <span>
+                  {selectedDetailJob.show_in_chat
+                    ? t("cron.yes")
+                    : t("cron.no")}
+                </span>
               </div>
               <div className="cron-job-detail-meta-item">
                 <span className="cron-job-detail-label">
                   <History size={12} strokeWidth={2.2} aria-hidden />
                   {t("cron.lastRun")}
                 </span>
-                <span>{formatLastRun(selectedDetailJob.last_run_at, locale)}</span>
+                <span>
+                  {formatLastRun(selectedDetailJob.last_run_at, locale)}
+                </span>
               </div>
             </section>
 
@@ -1225,7 +1346,9 @@ export default function CronPanel({
       <div className="cron-timeline">
         {historyGrouped.map(([day, runs]) => (
           <section key={day} className="cron-timeline-day">
-            <h3 className="cron-timeline-day-label">{formatDayLabel(day, locale)}</h3>
+            <h3 className="cron-timeline-day-label">
+              {formatDayLabel(day, locale)}
+            </h3>
             <div className="cron-timeline-items">
               {runs.map((run) => (
                 <article key={run.id} className="cron-timeline-card">
@@ -1249,16 +1372,16 @@ export default function CronPanel({
                   </p>
                   <div className="cron-timeline-card-foot">
                     <span className="cron-timeline-meta">
-                      <span className="cron-timeline-meta-chip">
-                        <Bot size={12} strokeWidth={2.2} aria-hidden />
-                        {agentName(run.agent_id)}
-                      </span>
                       {run.trigger ? (
                         <span className="cron-timeline-meta-chip">
                           {run.trigger === "manual" ? (
                             <Hand size={12} strokeWidth={2.2} aria-hidden />
                           ) : (
-                            <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
+                            <CalendarClock
+                              size={12}
+                              strokeWidth={2.2}
+                              aria-hidden
+                            />
                           )}
                           {runStatusLabel(run.trigger)}
                         </span>
@@ -1294,31 +1417,101 @@ export default function CronPanel({
     );
   };
 
+  const openCreate = () => {
+    setShowTemplates(false);
+    setPrefill(null);
+    setEditingJob(null);
+    setShowCreate(true);
+  };
+
+  const openFromTemplate = (template: CronTemplate) => {
+    setShowTemplates(false);
+    setPrefill({
+      title: t(template.titleKey),
+      task: t(template.taskKey),
+      schedule: template.schedule,
+    });
+    setEditingJob(null);
+    setShowCreate(true);
+  };
+
+  const renderTemplateGrid = () => (
+    <div className="cron-templates-grid">
+      {CRON_TEMPLATES.map((template) => {
+        const Icon = template.icon;
+        return (
+          <button
+            key={template.id}
+            type="button"
+            className="cron-template-card"
+            onClick={() => openFromTemplate(template)}
+          >
+            <span className="cron-template-icon" aria-hidden>
+              <Icon size={20} strokeWidth={1.6} />
+            </span>
+            <span className="cron-template-text">
+              <strong>{t(template.titleKey)}</strong>
+              <span>{t(template.descKey)}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="cron-page" data-tone={tone ?? "teal"} ref={pageRef}>
       <section className="cron-pane">
         <div className="cron-toolbar">
-          <nav className="cron-tabs" aria-label={t("page.cron.title")}>
-            <button
-              type="button"
-              className={`cron-tab ${activeTab === "jobs" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("jobs")}
-            >
-              <ListTodo size={15} strokeWidth={2.25} aria-hidden />
-              {t("cron.tab.jobs")}
-            </button>
-            <button
-              type="button"
-              className={`cron-tab ${activeTab === "history" ? "is-active" : ""}`}
-              onClick={() => setActiveTab("history")}
-            >
-              <History size={15} strokeWidth={2.25} aria-hidden />
-              {t("cron.tab.history")}
-            </button>
-          </nav>
+          <div className="cron-toolbar-start">
+            <div className="cron-create-group">
+              <button
+                type="button"
+                className="cron-toolbar-action cron-toolbar-action--primary"
+                onClick={openCreate}
+              >
+                <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
+                <span>{t("cron.create")}</span>
+              </button>
+              <button
+                type="button"
+                className="cron-toolbar-action cron-toolbar-action--primary cron-toolbar-action--template"
+                onClick={() => {
+                  const nextOpen = activeTab !== "jobs" || !showTemplates;
+                  setActiveTab("jobs");
+                  setShowTemplates(nextOpen);
+                }}
+                aria-expanded={showTemplates}
+              >
+                <LayoutTemplate size={15} strokeWidth={2.2} aria-hidden />
+                <span>{t("cron.createFromTemplate")}</span>
+              </button>
+            </div>
+          </div>
 
           {activeTab === "jobs" && (
             <div className="cron-toolbar-end">
+              <nav className="cron-tabs" aria-label={t("page.cron.title")}>
+                <button
+                  type="button"
+                  className="cron-tab is-active"
+                  onClick={() => setActiveTab("jobs")}
+                >
+                  <ListTodo size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.jobs")}
+                </button>
+                <button
+                  type="button"
+                  className="cron-tab"
+                  onClick={() => {
+                    setShowTemplates(false);
+                    setActiveTab("history");
+                  }}
+                >
+                  <History size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.history")}
+                </button>
+              </nav>
               <ExpandableSearch
                 value={search}
                 onChange={setSearch}
@@ -1331,9 +1524,21 @@ export default function CronPanel({
               >
                 {(
                   [
-                    { id: "gallery" as const, Icon: IconViewGallery, labelKey: "cron.view.gallery" as const },
-                    { id: "list" as const, Icon: IconViewList, labelKey: "cron.view.list" as const },
-                    { id: "detail" as const, Icon: IconViewDetail, labelKey: "cron.view.detail" as const },
+                    {
+                      id: "gallery" as const,
+                      Icon: IconViewGallery,
+                      labelKey: "cron.view.gallery" as const,
+                    },
+                    {
+                      id: "list" as const,
+                      Icon: IconViewList,
+                      labelKey: "cron.view.list" as const,
+                    },
+                    {
+                      id: "detail" as const,
+                      Icon: IconViewDetail,
+                      labelKey: "cron.view.detail" as const,
+                    },
                   ] as const
                 ).map(({ id, Icon, labelKey }) => (
                   <button
@@ -1349,23 +1554,29 @@ export default function CronPanel({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                className="skills-icon-btn"
-                onClick={() => {
-                  setEditingJob(null);
-                  setShowCreate(true);
-                }}
-                title={t("cron.create")}
-                aria-label={t("cron.create")}
-              >
-                <CalendarPlus size={17} strokeWidth={2.2} aria-hidden />
-              </button>
             </div>
           )}
 
           {activeTab === "history" && (
             <div className="cron-toolbar-end cron-history-filters">
+              <nav className="cron-tabs" aria-label={t("page.cron.title")}>
+                <button
+                  type="button"
+                  className="cron-tab"
+                  onClick={() => setActiveTab("jobs")}
+                >
+                  <ListTodo size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.jobs")}
+                </button>
+                <button
+                  type="button"
+                  className="cron-tab is-active"
+                  onClick={() => setActiveTab("history")}
+                >
+                  <History size={15} strokeWidth={2.25} aria-hidden />
+                  {t("cron.tab.history")}
+                </button>
+              </nav>
               <SelectMenu
                 value={filterJobId}
                 onChange={setFilterJobId}
@@ -1373,14 +1584,11 @@ export default function CronPanel({
                 aria-label={t("cron.history.filterJob")}
                 className="cron-history-filter"
               />
-              <SelectMenu
-                value={filterAgentId}
-                onChange={setFilterAgentId}
-                options={agentFilterOptions}
-                aria-label={t("cron.history.filterAgent")}
-                className="cron-history-filter"
-              />
-              <div className="cron-history-dates" role="group" aria-label={t("cron.history.filterDate")}>
+              <div
+                className="cron-history-dates"
+                role="group"
+                aria-label={t("cron.history.filterDate")}
+              >
                 <GlassDatePicker
                   value={filterDateFrom}
                   onChange={setFilterDateFrom}
@@ -1401,62 +1609,71 @@ export default function CronPanel({
           )}
         </div>
 
-        <AnimatedSwitch switchKey={activeTab} className="anim-switch--fill">
-        {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
-          <p className="cron-loading">{t("workspace.loading")}</p>
+        {activeTab === "jobs" && showTemplates && (
+          <section className="cron-template-picker">
+            <div className="cron-template-picker-header">
+              <span>{t("cron.createFromTemplate")}</span>
+              <button
+                type="button"
+                className="cron-template-picker-close"
+                onClick={() => setShowTemplates(false)}
+                aria-label={t("common.close")}
+              >
+                <X size={15} strokeWidth={2.2} aria-hidden />
+              </button>
+            </div>
+            {renderTemplateGrid()}
+          </section>
         )}
 
-        {error && <p className="cron-error">{error}</p>}
+        <MotionSwitch switchKey={activeTab} className="anim-switch--fill">
+          {activeTab === "jobs" && loading && filteredJobs.length === 0 && (
+            <p className="cron-loading">{t("workspace.loading")}</p>
+          )}
 
-        {activeTab === "jobs" && !loading && filteredJobs.length === 0 && !error && (
-          <div className="cron-empty-with-templates">
-            <EmptyIllustration
-              scene="cron"
-              className="cron-empty"
-              title={t("cron.empty")}
-              hint={t("cron.emptyHint")}
-            />
-            <section className="cron-templates">
-              <h3 className="cron-templates-title">自动化任务模版</h3>
-              <div className="cron-templates-grid">
-                {CRON_TEMPLATES.map((tpl) => {
-                  const Icon = tpl.icon;
-                  return (
-                    <button
-                      key={tpl.title}
-                      type="button"
-                      className="cron-template-card"
-                      onClick={() => {
-                        setPrefill({ title: tpl.title, task: tpl.task, schedule: tpl.schedule });
-                        setEditingJob(null);
-                        setShowCreate(true);
-                      }}
-                    >
-                      <span className="cron-template-icon" aria-hidden>
-                        <Icon size={20} strokeWidth={1.6} />
-                      </span>
-                      <span className="cron-template-text">
-                        <strong>{tpl.title}</strong>
-                        <span>{tpl.desc}</span>
-                      </span>
-                    </button>
-                  );
-                })}
+          {error && <p className="cron-error">{error}</p>}
+
+          {activeTab === "jobs" &&
+            !loading &&
+            filteredJobs.length === 0 &&
+            !error && (
+              <div className="cron-empty-with-templates">
+                <EmptyIllustration
+                  scene="cron"
+                  className="cron-empty"
+                  title={t("cron.empty")}
+                  hint={t("cron.emptyHint")}
+                >
+                  <button
+                    type="button"
+                    className="cron-btn-primary cron-empty-cta"
+                    onClick={openCreate}
+                  >
+                    <CalendarPlus size={15} strokeWidth={2.2} aria-hidden />
+                    {t("cron.create")}
+                  </button>
+                </EmptyIllustration>
+                {!showTemplates && (
+                  <section className="cron-templates">
+                    <h3 className="cron-templates-title">
+                      {t("cron.templates.title")}
+                    </h3>
+                    {renderTemplateGrid()}
+                  </section>
+                )}
               </div>
-            </section>
-          </div>
-        )}
+            )}
 
-        {activeTab === "jobs" && filteredJobs.length > 0 && (
-          <>
-            {jobsView === "gallery" && renderGallery()}
-            {jobsView === "list" && renderList()}
-            {jobsView === "detail" && renderDetail()}
-          </>
-        )}
+          {activeTab === "jobs" && filteredJobs.length > 0 && (
+            <>
+              {jobsView === "gallery" && renderGallery()}
+              {jobsView === "list" && renderList()}
+              {jobsView === "detail" && renderDetail()}
+            </>
+          )}
 
-        {activeTab === "history" && renderHistory()}
-        </AnimatedSwitch>
+          {activeTab === "history" && renderHistory()}
+        </MotionSwitch>
       </section>
 
       <CreateCronDialog
@@ -1471,8 +1688,6 @@ export default function CronPanel({
         onCreated={() => void loadJobs()}
         providers={providers}
         activeProviderId={activeProviderId}
-        agents={agents}
-        defaultAgentId={agentId}
         toneStyle={toneStyleFromElement(pageRef.current)}
       />
 
@@ -1541,162 +1756,32 @@ export default function CronPanel({
           document.body,
         )}
 
-      {drawerRun &&
-        createPortal(
-          <div
-            className="cron-run-drawer-backdrop"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setDrawerRun(null);
-            }}
-          >
-            <aside
-              className="cron-run-drawer"
-              role="dialog"
-              aria-modal
-              aria-labelledby="cron-run-drawer-title"
-            >
-              <header className="cron-run-drawer-head">
-                <div>
-                  <h2 id="cron-run-drawer-title" className="cron-run-drawer-title">
-                    <History size={16} strokeWidth={2.3} aria-hidden />
-                    {t("cron.history.logTitle")}
-                  </h2>
-                  <p className="cron-run-drawer-sub">
-                    <CalendarClock size={12} strokeWidth={2.2} aria-hidden />
-                    <span>
-                      {drawerRun.title} · {formatLastRun(drawerRun.fired_at, locale)}
-                    </span>
-                  </p>
-                </div>
-                <div className="cron-run-drawer-head-actions">
-                  <button
-                    type="button"
-                    className="cron-timeline-log-btn is-danger"
-                    disabled={runStatusKind(drawerRun.status) === "running"}
-                    onClick={() => void deleteRun(drawerRun)}
-                    title={t("cron.history.deleteRun")}
-                    aria-label={t("cron.history.deleteRun")}
-                  >
-                    <IconTrash width={14} height={14} />
-                    <span>{t("cron.history.deleteRun")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="cron-dialog-close"
-                    onClick={() => setDrawerRun(null)}
-                    aria-label={t("cron.cancel")}
-                  >
-                    <X size={16} strokeWidth={2.5} aria-hidden />
-                  </button>
-                </div>
-              </header>
-              <div className="cron-run-drawer-body">
-                <div className="cron-run-drawer-meta">
-                  <span
-                    className={`cron-status-pill is-${runStatusKind(drawerRun.status)}`}
-                  >
-                    <RunStatusIcon status={drawerRun.status} />
-                    {runStatusLabel(drawerRun.status)}
-                  </span>
-                  {drawerRun.summary && (
-                    <p className="cron-run-drawer-summary">
-                      <MessageSquareText size={13} strokeWidth={2.2} aria-hidden />
-                      <span>{drawerRun.summary}</span>
-                    </p>
-                  )}
-                </div>
+      {drawerJob && (
+        <CronTaskDetailDrawer
+          job={drawerJob}
+          runs={drawerJobRuns}
+          runsLoading={drawerJobRunsLoading}
+          busy={busyId === drawerJob.id}
+          onClose={() => setDrawerJobId(null)}
+          onEdit={() => {
+            setEditingJob(drawerJob);
+            setShowCreate(true);
+          }}
+          onToggleEnabled={() => void toggleEnabled(drawerJob)}
+          onRunNow={() => void runNow(drawerJob)}
+          onOpenRun={openRunDrawer}
+        />
+      )}
 
-                <section className="cron-run-drawer-block">
-                  <div className="cron-run-drawer-block-head">
-                    <h3 className="cron-run-drawer-label">
-                      <ListTree size={12} strokeWidth={2.3} aria-hidden />
-                      {t("cron.history.traceTitle")}
-                    </h3>
-                    {(() => {
-                      const texts = drawerMessages
-                        .filter((m) => m.role === "assistant" && (m.content || "").trim())
-                        .map((m) => (m.content || "").trim());
-                      const copyText = texts[texts.length - 1] || drawerRun.output;
-                      return copyText ? <CopyLogButton text={copyText} /> : null;
-                    })()}
-                  </div>
-                  {(() => {
-                    const activities = drawerMessages.flatMap((m) => m.activities ?? []);
-                    const assistantTexts = drawerMessages
-                      .filter((m) => m.role === "assistant" && (m.content || "").trim())
-                      .map((m) => (m.content || "").trim());
-                    const isRunning =
-                      runStatusKind(drawerRun.status) === "running";
-                    if (activities.length === 0 && assistantTexts.length === 0) {
-                      return (
-                        <p className="cron-history-empty">
-                          {isRunning
-                            ? t("cron.history.runningWait")
-                            : drawerTraceLoading
-                              ? t("cron.history.loadingTrace")
-                              : t("cron.history.empty")}
-                        </p>
-                      );
-                    }
-                    return (
-                      <div className="cron-run-trace">
-                        {activities.map((act, i) => (
-                          <MsgActivity
-                            key={act.id || `act-${i}`}
-                            activity={act}
-                            defaultOpen={act.status === "running"}
-                            showTimestamp
-                          />
-                        ))}
-                        {assistantTexts.map((text, i) => (
-                          <div key={`asst-${i}`} className="cron-run-assistant-chunk">
-                            <div className="cron-run-md">
-                              <ChatMarkdown content={text} compact />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </section>
-
-                {/* 会话里已有助手终稿时，output 字段是同一份快照，不再重复渲染 */}
-                {drawerRun.output &&
-                  !drawerMessages.some(
-                    (m) => m.role === "assistant" && (m.content || "").trim(),
-                  ) && (
-                  <section className="cron-run-drawer-block">
-                    <div className="cron-run-drawer-block-head">
-                      <h3 className="cron-run-drawer-label">
-                        <TerminalSquare size={12} strokeWidth={2.3} aria-hidden />
-                        Output
-                      </h3>
-                      <CopyLogButton text={drawerRun.output} />
-                    </div>
-                    <div className="cron-run-md">
-                      <ChatMarkdown content={drawerRun.output} compact />
-                    </div>
-                  </section>
-                )}
-                {drawerRun.error && (
-                  <section className="cron-run-drawer-block is-error">
-                    <div className="cron-run-drawer-block-head">
-                      <h3 className="cron-run-drawer-label">
-                        <CircleAlert size={12} strokeWidth={2.3} aria-hidden />
-                        Error
-                      </h3>
-                      <CopyLogButton text={drawerRun.error} />
-                    </div>
-                    <div className="cron-run-md">
-                      <ChatMarkdown content={drawerRun.error} plain compact />
-                    </div>
-                  </section>
-                )}
-              </div>
-            </aside>
-          </div>,
-          document.body,
-        )}
+      {drawerRun && (
+        <CronRunDetailDrawer
+          run={drawerRun}
+          messages={drawerMessages}
+          traceLoading={drawerTraceLoading}
+          onClose={() => setDrawerRun(null)}
+          onDelete={() => void deleteRun(drawerRun)}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,18 @@
 /** 毛玻璃风格音频播放器，替代原生黑色 controls。 */
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import {
+  Pause as PauseData,
+  Play as PlayData,
+  Volume2 as Volume2Data,
+  VolumeX as VolumeXData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
+
+const PAUSE_ICON = PauseData;
+const PLAY_ICON = PlayData;
+const VOLUME_ON_ICON = Volume2Data;
+const VOLUME_OFF_ICON = VolumeXData;
 
 type Props = {
   src: string;
@@ -39,7 +50,10 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
     const el = audioRef.current;
     if (!el) return;
     if (el.paused) {
-      void el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      void el
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => setPlaying(false));
     } else {
       el.pause();
       setPlaying(false);
@@ -85,11 +99,14 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
         aria-label={playing ? t("media.pause") : t("media.play")}
         onClick={togglePlay}
       >
-        {playing ? (
-          <Pause size={16} strokeWidth={2.25} aria-hidden />
-        ) : (
-          <Play size={16} strokeWidth={2.25} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={playing}
+          activeIcon={PAUSE_ICON}
+          inactiveIcon={PLAY_ICON}
+          size={16}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </button>
       <span className="glass-audio-time">{formatTime(current)}</span>
       <label className="glass-audio-seek">
@@ -121,11 +138,14 @@ export default function GlassAudioPlayer({ src, className, onError }: Props) {
         aria-label={muted ? t("media.unmute") : t("media.mute")}
         onClick={() => setMuted((v) => !v)}
       >
-        {muted ? (
-          <VolumeX size={15} strokeWidth={2.1} aria-hidden />
-        ) : (
-          <Volume2 size={15} strokeWidth={2.1} aria-hidden />
-        )}
+        <MorphToggleIcon
+          active={muted}
+          activeIcon={VOLUME_OFF_ICON}
+          inactiveIcon={VOLUME_ON_ICON}
+          size={15}
+          strokeWidth={2.1}
+          aria-hidden
+        />
       </button>
     </div>
   );

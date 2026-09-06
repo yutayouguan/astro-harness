@@ -1,4 +1,4 @@
-// 任务监控面板：子 Agent 活动树、当前 turn 进度、工具调用流、Todo 计划。
+// 任务监控面板：当前 turn 进度、工具调用流、Todo 计划。
 
 import { useMemo } from "react";
 import {
@@ -13,11 +13,14 @@ import {
   XCircle,
 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
-import type { ChatMessage } from "../../types";
-import { extractLatestTodoPlan, type TodoPlan } from "./TodoProgress";
+import type { ConversationEntry } from "../../types";
+import {
+  extractLatestTodoPlan,
+  type TodoPlan,
+} from "../../lib/chat/taskProgress";
 
 type Props = {
-  messages: ChatMessage[];
+  messages: ConversationEntry[];
   streaming: boolean;
   /** 当前 turn 工具轮次 */
   toolRound?: number;
@@ -34,7 +37,7 @@ type ActivitySummary = {
   error: number;
 };
 
-function summarizeActivities(messages: ChatMessage[]): ActivitySummary {
+function summarizeActivities(messages: ConversationEntry[]): ActivitySummary {
   let total = 0;
   let running = 0;
   let done = 0;
@@ -51,7 +54,7 @@ function summarizeActivities(messages: ChatMessage[]): ActivitySummary {
   return { total, running, done, error };
 }
 
-function recentActivities(messages: ChatMessage[], limit = 8) {
+function recentActivities(messages: ConversationEntry[], limit = 8) {
   const result: Array<{
     id: string;
     title: string;
@@ -61,7 +64,11 @@ function recentActivities(messages: ChatMessage[], limit = 8) {
   for (let i = messages.length - 1; i >= 0 && result.length < limit; i--) {
     const m = messages[i];
     if (m.role !== "assistant" || !m.activities) continue;
-    for (let j = m.activities.length - 1; j >= 0 && result.length < limit; j--) {
+    for (
+      let j = m.activities.length - 1;
+      j >= 0 && result.length < limit;
+      j--
+    ) {
       const act = m.activities[j];
       result.push({
         id: act.id,
@@ -74,20 +81,44 @@ function recentActivities(messages: ChatMessage[], limit = 8) {
   return result;
 }
 
-function StatusIcon({
-  status,
-}: {
-  status?: string;
-}) {
+function StatusIcon({ status }: { status?: string }) {
   switch (status) {
     case "running":
-      return <Loader2 size={13} strokeWidth={2} className="task-monitor-spin" aria-hidden />;
+      return (
+        <Loader2
+          size={13}
+          strokeWidth={2}
+          className="task-monitor-spin"
+          aria-hidden
+        />
+      );
     case "done":
-      return <CheckCircle2 size={13} strokeWidth={2} className="task-monitor-icon-done" aria-hidden />;
+      return (
+        <CheckCircle2
+          size={13}
+          strokeWidth={2}
+          className="task-monitor-icon-done"
+          aria-hidden
+        />
+      );
     case "error":
-      return <AlertCircle size={13} strokeWidth={2} className="task-monitor-icon-error" aria-hidden />;
+      return (
+        <AlertCircle
+          size={13}
+          strokeWidth={2}
+          className="task-monitor-icon-error"
+          aria-hidden
+        />
+      );
     default:
-      return <Circle size={13} strokeWidth={2} className="task-monitor-icon-pending" aria-hidden />;
+      return (
+        <Circle
+          size={13}
+          strokeWidth={2}
+          className="task-monitor-icon-pending"
+          aria-hidden
+        />
+      );
   }
 }
 
@@ -99,7 +130,9 @@ function TodoSection({ plan }: { plan: TodoPlan }) {
       <div className="task-monitor-section-header">
         <ListTodo size={14} strokeWidth={2} aria-hidden />
         <span>{plan.title}</span>
-        <span className="task-monitor-badge">{done}/{total}</span>
+        <span className="task-monitor-badge">
+          {done}/{total}
+        </span>
       </div>
       <ul className="task-monitor-todo-list">
         {plan.items.map((item, i) => (
@@ -108,9 +141,19 @@ function TodoSection({ plan }: { plan: TodoPlan }) {
             className={`task-monitor-todo-item ${item.done ? "is-done" : ""}`}
           >
             {item.done ? (
-              <CheckCircle2 size={13} strokeWidth={2} className="task-monitor-icon-done" aria-hidden />
+              <CheckCircle2
+                size={13}
+                strokeWidth={2}
+                className="task-monitor-icon-done"
+                aria-hidden
+              />
             ) : (
-              <Circle size={13} strokeWidth={2} className="task-monitor-icon-pending" aria-hidden />
+              <Circle
+                size={13}
+                strokeWidth={2}
+                className="task-monitor-icon-pending"
+                aria-hidden
+              />
             )}
             <span>{item.text}</span>
           </li>
@@ -139,7 +182,9 @@ export default function TaskMonitorPanel({
         <div className="task-monitor-stat">
           <Activity size={14} strokeWidth={2} aria-hidden />
           <span className="task-monitor-stat-label">
-            {streaming ? t("chat.taskMonitor.streaming" as never) : t("chat.taskMonitor.idle" as never)}
+            {streaming
+              ? t("chat.taskMonitor.streaming" as never)
+              : t("chat.taskMonitor.idle" as never)}
           </span>
         </div>
         {toolRound > 0 && (
@@ -161,7 +206,9 @@ export default function TaskMonitorPanel({
           <div className="task-monitor-stat">
             <Bot size={14} strokeWidth={2} aria-hidden />
             <span className="task-monitor-stat-label">
-              {summary.done}✓ {summary.running > 0 ? `${summary.running}⟳ ` : ""}{summary.error > 0 ? `${summary.error}✗` : ""}
+              {summary.done}✓{" "}
+              {summary.running > 0 ? `${summary.running}⟳ ` : ""}
+              {summary.error > 0 ? `${summary.error}✗` : ""}
             </span>
           </div>
         )}

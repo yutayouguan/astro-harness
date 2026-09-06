@@ -1,15 +1,16 @@
 //! 技能更新状态比对与批量检查。
 
 use anyhow::Result;
+use std::path::Path;
 
 use crate::agent_id::normalize as normalize_agent_id;
-use crate::install::agent_skills_dir;
+use crate::install::scoped_skills_path;
 use crate::models::{
     SkillOriginRecord, SkillUpdateCheckResult, SkillUpdateStatus, StoreSkillDetail,
 };
-use crate::origins::load_origins;
 pub use crate::origins::origin_to_store_skill;
-use crate::store::fetch_detail;
+use crate::origins::{ensure_known_skillhub_origins, load_origins};
+use crate::store::fetch_detail_strict;
 
 /// 用本地 origin 快照与远端快照判定更新状态。
 pub fn classify_update_status(
@@ -31,9 +32,11 @@ pub fn classify_update_status(
     }
 
     if let (Some(local_v), Some(remote_v)) = (&origin.remote_version, remote_version) {
-        if local_v.trim() != remote_v.trim() {
-            return SkillUpdateStatus::Outdated;
-        }
+        return if local_v.trim() == remote_v.trim() {
+            SkillUpdateStatus::Current
+        } else {
+            SkillUpdateStatus::Outdated
+        };
     }
 
     if let Some(remote_ts) = remote_updated_at {
@@ -66,30 +69,41 @@ pub fn check_origin_against_detail(
     }
 }
 
-fn installed_skill_folder_exists(agent_id: Option<&str>, folder: &str) -> Result<bool> {
-    let skills_dir = agent_skills_dir(agent_id)?;
+fn installed_skill_folder_exists(
+    scope: &str,
+    project_root: Option<&Path>,
+    folder: &str,
+) -> Result<bool> {
+    let skills_dir = scoped_skills_path(scope, project_root)?;
     Ok(skills_dir.join(folder).is_dir())
 }
 
 /// 检查当前 Agent 下所有有来源记录的技能更新状态；不写回 origin baseline `remote_*`。
 pub async fn check_updates_for_agent(
     agent_id: Option<&str>,
+    scope: &str,
+    project_root: Option<&Path>,
 ) -> Result<Vec<SkillUpdateCheckResult>> {
     let target = normalize_agent_id(agent_id);
+    if scope == "global" {
+        ensure_known_skillhub_origins(Some(&target))?;
+    }
     let file = load_origins()?;
     let origins: Vec<SkillOriginRecord> = file
         .records
         .into_iter()
-        .filter(|r| normalize_agent_id(r.agent_id.as_deref()) == target)
+        .filter(|r| {
+            normalize_agent_id(r.agent_id.as_deref()) == target && r.scope.as_deref() == Some(scope)
+        })
         .collect();
 
     let mut results = Vec::with_capacity(origins.len());
     for origin in origins {
-        match installed_skill_folder_exists(agent_id, &origin.folder) {
+        match installed_skill_folder_exists(scope, project_root, &origin.folder) {
             Ok(false) => continue,
             Ok(true) => {
                 let store_skill = origin_to_store_skill(&origin);
-                let item = match fetch_detail(&store_skill).await {
+                let item = match fetch_detail_strict(&store_skill).await {
                     Ok(detail) => check_origin_against_detail(&origin, &detail),
                     Err(e) => SkillUpdateCheckResult {
                         folder: origin.folder.clone(),
@@ -145,7 +159,7 @@ mod tests {
             store: "skillhub".into(),
             install_ref: "skillhub:owner/demo-skill".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at,
             last_updated_at,
             remote_version: remote_version.map(str::to_string),
@@ -215,6 +229,15 @@ mod tests {
     }
 
     #[test]
+    fn classify_equal_version_ignores_newer_catalog_timestamp() {
+        let origin = sample_origin(Some("1.0.0"), Some(100), None, 50);
+        assert_eq!(
+            classify_update_status(&origin, Some("1.0.0"), Some(200)),
+            SkillUpdateStatus::Current
+        );
+    }
+
+    #[test]
     fn classify_uses_installed_at_when_no_remote_timestamps() {
         let origin = sample_origin(None, None, None, 100);
         assert_eq!(
@@ -254,17 +277,6 @@ mod tests {
         assert_eq!(skill.store, "skillhub");
         assert_eq!(skill.install_ref, "skillhub:owner/demo-skill");
         assert_eq!(skill.source, "owner");
-    }
-
-    #[test]
-    fn origin_to_store_skill_clawhub_id() {
-        let mut origin = sample_origin(None, None, None, 1);
-        origin.store = "clawhub".into();
-        origin.install_ref = "clawhub:steipete--weather".into();
-        origin.folder = "weather".into();
-        let skill = origin_to_store_skill(&origin);
-        assert_eq!(skill.id, "clawhub:steipete/weather");
-        assert_eq!(skill.source, "steipete");
     }
 
     #[test]
@@ -344,10 +356,10 @@ mod tests {
             folder: "ghost-skill".into(),
             skill_id: None,
             name: "ghost".into(),
-            store: "clawhub".into(),
-            install_ref: "clawhub:ghost".into(),
+            store: "skillhub".into(),
+            install_ref: "skillhub:owner/ghost".into(),
             agent_id: Some("workspace".into()),
-            scope: None,
+            scope: Some("global".into()),
             installed_at: 1,
             last_updated_at: None,
             remote_version: Some("1.0.0".into()),
@@ -356,7 +368,9 @@ mod tests {
         })
         .unwrap();
 
-        let results = check_updates_for_agent(Some("workspace")).await.unwrap();
+        let results = check_updates_for_agent(Some("workspace"), "global", None)
+            .await
+            .unwrap();
         assert!(results.is_empty());
 
         let file = load_origins().unwrap();

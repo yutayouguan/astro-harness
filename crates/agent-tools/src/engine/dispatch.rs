@@ -1,13 +1,13 @@
-//! 工具统一分发：按名称从自注册 handler 表查找并执行。
+//! 工具执行的通用记账、权限与兼容分发逻辑。
 //!
-//! 所有 Agent 侧的工具执行均经 [`dispatch_tool`] 入口，确保禁用工具、
-//! 调用统计与错误格式保持一致。中央 match 已移除；内置路由由
-//! [`crate::registry::BuiltinToolRegistrar`] inventory 构建。
+//! Agent 主链由 `ToolRegistry::dispatch` 进入 [`dispatch_runtime`]。
+//! [`dispatch_tool`] 只为独立测试和旧调用边界保留。
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use crate::context::ToolContext;
+use crate::engine::executor::CoreToolRuntime;
 use crate::registry::{BuiltinToolHandler, BuiltinToolRegistrar};
 
 /// 从 inventory 构建的内置工具 name → handler 表（启动时检测重名）。
@@ -33,7 +33,7 @@ pub fn builtin_handler_names() -> Vec<&'static str> {
     names
 }
 
-/// 按工具名将调用路由到对应实现（内置 + 动态 MCP 统一入口）。
+/// 兼容入口：按工具名从旧 inventory handler 表分发。
 ///
 /// # 流程
 /// 1. 通过 `registry_allows` 闭包检查 toolset 是否启用
@@ -59,9 +59,9 @@ pub async fn dispatch_tool(
         args,
         Some(ctx.session_id.as_str()),
         ctx.turn_id.as_deref(),
-    );
+    )
+    .await;
     enforce_in_process_write_policy(ctx, name, args)?;
-    enforce_in_process_network_policy(ctx, name, args)?;
 
     // 1. 内置 handler（静态 inventory 注册）
     if let Some(handler) = handler_table().get(name) {
@@ -78,6 +78,56 @@ pub async fn dispatch_tool(
         && skills::list_installed()
             .into_iter()
             .any(|s| s.name == name && s.enabled)
+    {
+        let rewritten = serde_json::json!({
+            "action": "load",
+            "skill_id": name,
+            "input": args,
+        });
+        if let Some(handler) = handler_table().get("skills") {
+            return handler(ctx, "skills", &rewritten).await;
+        }
+    }
+
+    anyhow::bail!("未知工具: {name}")
+}
+
+/// 执行已由 [`crate::registry::ToolRegistry`] 解析的运行时。
+///
+/// 这是 Agent 主链的规范入口；[`dispatch_tool`] 仅保留给旧测试与
+/// 尚未迁移的独立调用方。
+pub async fn dispatch_runtime(
+    allowed: bool,
+    runtime: Option<&Arc<dyn CoreToolRuntime>>,
+    ctx: &mut ToolContext<'_>,
+    name: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<types::ToolOutput> {
+    if !allowed {
+        let toolset = home::tool_name_to_toolset(name);
+        anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");
+    }
+
+    let agent_id = ctx.agent_id();
+    let _ = home::record_tool_call(&agent_id, name, args);
+    let _ = usage::record_tool_call(
+        &agent_id,
+        name,
+        args,
+        Some(ctx.session_id.as_str()),
+        ctx.turn_id.as_deref(),
+    )
+    .await;
+    enforce_in_process_write_policy(ctx, name, args)?;
+
+    if let Some(runtime) = runtime {
+        return runtime.handle(ctx, args).await;
+    }
+
+    if home::is_tool_call_allowed("skills")
+        && skills::list_installed()
+            .into_iter()
+            .any(|skill| skill.name == name && skill.enabled)
     {
         let rewritten = serde_json::json!({
             "action": "load",
@@ -117,86 +167,6 @@ fn enforce_in_process_write_policy(
     }
 }
 
-fn enforce_in_process_network_policy(
-    ctx: &ToolContext<'_>,
-    name: &str,
-    args: &serde_json::Value,
-) -> anyhow::Result<()> {
-    if !tool_requires_in_process_network(name) {
-        return Ok(());
-    }
-    let settings = memory::load_permission_settings(&ctx.memory_dir);
-    let profile = ctx
-        .permission_profile
-        .as_deref()
-        .unwrap_or(&settings.selection.profile_id);
-    match profile {
-        types::DANGER_FULL_ACCESS_PROFILE => Ok(()),
-        types::READ_ONLY_PROFILE | types::WORKSPACE_PROFILE => {
-            let hosts = in_process_network_hosts(name, args);
-            if hosts.is_empty() {
-                anyhow::bail!(
-                    "permission denied: {name} has no valid remote host to authorize"
-                );
-            }
-            let missing: Vec<_> = hosts
-                .iter()
-                .filter(|host| !ctx.network_grant.allows_host(host))
-                .cloned()
-                .collect();
-            if missing.is_empty() {
-                Ok(())
-            } else {
-                anyhow::bail!(
-                    "permission denied: {name} requires one-call in-process network approval for {}",
-                    missing.join(", ")
-                )
-            }
-        }
-        custom => anyhow::bail!(
-            "custom permission profile {custom:?} cannot grant in-process network access until its tool-network rules are fully resolved"
-        ),
-    }
-}
-
-/// 是否为直接在 Astro 进程内发起网络请求的工具。
-///
-/// 该分类独立于 terminal/code_exec 的命令沙箱网络开关。
-pub fn tool_requires_in_process_network(name: &str) -> bool {
-    matches!(name, "web_search" | "web_fetch")
-}
-
-/// 从工具参数提取本次审批卡应展示的目标主机。
-pub fn in_process_network_hosts(name: &str, args: &serde_json::Value) -> Vec<String> {
-    let mut hosts = match name {
-        "web_search" => vec![
-            "api.search.brave.com".to_string(),
-            "www.bing.com".to_string(),
-        ],
-        "web_fetch" => {
-            let urls: Vec<&str> = args
-                .get("urls")
-                .and_then(serde_json::Value::as_array)
-                .filter(|items| !items.is_empty())
-                .map(|items| items.iter().filter_map(serde_json::Value::as_str).collect())
-                .unwrap_or_else(|| {
-                    args.get("url")
-                        .and_then(serde_json::Value::as_str)
-                        .into_iter()
-                        .collect()
-                });
-            urls.into_iter()
-                .filter_map(|raw| reqwest::Url::parse(raw.trim()).ok())
-                .filter_map(|url| url.host_str().map(str::to_ascii_lowercase))
-                .collect()
-        }
-        _ => Vec::new(),
-    };
-    hosts.sort();
-    hosts.dedup();
-    hosts
-}
-
 pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> bool {
     let action = || {
         args.get("action")
@@ -206,28 +176,10 @@ pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> b
             .to_ascii_lowercase()
     };
     match name {
-        "file_ops" => matches!(
-            args.get("operation")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_ascii_lowercase()
-                .as_str(),
-            "write"
-                | "append"
-                | "delete"
-                | "mkdir"
-                | "patch"
-                | "move"
-                | "rename"
-                | "mv"
-                | "copy"
-                | "cp"
-        ),
         "memory" | "todo" | "persona_create" => true,
         "skills" => action() == "manage",
         "pin_context" => matches!(action().as_str(), "pin" | "unpin" | "clear"),
-        "cron" => matches!(action().as_str(), "add" | "remove" | "enable" | "disable"),
+        "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => true,
         "image_gen" | "video_gen" | "speech_gen" | "music_gen" => true,
         _ => false,
     }
@@ -238,15 +190,15 @@ mod permission_tests {
     use super::*;
     use crate::context::ImageGenTargets;
 
-    fn with_ctx(
+    async fn with_ctx(
         dir: &tempfile::TempDir,
         write_grant: bool,
-        network_hosts: &[&str],
         f: impl FnOnce(&ToolContext<'_>),
     ) {
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+            .await
+            .unwrap();
         let manager = std::sync::RwLock::new(manager);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -256,11 +208,13 @@ mod permission_tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: dir.path().join("workspace"),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -268,26 +222,16 @@ mod permission_tests {
             hook_runtime: None,
             workspace_write_grant: write_grant,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::for_hosts(
-                network_hosts.iter().map(|host| (*host).to_string()),
-            ),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
         f(&ctx);
     }
 
     #[test]
     fn classifies_in_process_writes_without_blocking_read_actions() {
-        assert!(tool_requires_in_process_write(
-            "file_ops",
-            &serde_json::json!({"operation": "mv"})
-        ));
-        assert!(!tool_requires_in_process_write(
-            "file_ops",
-            &serde_json::json!({"operation": "read"})
-        ));
         assert!(tool_requires_in_process_write(
             "skills",
             &serde_json::json!({"action": "manage"})
@@ -305,12 +249,12 @@ mod permission_tests {
             &serde_json::json!({"action": "list"})
         ));
         assert!(tool_requires_in_process_write(
-            "cron",
-            &serde_json::json!({"action": "disable"})
+            "cron_disable",
+            &serde_json::json!({})
         ));
         assert!(!tool_requires_in_process_write(
-            "cron",
-            &serde_json::json!({"action": "list"})
+            "cron_list",
+            &serde_json::json!({})
         ));
         assert!(tool_requires_in_process_write(
             "image_gen",
@@ -318,11 +262,11 @@ mod permission_tests {
         ));
     }
 
-    #[test]
-    fn read_only_denies_and_workspace_allows_in_process_writes() {
+    #[tokio::test]
+    async fn read_only_denies_and_workspace_allows_in_process_writes() {
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
-        with_ctx(&dir, false, &[], |ctx| {
+        with_ctx(&dir, false, |ctx| {
             let error = enforce_in_process_write_policy(
                 ctx,
                 "todo",
@@ -335,88 +279,27 @@ mod permission_tests {
                 enforce_in_process_write_policy(ctx, "context_search", &serde_json::json!({}))
                     .is_ok()
             );
-        });
-        with_ctx(&dir, true, &[], |ctx| {
+        })
+        .await;
+        with_ctx(&dir, true, |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
                 &serde_json::json!({"action": "create"})
             )
             .is_ok());
-        });
+        })
+        .await;
 
         memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        with_ctx(&dir, false, &[], |ctx| {
+        with_ctx(&dir, false, |ctx| {
             assert!(enforce_in_process_write_policy(
                 ctx,
                 "todo",
                 &serde_json::json!({"action": "create"})
             )
             .is_ok());
-        });
-    }
-
-    #[test]
-    fn in_process_network_requires_separate_once_grant() {
-        let dir = tempfile::tempdir().unwrap();
-        memory::set_permission_preset(dir.path(), types::PermissionPreset::AskForApproval).unwrap();
-        with_ctx(&dir, false, &[], |ctx| {
-            let error = enforce_in_process_network_policy(
-                ctx,
-                "web_fetch",
-                &serde_json::json!({"url": "https://example.com/path"}),
-            )
-            .unwrap_err()
-            .to_string();
-            assert!(error.contains("one-call"), "{error}");
-        });
-        with_ctx(&dir, false, &["example.com"], |ctx| {
-            enforce_in_process_network_policy(
-                ctx,
-                "web_fetch",
-                &serde_json::json!({"url": "https://example.com/path"}),
-            )
-            .unwrap();
-        });
-        with_ctx(&dir, false, &["other.example"], |ctx| {
-            let error = enforce_in_process_network_policy(
-                ctx,
-                "web_fetch",
-                &serde_json::json!({"url": "https://example.com/path"}),
-            )
-            .unwrap_err()
-            .to_string();
-            assert!(error.contains("example.com"), "{error}");
-        });
-
-        memory::set_permission_preset(dir.path(), types::PermissionPreset::FullAccess).unwrap();
-        with_ctx(&dir, false, &[], |ctx| {
-            enforce_in_process_network_policy(
-                ctx,
-                "web_fetch",
-                &serde_json::json!({"url": "https://example.com/path"}),
-            )
-            .unwrap();
-        });
-    }
-
-    #[test]
-    fn network_host_extraction_is_stable_and_deduplicated() {
-        assert_eq!(
-            in_process_network_hosts(
-                "web_fetch",
-                &serde_json::json!({
-                    "url": "https://ignored.example",
-                    "urls": [
-                        "https://EXAMPLE.com/a",
-                        "https://example.com/b",
-                        "https://www.rust-lang.org/"
-                    ]
-                })
-            ),
-            vec!["example.com", "www.rust-lang.org"]
-        );
-        assert!(tool_requires_in_process_network("web_search"));
-        assert!(!tool_requires_in_process_network("terminal"));
+        })
+        .await;
     }
 }

@@ -17,8 +17,9 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon", "image-png", "unstable"] }
 tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
@@ -26,6 +27,7 @@ window-vibrancy = "0.8"
 tauri-plugin-clipboard = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2.11.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "0.8"
@@ -37,6 +39,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proto = { path = "../../../crates/agent-proto" }
 agent-protocol = { path = "../../../crates/agent-protocol" }
+agent-rollout = { path = "../../../crates/agent-rollout" }
 types = { path = "../../../crates/agent-types" }
 memory = { path = "../../../crates/agent-memory" }
 sandbox = { path = "../../../crates/agent-sandbox" }
@@ -48,7 +51,6 @@ subagents = { path = "../../../crates/agent-subagents" }
 session = { path = "../../../crates/agent-session" }
 agent = { path = "../../../crates/agent-core" }
 hooks = { path = "../../../crates/agent-hooks" }
-worktree = { path = "../../../crates/agent-delegate" }
 server = { path = "../../../crates/agent-server" }
 tools = { path = "../../../crates/agent-tools" }
 mcp = { path = "../../../crates/agent-mcp" }
@@ -63,6 +65,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 futures = "0.3"
 base64 = "0.22"
 trash = "5"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [dev-dependencies]
 tempfile = "3"

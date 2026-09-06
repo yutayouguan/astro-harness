@@ -46,16 +46,24 @@ export function clampPercent(n: number): number {
   return Math.min(100, Math.max(0, Math.round(n * 10) / 10));
 }
 
-export function normalizeStop(raw: unknown, fallback: ShellGradientStop): ShellGradientStop {
+export function normalizeStop(
+  raw: unknown,
+  fallback: ShellGradientStop,
+): ShellGradientStop {
   if (!raw || typeof raw !== "object") return { ...fallback };
   const o = raw as Record<string, unknown>;
-  const color = typeof o.color === "string" && isHexColor(o.color) ? o.color : fallback.color;
+  const color =
+    typeof o.color === "string" && isHexColor(o.color)
+      ? o.color
+      : fallback.color;
   const x = typeof o.x === "number" ? clampPercent(o.x) : fallback.x;
   const y = typeof o.y === "number" ? clampPercent(o.y) : fallback.y;
   return { color, x, y };
 }
 
-export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+export function hexToRgb(
+  hex: string,
+): { r: number; g: number; b: number } | null {
   if (!isHexColor(hex)) return null;
   return {
     r: Number.parseInt(hex.slice(1, 3), 16),
@@ -86,10 +94,12 @@ export function underlayFromGradient(
     gradient.secondary.color,
     ...gradient.extras.map((stop) => stop.color),
   ];
-  const mid = colors.slice(1).reduce(
-    (mixed, color, index) => mixHex(mixed, color, 1 / (index + 2)),
-    colors[0],
-  );
+  const mid = colors
+    .slice(1)
+    .reduce(
+      (mixed, color, index) => mixHex(mixed, color, 1 / (index + 2)),
+      colors[0],
+    );
   if (theme === "light") {
     if (isNearWhite(mid)) {
       return mixHex("#ffffff", "#e2e8f0", 0.28);
@@ -111,9 +121,7 @@ export function relativeLuminance(hex: string): number {
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   return (
-    0.2126 * channel(rgb.r) +
-    0.7152 * channel(rgb.g) +
-    0.0722 * channel(rgb.b)
+    0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b)
   );
 }
 
@@ -244,9 +252,7 @@ export function shellGradientPreviewBackground(
     const a = Math.round(alpha * strength * 1000) / 1000;
     const fade = Math.round(fadePct * spread * 10) / 10;
     const rgb = hexToRgb(stop.color);
-    const color = rgb
-      ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
-      : stop.color;
+    const color = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})` : stop.color;
     return `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${color} 0%, transparent ${fade}%)`;
   });
   return `${layers.join(", ")}, ${base}`;
@@ -324,7 +330,7 @@ export const DEFAULT_SHELL_GRADIENT: ShellGradient = {
 };
 
 export const DEFAULT_SHELL_COLOR_PREFS: ShellColorPrefs = {
-  style: "colorful",
+  style: "dynamic",
   gradient: {
     ...DEFAULT_SHELL_GRADIENT,
     primary: { ...DEFAULT_SHELL_GRADIENT.primary },
@@ -348,7 +354,9 @@ export const SHELL_GRADIENT_SWATCH_COLORS = [
 ] as const;
 
 export function gradientFromPreset(id: ShellGradientPresetId): ShellGradient {
-  const p = SHELL_GRADIENT_PRESETS.find((x) => x.id === id) ?? SHELL_GRADIENT_PRESETS[0];
+  const p =
+    SHELL_GRADIENT_PRESETS.find((x) => x.id === id) ??
+    SHELL_GRADIENT_PRESETS[0];
   return {
     id: p.id,
     primary: { ...p.primary },
@@ -448,15 +456,16 @@ export function normalizeGradient(raw: unknown): ShellGradient {
       ? (idRaw as ShellGradient["id"])
       : "ocean";
   const extras = Array.isArray(o.extras)
-    ? o.extras
-        .slice(0, 3)
-        .map((stop, index) =>
-          normalizeStop(stop, {
-            color: SHELL_GRADIENT_SWATCH_COLORS[(index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length],
-            x: 50,
-            y: 50,
-          }),
-        )
+    ? o.extras.slice(0, 3).map((stop, index) =>
+        normalizeStop(stop, {
+          color:
+            SHELL_GRADIENT_SWATCH_COLORS[
+              (index + 2) % SHELL_GRADIENT_SWATCH_COLORS.length
+            ],
+          x: 50,
+          y: 50,
+        }),
+      )
     : [];
   return {
     id,
@@ -483,10 +492,22 @@ export function applyShellGradientVars(
   el.style.setProperty("--shell-grad-sr", String(s.r));
   el.style.setProperty("--shell-grad-sg", String(s.g));
   el.style.setProperty("--shell-grad-sb", String(s.b));
-  el.style.setProperty("--shell-grad-px", `${clampPercent(gradient.primary.x)}%`);
-  el.style.setProperty("--shell-grad-py", `${clampPercent(gradient.primary.y)}%`);
-  el.style.setProperty("--shell-grad-sx", `${clampPercent(gradient.secondary.x)}%`);
-  el.style.setProperty("--shell-grad-sy", `${clampPercent(gradient.secondary.y)}%`);
+  el.style.setProperty(
+    "--shell-grad-px",
+    `${clampPercent(gradient.primary.x)}%`,
+  );
+  el.style.setProperty(
+    "--shell-grad-py",
+    `${clampPercent(gradient.primary.y)}%`,
+  );
+  el.style.setProperty(
+    "--shell-grad-sx",
+    `${clampPercent(gradient.secondary.x)}%`,
+  );
+  el.style.setProperty(
+    "--shell-grad-sy",
+    `${clampPercent(gradient.secondary.y)}%`,
+  );
   gradient.extras.slice(0, 3).forEach((stop, index) => {
     const rgb = hexToRgb(stop.color);
     if (!rgb) return;
@@ -527,7 +548,10 @@ export function applyShellGradientVars(
     "--shell-grad-spread",
     String(shellGradSpread(shellStopCount(gradient))),
   );
-  el.style.setProperty("--window-underlay", underlayFromGradient(theme, gradient));
+  el.style.setProperty(
+    "--window-underlay",
+    underlayFromGradient(theme, gradient),
+  );
 }
 
 let glassFlushRaf = 0;
@@ -537,7 +561,9 @@ let glassFlushRaf = 0;
  * 壳层背景已变时，侧栏/卡片玻璃可能仍显示旧色约数百毫秒～1s。
  * 关一帧再开，强制重建玻璃层。
  */
-export function flushGlassBackdrop(root: HTMLElement = document.documentElement): void {
+export function flushGlassBackdrop(
+  root: HTMLElement = document.documentElement,
+): void {
   if (typeof window === "undefined") return;
   root.setAttribute("data-glass-flush", "1");
   if (glassFlushRaf) cancelAnimationFrame(glassFlushRaf);

@@ -20,6 +20,8 @@ const CACHE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 pub struct OpenRouterEntry {
     pub max_input_tokens: Option<u64>,
     pub max_output_tokens: Option<u64>,
+    pub input_modalities: Vec<String>,
+    pub output_modalities: Vec<String>,
     pub supports_vision: bool,
     pub supports_file_input: bool,
     pub supports_audio_input: bool,
@@ -29,6 +31,7 @@ pub struct OpenRouterEntry {
     pub supports_image_generation: bool,
     pub supports_video_generation: bool,
     pub supports_audio_output: bool,
+    pub supports_transcription: bool,
     pub supports_music_generation: bool,
     pub display_name: Option<String>,
     pub description: Option<String>,
@@ -190,7 +193,8 @@ impl RawModel {
 
         let image_out = has_mod(&outs, "image");
         let video_out = has_mod(&outs, "video");
-        let audio_out = has_mod(&outs, "audio");
+        let audio_out = has_mod(&outs, "audio") || has_mod(&outs, "speech");
+        let transcription_out = has_mod(&outs, "transcription");
         let music_hint = id_lower.contains("lyria")
             || id_lower.contains("music")
             || name_lower.contains("lyria")
@@ -275,7 +279,10 @@ impl RawModel {
             supports_image_generation: image_out,
             supports_video_generation: video_out,
             supports_audio_output: audio_out && !supports_music,
+            supports_transcription: transcription_out,
             supports_music_generation: supports_music,
+            input_modalities: inns,
+            output_modalities: outs,
             display_name: nonempty(self.name),
             description: nonempty(self.description),
             canonical_slug: nonempty(self.canonical_slug),
@@ -316,6 +323,7 @@ fn parse_reasoning_meta(
         default_enabled: parsed.default_enabled,
         mandatory: parsed.mandatory,
         supports_max_tokens: parsed.supports_max_tokens,
+        persistent_instructions: None,
     };
     if meta.is_empty() {
         // 空对象 `{}` 仍视为「支持推理」占位
@@ -657,6 +665,25 @@ pub fn lookup(id: &str, kind: &str) -> Option<OpenRouterEntry> {
     best.cloned()
 }
 
+/// 模型市场的主用途分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelCatalogKind {
+    Generation,
+    Embedding,
+    Rerank,
+}
+
+fn catalog_kind(output_modalities: &[String]) -> ModelCatalogKind {
+    if output_modalities.iter().any(|m| m == "rerank") {
+        ModelCatalogKind::Rerank
+    } else if output_modalities.iter().any(|m| m == "embeddings") {
+        ModelCatalogKind::Embedding
+    } else {
+        ModelCatalogKind::Generation
+    }
+}
+
 /// 前端可序列化的模型目录条目。
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelCatalogEntry {
@@ -671,13 +698,17 @@ pub struct ModelCatalogEntry {
     pub created: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing: Option<super::model_meta::ModelPricingMeta>,
+    pub model_type: ModelCatalogKind,
     pub supports_vision: bool,
     pub supports_function_calling: bool,
     pub supports_reasoning: bool,
     pub supports_web_search: bool,
     pub supports_image_generation: bool,
+    pub supports_video_generation: bool,
     pub supports_audio_input: bool,
     pub supports_audio_output: bool,
+    pub supports_transcription: bool,
+    pub supports_music_generation: bool,
     pub input_modalities: Vec<String>,
     pub output_modalities: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -695,27 +726,16 @@ pub fn all_entries() -> Vec<ModelCatalogEntry> {
     guard
         .values()
         .map(|e| {
-            let mut input_mods = vec!["text".to_string()];
-            if e.supports_vision {
-                input_mods.push("image".to_string());
-            }
-            if e.supports_audio_input {
-                input_mods.push("audio".to_string());
-            }
-            if e.supports_file_input {
-                input_mods.push("file".to_string());
-            }
-
-            let mut output_mods = vec!["text".to_string()];
-            if e.supports_image_generation {
-                output_mods.push("image".to_string());
-            }
-            if e.supports_video_generation {
-                output_mods.push("video".to_string());
-            }
-            if e.supports_audio_output || e.supports_music_generation {
-                output_mods.push("audio".to_string());
-            }
+            let input_mods = if e.input_modalities.is_empty() {
+                vec!["text".to_string()]
+            } else {
+                e.input_modalities.clone()
+            };
+            let output_mods = if e.output_modalities.is_empty() {
+                vec!["text".to_string()]
+            } else {
+                e.output_modalities.clone()
+            };
 
             ModelCatalogEntry {
                 id: e.matched_key.clone(),
@@ -724,13 +744,17 @@ pub fn all_entries() -> Vec<ModelCatalogEntry> {
                 context_length: e.max_input_tokens,
                 created: e.created,
                 pricing: e.pricing.clone(),
+                model_type: catalog_kind(&output_mods),
                 supports_vision: e.supports_vision,
                 supports_function_calling: e.supports_function_calling,
                 supports_reasoning: e.supports_reasoning,
                 supports_web_search: e.supports_web_search,
                 supports_image_generation: e.supports_image_generation,
+                supports_video_generation: e.supports_video_generation,
                 supports_audio_input: e.supports_audio_input,
                 supports_audio_output: e.supports_audio_output,
+                supports_transcription: e.supports_transcription,
+                supports_music_generation: e.supports_music_generation,
                 input_modalities: input_mods,
                 output_modalities: output_mods,
                 knowledge_cutoff: e.knowledge_cutoff.clone(),
@@ -829,6 +853,100 @@ mod tests {
                     e.reasoning.supported_efforts,
                     vec!["xhigh".to_string(), "high".to_string()]
                 );
+            },
+        );
+    }
+
+    #[test]
+    fn catalog_preserves_modalities_and_classifies_specialized_models() {
+        with_fixture(
+            r#"{
+              "data": [
+                {
+                  "id": "example/embed",
+                  "architecture": {
+                    "input_modalities": ["text", "image"],
+                    "output_modalities": ["embeddings"]
+                  }
+                },
+                {
+                  "id": "example/reranker",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["rerank"]
+                  }
+                },
+                {
+                  "id": "example/video",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["video"]
+                  }
+                },
+                {
+                  "id": "example/speech",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["speech"]
+                  }
+                },
+                {
+                  "id": "example/transcription",
+                  "architecture": {
+                    "input_modalities": ["audio"],
+                    "output_modalities": ["transcription"]
+                  }
+                },
+                {
+                  "id": "google/lyria-music",
+                  "architecture": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["audio"]
+                  }
+                }
+              ]
+            }"#,
+            || {
+                let entries = all_entries();
+                let embedding = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/embed")
+                    .unwrap();
+                assert_eq!(embedding.model_type, ModelCatalogKind::Embedding);
+                assert_eq!(embedding.input_modalities, vec!["text", "image"]);
+                assert_eq!(embedding.output_modalities, vec!["embeddings"]);
+
+                let reranker = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/reranker")
+                    .unwrap();
+                assert_eq!(reranker.model_type, ModelCatalogKind::Rerank);
+                assert_eq!(reranker.output_modalities, vec!["rerank"]);
+
+                let video = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/video")
+                    .unwrap();
+                assert!(video.supports_video_generation);
+
+                let speech = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/speech")
+                    .unwrap();
+                assert!(speech.supports_audio_output);
+
+                let transcription = entries
+                    .iter()
+                    .find(|entry| entry.id == "example/transcription")
+                    .unwrap();
+                assert!(transcription.supports_transcription);
+
+                let music = entries
+                    .iter()
+                    .find(|entry| entry.id == "google/lyria-music")
+                    .unwrap();
+                assert!(music.supports_music_generation);
+                assert!(!music.supports_audio_output);
             },
         );
     }

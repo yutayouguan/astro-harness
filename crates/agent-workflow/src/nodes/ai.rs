@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 
-use providers::types::message::Message as ProviderMessage;
+use providers::types::request_content::{ChatCompletionMessage, UserContent};
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
@@ -10,17 +10,21 @@ use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
 use crate::model::WorkflowNode;
 
-fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
+fn build_provider_config(
+    node: &WorkflowNode,
+    ctx: &VariableContext,
+) -> Result<(String, ProviderConfig)> {
     let provider_id = node
         .config
         .get("provider_id")
         .and_then(|v| v.as_str())
         .unwrap_or("openai");
-    let model = node
+    let model_override = node
         .config
         .get("model")
         .and_then(|v| v.as_str())
-        .unwrap_or("gpt-4o-mini");
+        .map(str::trim)
+        .filter(|model| !model.is_empty());
     let temperature = node
         .config
         .get("temperature")
@@ -31,6 +35,16 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
         .get("max_tokens")
         .and_then(|v| v.as_u64())
         .unwrap_or(4096) as u32;
+
+    if let Some(runtime) = ctx.provider_config(provider_id) {
+        let mut config = runtime.config.clone();
+        if let Some(model) = model_override {
+            config.model = model.to_string();
+        }
+        config.temperature = temperature;
+        config.max_tokens = max_tokens;
+        return Ok((runtime.backend_id.clone(), config));
+    }
 
     let auth = providers::AuthKind::for_provider(provider_id);
     let api_key = if auth == providers::AuthKind::None {
@@ -47,7 +61,7 @@ fn build_provider_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)
         ProviderConfig {
             api_key,
             base_url,
-            model: model.to_string(),
+            model: model_override.unwrap_or("gpt-4o-mini").to_string(),
             temperature,
             max_tokens,
             thinking_enabled: false,
@@ -66,8 +80,8 @@ pub async fn one_shot_llm(
     user: &str,
 ) -> Result<String> {
     let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
+        ChatCompletionMessage::system(system),
+        ChatCompletionMessage::user_text(user),
     ];
 
     let mut stream =
@@ -105,7 +119,7 @@ impl NodeExecutor for AiAgentTaskExec {
             bail!("AI 节点的指令(prompt_template)为空");
         }
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, system_prompt, &prompt).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
@@ -149,7 +163,7 @@ impl NodeExecutor for ParameterExtractionExec {
             field_desc,
         );
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &prompt).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -208,7 +222,7 @@ impl NodeExecutor for QuestionClassificationExec {
             class_desc,
         );
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &prompt).await?;
         let chosen_id = response.trim();
 
@@ -256,7 +270,7 @@ impl NodeExecutor for KnowledgeRetrievalExec {
              知识来源参考: {}。以 JSON 数组返回，每条包含 content 和 relevance 字段。只输出 JSON。",
             top_k, knowledge_path,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &query).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -297,7 +311,7 @@ impl NodeExecutor for SummarizationExec {
             "你是一个文本摘要助手。请用「{}」风格对用户输入进行摘要，控制在 {} 字以内。只输出摘要文本。",
             style, max_len,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
@@ -341,7 +355,7 @@ impl NodeExecutor for SentimentAnalysisExec {
              可选标签: {}。以 JSON 返回 {{\"label\": \"...\", \"confidence\": 0.0~1.0}}。只输出 JSON。",
             labels,
         );
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &text).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -385,7 +399,7 @@ impl NodeExecutor for DocumentUnderstandingExec {
             format!("文档: {}\n\n指令: {}", input_path, prompt)
         };
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let response = one_shot_llm(&provider_id, &config, &system, &user_msg).await?;
 
         let parsed: serde_json::Value = serde_json::from_str(response.trim())
@@ -441,12 +455,12 @@ impl NodeExecutor for VisionUnderstandingExec {
             format!("data:{};base64,{}", mime, b64)
         };
 
-        let (provider_id, config) = build_provider_config(node)?;
+        let (provider_id, config) = build_provider_config(node, ctx)?;
         let messages = vec![
-            ProviderMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
-            ProviderMessage::user(vec![
-                providers::types::message::UserContent::Image { url: image_url },
-                providers::types::message::UserContent::Text { text: prompt },
+            ChatCompletionMessage::system("你是一个视觉理解助手。根据用户提示分析图片内容。"),
+            ChatCompletionMessage::user(vec![
+                UserContent::Image { url: image_url },
+                UserContent::Text { text: prompt },
             ]),
         ];
 
@@ -465,5 +479,60 @@ impl NodeExecutor for VisionUnderstandingExec {
             "input_path": input_path,
             "provider": provider_id,
         })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    use crate::engine::RuntimeProviderConfig;
+    use crate::model::{NodeType, Position};
+
+    fn node(config: serde_json::Value) -> WorkflowNode {
+        WorkflowNode {
+            id: "ai".into(),
+            node_type: NodeType::AiAgentTask,
+            label: "AI".into(),
+            position: Position { x: 0.0, y: 0.0 },
+            config,
+            disabled: false,
+        }
+    }
+
+    #[test]
+    fn runtime_model_is_kept_unless_node_explicitly_overrides_it() {
+        let runtime = RuntimeProviderConfig {
+            backend_id: "openai".into(),
+            config: ProviderConfig {
+                api_key: "secret".into(),
+                model: "configured-model".into(),
+                ..ProviderConfig::default()
+            },
+            image_model: String::new(),
+            video_model: String::new(),
+            tts_model: String::new(),
+            music_model: String::new(),
+        };
+        let ctx = VariableContext::default()
+            .with_provider_configs(HashMap::from([("provider-record".into(), runtime)]));
+
+        let (_, inherited) = build_provider_config(
+            &node(serde_json::json!({"provider_id": "provider-record"})),
+            &ctx,
+        )
+        .expect("inherited provider config");
+        assert_eq!(inherited.model, "configured-model");
+
+        let (_, overridden) = build_provider_config(
+            &node(serde_json::json!({
+                "provider_id": "provider-record",
+                "model": "node-model"
+            })),
+            &ctx,
+        )
+        .expect("overridden provider config");
+        assert_eq!(overridden.model, "node-model");
     }
 }

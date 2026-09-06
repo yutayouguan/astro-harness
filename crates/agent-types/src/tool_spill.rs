@@ -1,7 +1,7 @@
 //! 工具结果落盘与可恢复引用（Cursor 式「大结果外部化」）。
 //!
 //! 不变量：
-//! - `Message::content` / DB `content` 始终保留全文（审计、FTS、UI）
+//! - `ResponseItem` / DB `item_json` 始终保留全文（审计、FTS、UI）
 //! - `compressed_content` 可改为 spill / prune 视图，供 Provider 读取
 //! - 落盘路径：`{memory_dir}/sessions/tool_spills/{session_id}/{message_id}.txt`
 
@@ -23,7 +23,7 @@ const PREVIEW_CHARS: usize = 800;
 
 pub fn spill_file_path(memory_dir: &Path, session_id: &str, message_id: i64) -> PathBuf {
     memory_dir
-        .join("sessions")
+        .join("data")
         .join("tool_spills")
         .join(session_id)
         .join(format!("{message_id}.txt"))
@@ -67,7 +67,7 @@ pub fn make_spill_view(
          Tool: {name}\n\
          Bytes: {total_bytes}\n\
          Spill: {spill_rel}\n\
-         Recovery: use `file_ops` read with offset/limit on the spill path, or `search` (scope=session).\n\
+         Recovery: use `exec_command` to read the spill path with offset/limit, or `search` (scope=session).\n\
          \n\
          Preview{truncated_suffix}:\n{preview}",
         truncated_suffix = if truncated { " (truncated)" } else { "" },
@@ -83,7 +83,7 @@ pub fn make_prune_view(tool_name: Option<&str>, spill_rel: Option<&str>) -> Stri
         "{TOOL_PRUNE_MARK}\n\
          Tool: {name}\n\
          Reason: context window maintenance (recent tail protected).{spill_line}\n\
-         Full output remains in session DB. Recover via `search` (scope=session) or `file_ops` read on spill path."
+         Full output remains in session DB. Recover via `search` (scope=session) or `exec_command` to read the spill path."
     )
 }
 
@@ -105,9 +105,9 @@ mod tests {
         assert!(path.exists());
         let rel = spill_path_for_prompt(dir.path(), &path);
         assert!(rel.contains("tool_spills/sess-1/42.txt"));
-        let view = make_spill_view(Some("terminal"), &rel, 11, "hello world");
+        let view = make_spill_view(Some("exec_command"), &rel, 11, "hello world");
         assert!(view.contains(TOOL_SPILL_MARK));
-        assert!(view.contains("terminal"));
+        assert!(view.contains("exec_command"));
     }
 
     #[test]

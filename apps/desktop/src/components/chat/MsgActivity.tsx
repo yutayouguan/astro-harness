@@ -1,6 +1,23 @@
 /** 单条聊天活动卡：kind 图标 + 可折叠 IO / 生成媒体。 */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, ChevronDown, Webhook } from "lucide-react";
+import {
+  Activity,
+  BookOpenText,
+  AudioLines,
+  Globe2,
+  Image as ImageIcon,
+  Music2,
+  PencilLine,
+  Search,
+  SquareTerminal,
+  Video,
+  Webhook,
+  Wrench,
+} from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useLiveElapsedSec } from "../../hooks/chat/useLiveElapsedSec";
 import {
@@ -8,15 +25,22 @@ import {
   resolveActivityIO,
 } from "../../lib/chat/resolveActivityIO";
 import { formatElapsedSec } from "../../lib/chat/elapsedSec";
+import { isLiveActivityStatus } from "../../lib/chat/toolActivityStatus";
 import { parseGeneratedMedia } from "../../lib/media/parseGeneratedMedia";
 import {
   looksLikeRelativeLocalPath,
   resolveMediaPreviewPath,
 } from "../../lib/media/resolveMediaSrc";
-import type { ChatActivity, ChatActivityKind } from "../../types";
+import type { ChatActivity } from "../../types";
+import {
+  activityTitlePresentation,
+  activityVisualKind,
+} from "../../lib/chat/activityPresentation";
 import McpIcon from "../icons/McpIcon";
 import GeneratedMediaCard from "../media/GeneratedMediaCard";
-import { IconMemory, IconSkills, IconTools } from "../icons/NavIcons";
+import { IconMemory, IconSkills } from "../icons/NavIcons";
+import { MorphToggleIcon } from "../icons/MorphIcon";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 type Props = {
   activity: ChatActivity;
@@ -25,20 +49,47 @@ type Props = {
   mediaBaseDir?: string | null;
 };
 
-function KindIcon({ kind }: { kind: ChatActivityKind }) {
-  switch (kind) {
+export function ActivityIcon({
+  activity,
+  size = 14,
+}: {
+  activity: ChatActivity;
+  size?: number;
+}) {
+  const props = { size, strokeWidth: 2, "aria-hidden": true as const };
+  switch (activityVisualKind(activity)) {
+    case "read":
+      return <BookOpenText {...props} />;
+    case "search":
+      return <Search {...props} />;
+    case "run":
+      return <SquareTerminal {...props} />;
+    case "edit":
+      return <PencilLine {...props} />;
+    case "browse":
+      return <Globe2 {...props} />;
+    case "image":
+      return <ImageIcon {...props} />;
+    case "video":
+      return <Video {...props} />;
+    case "music":
+      return <Music2 {...props} />;
+    case "speech":
+      return <AudioLines {...props} />;
+    case "media":
+      return <ImageIcon {...props} />;
     case "mcp":
-      return <McpIcon size={14} />;
-    case "tool":
-      return <IconTools width={14} height={14} />;
+      return <McpIcon size={size} />;
     case "skill":
-      return <IconSkills width={14} height={14} />;
+      return <IconSkills width={size} height={size} />;
     case "memory":
-      return <IconMemory width={14} height={14} />;
+      return <IconMemory width={size} height={size} />;
     case "hook":
-      return <Webhook size={14} strokeWidth={2} aria-hidden />;
+      return <Webhook {...props} />;
     case "status":
-      return <Activity size={14} strokeWidth={2} aria-hidden />;
+      return <Activity {...props} />;
+    case "tool":
+      return <Wrench {...props} />;
   }
 }
 
@@ -52,7 +103,7 @@ export default function MsgActivity({
   const hasBody = activityHasBody(activity);
   const { input, output } = resolveActivityIO(activity);
   const mediaItems = useMemo(() => {
-    if (activity.status === "running") return [];
+    if (isLiveActivityStatus(activity.status)) return [];
     if (activity.media && activity.media.length > 0) return activity.media;
     return parseGeneratedMedia(output);
   }, [activity.status, activity.media, output]);
@@ -62,7 +113,8 @@ export default function MsgActivity({
       mediaItems
         .filter(
           (m) =>
-            !looksLikeRelativeLocalPath(m.path) || Boolean(mediaBaseDir?.trim()),
+            !looksLikeRelativeLocalPath(m.path) ||
+            Boolean(mediaBaseDir?.trim()),
         )
         .map((m) => ({
           ...m,
@@ -73,7 +125,8 @@ export default function MsgActivity({
   const hasMedia = previewMedia.length > 0;
   const canToggle = hasBody || hasMedia;
   const [open, setOpen] = useState(() => defaultOpen && canToggle);
-  const running = activity.status === "running";
+  const [inputOpen, setInputOpen] = useState(false);
+  const running = isLiveActivityStatus(activity.status);
   const liveSec = useLiveElapsedSec(running, activity.at ?? null);
 
   useEffect(() => {
@@ -82,6 +135,7 @@ export default function MsgActivity({
 
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
+  const displayTitle = resolveActivityTitle(activity, t);
 
   const durationLabel = running
     ? liveSec != null
@@ -93,14 +147,28 @@ export default function MsgActivity({
         })
       : null;
 
+  const metaLabel =
+    showTimestamp && activity.at ? (
+      <span className="msg-activity-time">
+        {new Date(activity.at).toLocaleTimeString()}
+      </span>
+    ) : null;
+
   const summary: ReactNode = (
     <>
       <span className="msg-activity-kind-icon">
-        <KindIcon kind={activity.kind} />
+        <ActivityIcon activity={activity} />
       </span>
-      <span className="msg-activity-title">{activity.title}</span>
-      {durationLabel ? (
-        <span className="msg-activity-duration">{durationLabel}</span>
+      <span className="msg-activity-title" title={activity.title}>
+        {displayTitle}
+      </span>
+      {metaLabel || durationLabel ? (
+        <span className="msg-activity-meta">
+          {metaLabel}
+          {durationLabel ? (
+            <span className="msg-activity-duration">{durationLabel}</span>
+          ) : null}
+        </span>
       ) : null}
     </>
   );
@@ -116,11 +184,14 @@ export default function MsgActivity({
             type="button"
             className="msg-activity-toggle"
             aria-expanded={open}
-            aria-label={`${activity.title}，${open ? t("chat.activityCollapse") : t("chat.activityExpand")}`}
+            aria-label={`${displayTitle}，${open ? t("chat.activityCollapse") : t("chat.activityExpand")}`}
             onClick={() => setOpen((v) => !v)}
           >
             {summary}
-            <ChevronDown
+            <MorphToggleIcon
+              active={open}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
               size={14}
               strokeWidth={2}
               className="msg-activity-chevron"
@@ -130,7 +201,7 @@ export default function MsgActivity({
         ) : (
           <div className="msg-activity-summary">{summary}</div>
         )}
-        {(hasMedia || input || output) ? (
+        {hasMedia || input || output ? (
           <div className="msg-activity-collapse">
             <div className="msg-activity-collapse-inner">
               {hasMedia ? (
@@ -148,11 +219,39 @@ export default function MsgActivity({
               {input || output ? (
                 <div className="msg-activity-io">
                   {input ? (
-                    <div className="msg-activity-io-block">
-                      <span className="msg-activity-io-label">
-                        {t("chat.activityInput")}
-                      </span>
-                      <pre className="msg-activity-detail">{input}</pre>
+                    <div className="msg-activity-io-block is-input">
+                      <button
+                        type="button"
+                        className="msg-activity-io-disclosure"
+                        aria-expanded={inputOpen}
+                        onClick={() => setInputOpen((value) => !value)}
+                      >
+                        <span className="msg-activity-io-label">
+                          {t("chat.activityInput")}
+                        </span>
+                        <MorphToggleIcon
+                          active={inputOpen}
+                          activeIcon={ChevronUpData}
+                          inactiveIcon={ChevronDownData}
+                          size={13}
+                          strokeWidth={1.8}
+                          className="msg-activity-io-chevron"
+                          aria-hidden
+                        />
+                      </button>
+                      <div
+                        className={`msg-activity-input-collapse${inputOpen ? " is-open" : ""}`}
+                      >
+                        <div className="msg-activity-input-collapse-inner">
+                          <div className="msg-activity-detail is-input">
+                            <ChatMarkdown
+                              content={input}
+                              compact
+                              mediaBaseDir={mediaBaseDir}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : null}
                   {output ? (
@@ -160,7 +259,13 @@ export default function MsgActivity({
                       <span className="msg-activity-io-label">
                         {t("chat.activityOutput")}
                       </span>
-                      <pre className="msg-activity-detail">{output}</pre>
+                      <div className="msg-activity-detail is-output">
+                        <ChatMarkdown
+                          content={output}
+                          compact
+                          mediaBaseDir={mediaBaseDir}
+                        />
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -168,12 +273,18 @@ export default function MsgActivity({
             </div>
           </div>
         ) : null}
-        {showTimestamp && activity.at ? (
-          <span className="msg-activity-time">
-            {new Date(activity.at).toLocaleTimeString()}
-          </span>
-        ) : null}
       </div>
     </div>
   );
+}
+
+function resolveActivityTitle(
+  activity: ChatActivity,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const presentation = activityTitlePresentation(activity);
+  if (!presentation) return activity.title;
+  return presentation.target
+    ? t(presentation.key, { target: presentation.target })
+    : t(presentation.key);
 }

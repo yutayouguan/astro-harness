@@ -2,7 +2,9 @@
 
 use reqwest::header::HeaderMap;
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
+use crate::compat::{
+    OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible, ThinkingFormat,
+};
 use crate::traits::{
     Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, MusicGenModel,
     ProviderClient, ProviderExt, TTSModel, VideoGenModel,
@@ -25,9 +27,10 @@ impl ProviderExt for MiniMax {
 
 impl OpenAICompatible for MiniMax {
     const STREAM_USAGE: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::MiniMaxAdaptive;
 }
+
+impl OpenAIResponsesCompatible for MiniMax {}
 
 impl Capabilities for MiniMax {
     type Chat = Capable<OpenAICompletionModel<Self>>;

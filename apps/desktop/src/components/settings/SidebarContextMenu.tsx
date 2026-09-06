@@ -1,7 +1,12 @@
 /** 侧栏右键菜单：显示/隐藏名称、展开/收起导航栏。 */
-import { useEffect, useLayoutEffect, useRef, type ComponentType } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { PanelLeftClose, PanelLeftOpen, Type, type LucideProps } from "lucide-react";
+import { Type } from "lucide-react";
+import {
+  PanelLeftClose as PanelLeftCloseData,
+  PanelLeftOpen as PanelLeftOpenData,
+} from "lucide";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import {
@@ -16,7 +21,7 @@ export type SidebarMenuAction = "toggleLabels" | "togglePin";
 type Item = {
   action: SidebarMenuAction;
   labelKey: MessageKey;
-  Icon: ComponentType<LucideProps>;
+  icon: ReactNode;
 };
 
 type Props = {
@@ -44,13 +49,24 @@ export default function SidebarContextMenu({
   const items: Item[] = [
     {
       action: "toggleLabels",
-      labelKey: labelsVisible ? "sidebar.menu.hideLabels" : "sidebar.menu.showLabels",
-      Icon: Type,
+      labelKey: labelsVisible
+        ? "sidebar.menu.hideLabels"
+        : "sidebar.menu.showLabels",
+      icon: <Type className="fs-ctx-ico" {...ICO} aria-hidden />,
     },
     {
       action: "togglePin",
       labelKey: pinned ? "sidebar.menu.collapse" : "sidebar.menu.expand",
-      Icon: pinned ? PanelLeftClose : PanelLeftOpen,
+      icon: (
+        <MorphToggleIcon
+          active={pinned}
+          activeIcon={PanelLeftCloseData}
+          inactiveIcon={PanelLeftOpenData}
+          className="fs-ctx-ico"
+          {...ICO}
+          aria-hidden
+        />
+      ),
     },
   ];
 
@@ -102,7 +118,7 @@ export default function SidebarContextMenu({
           className="fs-ctx-item"
           onClick={() => onAction(it.action)}
         >
-          <it.Icon className="fs-ctx-ico" {...ICO} aria-hidden />
+          {it.icon}
           <span>{t(it.labelKey)}</span>
         </button>
       ))}

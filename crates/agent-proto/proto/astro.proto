@@ -14,12 +14,35 @@ service AstroService {
       returns (stream ThreadEvent);
   // Submit one user input operation to a loaded or newly created Thread.
   rpc SubmitTurn(SubmitTurnRequest) returns (SubmitTurnResponse);
+  rpc RealtimeConversationStart(RealtimeConversationStartRequest)
+      returns (RealtimeOperationResponse);
+  rpc RealtimeConversationAudio(RealtimeConversationAudioRequest)
+      returns (RealtimeOperationResponse);
+  rpc RealtimeConversationText(RealtimeConversationTextRequest)
+      returns (RealtimeOperationResponse);
+  rpc RealtimeConversationSpeech(RealtimeConversationSpeechRequest)
+      returns (RealtimeOperationResponse);
+  rpc RealtimeConversationClose(RealtimeConversationRequest)
+      returns (RealtimeOperationResponse);
+  rpc RealtimeConversationListVoices(RealtimeConversationRequest)
+      returns (RealtimeVoicesResponse);
   // Rebuild durable history, merge an active snapshot, and subscribe the connection.
   rpc ResumeThread(ResumeThreadRequest) returns (ResumeThreadResponse);
   // Stop routing one Thread to a connection without stopping the Thread.
   rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
+  rpc ResolveElicitation(ResolveElicitationRequest) returns (Empty);
+  rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
+  rpc ReconcileExtensions(ReconcileExtensionsRequest) returns (ReconcileExtensionsResponse);
+  rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
+  rpc RunUserShellCommand(RunUserShellCommandRequest) returns (RunUserShellCommandResponse);
+  rpc OpenTerminal(TerminalOpenRequest) returns (TerminalSessionResponse);
+  rpc ReadTerminal(TerminalReadRequest) returns (TerminalReadResponse);
+  rpc WriteTerminal(TerminalWriteRequest) returns (Empty);
+  rpc ResizeTerminal(TerminalResizeRequest) returns (Empty);
+  rpc KillTerminal(TerminalIdRequest) returns (Empty);
+  rpc CloseTerminal(TerminalIdRequest) returns (Empty);
   // 文生图流：进度、图片字节或错误。
   rpc GenerateImage(ImageRequest) returns (stream ImageEvent);
   // 列出已安装且可用于提示的技能。
@@ -34,13 +57,6 @@ service AstroService {
   rpc QueryMemory(MemoryQuery) returns (MemoryResult);
   // 在记忆沙箱内列举文件（受根目录约束）。
   rpc ListFiles(FileListRequest) returns (FileListResponse);
-  // 统计消息 + 工具的 token 数（Anthropic count_tokens）。
-  rpc CountTokens(CountTokensRequest) returns (CountTokensResponse);
-  // Anthropic Message Batches：创建 / 查询 / 列表 / 结果。
-  rpc CreateBatch(BatchCreateRequest) returns (BatchResponse);
-  rpc GetBatch(BatchStatusRequest) returns (BatchResponse);
-  rpc ListBatches(BatchListRequest) returns (BatchResponse);
-  rpc GetBatchResults(BatchStatusRequest) returns (BatchResultsResponse);
 }
 
 // 空请求/响应占位。
@@ -53,6 +69,7 @@ message ChatFallbackTarget {
   string api_key = 3;
   string base_url = 4;
   string provider_id = 5; // providers.json 条目 id，可空
+  reserved 6;
 }
 
 // 单条辅助模型已解析目标（title_generation / compaction / smart_approval /
@@ -112,7 +129,7 @@ message ChatRequest {
   uint32 context_window = 29;
   // 主模型最大输出 token（来自模型元数据）；0 = 后端用默认（8192）
   uint32 max_output_tokens = 30;
-  // 交互模式：agent | plan | ask（空=agent）；用于 Plan/Ask 工具门禁
+  // 交互模式：agent | plan（空=agent）；用于 Plan 工具门禁
   string interaction_mode = 31;
   // 任务隔离：非空则 AgentLoop 以该路径为 project_root（file_ops/terminal 沙箱根）
   string project_root = 32;
@@ -125,6 +142,18 @@ message ChatRequest {
   string image_gen_fallback_music_model = 36;
   // 前端队列身份；仅在输入持久化后通过 user_input_committed 回执。
   string client_message_id = 37;
+  // 会话绑定的持久项目；服务端用于审计与恢复。
+  string project_id = 38;
+  // 当前项目全部可读写目录；第一个元素必须与 project_root（主 cwd）一致。
+  repeated string workspace_roots = 39;
+  reserved 40;
+  // 模型目录指定的工具暴露模式；空值表示使用 feature flag。
+  string tool_mode = 41;
+  // 编辑重提：提交新输入前保留的绝对 user/assistant 气泡数。
+  optional uint32 rollback_keep_chat_bubbles = 42;
+  string persistent_instructions = 43;
+  // 模型目录运行时能力（types::ModelProfile JSON）。
+  string model_profile_json = 44;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。
@@ -186,6 +215,62 @@ message SubmitTurnResponse {
   string reason = 4;
 }
 
+message RealtimeConversationRequest {
+  string session_id = 1;
+}
+
+message RealtimeConversationStartRequest {
+  string session_id = 1;
+  string provider = 2;
+  string model = 3;
+  string api_key = 4;
+  string base_url = 5;
+  string output_modality = 6; // audio | text
+  string voice = 7;
+  string instructions = 8;
+  optional bool include_startup_context = 9;
+  string turn_detection = 10; // disabled | server_vad | semantic_vad
+  string noise_reduction = 11; // empty | near_field | far_field
+  reserved 12, 13;
+  string connection_id = 14;
+  string transport = 15; // websocket | webrtc | existing_call
+  string sdp = 16; // browser offer for webrtc
+  string call_id = 17; // required for existing_call
+  string version = 18; // v2 | v3
+  bool client_managed_handoffs = 19;
+  string handoff_mode = 20; // thinking | commentary | bem_tags
+  string handoff_channel_prefixes_json = 21;
+  bool flush_transcript_tail_on_session_end = 22;
+}
+
+message RealtimeConversationAudioRequest {
+  string session_id = 1;
+  bytes data = 2;
+  uint32 sample_rate = 3;
+  uint32 num_channels = 4;
+  string format = 5; // pcm16
+}
+
+message RealtimeConversationTextRequest {
+  string session_id = 1;
+  string text = 2;
+  string role = 3; // user | developer | assistant
+}
+
+message RealtimeConversationSpeechRequest {
+  string session_id = 1;
+  string text = 2;
+}
+
+message RealtimeOperationResponse {
+  string submission_id = 1;
+}
+
+message RealtimeVoicesResponse {
+  repeated string voices = 1;
+  string default_voice = 2;
+}
+
 message ResumeThreadRequest {
   string connection_id = 1;
   string thread_id = 2;
@@ -209,6 +294,10 @@ message ThreadSnapshot {
   bool has_active_turn = 5;
   repeated string pending_background_turn_ids = 6;
   reserved 7;
+  optional string model = 8;
+  optional string reasoning_effort = 9;
+  optional string provider_id = 10;
+  optional string backend_id = 11;
 }
 
 message ThreadTurn {
@@ -252,7 +341,13 @@ message ThreadEvent {
     ThreadTurnAborted turn_aborted = 23;
     ThreadExtension extension = 24;
     bool shutdown_complete = 25;
+    ThreadRealtimeEvent realtime = 26;
   }
+}
+
+message ThreadRealtimeEvent {
+  string kind = 1; // started | event | closed | voices
+  string payload_json = 2;
 }
 
 message ThreadTurnStarted {
@@ -279,6 +374,17 @@ message ThreadTokenCount {
   uint64 input_tokens = 1;
   uint64 output_tokens = 2;
   uint64 total_tokens = 3;
+  uint64 uncached_input_tokens = 4;
+  uint64 cache_read_tokens = 5;
+  uint64 cache_write_tokens = 6;
+  uint64 reasoning_tokens = 7;
+  uint64 request_count = 8;
+  uint64 provider_total_tokens = 9;
+  bool provider_total_tokens_reported = 10;
+  bool cache_read_reported = 11;
+  bool cache_write_reported = 12;
+  bool reasoning_reported = 13;
+  bool input_tokens_include_cache = 14;
 }
 
 message ThreadTurnComplete {
@@ -307,6 +413,123 @@ message InterruptResumeItem {
 message InterruptResumeRequest {
   string session_id = 1;
   repeated InterruptResumeItem resume = 2;
+}
+
+message ResolveElicitationRequest {
+  string session_id = 1;
+  string server_name = 2;
+  string request_id = 3;
+  string action = 4; // accept | decline | cancel
+  string content_json = 5;
+  string meta_json = 6;
+}
+
+message UpdateTurnSettingsRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  optional string model = 3;
+  optional string reasoning_effort = 4;
+  optional string reasoning_summary = 5;
+  optional string service_tier = 6;
+}
+
+message UpdateTurnSettingsResponse {
+  string status = 1; // applied | target_unavailable | rejected
+  string message = 2;
+}
+
+message ReconcileExtensionsRequest {
+  string session_id = 1;
+}
+
+message ExtensionReconcileChange {
+  string extension_id = 1;
+  string kind = 2; // added | updated | removed
+}
+
+message ReconcileExtensionsResponse {
+  string previous_version = 1;
+  string next_version = 2;
+  repeated ExtensionReconcileChange changed_extensions = 3;
+  bool refresh_mcp = 4;
+  bool refresh_skills = 5;
+  bool refresh_hooks = 6;
+  bool refresh_toolsets = 7;
+}
+
+message ApproveGuardianDeniedActionRequest {
+  string session_id = 1;
+  string assessment_id = 2;
+}
+
+message RunUserShellCommandRequest {
+  string session_id = 1;
+  string command = 2;
+  string cwd = 3;
+}
+
+message RunUserShellCommandResponse {
+  string submission_id = 1;
+  string turn_id = 2;
+  string item_id = 3;
+  bool attached_to_active_turn = 4;
+}
+
+message TerminalOpenRequest {
+  string scope = 1;
+  string cwd = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+  // "project" keeps workspace-write sandboxing; "system" launches the user's
+  // login shell without the project filesystem sandbox.
+  string execution_mode = 5;
+  // Desktop settings may deliberately replace an existing shell when its mode
+  // no longer matches. Agent callers continue to reuse the active session.
+  bool replace_mode_mismatch = 6;
+  // Stable Desktop tab identity. Reopening the same token reattaches instead of
+  // spawning another shell, including during React StrictMode remounts.
+  string client_token = 7;
+  // Marks a project-sandbox tab as the implicit target for AI terminal tools.
+  bool agent_default = 8;
+}
+
+message TerminalIdRequest { uint64 id = 1; }
+
+message TerminalReadRequest {
+  uint64 id = 1;
+  uint64 cursor = 2;
+  uint32 max_bytes = 3;
+  uint32 wait_ms = 4;
+}
+
+message TerminalWriteRequest {
+  uint64 id = 1;
+  bytes data = 2;
+}
+
+message TerminalResizeRequest {
+  uint64 id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+message TerminalSessionResponse {
+  uint64 id = 1;
+  string scope = 2;
+  string cwd = 3;
+  bool running = 4;
+  optional uint32 exit_code = 5;
+  uint64 base_cursor = 6;
+  uint64 end_cursor = 7;
+}
+
+message TerminalReadResponse {
+  uint64 id = 1;
+  bytes data = 2;
+  uint64 next_cursor = 3;
+  bool dropped = 4;
+  bool running = 5;
+  optional uint32 exit_code = 6;
 }
 
 message ImageRequest {
@@ -363,35 +586,3 @@ message SessionSnippet { string session_id = 1; string summary = 2; }
 message FileListRequest { string path = 1; int32 depth = 2; }
 message FileListResponse { repeated FileEntry entries = 1; }
 message FileEntry { string path = 1; bool is_dir = 2; int64 size = 3; }
-
-// ---------------------------------------------------------------------------
-// Token Counting & Batch API
-// ---------------------------------------------------------------------------
-
-message CountTokensRequest {
-  string agent_id = 1;
-  string model = 2;
-  string messages_json = 3;
-  string tools_json = 4;
-}
-message CountTokensResponse {
-  uint32 input_tokens = 1;
-}
-
-message BatchCreateRequest {
-  string agent_id = 1;
-  string requests_json = 2;
-}
-message BatchStatusRequest {
-  string agent_id = 1;
-  string batch_id = 2;
-}
-message BatchListRequest {
-  string agent_id = 1;
-}
-message BatchResponse {
-  string response_json = 1;
-}
-message BatchResultsResponse {
-  string results_jsonl = 1;
-}

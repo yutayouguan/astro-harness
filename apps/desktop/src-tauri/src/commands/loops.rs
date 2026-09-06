@@ -1,8 +1,47 @@
 use serde::{Deserialize, Serialize};
 use workflow::engine::WorkflowRunResult;
-use workflow::model::{NewWorkflow, NodeType, Position, Workflow, WorkflowEdge, WorkflowNode};
+use workflow::model::{
+    NewWorkflow, NodeType, Position, Workflow, WorkflowAgentTool, WorkflowAgentToolPatch,
+    WorkflowEdge, WorkflowNode,
+};
 use workflow::run_db::{WorkflowRunDb, WorkflowRunRow, WorkflowStepLogRow};
 use workflow::store::WorkflowStore;
+
+fn workflow_provider_configs(
+) -> Result<std::collections::HashMap<String, workflow::engine::RuntimeProviderConfig>, String> {
+    use super::providers::{find_provider, get_providers_state, resolve_api_key};
+
+    let state = get_providers_state()?;
+    let mut runtime = std::collections::HashMap::new();
+    for provider in state
+        .providers
+        .into_iter()
+        .filter(|provider| provider.enabled)
+    {
+        let stored = find_provider(&provider.id)?;
+        let (has_key, _, _, api_key) = resolve_api_key(&stored);
+        if stored.kind.requires_api_key() && !has_key {
+            continue;
+        }
+        let resolved = workflow::engine::RuntimeProviderConfig {
+            backend_id: provider.backend_id.clone(),
+            config: providers::ProviderConfig {
+                api_key: api_key.unwrap_or_default(),
+                base_url: (!stored.endpoint.trim().is_empty()).then_some(stored.endpoint.clone()),
+                model: stored.model.clone(),
+                api_mode: String::new(),
+                ..providers::ProviderConfig::default()
+            },
+            image_model: provider.image_model.clone(),
+            video_model: provider.video_model.clone(),
+            tts_model: provider.tts_model.clone(),
+            music_model: provider.music_model.clone(),
+        };
+        runtime.insert(provider.backend_id, resolved.clone());
+        runtime.insert(provider.id, resolved);
+    }
+    Ok(runtime)
+}
 
 // ── DTO ──────────────────────────────────────────────────────────────
 
@@ -12,7 +51,8 @@ pub struct LoopDto {
     pub name: String,
     pub description: String,
     pub enabled: bool,
-    pub ai_callable: bool,
+    #[serde(default)]
+    pub agent_tool: WorkflowAgentTool,
     pub nodes: Vec<LoopNodeDto>,
     pub edges: Vec<LoopEdgeDto>,
     pub variables: std::collections::HashMap<String, serde_json::Value>,
@@ -48,7 +88,7 @@ fn to_dto(wf: Workflow) -> LoopDto {
         name: wf.name,
         description: wf.description,
         enabled: wf.enabled,
-        ai_callable: wf.ai_callable,
+        agent_tool: wf.agent_tool,
         nodes: wf
             .nodes
             .into_iter()
@@ -85,7 +125,7 @@ fn from_dto(dto: LoopDto) -> Workflow {
         name: dto.name,
         description: dto.description,
         enabled: dto.enabled,
-        ai_callable: dto.ai_callable,
+        agent_tool: dto.agent_tool,
         nodes: dto
             .nodes
             .into_iter()
@@ -163,10 +203,13 @@ pub async fn set_loop_enabled(id: String, enabled: bool) -> Result<bool, String>
 }
 
 #[tauri::command]
-pub async fn set_loop_ai_callable(id: String, callable: bool) -> Result<bool, String> {
+pub async fn set_loop_agent_tool(
+    id: String,
+    patch: WorkflowAgentToolPatch,
+) -> Result<bool, String> {
     let store = WorkflowStore::open_default().map_err(|e| e.to_string())?;
     store
-        .set_ai_callable(&id, callable)
+        .update_agent_tool(&id, patch)
         .map_err(|e| e.to_string())
 }
 
@@ -177,18 +220,27 @@ pub async fn run_loop(id: String) -> Result<WorkflowRunResult, String> {
         .get(&id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("workflow {} 不存在", id))?;
+    let provider_configs = workflow_provider_configs()?;
 
-    // WorkflowRunDb 含 rusqlite Connection（非 Send），需在 spawn_blocking + current_thread runtime 中执行
+    // WorkflowRunDb 在 spawn_blocking + current_thread runtime 中执行
     tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
         rt.block_on(async {
-            let run_db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-            workflow::engine::execute_workflow(&wf, serde_json::json!({}), "manual", &run_db)
+            let run_db = WorkflowRunDb::open_default()
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            workflow::engine::execute_workflow_with_provider_configs(
+                &wf,
+                serde_json::json!({}),
+                "manual",
+                &run_db,
+                provider_configs,
+            )
+            .await
+            .map_err(|e| e.to_string())
         })
     })
     .await
@@ -200,27 +252,36 @@ pub async fn list_loop_runs(
     workflow_id: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<WorkflowRunRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
+    let db = WorkflowRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
     db.list_runs(workflow_id.as_deref(), limit.unwrap_or(100))
+        .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_loop_run(run_id: String) -> Result<Option<WorkflowRunRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.get_run(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    db.get_run(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn delete_loop_run(run_id: String) -> Result<bool, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.delete_run(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    db.delete_run(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_loop_step_logs(run_id: String) -> Result<Vec<WorkflowStepLogRow>, String> {
-    let db = WorkflowRunDb::open_default().map_err(|e| e.to_string())?;
-    db.list_step_logs(&run_id).map_err(|e| e.to_string())
+    let db = WorkflowRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    db.list_step_logs(&run_id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -251,6 +312,53 @@ pub async fn export_loop_svg(path: String, content: String) -> Result<String, St
     }
     std::fs::write(&final_path, &content).map_err(|e| e.to_string())?;
     Ok(final_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn open_loop_export(path: String) -> Result<(), String> {
+    let desktop = home::user_home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("Desktop");
+    let canonical_desktop = desktop.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = std::path::PathBuf::from(path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !canonical_path.starts_with(&canonical_desktop)
+        || canonical_path.extension().and_then(|ext| ext.to_str()) != Some("svg")
+    {
+        return Err("只能打开桌面目录中的 SVG 导出文件".into());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&canonical_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = canonical_path;
+        Err("当前平台不支持用系统应用打开文件".into())
+    }
 }
 
 #[tauri::command]

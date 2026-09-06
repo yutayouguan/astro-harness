@@ -5,11 +5,14 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  ChevronDown,
-  ChevronRight,
   AlertTriangle,
 } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
 import type { LoopRunDto, LoopStepLogDto } from "./loopTypes";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 interface Props {
   runId: string;
@@ -75,9 +78,7 @@ function RunStatusBadge({ status }: { status: string }) {
       );
     default:
       return (
-        <span className="loop-run-badge loop-run-badge--pending">
-          {status}
-        </span>
+        <span className="loop-run-badge loop-run-badge--pending">{status}</span>
       );
   }
 }
@@ -105,12 +106,15 @@ function StepCard({ step }: { step: LoopStepLogDto }) {
             <span className="loop-run-step-duration">
               {formatDuration(step.started_at, step.finished_at)}
             </span>
-            {hasDetail &&
-              (expanded ? (
-                <ChevronDown size={14} />
-              ) : (
-                <ChevronRight size={14} />
-              ))}
+            {hasDetail ? (
+              <MorphToggleIcon
+                active={expanded}
+                activeIcon={ChevronDownData}
+                inactiveIcon={ChevronRightData}
+                size={14}
+                aria-hidden
+              />
+            ) : null}
           </div>
         </div>
 
@@ -169,7 +173,12 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
   if (error) {
     return (
       <div className="loop-run-detail">
-        <div className="loop-empty" style={{ color: "var(--ink-error, #ef4444)" }}>{error}</div>
+        <div
+          className="loop-empty"
+          style={{ color: "var(--ink-error, #ef4444)" }}
+        >
+          {error}
+        </div>
       </div>
     );
   }
@@ -182,8 +191,7 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
     );
   }
 
-  const truncatedId =
-    run.id.length > 12 ? run.id.slice(0, 12) + "…" : run.id;
+  const truncatedId = run.id.length > 12 ? run.id.slice(0, 12) + "…" : run.id;
 
   return (
     <div className="loop-run-detail">
@@ -245,11 +253,13 @@ export default function LoopRunDetail({ runId, onBack }: Props) {
             className="loop-run-output-header"
             onClick={() => setOutputExpanded(!outputExpanded)}
           >
-            {outputExpanded ? (
-              <ChevronDown size={14} />
-            ) : (
-              <ChevronRight size={14} />
-            )}
+            <MorphToggleIcon
+              active={outputExpanded}
+              activeIcon={ChevronDownData}
+              inactiveIcon={ChevronRightData}
+              size={14}
+              aria-hidden
+            />
             <span>最终输出</span>
           </div>
           {outputExpanded && (

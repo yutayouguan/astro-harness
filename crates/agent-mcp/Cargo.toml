@@ -10,8 +10,10 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 toml = "0.8"
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 futures = "0.3"
+async-channel = "2"
 keyring = "3"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
 sse-stream = "0.2"

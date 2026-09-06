@@ -1,16 +1,18 @@
 //! 工具执行凭证：LLM 聊天与媒体生成的 Provider 凭证。
 
 /// 当前聊天会话的 LLM 凭证。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModelCredentials {
     pub provider: String,
     pub model: String,
+    /// 当前模型目录解析出的工具模式；不包含 feature flag 回退值。
+    pub tool_mode: Option<crate::ToolMode>,
     pub api_key: String,
     pub base_url: String,
 }
 
 /// 单个媒体生成 Provider 的调用凭证。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImageGenCreds {
     pub provider: String,
     pub model: String,
@@ -23,7 +25,7 @@ pub struct ImageGenCreds {
 }
 
 /// 主备媒体凭证对。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImageGenTargets {
     pub primary: Option<ImageGenCreds>,
     pub fallback: Option<ImageGenCreds>,

@@ -55,7 +55,9 @@ export default function AvatarPickerDrawer({
             <h3 id="agent-avatar-drawer-title" className="lucide-picker-title">
               {t("chat.agentAvatarDrawerTitle")}
             </h3>
-            <p className="lucide-picker-sub">{t("chat.agentAvatarDrawerSub")}</p>
+            <p className="lucide-picker-sub">
+              {t("chat.agentAvatarDrawerSub")}
+            </p>
           </div>
           <button
             type="button"
@@ -68,14 +70,12 @@ export default function AvatarPickerDrawer({
           </button>
         </header>
         <div className="agent-icon-drawer-scroll">
-          <CoverPicker
-            value={coverId}
-            busy={busy}
-            onChange={onPickCover}
-          />
+          <CoverPicker value={coverId} busy={busy} onChange={onPickCover} />
         </div>
         <footer className="agent-icon-drawer-foot">
-          <p className="chat-agent-covers-sub">{t("chat.agentAvatarDrawerUploadHint")}</p>
+          <p className="chat-agent-covers-sub">
+            {t("chat.agentAvatarDrawerUploadHint")}
+          </p>
           <button
             type="button"
             className="chat-agent-icon-btn"

@@ -146,20 +146,20 @@ fn append_daily_not_gated_by_write_approval() {
 
 #[test]
 fn dreaming_finalize_enqueues_when_write_approval() {
-    use home::{agent_workspace_dir, create_agent};
+    use home::{agent_workspace_dir, DEFAULT_AGENT_ID};
     use memory::dreaming::{finalize_dream_job, DreamDiary, DreamJob, DreamingState};
     use memory::workspace::ensure_workspace;
 
     let dir = TempDir::new().unwrap();
     ensure_workspace(dir.path()).unwrap();
     write_approval_config(dir.path());
-    let agent = create_agent(dir.path(), "Dreamer").unwrap();
-    let ws = agent_workspace_dir(dir.path(), &agent.id);
+    let agent_id = DEFAULT_AGENT_ID.to_string();
+    let ws = agent_workspace_dir(dir.path(), &agent_id);
     fs::write(ws.join("MEMORY.md"), "- old bullet\n").unwrap();
 
     let job = DreamJob {
-        agent_id: agent.id.clone(),
-        agent_name: "Dreamer".into(),
+        agent_id: agent_id.clone(),
+        agent_name: "default".into(),
         workspace: ws.clone(),
         memory_before: "- old bullet\n".into(),
         diaries: vec![DreamDiary {

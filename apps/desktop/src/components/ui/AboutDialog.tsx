@@ -5,6 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { X } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
+import { useDynamicOverlayLayer } from "../../hooks/ui/useDynamicOverlayLayer";
 import appIcon from "../../assets/astro-app-icon.png";
 
 type Props = {
@@ -24,6 +25,7 @@ export default function AboutDialog({ open, onClose }: Props) {
   const { t } = useI18n();
   const titleId = useId();
   const [version, setVersion] = useState("0.1.0");
+  const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
   useEffect(() => {
     if (!open) return;
@@ -55,7 +57,10 @@ export default function AboutDialog({ open, onClose }: Props) {
   return createPortal(
     <div
       className="app-dialog-backdrop about-dialog-backdrop"
+      data-app-overlay-layer={layer}
+      style={{ zIndex: layer }}
       role="presentation"
+      onPointerDownCapture={bringToFront}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -104,11 +109,7 @@ export default function AboutDialog({ open, onClose }: Props) {
           ))}
         </ul>
 
-        <button
-          type="button"
-          className="about-dialog-ok"
-          onClick={onClose}
-        >
+        <button type="button" className="about-dialog-ok" onClick={onClose}>
           {t("about.close")}
         </button>
       </div>

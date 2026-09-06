@@ -11,17 +11,6 @@ struct Person {
 }
 
 #[test]
-fn parse_submit_tool_call_xml() {
-    let raw = r#"先想一下…
-<tool_call>{"name":"submit","arguments":{"name":"John","age":30,"profession":"doctor"}}</tool_call>
-"#;
-    let person: Person = parse_submit_payload(raw).unwrap();
-    assert_eq!(person.name.as_deref(), Some("John"));
-    assert_eq!(person.age, Some(30));
-    assert_eq!(person.profession.as_deref(), Some("doctor"));
-}
-
-#[test]
 fn parse_submit_from_fenced_json() {
     let raw = r#"```json
 {"name":"Ada","age":36,"profession":"mathematician"}
@@ -47,7 +36,14 @@ fn parse_submit_no_data() {
 
 #[test]
 fn parse_submit_deserialization_error() {
-    let raw = r#"<tool_call>{"name":"submit","arguments":{"age":"not-a-number"}}</tool_call>"#;
+    let raw = r#"{"age":"not-a-number"}"#;
     let err = parse_submit_payload::<Person>(raw).unwrap_err();
     assert!(matches!(err, ExtractionError::DeserializationError(_)));
+}
+
+#[test]
+fn parse_submit_rejects_legacy_tool_markup() {
+    let raw = r#"<tool_call>{"name":"submit","arguments":{"name":"John"}}</tool_call>"#;
+    let err = parse_submit_payload::<Person>(raw).unwrap_err();
+    assert!(matches!(err, ExtractionError::NoData));
 }

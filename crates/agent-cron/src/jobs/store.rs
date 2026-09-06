@@ -12,7 +12,7 @@ use home::{default_memory_dir, ensure_default_workspace_dirs};
 use super::model::{
     default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob,
 };
-use super::schedule::compute_next_run;
+use super::schedule::{compute_next_run, ensure_custom_start};
 
 /// `jobs.json` 顶层结构
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -47,7 +47,12 @@ impl CronStore {
 
     /// 列出全部任务（加载时补全缺省 title / agent_id）
     pub fn list(&self) -> anyhow::Result<Vec<CronJob>> {
-        Ok(self.load()?.jobs)
+        Ok(self
+            .load()?
+            .jobs
+            .into_iter()
+            .filter(|job| job.agent_id == default_agent_id())
+            .collect())
     }
 
     /// 快捷添加：仅 schedule + task，其余用默认值
@@ -65,9 +70,9 @@ impl CronStore {
 
     /// 添加新任务：校验 schedule、计算 `next_run_at` 并持久化
     pub fn add_job(&self, input: NewCronJob) -> anyhow::Result<CronJob> {
-        let schedule = input.schedule.trim();
+        let raw_schedule = input.schedule.trim();
         let task = input.task.trim();
-        if schedule.is_empty() {
+        if raw_schedule.is_empty() {
             anyhow::bail!("schedule 不能为空");
         }
         if task.is_empty() {
@@ -78,15 +83,17 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = normalize_cron_agent_id(&input.agent_id);
-        // 校验表达式
-        let next = compute_next_run(schedule, Local::now())?
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let agent_id = default_agent_id();
+        // 自定义日历周期以创建时刻为相位锚点；随后校验表达式。
+        let now = Local::now();
+        let schedule = ensure_custom_start(raw_schedule, now);
+        let next =
+            compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
         let mut file = self.load()?;
         let job = CronJob {
             id: Uuid::new_v4().to_string(),
-            schedule: schedule.to_string(),
+            schedule,
             task: task.to_string(),
             title,
             agent_id,
@@ -109,9 +116,9 @@ impl CronStore {
         id_or_prefix: &str,
         input: NewCronJob,
     ) -> anyhow::Result<Option<CronJob>> {
-        let schedule = input.schedule.trim();
+        let raw_schedule = input.schedule.trim();
         let task = input.task.trim();
-        if schedule.is_empty() {
+        if raw_schedule.is_empty() {
             anyhow::bail!("schedule 不能为空");
         }
         if task.is_empty() {
@@ -122,15 +129,17 @@ impl CronStore {
         } else {
             input.title.trim().to_string()
         };
-        let agent_id = normalize_cron_agent_id(&input.agent_id);
-        let next = compute_next_run(schedule, Local::now())?
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let agent_id = default_agent_id();
+        let now = Local::now();
+        let schedule = ensure_custom_start(raw_schedule, now);
+        let next =
+            compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
         let mut file = self.load()?;
         let mut updated = None;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
-                job.schedule = schedule.to_string();
+                job.schedule = schedule.clone();
                 job.task = task.to_string();
                 job.title = title;
                 job.agent_id = agent_id;
@@ -185,26 +194,17 @@ impl CronStore {
         Ok(true)
     }
 
-    /// 启用或禁用任务；启用时会重算过期的 `next_run_at`（`once:` 过期则报错）
+    /// 启用或禁用任务；启用时会补算缺失的 `next_run_at`。
     pub fn set_enabled(&self, id_or_prefix: &str, enabled: bool) -> anyhow::Result<bool> {
         let mut file = self.load()?;
         let mut found = false;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
-                if enabled {
-                    if job.schedule.trim().starts_with("once:") {
-                        let next = compute_next_run(&job.schedule, Local::now())?;
-                        if next <= Local::now() {
-                            anyhow::bail!("无法启用已过期的单次任务");
-                        }
-                        job.next_run_at =
-                            Some(next.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
-                    } else if job.next_run_at.is_none() {
-                        job.next_run_at = Some(
-                            compute_next_run(&job.schedule, Local::now())?
-                                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                        );
-                    }
+                if enabled && job.next_run_at.is_none() {
+                    job.next_run_at = Some(
+                        compute_next_run(&job.schedule, Local::now())?
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    );
                 }
                 job.enabled = enabled;
                 found = true;
@@ -225,7 +225,7 @@ impl CronStore {
         let mut fired = Vec::new();
 
         for job in &mut file.jobs {
-            if !job.enabled {
+            if !job.enabled || job.agent_id != default_agent_id() {
                 continue;
             }
             let due = match &job.next_run_at {
@@ -241,15 +241,10 @@ impl CronStore {
 
             let fired_at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
             job.last_run_at = Some(fired_at);
-            if job.schedule.trim().starts_with("once:") {
-                job.enabled = false;
-                job.next_run_at = None;
-            } else {
-                job.next_run_at = Some(
-                    compute_next_run(&job.schedule, now + Duration::seconds(1))?
-                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                );
-            }
+            job.next_run_at = Some(
+                compute_next_run(&job.schedule, now + Duration::seconds(1))?
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            );
             fired.push(job.clone());
         }
 
@@ -259,7 +254,7 @@ impl CronStore {
             // 只在有 next_run 需要初始化时才写文件
             let mut needs_save = false;
             for job in &mut file.jobs {
-                if job.enabled && job.next_run_at.is_none() {
+                if job.enabled && job.agent_id == default_agent_id() && job.next_run_at.is_none() {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, now)?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -297,11 +292,25 @@ impl CronStore {
             return Ok(JobsFile::default());
         }
         let mut file: JobsFile = serde_json::from_str(&raw)?;
+        let mut migrated = false;
         for job in &mut file.jobs {
             if job.title.trim().is_empty() {
                 job.title = title_from_task(&job.task);
             }
             job.agent_id = normalize_cron_agent_id(&job.agent_id);
+            if let Ok(created_at) = DateTime::parse_from_rfc3339(&job.created_at) {
+                let created_at = created_at.with_timezone(&Local);
+                let anchored_schedule = ensure_custom_start(&job.schedule, created_at);
+                if anchored_schedule != job.schedule
+                    && compute_next_run(&anchored_schedule, created_at).is_ok()
+                {
+                    job.schedule = anchored_schedule;
+                    migrated = true;
+                }
+            }
+        }
+        if migrated {
+            self.save(&file)?;
         }
         Ok(file)
     }

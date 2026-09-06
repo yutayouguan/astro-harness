@@ -1,10 +1,9 @@
-//! 聊天主模型故障切换：错误分类与首包前 fallback 流包装。
+//! Responses 主模型故障切换：错误分类与首包前 fallback 流包装。
 
 use futures::{stream, StreamExt};
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::{CompletionStream, StreamChunk};
 use providers::ProviderConfig;
-use types::ChatTarget;
+use types::ModelTarget;
 
 /// 实际命中目标的可观测元数据（写入 usage 等，不改会话默认模型）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,7 +15,7 @@ pub struct ActiveTargetMeta {
 }
 
 impl ActiveTargetMeta {
-    fn from_target(t: &ChatTarget) -> Self {
+    pub(super) fn from_target(t: &ModelTarget) -> Self {
         Self {
             provider_id: t.provider_id.clone(),
             backend_id: t.backend_id.clone(),
@@ -81,6 +80,7 @@ fn chunk_has_meaningful_content(chunk: &StreamChunk) -> bool {
     match chunk {
         StreamChunk::Text(t) if !t.is_empty() => true,
         StreamChunk::Thinking(t) if !t.is_empty() => true,
+        StreamChunk::ResponseItemDone(_) => true,
         StreamChunk::ToolCallStart { .. } | StreamChunk::ToolCallDelta { .. } => true,
         _ => false,
     }
@@ -88,6 +88,12 @@ fn chunk_has_meaningful_content(chunk: &StreamChunk) -> bool {
 
 fn is_error_only_pre_content_chunk(chunk: &StreamChunk) -> bool {
     matches!(chunk, StreamChunk::Error(_)) && !chunk_has_meaningful_content(chunk)
+}
+
+/// 所有进入 Agent fallback 链的目标都已通过 Responses capability gate；原生
+/// `tool_search`、namespace 与 `defer_loading` 必须逐跳原样保留。
+fn tools_for_responses_target(tools: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    tools.to_vec()
 }
 
 /// Peek 首个流事件：首包前错误（流 Err 或 error-only chunk）直接失败；否则还原含已 peek 项的流。
@@ -111,13 +117,14 @@ pub async fn probe_or_wrap_pre_content(
     }
 }
 
-/// 按 `targets` 链尝试 `chat_stream`；仅首包前可切；耗尽返回聚合错误。
-pub async fn try_stream_completion_with_fallback(
-    targets: &[ChatTarget],
-    messages: Vec<ProviderMessage>,
+/// 按 `targets` 链尝试 Responses stream；仅首包前可切，绝不降级到 Chat Completions。
+pub async fn try_stream_responses_with_fallback(
+    targets: &[ModelTarget],
+    instructions: String,
+    input: Vec<agent_protocol::ResponseItem>,
     tools: Vec<serde_json::Value>,
     base_config: &ProviderConfig,
-    mut on_failover: impl FnMut(&ChatTarget, &ChatTarget, &anyhow::Error),
+    mut on_failover: impl FnMut(&ModelTarget, &ModelTarget, &anyhow::Error),
 ) -> anyhow::Result<(CompletionStream, ActiveTargetMeta)> {
     if targets.is_empty() {
         anyhow::bail!("聊天目标列表为空，无法发起补全");
@@ -125,7 +132,13 @@ pub async fn try_stream_completion_with_fallback(
 
     let mut errors = Vec::new();
     for (i, target) in targets.iter().enumerate() {
-        let is_google = target.backend_id == "google" || target.provider_id == "google";
+        if !providers::dispatch::supports_agent_responses(&target.backend_id) {
+            errors.push(format!(
+                "{}: provider does not support the Responses API",
+                target.backend_id
+            ));
+            continue;
+        }
         let config = ProviderConfig {
             api_key: target.api_key.clone(),
             base_url: Some(target.base_url.clone()).filter(|s| !s.is_empty()),
@@ -135,20 +148,17 @@ pub async fn try_stream_completion_with_fallback(
             thinking_enabled: base_config.thinking_enabled,
             reasoning_effort: base_config.reasoning_effort.clone(),
             additional_params: base_config.additional_params.clone(),
-            // 仅 Google Interactions 续写；其它后端忽略该字段
-            previous_interaction_id: if is_google {
-                base_config.previous_interaction_id.clone()
-            } else {
-                None
-            },
-            api_mode: target.api_mode.clone(),
+            previous_interaction_id: None,
+            api_mode: "responses".into(),
         };
+        let target_tools = tools_for_responses_target(&tools);
 
         let attempt = async {
-            let stream = providers::dispatch::chat_stream(
+            let stream = providers::dispatch::agent_responses_stream(
                 &target.backend_id,
-                messages.clone(),
-                tools.clone(),
+                instructions.clone(),
+                input.clone(),
+                target_tools,
                 &config,
             )
             .await?;
@@ -171,7 +181,7 @@ pub async fn try_stream_completion_with_fallback(
         }
     }
 
-    anyhow::bail!("全部模型尝试失败：{}", errors.join("；"))
+    anyhow::bail!("全部 Responses 模型尝试失败：{}", errors.join("；"))
 }
 
 #[cfg(test)]
@@ -224,6 +234,28 @@ mod tests {
         )));
     }
 
+    #[test]
+    fn responses_targets_preserve_tool_search_and_deferred_namespaces() {
+        let tools = vec![
+            serde_json::json!({"type": "tool_search", "execution": "client"}),
+            serde_json::json!({
+                "type": "function",
+                "name": "terminal",
+                "defer_loading": true
+            }),
+            serde_json::json!({
+                "type": "namespace",
+                "name": "media",
+                "tools": [{
+                    "type": "function",
+                    "name": "image_gen",
+                    "defer_loading": true
+                }]
+            }),
+        ];
+        assert_eq!(tools_for_responses_target(&tools), tools);
+    }
+
     #[tokio::test]
     async fn probe_treats_error_only_first_chunk_as_failure() {
         let stream: CompletionStream = Box::pin(stream::iter(vec![Ok(StreamChunk::Error(
@@ -252,8 +284,8 @@ mod tests {
 
     #[tokio::test]
     async fn probe_keeps_error_chunk_when_content_already_present() {
-        // In the new model, a single chunk can only be one variant.
-        // Simulate: a text chunk followed by an error chunk.
+        // 在新模型中，单个 chunk 只能是一种变体。
+        // 模拟：一个文本 chunk 后跟一个错误 chunk。
         let stream: CompletionStream = Box::pin(stream::iter(vec![
             Ok(StreamChunk::Text("partial".into())),
             Ok(StreamChunk::Error("mid-stream".into())),
@@ -265,8 +297,9 @@ mod tests {
 
     #[tokio::test]
     async fn try_stream_rejects_empty_targets() {
-        let err = match try_stream_completion_with_fallback(
+        let err = match try_stream_responses_with_fallback(
             &[],
+            String::new(),
             vec![],
             vec![],
             &ProviderConfig::default(),

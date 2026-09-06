@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  AuxiliarySettingsDto,
-  AuxiliaryTaskId,
-} from "../../types";
+import type { AuxiliarySettingsDto, AuxiliaryTaskId } from "../../types";
 
 type UseAuxiliarySettings = {
   loading: boolean;
   error: string | null;
   settings: AuxiliarySettingsDto | null;
-  setRoute(task: AuxiliaryTaskId, provider: string, model: string): Promise<void>;
+  setRoute(
+    task: AuxiliaryTaskId,
+    provider: string,
+    model: string,
+  ): Promise<void>;
   resetRoute(task: AuxiliaryTaskId): Promise<void>;
   resetAll(): Promise<void>;
   reload(): Promise<void>;
@@ -74,7 +75,9 @@ export function useAuxiliarySettings(active = true): UseAuxiliarySettings {
   const resetAll = useCallback(async () => {
     setError(null);
     try {
-      const next = await invoke<AuxiliarySettingsDto>("reset_all_auxiliary_routes");
+      const next = await invoke<AuxiliarySettingsDto>(
+        "reset_all_auxiliary_routes",
+      );
       setSettings(next);
     } catch (err) {
       setError(errorMessage(err));

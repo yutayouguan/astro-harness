@@ -7,7 +7,11 @@ type UseEvolutionSettings = {
   error: string | null;
   settings: EvolutionSettingsDto | null;
   setEnabled(enabled: boolean): Promise<void>;
-  setRoute(route: EvolutionRouteId, provider: string, model: string): Promise<void>;
+  setRoute(
+    route: EvolutionRouteId,
+    provider: string,
+    model: string,
+  ): Promise<void>;
   resetRoute(route: EvolutionRouteId): Promise<void>;
   setGates(
     runTests: boolean,
@@ -72,7 +76,9 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
   const setEnabled = useCallback(async (enabled: boolean) => {
     setError(null);
     try {
-      const next = await invoke<EvolutionSettingsDto>("set_evolution_enabled", { enabled });
+      const next = await invoke<EvolutionSettingsDto>("set_evolution_enabled", {
+        enabled,
+      });
       setSettings(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -99,7 +105,9 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
   const resetRoute = useCallback(async (route: EvolutionRouteId) => {
     setError(null);
     try {
-      const next = await invoke<EvolutionSettingsDto>("reset_evolution_route", { route });
+      const next = await invoke<EvolutionSettingsDto>("reset_evolution_route", {
+        route,
+      });
       setSettings(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -141,15 +149,18 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
     ) => {
       setError(null);
       try {
-        const next = await invoke<EvolutionSettingsDto>("set_evolution_search", {
-          generations,
-          variants,
-          crossover,
-          populationSize: populationSize ?? null,
-          maxEvalExamples: maxEvalExamples ?? null,
-          maxLlmCalls: maxLlmCalls ?? null,
-          postApprovalCooldownSecs: postApprovalCooldownSecs ?? null,
-        });
+        const next = await invoke<EvolutionSettingsDto>(
+          "set_evolution_search",
+          {
+            generations,
+            variants,
+            crossover,
+            populationSize: populationSize ?? null,
+            maxEvalExamples: maxEvalExamples ?? null,
+            maxLlmCalls: maxLlmCalls ?? null,
+            postApprovalCooldownSecs: postApprovalCooldownSecs ?? null,
+          },
+        );
         setSettings(next);
       } catch (err) {
         setError(errorMessage(err));
@@ -195,13 +206,16 @@ export function useEvolutionSettings(active = true): UseEvolutionSettings {
     ) => {
       setError(null);
       try {
-        const next = await invoke<EvolutionSettingsDto>("set_evolution_curator", {
-          enabled,
-          intervalDays,
-          maxEnqueue,
-          llmDiagnose,
-          maxLlmCalls,
-        });
+        const next = await invoke<EvolutionSettingsDto>(
+          "set_evolution_curator",
+          {
+            enabled,
+            intervalDays,
+            maxEnqueue,
+            llmDiagnose,
+            maxLlmCalls,
+          },
+        );
         setSettings(next);
       } catch (err) {
         setError(errorMessage(err));

@@ -1,20 +1,28 @@
 import { useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, ChevronDown, Square } from "lucide-react";
+import { Bot, Square } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   createAgentTreeRootLifecycle,
   flattenAgentTree,
+  summarizeAgentActivity,
   type AgentThreadStatus,
   type AgentTreeNode,
 } from "../../hooks/chat/subagentTree";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 
 type Props = {
   rootSessionId?: string | null;
+  rootServiceTier?: string | null;
   roots: AgentTreeNode[];
   onRefresh: () => Promise<void>;
   onOpenThread: (canonicalPath: string) => void;
   onOpenPanel: () => void;
+  showEmpty?: boolean;
 };
 
 function statusKey(status: AgentThreadStatus): string {
@@ -31,10 +39,12 @@ function visibleNode(node: AgentTreeNode): AgentTreeNode | null {
 
 export default function SubagentActivityBar({
   rootSessionId,
+  rootServiceTier = null,
   roots,
   onRefresh,
   onOpenThread,
   onOpenPanel,
+  showEmpty = false,
 }: Props) {
   const { t } = useI18n();
   const root = rootSessionId?.trim() ?? "";
@@ -42,10 +52,17 @@ export default function SubagentActivityBar({
   const [expanded, setExpanded] = useState(true);
   const [stopping, setStopping] = useState(false);
   const visibleRoots = useMemo(
-    () => roots.map(visibleNode).filter((node): node is AgentTreeNode => node !== null),
+    () =>
+      roots
+        .map(visibleNode)
+        .filter((node): node is AgentTreeNode => node !== null),
     [roots],
   );
   const visible = useMemo(() => flattenAgentTree(visibleRoots), [visibleRoots]);
+  const summary = useMemo(
+    () => summarizeAgentActivity(visibleRoots),
+    [visibleRoots],
+  );
   const running = useMemo(
     () => visible.filter((node) => node.thread.status.kind === "running"),
     [visible],
@@ -57,13 +74,39 @@ export default function SubagentActivityBar({
     return () => rootLifecycle.invalidate(token);
   }, [root, rootLifecycle]);
 
-  if (!root || visible.length === 0) return null;
+  if (!root && !showEmpty) return null;
+  if (visible.length === 0 && !showEmpty) return null;
+
+  const summaryParts = [
+    summary.pending > 0
+      ? t("subagents.activity.pending", { count: String(summary.pending) })
+      : null,
+    summary.running > 0
+      ? t("subagents.activity.running", { count: String(summary.running) })
+      : null,
+    summary.errored > 0
+      ? t("subagents.activity.errored", { count: String(summary.errored) })
+      : null,
+    summary.interrupted > 0
+      ? t("subagents.activity.interrupted", {
+          count: String(summary.interrupted),
+        })
+      : null,
+  ].filter(Boolean);
+  const serviceTier = rootServiceTier?.trim() ?? "";
+  const activitySummary =
+    summaryParts.length > 0
+      ? summaryParts.join(" · ")
+      : t("subagents.activity.done");
+  const summaryWithTier = serviceTier
+    ? `${activitySummary} · ${t("subagents.activity.serviceTier", { tier: serviceTier })}`
+    : activitySummary;
 
   const stopAll = async () => {
     if (running.length === 0 || stopping) return;
     const token = rootLifecycle.current();
-    const isCurrentRoot = () => token.root === root
-      && rootLifecycle.isCurrent(token);
+    const isCurrentRoot = () =>
+      token.root === root && rootLifecycle.isCurrent(token);
     if (!isCurrentRoot()) return;
     setStopping(true);
     try {
@@ -74,7 +117,8 @@ export default function SubagentActivityBar({
               rootSessionId: root,
               target: thread.canonicalPath,
             },
-          })),
+          }),
+        ),
       );
       if (!isCurrentRoot()) return;
       await onRefresh();
@@ -86,7 +130,11 @@ export default function SubagentActivityBar({
   const renderNode = (node: AgentTreeNode, depth: number) => {
     const status = statusKey(node.thread.status);
     return (
-      <div className="subagent-activity-branch" key={node.thread.threadId} role="none">
+      <div
+        className="subagent-activity-branch"
+        key={node.thread.threadId}
+        role="none"
+      >
         <button
           type="button"
           role="treeitem"
@@ -101,7 +149,11 @@ export default function SubagentActivityBar({
             <small>{node.thread.agentType}</small>
           </span>
           {node.unread ? (
-            <span className="subagents-unread" role="img" aria-label={t("subagents.unread")} />
+            <span
+              className="subagents-unread"
+              role="img"
+              aria-label={t("subagents.unread")}
+            />
           ) : null}
           <em>{t(`subagents.status.${status}` as never)}</em>
         </button>
@@ -115,7 +167,7 @@ export default function SubagentActivityBar({
   };
 
   return (
-    <section className="composer-queue subagent-activity" aria-live="polite">
+    <section className="subagent-activity" aria-live="polite">
       <div className="subagent-activity-head">
         <button
           type="button"
@@ -125,27 +177,49 @@ export default function SubagentActivityBar({
         >
           <Bot size={15} strokeWidth={2.1} aria-hidden />
           <span className="subagent-activity-copy">
-            <strong>{t("subagents.activity.title", { count: String(visible.length) })}</strong>
+            <strong>
+              {t("subagents.activity.title", { count: String(visible.length) })}
+            </strong>
             <small>
-              {running.length > 0
-                ? t("subagents.activity.running", { count: String(running.length) })
-                : t("subagents.activity.done")}
+              {!root
+                ? t("subagents.noSession")
+                : visible.length === 0
+                  ? t("subagents.empty")
+                  : stopping
+                    ? t("subagents.activity.stopping")
+                    : summaryWithTier}
             </small>
           </span>
-          <ChevronDown className={expanded ? "is-open" : ""} size={14} aria-hidden />
+          <MorphToggleIcon
+            active={expanded}
+            activeIcon={ChevronUpData}
+            inactiveIcon={ChevronDownData}
+            size={14}
+            aria-hidden
+          />
         </button>
         <span className="subagent-activity-actions">
           {running.length > 0 ? (
-            <button type="button" disabled={stopping} onClick={() => void stopAll()}>
+            <button
+              type="button"
+              disabled={stopping}
+              onClick={() => void stopAll()}
+            >
               <Square size={11} strokeWidth={2.4} aria-hidden />
               {t("subagents.activity.stopAll")}
             </button>
           ) : null}
-          <button type="button" onClick={onOpenPanel}>{t("subagents.activity.openAll")}</button>
+          <button type="button" onClick={onOpenPanel}>
+            {t("subagents.activity.openAll")}
+          </button>
         </span>
       </div>
-      {expanded ? (
-        <div className="subagent-activity-list" role="tree" aria-label={t("subagents.threadList")}>
+      {expanded && visibleRoots.length > 0 ? (
+        <div
+          className="subagent-activity-list"
+          role="tree"
+          aria-label={t("subagents.threadList")}
+        >
           {visibleRoots.map((node) => renderNode(node, 0))}
         </div>
       ) : null}

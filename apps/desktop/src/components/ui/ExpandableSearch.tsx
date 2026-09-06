@@ -1,5 +1,5 @@
 /** 可展开搜索框。 */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { IconSearch } from "../icons/NavIcons";
@@ -13,6 +13,10 @@ type Props = {
   className?: string;
   /** 展开输入框按下 Enter 时触发 */
   onSubmit?: () => void;
+  /** 外部状态需要持续显示搜索框（例如归档视图） */
+  forceOpen?: boolean;
+  /** 与搜索输入共享容器的次级动作 */
+  trailingAction?: ReactNode;
 };
 
 export default function ExpandableSearch({
@@ -21,12 +25,14 @@ export default function ExpandableSearch({
   placeholderKey,
   className = "",
   onSubmit,
+  forceOpen = false,
+  trailingAction,
 }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const expanded = open || value.trim().length > 0;
+  const expanded = forceOpen || open || value.trim().length > 0;
 
   useEffect(() => {
     if (!expanded) return;
@@ -62,7 +68,11 @@ export default function ExpandableSearch({
     >
       {expanded ? (
         <div className="expandable-search-field">
-          <IconSearch width={15} height={15} className="expandable-search-glyph" />
+          <IconSearch
+            width={15}
+            height={15}
+            className="expandable-search-glyph"
+          />
           <input
             ref={inputRef}
             className="expandable-search-input"
@@ -78,17 +88,20 @@ export default function ExpandableSearch({
             placeholder={t(placeholderKey)}
             aria-label={t(placeholderKey)}
           />
-          <button
-            type="button"
-            className="expandable-search-close"
-            aria-label={t("common.close") as MessageKey}
-            onClick={() => {
-              onChange("");
-              setOpen(false);
-            }}
-          >
-            ×
-          </button>
+          {trailingAction}
+          {!forceOpen && (
+            <button
+              type="button"
+              className="expandable-search-close"
+              aria-label={t("common.close") as MessageKey}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       ) : (
         <button

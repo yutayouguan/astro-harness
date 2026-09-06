@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   displayContextWindow,
+  cacheHitPercent,
   formatTokenCount,
   normalizeContextUsageEvent,
   resolveContextWindow,
@@ -46,6 +47,8 @@ test("visibleSegments drops zeros and sorts by tokens desc", () => {
   const snap: ContextUsageSnapshot = {
     contextWindow: 128_000,
     totalTokens: 30,
+    estimatedTotalTokens: 30,
+    source: "local_estimate",
     segments: [
       { id: "system", tokens: 10 },
       { id: "tools", tokens: 0 },
@@ -64,6 +67,19 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
     normalizeContextUsageEvent({
       context_window: 1_048_576,
       total_tokens: 42,
+      estimated_total_tokens: 40,
+      source: "provider_reported",
+      latest_usage: {
+        input_tokens: 40,
+        uncached_input_tokens: 8,
+        output_tokens: 2,
+        total_tokens: 42,
+        provider_total_tokens: 42,
+        cache_read_tokens: 32,
+        cache_read_reported: true,
+        reasoning_tokens: 0,
+        reasoning_reported: true,
+      },
       updated_at: 1_700_000_000_000,
       recommend_compact: true,
       segments: [
@@ -82,6 +98,21 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
     {
       contextWindow: 1_048_576,
       totalTokens: 42,
+      estimatedTotalTokens: 40,
+      source: "provider_reported",
+      latestUsage: {
+        inputTokens: 40,
+        uncachedInputTokens: 8,
+        outputTokens: 2,
+        totalTokens: 42,
+        providerTotalTokens: 42,
+        cacheReadTokens: 32,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        cacheReadReported: true,
+        cacheWriteReported: false,
+        reasoningReported: true,
+      },
       updatedAt: 1_700_000_000_000,
       recommendCompact: true,
       segments: [
@@ -97,6 +128,44 @@ test("normalizeContextUsageEvent maps snake_case Tauri payload", () => {
   );
 });
 
+test("cacheHitPercent distinguishes unsupported from an explicit zero hit", () => {
+  const usage = {
+    inputTokens: 100,
+    uncachedInputTokens: 100,
+    outputTokens: 10,
+    totalTokens: 110,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    cacheReadReported: false,
+    cacheWriteReported: false,
+    reasoningReported: false,
+  };
+  assert.equal(cacheHitPercent(usage), null);
+  assert.equal(cacheHitPercent({ ...usage, cacheReadReported: true }), 0);
+  assert.equal(
+    cacheHitPercent({
+      ...usage,
+      inputTokens: 100,
+      cacheReadTokens: 75,
+      cacheReadReported: true,
+    }),
+    75,
+  );
+});
+
 test("SEGMENT_ORDER lists all known segments", () => {
-  assert.equal(SEGMENT_ORDER.length, 9);
+  assert.deepEqual(SEGMENT_ORDER, [
+    "system",
+    "developer",
+    "user_context",
+    "tools",
+    "agents",
+    "mcp",
+    "memory",
+    "skills",
+    "recall",
+    "subagent",
+    "conversation",
+  ]);
 });

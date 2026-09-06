@@ -18,9 +18,7 @@ export default defineConfig({
     strictPort: true,
     // Tauri WebView 常把 localhost 解析到 127.0.0.1；避免只绑 [::1] 导致空白窗
     host: host || "127.0.0.1",
-    hmr: host
-      ? { protocol: "ws", host, port: 1421 }
-      : { host: "127.0.0.1" },
+    hmr: host ? { protocol: "ws", host, port: 1421 } : { host: "127.0.0.1" },
     watch: { ignored: ["**/src-tauri/**"] },
   },
 });

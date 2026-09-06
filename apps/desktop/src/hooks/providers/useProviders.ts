@@ -9,7 +9,9 @@ export function useProviders() {
   providersRef.current = providers;
 
   const syncProvidersFromState = useCallback((state: ProvidersStateDto) => {
-    const enabled = state.providers.filter((p) => p.enabled);
+    const enabled = state.providers.filter(
+      (p) => p.enabled && p.supports_responses_api === true,
+    );
     setProviders(enabled);
     const activeId =
       state.active_provider_id &&
@@ -28,8 +30,12 @@ export function useProviders() {
       .catch(() =>
         invoke<ProviderDto[]>("list_providers")
           .then((list) => {
-            setProviders(list);
-            if (list[0]) setActiveProviderId(list[0].id);
+            const responsesProviders = list.filter(
+              (provider) => provider.supports_responses_api === true,
+            );
+            setProviders(responsesProviders);
+            if (responsesProviders[0])
+              setActiveProviderId(responsesProviders[0].id);
           })
           .catch(() => {}),
       );
@@ -55,7 +61,6 @@ export function useProviders() {
               endpoint: provider.endpoint,
               model,
               enabled: provider.enabled,
-              api_mode: provider.api_mode ?? "",
             },
           });
         }

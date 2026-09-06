@@ -1,18 +1,20 @@
 //! 多轮循环中的上下文维护：LLM 前后的压缩/摘要、工具结果记录、hook 集成。
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use agent_protocol::{
-    ContextUsageEvent, ContextUsageItem, ContextUsageSegment, DeltaEvent, EventMsg, ToolStatus,
+    ContextUsageBreakdown, ContextUsageEvent, ContextUsageItem, ContextUsageSegment,
+    ContextUsageSource, DeltaEvent, EventMsg, ToolStatus,
 };
+use providers::Usage;
 
 use super::lifecycle::{
-    bounded_tool_completed_event, emit, emit_context_compacted, emit_extension_completed,
-    emit_hook_completed, emit_hook_started, emit_prepared, emit_subagent_activity,
-    is_subagent_tool,
+    bounded_tool_completed_event, bounded_tool_completed_event_with_execution, emit,
+    emit_context_compacted, emit_extension_completed, emit_prepared, emit_subagent_activity,
+    is_subagent_tool, ToolExecutionMetadata,
 };
 use super::provider::ProviderStreamer;
-use super::traits::StreamingChat;
 use crate::runtime::{AgentLoop, TurnContext};
 
 /// Gateway 预压安全网 + mid-run 辅模型摘要，统一进 LLM 前的上下文维护。
@@ -69,24 +71,63 @@ pub(super) async fn pre_llm_maintenance(
     hook_stopped
 }
 
-/// 构建并推送上下文占用估算快照。
+/// 构建并推送上下文占用估算快照，并返回该 sampling 的分层基线。
 pub(super) async fn emit_context_usage(
     session: &Arc<AgentLoop>,
     turn_context: &TurnContext,
-    history: &[types::message::Message],
+    prompt: &crate::prompt::PromptContract,
+    prompt_context: &[crate::prompt::context_state::PromptContextEvent],
+    history: &[agent_protocol::ResponseItem],
     tools: &[serde_json::Value],
-) {
+) -> crate::prompt::context_usage::ContextUsageSnapshot {
     let agent = session.as_ref();
-    let layers = agent.system_prompt_layer_breakdown().await;
+    let mut layers = AgentLoop::prompt_contract_layer_breakdown(prompt);
+    let actual_developer_chars = prompt_context
+        .iter()
+        .flat_map(|event| &event.messages)
+        .filter(|item| item.role() == Some("developer"))
+        .map(|item| item.text().chars().count())
+        .sum::<usize>();
+    let actual_user_chars = prompt_context
+        .iter()
+        .flat_map(|event| &event.messages)
+        .filter(|item| item.role() == Some("user"))
+        .map(|item| item.text().chars().count())
+        .sum::<usize>();
+    let current_developer_chars =
+        layers.developer_chars + layers.skills_chars + layers.mcp_instruction_chars;
+    let current_user_chars = layers.user_context_chars + layers.memory_chars + layers.recall_chars;
+    let developer_history_chars = actual_developer_chars.saturating_sub(current_developer_chars);
+    let user_history_chars = actual_user_chars.saturating_sub(current_user_chars);
+    if developer_history_chars > 0 {
+        layers.developer_chars += developer_history_chars;
+        layers.developer_items.push((
+            "context_history".into(),
+            "Developer context history".into(),
+            developer_history_chars,
+        ));
+    }
+    if user_history_chars > 0 {
+        layers.user_context_chars += user_history_chars;
+        layers.user_context_items.push((
+            "context_history".into(),
+            "User context history".into(),
+            user_history_chars,
+        ));
+    }
     let recommend_compact_ratio = agent.compression_config().recommend_compact_ratio;
     let snap = crate::prompt::context_usage::build_snapshot(
         crate::prompt::context_usage::ContextUsageInput {
             system_chars: layers.system_chars,
+            developer_chars: layers.developer_chars,
+            user_context_chars: layers.user_context_chars,
             memory_chars: layers.memory_chars,
             skills_chars: layers.skills_chars,
             recall_chars: layers.recall_chars,
             mcp_instruction_chars: layers.mcp_instruction_chars,
             system_items: &layers.system_items,
+            developer_items: &layers.developer_items,
+            user_context_items: &layers.user_context_items,
             memory_items: &layers.memory_items,
             skill_items: &layers.skill_items,
             mcp_instruction_items: &layers.mcp_instruction_items,
@@ -98,33 +139,82 @@ pub(super) async fn emit_context_usage(
             recommend_compact_ratio,
         },
     );
+    emit_context_usage_snapshot(session, turn_context, &snap, None).await;
+    snap
+}
+
+/// 用最近一次 Provider usage 校准 top-line，分层仍保留 sampling 前本地估算。
+pub(super) async fn emit_provider_context_usage(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+    snap: &crate::prompt::context_usage::ContextUsageSnapshot,
+    usage: Usage,
+) {
+    emit_context_usage_snapshot(session, turn_context, snap, Some(usage)).await;
+}
+
+async fn emit_context_usage_snapshot(
+    session: &Arc<AgentLoop>,
+    turn_context: &TurnContext,
+    snap: &crate::prompt::context_usage::ContextUsageSnapshot,
+    usage: Option<Usage>,
+) {
+    let source = match usage.and_then(|value| value.reported_total_tokens) {
+        Some(_) => ContextUsageSource::ProviderReported,
+        None if usage.is_some() => ContextUsageSource::ProviderRecomputed,
+        None => ContextUsageSource::LocalEstimate,
+    };
+    let total_tokens = usage
+        .map(|value| value.total_tokens())
+        .unwrap_or(snap.total_tokens);
+    let latest_usage = usage.map(|value| ContextUsageBreakdown {
+        input_tokens: u64::from(value.prompt_tokens()),
+        uncached_input_tokens: u64::from(value.input_tokens),
+        output_tokens: u64::from(value.output_tokens),
+        total_tokens: u64::from(value.total_tokens()),
+        provider_total_tokens: value.reported_total_tokens.map(u64::from),
+        cache_read_tokens: u64::from(value.cache_read_tokens),
+        cache_write_tokens: u64::from(value.cache_write_tokens),
+        reasoning_tokens: u64::from(value.reasoning_tokens),
+        cache_read_reported: value.cache_read_reported,
+        cache_write_reported: value.cache_write_reported,
+        reasoning_reported: value.reasoning_reported,
+    });
+    let recommend_compact = snap.recommend_compact
+        || (snap.context_window > 0
+            && (total_tokens as f64 / snap.context_window as f64)
+                >= f64::from(session.compression_config().recommend_compact_ratio));
+
     emit(
         session,
         turn_context,
         EventMsg::ContextUsage(ContextUsageEvent {
             turn_id: turn_context.sub_id().to_string(),
             context_window: snap.context_window,
-            total_tokens: snap.total_tokens,
+            total_tokens,
+            estimated_total_tokens: snap.total_tokens,
+            source,
+            latest_usage,
             segments: snap
                 .segments
-                .into_iter()
+                .iter()
                 .map(|segment| ContextUsageSegment {
-                    id: segment.id,
+                    id: segment.id.clone(),
                     tokens: segment.tokens,
-                    count: segment.meta.and_then(|meta| meta.count),
+                    count: segment.meta.as_ref().and_then(|meta| meta.count),
                     items: segment
                         .items
-                        .into_iter()
+                        .iter()
                         .map(|item| ContextUsageItem {
-                            id: item.id,
-                            label: item.label,
+                            id: item.id.clone(),
+                            label: item.label.clone(),
                             tokens: item.tokens,
                         })
                         .collect(),
                 })
                 .collect(),
             updated_at: snap.updated_at,
-            recommend_compact: snap.recommend_compact,
+            recommend_compact,
         }),
     )
     .await;
@@ -180,8 +270,15 @@ pub(super) async fn post_tool_maintenance(
         }
     }
 
-    let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
-    let stop_after = step_context.tool_router.any_stop_after(&names);
+    let names: Vec<String> = calls
+        .iter()
+        .map(types::ParsedToolCall::display_name)
+        .collect();
+    let stop_after = calls.iter().any(|call| {
+        step_context
+            .tool_router
+            .stop_after(call.namespace.as_deref(), &call.name)
+    });
     if stop_after {
         tracing::info!(
             ?names,
@@ -194,6 +291,7 @@ pub(super) async fn post_tool_maintenance(
 /// 处理工具执行结果：推送事件、解析 A2UI、记录到会话历史。
 ///
 /// 返回 `false` 表示取消或 channel 关闭，主循环应提前退出。
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn record_tool_outcomes(
     session: &Arc<AgentLoop>,
     calls: &[types::ParsedToolCall],
@@ -202,6 +300,7 @@ pub(super) async fn record_tool_outcomes(
     turn_context: &TurnContext,
     timeline: &mut crate::timeline::TimelineBuilder,
     now_ms: impl Fn() -> i64,
+    execution: Option<&ToolExecutionMetadata>,
 ) -> bool {
     for (call, result) in calls.iter().zip(outcomes) {
         if pause.is_cancelled() {
@@ -209,10 +308,10 @@ pub(super) async fn record_tool_outcomes(
         }
 
         let tool_media = result.media().to_vec();
+        let tool_file_changes = result.file_changes().to_vec();
         let result_text = result.text().to_string();
-        let is_success = !result_text.starts_with("工具错误")
-            && !result_text.starts_with("工具已禁用")
-            && !result_text.starts_with("工具参数 JSON 解析失败");
+        let tool_status = tool_status_from_result(&result_text);
+        let is_success = tool_status == ToolStatus::Completed;
 
         let info_ui = parse_astro_ui(&result_text);
         let result_for_history = if let Some(ref ui) = info_ui {
@@ -235,26 +334,25 @@ pub(super) async fn record_tool_outcomes(
         }
 
         let recorded = {
+            let tool_name = call.tool_name();
             let agent = session.as_ref();
-            let recorded = agent
-                .record_tool_result_with_id(Some(&call.id), Some(&call.name), &result_for_history)
-                .await;
-            if !tool_media.is_empty() {
-                let mut state = agent.state.lock().expect("session state mutex poisoned");
-                if let Some(last) = state.history.last_mut() {
-                    if last.role == types::message::Role::Tool && last.media.is_empty() {
-                        last.media = tool_media.clone();
-                    }
-                }
-            }
-            recorded
+            agent
+                .record_tool_result_with_id_and_media(
+                    Some(&call.id),
+                    Some(&tool_name),
+                    &result_for_history,
+                    &tool_media,
+                    &tool_file_changes,
+                    Some(&tool_status),
+                )
+                .await
         };
         if let Err(error) = recorded {
             tracing::warn!(%error, tool_call_id = %call.id, "failed to record tool result");
             return false;
         }
 
-        if matches!(call.name.as_str(), "terminal" | "code_exec") && !result_text.is_empty() {
+        if matches!(call.name.as_str(), "exec_command" | "code_exec") && !result_text.is_empty() {
             emit(
                 session,
                 turn_context,
@@ -267,24 +365,34 @@ pub(super) async fn record_tool_outcomes(
             .await;
         }
 
-        emit_prepared(
-            session,
-            turn_context,
-            bounded_tool_completed_event(
+        let mut completed_event = if let Some(execution) = execution {
+            bounded_tool_completed_event_with_execution(
                 turn_context.sub_id(),
                 &call.id,
-                &call.name,
+                &call.display_name(),
                 call.arguments.clone(),
                 Some(serde_json::Value::String(result_text.clone())),
                 tool_media,
-                if is_success {
-                    ToolStatus::Completed
-                } else {
-                    ToolStatus::Failed
-                },
-            ),
-        )
-        .await;
+                tool_status,
+                execution,
+            )
+        } else {
+            bounded_tool_completed_event(
+                turn_context.sub_id(),
+                &call.id,
+                &call.display_name(),
+                call.arguments.clone(),
+                Some(serde_json::Value::String(result_text.clone())),
+                tool_media,
+                tool_status,
+            )
+        };
+        super::lifecycle::attach_file_changes(
+            turn_context.sub_id(),
+            &mut completed_event,
+            tool_file_changes,
+        );
+        emit_prepared(session, turn_context, completed_event).await;
 
         if call.name == "memory" && is_success {
             let s = result_text.trim();
@@ -345,77 +453,188 @@ pub(super) async fn record_tool_outcomes(
     // 工具循环后回写 timeline/surfaces，避免历史恢复丢 A2UI 卡片。
     {
         let agent = session.as_ref();
-        if let Err(e) = agent.patch_last_assistant_timeline(timeline.reasoning_details_snapshot()) {
+        if let Err(e) = agent
+            .patch_last_assistant_timeline(timeline.reasoning_details_snapshot())
+            .await
+        {
             tracing::warn!(error = %e, "patch assistant timeline after tools failed");
         }
     }
     true
 }
 
+pub(super) struct SamplingRequest {
+    pub stream: super::types::AssistantContentStream,
+    pub provider: Option<String>,
+    pub model: String,
+    pub attempt: usize,
+    pub started_at: Instant,
+}
+
+/// 为每次普通主循环 sampling 派发一次完整的 LLM telemetry。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn emit_post_llm_telemetry(
+    session: &Arc<AgentLoop>,
+    provider: Option<String>,
+    model: String,
+    attempt: usize,
+    started_at: Instant,
+    status: &str,
+    assistant_chars: usize,
+    error: Option<String>,
+) {
+    let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
+    let agent = session.as_ref();
+    let _ = agent.fire_hook(
+        ::hooks::POST_LLM_CALL,
+        ::hooks::HookPayload {
+            session_id: agent.session_id().to_string(),
+            turn_id: agent.current_turn_id().await,
+            provider: provider.clone(),
+            model: model.clone(),
+            attempt: Some(attempt),
+            duration_ms: Some(duration_ms),
+            status: Some(status.into()),
+            assistant_chars: Some(assistant_chars),
+            error,
+            detail: format!(
+                "provider={} model={} attempt={} duration_ms={} status={} assistant_chars={}",
+                provider.as_deref().unwrap_or(""),
+                model,
+                attempt,
+                duration_ms,
+                status,
+                assistant_chars
+            ),
+            ..Default::default()
+        },
+    );
+}
+
+fn primary_sampling_identity(streamer: &ProviderStreamer) -> (Option<String>, String) {
+    match streamer.targets.first() {
+        Some(target) => (
+            (!target.backend_id.is_empty()).then(|| target.backend_id.clone()),
+            target.model.clone(),
+        ),
+        None => (None, streamer.base_config.model.clone()),
+    }
+}
+
 /// 触发 PRE/POST_API_REQUEST hook 并发起 LLM 流式请求。
 ///
-/// 成功返回 `Ok(stream)`；失败返回 `Err(error_string)` 并已在 hook 中记录。
+/// 成功返回 stream 与本次 sampling telemetry；失败返回错误并已在 hook 中记录。
 pub(super) async fn run_sampling_request(
     session: &Arc<AgentLoop>,
-    turn_context: &TurnContext,
     streamer: &ProviderStreamer,
-    system_prompt: &str,
-    history: &[types::message::Message],
-    tool_specs: Vec<serde_json::Value>,
-) -> Result<super::types::AssistantContentStream, String> {
+    prompt: &super::provider::Prompt,
+    attempt: usize,
+) -> Result<SamplingRequest, String> {
+    let started_at = Instant::now();
+    let (initial_provider, initial_model) = primary_sampling_identity(streamer);
     {
         let agent = session.as_ref();
         let sid = agent.session_id().to_string();
         let turn_id = agent.current_turn_id().await;
-        let hook_item = emit_hook_started(session, turn_context, ::hooks::PRE_API_REQUEST).await;
         let _ = agent.fire_hook(
             ::hooks::PRE_API_REQUEST,
             ::hooks::HookPayload {
                 session_id: sid,
                 turn_id,
+                provider: initial_provider.clone(),
+                model: initial_model.clone(),
+                attempt: Some(attempt),
+                duration_ms: Some(0),
+                status: Some("started".into()),
+                detail: format!(
+                    "provider={} model={} attempt={} status=started",
+                    initial_provider.as_deref().unwrap_or(""),
+                    initial_model,
+                    attempt
+                ),
                 ..Default::default()
             },
         );
-        emit_hook_completed(session, turn_context, hook_item, ::hooks::PRE_API_REQUEST).await;
     }
-    match streamer
-        .stream_chat(system_prompt, history, tool_specs)
-        .await
-    {
+    match streamer.stream_prompt(prompt).await {
         Ok(s) => {
+            let (provider, model) = streamer
+                .last_hit_meta()
+                .map(|meta| (Some(meta.backend_id), meta.model))
+                .unwrap_or_else(|| (initial_provider.clone(), initial_model.clone()));
+            let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
-            let hook_item =
-                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
+                    provider: provider.clone(),
+                    model: model.clone(),
+                    attempt: Some(attempt),
+                    duration_ms: Some(duration_ms),
+                    status: Some("succeeded".into()),
+                    detail: format!(
+                        "provider={} model={} attempt={} duration_ms={} status=succeeded",
+                        provider.as_deref().unwrap_or(""),
+                        model,
+                        attempt,
+                        duration_ms
+                    ),
                     ..Default::default()
                 },
             );
-            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
-            Ok(s)
+            Ok(SamplingRequest {
+                stream: s,
+                provider,
+                model,
+                attempt,
+                started_at,
+            })
         }
         Err(err) => {
+            let duration_ms = started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
+            let (failed_provider, failed_model) = streamer
+                .last_attempt_meta()
+                .map(|meta| (Some(meta.backend_id), meta.model))
+                .unwrap_or_else(|| (initial_provider.clone(), initial_model.clone()));
             let agent = session.as_ref();
             let sid = agent.session_id().to_string();
             let turn_id = agent.current_turn_id().await;
-            let hook_item =
-                emit_hook_started(session, turn_context, ::hooks::POST_API_REQUEST).await;
             let _ = agent.fire_hook(
                 ::hooks::POST_API_REQUEST,
                 ::hooks::HookPayload {
                     session_id: sid,
                     turn_id,
+                    provider: failed_provider.clone(),
+                    model: failed_model.clone(),
+                    attempt: Some(attempt),
+                    duration_ms: Some(duration_ms),
+                    status: Some("failed".into()),
                     error: Some(err.to_string()),
-                    detail: format!("error={err}"),
+                    detail: format!(
+                        "provider={} model={} attempt={} duration_ms={} status=failed error={err}",
+                        failed_provider.as_deref().unwrap_or(""),
+                        failed_model,
+                        attempt,
+                        duration_ms
+                    ),
                     ..Default::default()
                 },
             );
-            emit_hook_completed(session, turn_context, hook_item, ::hooks::POST_API_REQUEST).await;
+            emit_post_llm_telemetry(
+                session,
+                failed_provider,
+                failed_model,
+                attempt,
+                started_at,
+                "failed",
+                0,
+                Some(err.to_string()),
+            )
+            .await;
             Err(err.to_string())
         }
     }
@@ -446,4 +665,60 @@ fn parse_astro_ui(result: &str) -> Option<AstroUiPayload> {
             .to_string(),
         operations,
     })
+}
+
+fn tool_status_from_result(result: &str) -> ToolStatus {
+    // Tool execution currently transports terminal state through canonical
+    // runtime-generated result prefixes. Keep the mapping centralized until
+    // ToolOutput carries typed outcome metadata.
+    if result.starts_with("Permission denied")
+        || result.starts_with("Permission blocked")
+        || result.starts_with("Command denied")
+        || result.starts_with("Command blocked")
+        || result.starts_with("Browser action denied")
+        || result.starts_with("Browser action blocked")
+        || result.contains("\n\nSandbox retry denied:")
+    {
+        ToolStatus::Declined
+    } else if result.starts_with("工具错误")
+        || result.starts_with("工具已禁用")
+        || result.starts_with("工具参数 JSON 解析失败")
+        || result.starts_with("Tool error")
+    {
+        ToolStatus::Failed
+    } else {
+        ToolStatus::Completed
+    }
+}
+
+#[cfg(test)]
+mod tool_status_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_completed_failed_and_declined_tool_results() {
+        assert_eq!(tool_status_from_result("ok"), ToolStatus::Completed);
+        assert_eq!(
+            tool_status_from_result("工具错误: transport failed"),
+            ToolStatus::Failed
+        );
+        assert_eq!(
+            tool_status_from_result("Tool error: permission approval request timed out"),
+            ToolStatus::Failed
+        );
+        assert_eq!(
+            tool_status_from_result("Permission denied by user. Do not retry."),
+            ToolStatus::Declined
+        );
+        assert_eq!(
+            tool_status_from_result("Browser action blocked: user approval is unavailable"),
+            ToolStatus::Declined
+        );
+        assert_eq!(
+            tool_status_from_result(
+                "sandbox denied\n\nSandbox retry denied: Permission denied by user"
+            ),
+            ToolStatus::Declined
+        );
+    }
 }

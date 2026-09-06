@@ -8,9 +8,18 @@ type Props = {
   className?: string;
 };
 
-export default function CoverPicker({ value, onChange, busy, className = "" }: Props) {
+export default function CoverPicker({
+  value,
+  onChange,
+  busy,
+  className = "",
+}: Props) {
   return (
-    <div className={`astro-cover-picker ${className}`.trim()} role="listbox" aria-label="Agent cover">
+    <div
+      className={`astro-cover-picker ${className}`.trim()}
+      role="listbox"
+      aria-label="Agent cover"
+    >
       {AGENT_COVERS.map((cover) => {
         const selected = value === cover.id;
         const { Art } = cover;

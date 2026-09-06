@@ -4,7 +4,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: var(--z-window-drag);
   height: var(--titlebar-h);
   padding-left: var(--titlebar-traffic-w);
   background: transparent;
@@ -13,13 +13,18 @@
   cursor: default;
 }
 
+/* 浏览器标题栏提供自己的拖拽层；让出命中测试，避免遮住 Tab 和菜单按钮。 */
+.app-shell.has-browser-surface > .native-drag-region {
+  pointer-events: none;
+}
+
 /* 红绿灯右侧：常驻侧栏固定/隐藏开关（浮在 drag region 之上） */
 .titlebar-sidebar-toggle {
   position: absolute;
   /* 略高于默认红绿灯中线，视觉更贴窗顶 */
   top: 4px;
   left: var(--titlebar-traffic-w);
-  z-index: 45;
+  z-index: var(--z-window-controls);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,17 +71,137 @@
    */
 }
 
+.app-shell.has-wallpaper {
+  isolation: isolate;
+}
+
+.shell-wallpaper-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-wallpaper);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.shell-wallpaper-layer > img {
+  position: absolute;
+  inset: calc(var(--wallpaper-blur, 0) * -1px);
+  width: calc(100% + var(--wallpaper-blur, 0) * 2px);
+  height: calc(100% + var(--wallpaper-blur, 0) * 2px);
+  filter: blur(calc(var(--wallpaper-blur, 0) * 1px));
+}
+
+.shell-wallpaper-layer > span {
+  position: absolute;
+  inset: 0;
+  background: rgba(244, 246, 252, var(--wallpaper-shade, 0.34));
+}
+
+html[data-theme="dark"] .shell-wallpaper-layer > span {
+  background: rgba(5, 7, 14, var(--wallpaper-shade, 0.34));
+}
+
+/* 灵动色彩：主聊天页右下角的即时换色入口。 */
+.chat-main.has-dynamic-palette {
+  position: relative;
+}
+
+.shell-dynamic-palette-button {
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  z-index: var(--z-shell-floating-control);
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--tone, #2563eb);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transition: opacity 160ms ease;
+}
+
+.shell-dynamic-palette-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 100%;
+}
+
+.shell-dynamic-palette-icon svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.shell-dynamic-palette-stem {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 62%, var(--ink-mute));
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.shell-dynamic-palette-rotor {
+  transform: rotate(0deg);
+  transform-origin: 24px 24px;
+  transform-box: view-box;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .shell-dynamic-palette-button:hover {
+    opacity: 0.88;
+  }
+}
+
+.shell-dynamic-palette-button:active {
+  opacity: 0.72;
+}
+
+.shell-dynamic-palette-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, #2563eb) 68%, transparent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .shell-dynamic-palette-button {
+    right: 12px;
+    bottom: 0;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-dynamic-palette-button {
+    transition: opacity 160ms ease;
+  }
+}
+
 .shell-tone-crossfade {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  animation: shell-tone-fade-out 0.28s ease-out forwards;
+  will-change: opacity;
+  animation: shell-tone-fade-out 260ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 @keyframes shell-tone-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -84,267 +209,618 @@
     animation: none;
     opacity: 0;
   }
+
+  .sidebar-resizer::before {
+    transition: none;
+  }
 }
 
 /* Tab 主题色驱动背景渐变（暗色） */
 html[data-theme="dark"] .app-shell[data-tone="blue"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(59, 130, 246, 0.32), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(96, 165, 250, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(37, 99, 235, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(59, 130, 246, 0.32),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(96, 165, 250, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(37, 99, 235, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="green"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(34, 197, 94, 0.26), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(52, 211, 153, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(16, 185, 129, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(34, 197, 94, 0.26),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(52, 211, 153, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(16, 185, 129, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #07140f 0%, #0f2a1c 45%, #060f0a 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="purple"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(139, 92, 246, 0.3), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(167, 139, 250, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(139, 92, 246, 0.3),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(167, 139, 250, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(192, 132, 252, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #100816 0%, #1a1028 45%, #0e0a18 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="orange"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.2), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 146, 60, 0.1), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(234, 88, 12, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(245, 158, 11, 0.2),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(251, 146, 60, 0.1),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(234, 88, 12, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #100e0a 0%, #241810 45%, #0c0a08 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="pink"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(236, 72, 153, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(244, 114, 182, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(219, 39, 119, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(236, 72, 153, 0.22),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(244, 114, 182, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(219, 39, 119, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #120810 0%, #2a1420 45%, #0e060c 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="cyan"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(6, 182, 212, 0.22), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(34, 211, 238, 0.12), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(8, 145, 178, 0.08), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(6, 182, 212, 0.22),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(34, 211, 238, 0.12),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(8, 145, 178, 0.08),
+      transparent 55%
+    ),
     linear-gradient(160deg, #071012 0%, #0e2a32 45%, #060c0e 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="indigo"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(99, 102, 241, 0.28), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(129, 140, 248, 0.14), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(79, 70, 229, 0.1), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(99, 102, 241, 0.28),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(129, 140, 248, 0.14),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(79, 70, 229, 0.1),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0c0c1a 0%, #1c1a42 45%, #0a0a16 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="amber"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(245, 158, 11, 0.38), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(251, 191, 36, 0.22), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(217, 119, 6, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(245, 158, 11, 0.38),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(251, 191, 36, 0.22),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(217, 119, 6, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #1a1408 0%, #78350f 45%, #120e08 100%);
 }
 
 html[data-theme="dark"] .app-shell[data-tone="teal"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 18% 0%, rgba(45, 212, 191, 0.4), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 22%, rgba(94, 234, 212, 0.22), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(13, 148, 136, 0.16), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 18% 0%,
+      rgba(45, 212, 191, 0.4),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 22%,
+      rgba(94, 234, 212, 0.22),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(13, 148, 136, 0.16),
+      transparent 55%
+    ),
     linear-gradient(160deg, #0a1a18 0%, #134e4a 45%, #071412 100%);
 }
 
 /* 极光：青→靛 双色 */
 html[data-theme="dark"] .app-shell[data-tone="aurora"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(34, 211, 238, 0.42), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(129, 140, 248, 0.28), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(6, 182, 212, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 14% 0%,
+      rgba(34, 211, 238, 0.42),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 90% 20%,
+      rgba(129, 140, 248, 0.28),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(6, 182, 212, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #07141a 0%, #13243a 42%, #100e22 100%);
 }
 
 /* 暮光：紫→玫粉 双色 */
 html[data-theme="dark"] .app-shell[data-tone="twilight"] {
   --shell-bg:
-    radial-gradient(ellipse 85% 70% at 14% 0%, rgba(167, 139, 250, 0.4), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 90% 20%, rgba(244, 114, 182, 0.26), transparent 50%),
-    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(192, 132, 252, 0.14), transparent 55%),
+    radial-gradient(
+      ellipse 85% 70% at 14% 0%,
+      rgba(167, 139, 250, 0.4),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 90% 20%,
+      rgba(244, 114, 182, 0.26),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 50% 100%,
+      rgba(192, 132, 252, 0.14),
+      transparent 55%
+    ),
     linear-gradient(160deg, #140818 0%, #241430 42%, #180c16 100%);
 }
 
 /* Tab 主题色驱动背景渐变（亮色） */
 html[data-theme="light"] .app-shell[data-tone="blue"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(96, 165, 250, 0.65), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(147, 197, 253, 0.45), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(191, 219, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(96, 165, 250, 0.65),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(147, 197, 253, 0.45),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(191, 219, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0f7ff 0%, #dbeafe 48%, #e8f1fc 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="green"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(74, 222, 128, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(110, 231, 183, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(167, 243, 208, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(74, 222, 128, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(110, 231, 183, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(167, 243, 208, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdf6 0%, #dcfce7 48%, #e8f8ef 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="purple"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(196, 181, 253, 0.45), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(221, 214, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(167, 139, 250, 0.55),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(196, 181, 253, 0.45),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(221, 214, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f5f3ff 0%, #ede9fe 48%, #f0ecff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="orange"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 146, 60, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(253, 186, 116, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(254, 215, 170, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(251, 146, 60, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(253, 186, 116, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(254, 215, 170, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fff7ed 0%, #ffedd5 48%, #fff4e8 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="pink"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(244, 114, 182, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(249, 168, 212, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(244, 114, 182, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(249, 168, 212, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(251, 207, 232, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fdf2f8 0%, #fce7f3 48%, #fdf0f7 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="cyan"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.48), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(103, 232, 249, 0.38), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(34, 211, 238, 0.48),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(103, 232, 249, 0.38),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(165, 243, 252, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdff 0%, #cffafe 48%, #e8fafc 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="indigo"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(129, 140, 248, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(165, 180, 252, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(199, 210, 254, 0.4), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(129, 140, 248, 0.55),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(165, 180, 252, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(199, 210, 254, 0.4),
+      transparent 55%
+    ),
     linear-gradient(165deg, #eef2ff 0%, #e0e7ff 48%, #eef0ff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="amber"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(251, 191, 36, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(252, 211, 77, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(253, 230, 138, 0.38), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(251, 191, 36, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(252, 211, 77, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(253, 230, 138, 0.38),
+      transparent 55%
+    ),
     linear-gradient(165deg, #fffbeb 0%, #fef3c7 48%, #fff8e8 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="teal"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(45, 212, 191, 0.48), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(94, 234, 212, 0.38), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(153, 246, 228, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(45, 212, 191, 0.48),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(94, 234, 212, 0.38),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(153, 246, 228, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f0fdfa 0%, #ccfbf1 48%, #e8faf6 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="aurora"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(34, 211, 238, 0.52), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(129, 140, 248, 0.42), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(165, 243, 252, 0.34), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(34, 211, 238, 0.52),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(129, 140, 248, 0.42),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(165, 243, 252, 0.34),
+      transparent 55%
+    ),
     linear-gradient(165deg, #ecfeff 0%, #e0e7ff 48%, #f0f9ff 100%);
 }
 
 html[data-theme="light"] .app-shell[data-tone="twilight"] {
   --shell-bg:
-    radial-gradient(ellipse 90% 70% at 12% 8%, rgba(167, 139, 250, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 18%, rgba(244, 114, 182, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(251, 207, 232, 0.36), transparent 55%),
+    radial-gradient(
+      ellipse 90% 70% at 12% 8%,
+      rgba(167, 139, 250, 0.5),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 88% 18%,
+      rgba(244, 114, 182, 0.4),
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(251, 207, 232, 0.36),
+      transparent 55%
+    ),
     linear-gradient(165deg, #f5f3ff 0%, #fce7f3 48%, #faf5ff 100%);
 }
 
 /* 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块） */
-html[data-theme="dark"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
+html[data-theme="dark"]:is(
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.2 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e1r, 0),
+        var(--shell-grad-e1g, 0),
+        var(--shell-grad-e1b, 0),
+        calc(var(--shell-grad-e1a, 0) * 0.2 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.18 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e2r, 0),
+        var(--shell-grad-e2g, 0),
+        var(--shell-grad-e2b, 0),
+        calc(var(--shell-grad-e2a, 0) * 0.18 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.16 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e3r, 0),
+        var(--shell-grad-e3g, 0),
+        var(--shell-grad-e3b, 0),
+        calc(var(--shell-grad-e3a, 0) * 0.16 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(85% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.34 * var(--shell-grad-strength, 1))),
+      ellipse calc(85% * var(--shell-grad-spread, 1))
+        calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
+        var(--shell-grad-py, 8%),
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.34 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.16 * var(--shell-grad-strength, 1))),
+      ellipse calc(70% * var(--shell-grad-spread, 1))
+        calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
+        var(--shell-grad-sy, 22%),
+      rgba(
+        var(--shell-grad-sr, 6),
+        var(--shell-grad-sg, 182),
+        var(--shell-grad-sb, 212),
+        calc(0.16 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(55% * var(--shell-grad-spread, 1)) calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.1 * var(--shell-grad-strength, 1))),
+      ellipse calc(55% * var(--shell-grad-spread, 1))
+        calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.1 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(160deg, #0a1018 0%, #122033 45%, #080e16 100%);
 }
 
-html[data-theme="light"]:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell {
+html[data-theme="light"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .app-shell {
   --shell-bg:
     radial-gradient(
       circle at var(--shell-grad-e1x, 50%) var(--shell-grad-e1y, 50%),
-      rgba(var(--shell-grad-e1r, 0), var(--shell-grad-e1g, 0), var(--shell-grad-e1b, 0), calc(var(--shell-grad-e1a, 0) * 0.38 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e1r, 0),
+        var(--shell-grad-e1g, 0),
+        var(--shell-grad-e1b, 0),
+        calc(var(--shell-grad-e1a, 0) * 0.38 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(48% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e2x, 50%) var(--shell-grad-e2y, 50%),
-      rgba(var(--shell-grad-e2r, 0), var(--shell-grad-e2g, 0), var(--shell-grad-e2b, 0), calc(var(--shell-grad-e2a, 0) * 0.34 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e2r, 0),
+        var(--shell-grad-e2g, 0),
+        var(--shell-grad-e2b, 0),
+        calc(var(--shell-grad-e2a, 0) * 0.34 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(46% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
       circle at var(--shell-grad-e3x, 50%) var(--shell-grad-e3y, 50%),
-      rgba(var(--shell-grad-e3r, 0), var(--shell-grad-e3g, 0), var(--shell-grad-e3b, 0), calc(var(--shell-grad-e3a, 0) * 0.3 * var(--shell-grad-strength, 1))),
+      rgba(
+        var(--shell-grad-e3r, 0),
+        var(--shell-grad-e3g, 0),
+        var(--shell-grad-e3b, 0),
+        calc(var(--shell-grad-e3a, 0) * 0.3 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(44% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(90% * var(--shell-grad-spread, 1)) calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%) var(--shell-grad-py, 8%),
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.58 * var(--shell-grad-strength, 1))),
+      ellipse calc(90% * var(--shell-grad-spread, 1))
+        calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
+        var(--shell-grad-py, 8%),
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.58 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(70% * var(--shell-grad-spread, 1)) calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%) var(--shell-grad-sy, 22%),
-      rgba(var(--shell-grad-sr, 6), var(--shell-grad-sg, 182), var(--shell-grad-sb, 212), calc(0.42 * var(--shell-grad-strength, 1))),
+      ellipse calc(70% * var(--shell-grad-spread, 1))
+        calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
+        var(--shell-grad-sy, 22%),
+      rgba(
+        var(--shell-grad-sr, 6),
+        var(--shell-grad-sg, 182),
+        var(--shell-grad-sb, 212),
+        calc(0.42 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
     radial-gradient(
-      ellipse calc(60% * var(--shell-grad-spread, 1)) calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
-      rgba(var(--shell-grad-pr, 37), var(--shell-grad-pg, 99), var(--shell-grad-pb, 235), calc(0.28 * var(--shell-grad-strength, 1))),
+      ellipse calc(60% * var(--shell-grad-spread, 1))
+        calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
+      rgba(
+        var(--shell-grad-pr, 37),
+        var(--shell-grad-pg, 99),
+        var(--shell-grad-pb, 235),
+        calc(0.28 * var(--shell-grad-strength, 1))
+      ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
     linear-gradient(165deg, #f0f7ff 0%, #e8eef8 48%, #f4f7fb 100%);
 }
 
 /* 统一色选白：压低渐变强度，保留可读玻璃描边（强调色由 JS 回退 slate） */
-html[data-theme="light"][data-unified-surface="light-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+html[data-theme="light"][data-unified-surface="light-neutral"]:is(
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) {
   --glass-edge: color-mix(in srgb, #64748b 16%, rgba(15, 23, 42, 0.1));
   --glass-border: color-mix(in srgb, #64748b 12%, rgba(15, 23, 42, 0.08));
   --header-chip-border: color-mix(in srgb, #64748b 20%, rgba(15, 23, 42, 0.12));
 }
 
-html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-style="unified"], [data-color-style="dynamic"]) {
+html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
+  [data-color-style="unified"],
+  [data-color-style="dynamic"]
+) {
   --glass-edge: rgba(255, 255, 255, 0.14);
   --glass-border: rgba(255, 255, 255, 0.11);
   --header-chip-border: rgba(255, 255, 255, 0.16);
@@ -352,13 +828,22 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
 
 .body-row {
   --sidebar-w: 76px;
-    --sidebar-w-wide: 220px;
+  --sidebar-w-wide: 220px;
   flex: 1;
   min-height: 0;
   display: flex;
   padding: 0;
   gap: 0;
   position: relative;
+  transition: padding-left 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.body-row:has(> .sidebar.is-pinned.is-icons) {
+  padding-left: var(--sidebar-w);
+}
+
+.body-row:has(> .sidebar.is-pinned.is-labels) {
+  padding-left: var(--sidebar-w-wide);
 }
 
 /* 左缘热区：收起时鼠标靠近即可展开 */
@@ -368,7 +853,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   top: 0;
   bottom: 0;
   width: 14px;
-  z-index: 35;
+  z-index: var(--z-sidebar-hotzone);
 }
 
 .sidebar {
@@ -378,26 +863,35 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 48px 8px 16px;
+  padding: 44px 8px 8px;
   border-radius: 0;
   background: var(--sidebar-bg);
   border: none;
   border-right: 1px solid var(--glass-edge);
-  backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
-  -webkit-backdrop-filter: blur(var(--blur-glass, 20px)) saturate(1.25);
+  backdrop-filter: blur(
+      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(
+      calc((var(--blur-glass, 20px)) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: var(--z-sidebar);
   overflow: hidden;
   transform: translateX(calc(-1 * 100% + var(--sidebar-collapsed)));
+  transform-origin: left center;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition:
-    width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.14s ease;
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    visibility 0s linear 300ms;
   box-shadow:
     8px 0 32px rgba(15, 23, 42, 0.1),
     inset -1px 0 0 rgba(255, 255, 255, 0.2);
@@ -405,7 +899,7 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
 
 .sidebar.is-labels {
   width: var(--sidebar-w-wide);
-  padding: 48px 10px 16px;
+  padding: 44px 10px 8px;
 }
 
 /* 侧栏透出壳层渐变；叠加一层极淡主题色，与 tab 同步即时变色 */
@@ -415,9 +909,11 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is([data-color-styl
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse 120% 80% at 0% 0%,
-      var(--tone-soft, transparent) 0%,
-      transparent 70%);
+  background: radial-gradient(
+    ellipse 120% 80% at 0% 0%,
+    var(--tone-soft, transparent) 0%,
+    transparent 70%
+  );
   opacity: 0.85;
 }
 
@@ -589,36 +1085,104 @@ html[data-tone="twilight"] {
   --tone-glow: var(--tone-twilight-glow);
 }
 
-.sidebar>* {
+.sidebar > * {
   position: relative;
   z-index: 1;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  z-index: var(--z-sidebar-resizer);
+  top: 38px;
+  bottom: 12px;
+  left: var(--sidebar-w-wide);
+  width: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+  transform: translateX(-50%);
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 5px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, #2563eb) 42%, transparent);
+  opacity: 0;
+  transform: scaleY(0.72);
+  transition:
+    opacity 0.14s ease,
+    transform 0.18s ease,
+    background 0.14s ease;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer:focus-visible::before,
+.sidebar-resizer.is-resizing::before {
+  opacity: 1;
+  transform: scaleY(1);
+  background: color-mix(in srgb, var(--tone, #2563eb) 72%, transparent);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+.sidebar.is-resizing,
+.sidebar.is-open.is-resizing {
+  user-select: none;
+  transition: none;
+}
+
+/* 拖动分隔条时指针会掠过按钮，锁定光标避免中途退化成小手 */
+.app-shell:has(.sidebar.is-resizing),
+.app-shell:has(.sidebar.is-resizing) *,
+.app-shell:has(.chat-right-panel.is-resizing),
+.app-shell:has(.chat-right-panel.is-resizing) * {
+  cursor: ew-resize !important;
 }
 
 .sidebar.is-open {
   transform: translateX(0);
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   transition:
-    width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.18s ease;
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    visibility 0s linear 0s;
 }
 
 /* 浮层模式（非固定）时必须盖住 content-header / header-actions(45) / model-picker(50) */
 .sidebar.is-open:not(.is-pinned) {
-  z-index: 60;
+  z-index: var(--z-sidebar-overlay);
 }
 
-/* 固定：参与布局占位，不再浮层遮挡内容 */
+/* 固定栏本身保持绝对定位，由 .body-row 的 padding 平滑承担布局占位。 */
 .sidebar.is-pinned {
-  position: relative;
-  transform: none;
+  transform: translateX(0);
   opacity: 1;
   pointer-events: auto;
   box-shadow: none;
   background: var(--sidebar-pinned-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body-row,
+  .sidebar {
+    transition: none;
+  }
 }
 
 .sidebar-brand {
@@ -626,34 +1190,21 @@ html[data-tone="twilight"] {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 4px 0 14px;
+  padding: 2px 0 12px;
   white-space: nowrap;
-}
-
-.sidebar-brand-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
 }
 
 .sidebar.is-labels .sidebar-brand {
   flex-direction: row;
   align-items: center;
-  gap: 10px;
-  padding: 4px 6px 16px;
+  gap: 8px;
+  padding: 2px 6px 12px;
 }
 
 .sidebar.is-labels .sidebar-brand-text {
   display: block;
   flex: 1;
   min-width: 0;
-}
-
-.sidebar.is-labels .sidebar-brand-actions {
-  flex-direction: row;
-  margin-left: auto;
-  gap: 4px;
 }
 
 .sidebar-pin-btn {
@@ -668,7 +1219,10 @@ html[data-tone="twilight"] {
   color: var(--tone, var(--ink-soft));
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .sidebar-pin-btn[data-tone="blue"] {
@@ -736,8 +1290,8 @@ html[data-tone="twilight"] {
 }
 
 .sidebar-logo {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   background: transparent;
@@ -749,8 +1303,8 @@ html[data-tone="twilight"] {
 
 .sidebar-logo svg {
   display: block;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 .sidebar-brand-text {

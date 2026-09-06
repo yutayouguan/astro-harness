@@ -334,7 +334,7 @@ mod tests {
             event: SandboxAuditKind::Spawned,
             session_id: Some("session-1".into()),
             turn_id: Some("turn-1".into()),
-            tool_name: "terminal".into(),
+            tool_name: "exec_command".into(),
             profile_id: ":workspace".into(),
             policy_hash: Some("0".repeat(64)),
             backend: "seatbelt".into(),
@@ -360,7 +360,7 @@ mod tests {
             dir.path(),
             Some("session-1".into()),
             Some("turn-1".into()),
-            "terminal",
+            "exec_command",
             ":workspace",
         );
         metadata.record(
@@ -383,7 +383,8 @@ mod tests {
     #[test]
     fn backend_unavailable_error_uses_dedicated_event() {
         let dir = tempfile::tempdir().unwrap();
-        let metadata = SandboxAuditMetadata::new(dir.path(), None, None, "terminal", ":workspace");
+        let metadata =
+            SandboxAuditMetadata::new(dir.path(), None, None, "exec_command", ":workspace");
         metadata.record_prepare_error(
             None,
             "sh",

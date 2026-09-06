@@ -22,16 +22,26 @@ test("imports stdio and Streamable HTTP servers", () => {
     ["stdio", "streamableHttp"],
   );
   assert.deepEqual(
-    servers.map((server) => [server.startupTimeoutSecs, server.toolTimeoutSecs]),
-    [[10, 60], [10, 60]],
+    servers.map((server) => [
+      server.startupTimeoutSecs,
+      server.toolTimeoutSecs,
+    ]),
+    [
+      [10, 60],
+      [10, 60],
+    ],
   );
 });
 
-test("preserves Codex timeout field names", () => {
+test("preserves timeout field names", () => {
   const [server] = parseMcpJson(
     JSON.stringify({
       mcpServers: {
-        local: { command: "npx", startup_timeout_sec: 17, tool_timeout_sec: 91 },
+        local: {
+          command: "npx",
+          startup_timeout_sec: 17,
+          tool_timeout_sec: 91,
+        },
       },
     }),
   );
@@ -40,7 +50,7 @@ test("preserves Codex timeout field names", () => {
   assert.equal(server.toolTimeoutSecs, 91);
 });
 
-test("preserves Codex environment credential references", () => {
+test("preserves environment credential references", () => {
   const servers = parseMcpJson(
     JSON.stringify({
       mcpServers: {
@@ -63,7 +73,11 @@ test("preserves Codex environment credential references", () => {
 
 test("bounds imported timeout values", () => {
   const [server] = parseMcpJson(
-    JSON.stringify({ command: "npx", startupTimeoutSecs: 0, toolTimeoutSecs: 9000 }),
+    JSON.stringify({
+      command: "npx",
+      startupTimeoutSecs: 0,
+      toolTimeoutSecs: 9000,
+    }),
   );
 
   assert.equal(server.startupTimeoutSecs, 1);
@@ -90,7 +104,7 @@ test("preserves required, cwd and allow/deny policy", () => {
   assert.equal(isMcpToolEnabled(server, "unknown"), false);
 });
 
-test("preserves Codex server and per-tool approval modes", () => {
+test("preserves server and per-tool approval modes", () => {
   const [server] = parseMcpJson(
     JSON.stringify({
       mcpServers: {
@@ -98,7 +112,7 @@ test("preserves Codex server and per-tool approval modes", () => {
           command: "npx",
           default_tools_approval_mode: "writes",
           tools: {
-            read: { approval_mode: "approve" },
+            read: { approval_mode: "approve", output_token_limit: 300 },
             publish: { enabled: false, approval_mode: "prompt" },
             legacy: true,
           },
@@ -109,6 +123,7 @@ test("preserves Codex server and per-tool approval modes", () => {
 
   assert.equal(server.defaultToolsApprovalMode, "writes");
   assert.equal(server.toolApprovalModes.read, "approve");
+  assert.equal(server.toolOutputTokenLimits.read, 300);
   assert.equal(server.toolApprovalModes.publish, "prompt");
   assert.equal(isMcpToolEnabled(server, "publish"), false);
   assert.equal(isMcpToolEnabled(server, "legacy"), true);
@@ -141,7 +156,8 @@ test("normalizes MCP runtime status and rejects unknown state strings", () => {
     },
   );
   assert.equal(
-    normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never }).status,
+    normalizeMcpRuntimeStatus({ id: "future", status: "future_state" as never })
+      .status,
     "unknown",
   );
 });

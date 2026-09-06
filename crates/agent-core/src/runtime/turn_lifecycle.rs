@@ -1,8 +1,10 @@
-//! Session turn lifecycle: input persistence, memory recall, prompt assembly, and hooks.
+//! Session turn 生命周期：输入持久化、记忆召回、prompt 组装与 hooks。
 
-use session::{build_conversation_context, format_recalled_context, ConversationStore, NewMessage};
-use types::message::Message;
+use session::{
+    build_conversation_context, format_recalled_context, ConversationStore, NewResponseItem,
+};
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use agent_protocol::{TurnInputError, TurnInputMode, TurnInputRequest, TurnInputSubmission};
@@ -32,6 +34,70 @@ where
         image_data_urls,
         client_message_id: None,
     })
+}
+
+fn discovered_deferred_tool_names(
+    history: &[agent_protocol::ResponseItem],
+) -> HashSet<types::ToolName> {
+    let mut discovered = HashSet::new();
+    for item in history {
+        let agent_protocol::ResponseItem::ToolSearchOutput { status, tools, .. } = item else {
+            continue;
+        };
+        if status != "completed" {
+            continue;
+        }
+        for tool in tools {
+            if tool.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                let Some(namespace) = tool.get("name").and_then(serde_json::Value::as_str) else {
+                    continue;
+                };
+                for child in tool
+                    .get("tools")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(name) = child.get("name").and_then(serde_json::Value::as_str) {
+                        discovered.insert(types::ToolName::new(Some(namespace), name));
+                    }
+                }
+                continue;
+            }
+            if let Some(name) = tool.get("name").and_then(serde_json::Value::as_str) {
+                discovered.insert(types::ToolName::plain(name));
+            }
+        }
+    }
+    discovered
+}
+
+fn response_item_for_turn_input(
+    content: &str,
+    image_data_urls: &[String],
+    marker: Option<&str>,
+) -> agent_protocol::ResponseItem {
+    let mut response_content = vec![agent_protocol::ContentItem::InputText {
+        text: content.to_string(),
+    }];
+    response_content.extend(image_data_urls.iter().map(|image_url| {
+        agent_protocol::ContentItem::InputImage {
+            image_url: image_url.clone(),
+            detail: None,
+        }
+    }));
+    agent_protocol::ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: response_content,
+        phase: None,
+        internal_chat_message_metadata_passthrough: marker
+            .map(|value| serde_json::json!({ "astro_memory_marker": value })),
+    }
+}
+
+fn response_item_memory_marker(item: &agent_protocol::ResponseItem) -> Option<&str> {
+    item.metadata()?.get("astro_memory_marker")?.as_str()
 }
 
 impl Session {
@@ -125,11 +191,15 @@ impl Session {
         submission_id: String,
         request: TurnInputRequest,
         mode: TurnInputMode,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
-        if request.input.is_empty()
-            || request
-                .input
+        let TurnInputRequest {
+            input,
+            rollback_keep_chat_bubbles,
+            thread_settings,
+        } = request;
+        if input.is_empty()
+            || input
                 .iter()
                 .all(|item| item.content.trim().is_empty() && item.image_data_urls.is_empty())
         {
@@ -138,6 +208,13 @@ impl Session {
             ));
         }
         let active_turn_id = self.active_turn_id().await;
+        if rollback_keep_chat_bubbles.is_some()
+            && (active_turn_id.is_some() || matches!(&mode, TurnInputMode::Steer { .. }))
+        {
+            return Err(TurnInputError::Invalid(
+                "history rollback requires an idle thread start".into(),
+            ));
+        }
         if active_turn_id.is_none()
             && matches!(
                 mode,
@@ -149,11 +226,19 @@ impl Session {
                 reason: "terminating".into(),
             });
         }
+        if let Some(keep_chat_bubbles) = rollback_keep_chat_bubbles {
+            self.rollback_thread_to_bubbles(submission_id.clone(), keep_chat_bubbles)
+                .await
+                .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
+        }
         match mode {
             TurnInputMode::StartOrSteer => match active_turn_id {
-                Some(turn_id) => self.steer_turn(Some(&turn_id), request.input).await,
+                Some(turn_id) => {
+                    self.steer_turn(submission_id, Some(&turn_id), input, thread_settings)
+                        .await
+                }
                 None => {
-                    self.start_turn(submission_id, request.input, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, responses_override)
                         .await
                 }
             },
@@ -162,18 +247,23 @@ impl Session {
                     reason: "not_idle".into(),
                 }),
                 None => {
-                    self.start_turn(submission_id, request.input, chat_override)
+                    self.start_turn(submission_id, input, thread_settings, responses_override)
                         .await
                 }
             },
             TurnInputMode::Steer { expected_turn_id } => {
-                self.steer_turn(Some(&expected_turn_id), request.input)
-                    .await
+                self.steer_turn(
+                    submission_id,
+                    Some(&expected_turn_id),
+                    input,
+                    thread_settings,
+                )
+                .await
             }
         }
     }
 
-    async fn active_turn_id(&self) -> Option<String> {
+    pub(crate) async fn active_turn_id(&self) -> Option<String> {
         let active_turn = self.active_turn.lock().await;
         active_turn
             .as_ref()?
@@ -187,24 +277,115 @@ impl Session {
         self: &Arc<Self>,
         turn_id: String,
         input: Vec<TurnInput>,
-        chat_override: Option<crate::streaming::ChatOverride>,
+        thread_settings: agent_protocol::ThreadSettingsOverrides,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
     ) -> Result<TurnInputSubmission, TurnInputError> {
+        let has_settings = !thread_settings.is_empty();
+        let previous_settings = has_settings.then(|| self.snapshot_request_settings());
+        let applied_settings = if has_settings {
+            Some(
+                self.apply_thread_settings(thread_settings)
+                    .map_err(TurnInputError::Invalid)?,
+            )
+        } else {
+            None
+        };
         let context = self.create_turn_context(turn_id.clone()).await;
         let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
             Arc::clone(self),
             Arc::clone(&context),
-            chat_override,
+            responses_override,
         );
-        self.spawn_task(context, input, RegularTask::new(args))
+        let applied_event = async {
+            if let Some(thread_settings) = applied_settings {
+                self.send_event(
+                    &turn_id,
+                    agent_protocol::EventMsg::ThreadSettingsApplied(
+                        agent_protocol::ThreadSettingsAppliedEvent { thread_settings },
+                    ),
+                )
+                .await;
+            }
+        };
+        if let Err(error) = self
+            .spawn_task_with_install_hook(context, input, RegularTask::new(args), applied_event)
+            .await
+        {
+            if let Some(previous_settings) = previous_settings {
+                self.restore_request_settings(previous_settings);
+            }
+            return Err(TurnInputError::Invalid(error.to_string()));
+        }
+        Ok(TurnInputSubmission::Started { turn_id })
+    }
+
+    pub(crate) async fn recover_turn(
+        self: &Arc<Self>,
+        turn_id: String,
+        responses_override: Option<crate::streaming::ResponsesOverride>,
+    ) -> Result<TurnInputSubmission, TurnInputError> {
+        if self.active_turn_id().await.is_some() || self.terminating_turn_id().await.is_some() {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "not_idle".into(),
+            });
+        }
+        if !self
+            .is_recoverable_turn(&turn_id)
+            .await
+            .map_err(|error| TurnInputError::Invalid(error.to_string()))?
+        {
+            return Ok(TurnInputSubmission::NotSubmitted {
+                reason: "turn_not_recoverable".into(),
+            });
+        }
+        let context = self.create_turn_context(turn_id.clone()).await;
+        let args = crate::streaming::multi_turn::RunTurnArgs::submitted(
+            Arc::clone(self),
+            Arc::clone(&context),
+            responses_override,
+        );
+        self.spawn_task(context, Vec::new(), RegularTask::recovery(args))
             .await
             .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         Ok(TurnInputSubmission::Started { turn_id })
     }
 
+    async fn is_recoverable_turn(&self, turn_id: &str) -> anyhow::Result<bool> {
+        let rollout_root = self.memory_dir().join("sessions").join("rollouts");
+        let Some(path) = agent_rollout::find_rollout(&rollout_root, self.session_id())? else {
+            return Ok(false);
+        };
+        let mut started = false;
+        let mut recoverable_terminal = None;
+        for item in agent_rollout::read_rollout(&path).await? {
+            let agent_rollout::RolloutItem::EventMsg(event) = item else {
+                continue;
+            };
+            match event {
+                agent_protocol::EventMsg::TurnStarted(event) if event.turn_id == turn_id => {
+                    started = true;
+                }
+                agent_protocol::EventMsg::TurnAborted(event)
+                    if event.turn_id.as_deref() == Some(turn_id) =>
+                {
+                    recoverable_terminal =
+                        Some(event.reason == agent_protocol::TurnAbortReason::Interrupted);
+                }
+                agent_protocol::EventMsg::TurnComplete(event) if event.turn_id == turn_id => {
+                    recoverable_terminal = Some(false);
+                }
+                _ => {}
+            }
+        }
+        Ok(started && recoverable_terminal.unwrap_or(true))
+    }
+
     async fn steer_turn(
         &self,
+        submission_id: String,
         expected_turn_id: Option<&str>,
         input: Vec<TurnInput>,
+        thread_settings: agent_protocol::ThreadSettingsOverrides,
     ) -> Result<TurnInputSubmission, TurnInputError> {
         let turn_id = self.active_turn_id().await.ok_or_else(|| {
             TurnInputError::Invalid("no active turn available for steering".into())
@@ -230,14 +411,26 @@ impl Session {
                 });
             }
         }
+        if !thread_settings.is_empty() {
+            let thread_settings = self
+                .apply_thread_settings(thread_settings)
+                .map_err(TurnInputError::Invalid)?;
+            self.send_event(
+                &submission_id,
+                agent_protocol::EventMsg::ThreadSettingsApplied(
+                    agent_protocol::ThreadSettingsAppliedEvent { thread_settings },
+                ),
+            )
+            .await;
+        }
         Ok(TurnInputSubmission::Steered { turn_id })
     }
 
-    /// Prepare initial task input for the first sampling request.
+    /// 为首次采样请求准备初始任务输入。
     ///
-    /// Production paths call this from [`crate::tasks::RegularTask`]. The
-    /// public `start_or_steer_turn*` methods remain compatibility adapters for
-    /// callers that have not yet moved input ownership into `SessionTask`.
+    /// 生产路径从 [`crate::tasks::RegularTask`] 调用此方法。公开的
+    /// `start_or_steer_turn*` 方法作为兼容适配器保留，供尚未将输入
+    /// 所有权迁移到 `SessionTask` 的调用方使用。
     pub(crate) async fn prepare_turn(&self, input: &[TurnInput]) -> anyhow::Result<TurnResult> {
         anyhow::ensure!(!input.is_empty(), "regular turn requires initial input");
         let client_message_ids = input
@@ -261,7 +454,7 @@ impl Session {
                 .clone_history()
                 .await
                 .iter()
-                .any(|m| matches!(m.role, types::message::Role::Assistant))
+                .any(|item| item.role() == Some("assistant"))
             && self.config.thread_memory_mode == types::ThreadMemoryMode::Enabled
         {
             memory::try_append_decision(
@@ -297,9 +490,18 @@ impl Session {
             .await
     }
 
-    /// Prepare a follow-up whose durable mailbox input is persisted with its
-    /// sequence marker before sampling. Retries converge on the existing
-    /// marker and therefore never append a duplicate user message.
+    pub(crate) async fn prepare_recovery_turn(&self) -> anyhow::Result<TurnResult> {
+        self.cancel.reset();
+        if self.is_budget_exhausted().await {
+            return Ok(TurnResult::BudgetExhausted);
+        }
+        self.begin_user_turn().await;
+        self.reload_tools_and_mcp().await?;
+        self.finish_prepared_turn("", None).await
+    }
+
+    /// 准备后续轮次，其持久化邮箱输入在采样前与序列标记一起持久化。
+    /// 重试会收敛到已有标记，因此不会追加重复的用户消息。
     pub(crate) async fn prepare_mailbox_turn(&self) -> anyhow::Result<TurnResult> {
         self.cancel.reset();
         if self.is_budget_exhausted().await {
@@ -334,13 +536,13 @@ impl Session {
             .await
             .iter()
             .rev()
-            .find(|message| {
-                matches!(message.role, types::message::Role::User)
-                    && message.compressed_content.as_deref().is_some_and(|marker| {
+            .find(|item| {
+                item.role() == Some("user")
+                    && response_item_memory_marker(item).is_some_and(|marker| {
                         marker.starts_with(crate::exec::subagents::MAILBOX_FINISH_PREFIX)
                     })
             })
-            .map(|message| message.content_text())
+            .map(agent_protocol::ResponseItem::text)
             .ok_or_else(|| {
                 anyhow::anyhow!("follow-up mailbox input is missing from runtime history")
             })?;
@@ -358,18 +560,48 @@ impl Session {
         } else {
             None
         };
-        let recalled = build_conversation_context(
-            &self.services.sessions,
-            &self.session_id,
-            self.config.recent_turns,
-            fts_keywords,
-        )?;
+        let recalled = if let Some(keywords) = fts_keywords.filter(|value| !value.trim().is_empty())
+        {
+            let visible_history = self
+                .provider_response_history()
+                .await
+                .into_iter()
+                .map(|item| {
+                    let role = item.role().unwrap_or_else(|| {
+                        if item.is_tool_output() {
+                            "tool"
+                        } else {
+                            "assistant"
+                        }
+                    });
+                    (role.to_string(), item.provider_view_text())
+                })
+                .collect::<std::collections::HashSet<_>>();
+            let mut recalled = build_conversation_context(
+                &self.services.sessions,
+                &self.session_id,
+                self.config.recent_turns,
+                Some(keywords),
+            )
+            .await?;
+            recalled.retain(|entry| {
+                !visible_history.contains(&(
+                    entry.item.role().unwrap_or("item").to_string(),
+                    entry.item.text(),
+                ))
+            });
+            recalled
+        } else {
+            Vec::new()
+        };
         self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
-        let system_prompt = self
-            .build_system_prompt_with_inject(admission_context)
+        let prompt = self
+            .build_prompt_contract_with_inject(admission_context)
             .await;
+        self.persist_prompt_context_if_changed(&prompt).await;
+        let system_prompt = prompt.flattened();
         let turn_id = self.current_turn_id().await;
         let inject = self.fire_hook(
             ::hooks::PRE_LLM_CALL,
@@ -390,6 +622,7 @@ impl Session {
         Ok(TurnResult::Continue {
             turn: self.session_turn().await,
             system_prompt,
+            prompt,
         })
     }
 
@@ -402,15 +635,17 @@ impl Session {
 
     fn apply_admission_outcome(
         event_name: &str,
-        outcome: ::hooks::HookOutcome,
+        should_stop: bool,
+        stop_reason: Option<String>,
+        additional_contexts: Vec<String>,
     ) -> anyhow::Result<Option<String>> {
-        match outcome {
-            ::hooks::HookOutcome::Block(reason) => {
-                anyhow::bail!("{event_name} blocked by hook: {reason}")
-            }
-            ::hooks::HookOutcome::InjectContext(context) => Ok(Some(context)),
-            _ => Ok(None),
+        if should_stop {
+            anyhow::bail!(
+                "{event_name} blocked by hook: {}",
+                stop_reason.unwrap_or_else(|| "hook requested stop".into())
+            );
         }
+        Ok((!additional_contexts.is_empty()).then(|| additional_contexts.join("\n\n")))
     }
 
     async fn admit_initial_input(
@@ -420,7 +655,7 @@ impl Session {
     ) -> anyhow::Result<Option<String>> {
         let _admission_guard = self.admission_lock.lock().await;
         let mut contexts = Vec::new();
-        if let Some(context) = self.admit_session_start_locked().await? {
+        if let Some(context) = self.admit_session_start_locked(turn_id.clone()).await? {
             contexts.push(context);
         }
         for item in input {
@@ -434,10 +669,14 @@ impl Session {
     #[cfg(test)]
     async fn admit_session_start(&self) -> anyhow::Result<Option<String>> {
         let _admission_guard = self.admission_lock.lock().await;
-        self.admit_session_start_locked().await
+        self.admit_session_start_locked(self.current_turn_id().await)
+            .await
     }
 
-    async fn admit_session_start_locked(&self) -> anyhow::Result<Option<String>> {
+    async fn admit_session_start_locked(
+        &self,
+        turn_id: Option<String>,
+    ) -> anyhow::Result<Option<String>> {
         let Some(source) = self.lock_state().pending_session_start_source.clone() else {
             return Ok(None);
         };
@@ -447,46 +686,25 @@ impl Session {
         } else {
             ::hooks::SESSION_START
         };
-        // Codex emits SubagentStart only for the child startup admission. A
-        // resumed/follow-up turn is represented by its own SubagentStop.
+        // SubagentStart 仅在子 agent 启动准入时触发。恢复/后续轮次
+        // 由各自的 SubagentStop 表示。
         let context = if subagent.is_some() && source != "startup" {
             None
-        } else if subagent.is_some() {
-            self.fire_subagent_start_hook(::hooks::HookPayload {
-                source: Some(source.clone()),
-                agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
-                agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
-                agent_transcript_path: self.hook_transcript_path(),
-                detail: format!(
-                    "session={} path={}",
-                    self.session_id,
-                    subagent
-                        .as_ref()
-                        .map(|context| context.canonical_path.as_str())
-                        .unwrap_or("/root")
-                ),
-                ..Default::default()
-            })
         } else {
-            let outcome = self.fire_hook(
+            let source_kind = match source.as_str() {
+                "startup" => ::hooks::SessionStartSource::Startup,
+                "resume" => ::hooks::SessionStartSource::Resume,
+                "clear" => ::hooks::SessionStartSource::Clear,
+                "compact" => ::hooks::SessionStartSource::Compact,
+                other => anyhow::bail!("unsupported SessionStart source: {other}"),
+            };
+            let outcome = self.run_session_start_hook(source_kind, turn_id);
+            Self::apply_admission_outcome(
                 event_name,
-                ::hooks::HookPayload {
-                    source: Some(source.clone()),
-                    agent_id: subagent.as_ref().map(|context| context.agent_id.clone()),
-                    agent_type: subagent.as_ref().map(|context| context.agent_type.clone()),
-                    agent_transcript_path: self.hook_transcript_path(),
-                    detail: format!(
-                        "session={} path={}",
-                        self.session_id,
-                        subagent
-                            .as_ref()
-                            .map(|context| context.canonical_path.as_str())
-                            .unwrap_or("/root")
-                    ),
-                    ..Default::default()
-                },
-            );
-            Self::apply_admission_outcome(event_name, outcome)?
+                outcome.should_stop,
+                outcome.stop_reason,
+                outcome.additional_contexts,
+            )?
         };
         let mut state = self.lock_state();
         if state.pending_session_start_source.as_deref() == Some(source.as_str()) {
@@ -500,19 +718,16 @@ impl Session {
         prompt: &str,
         turn_id: Option<String>,
     ) -> anyhow::Result<Option<String>> {
-        let outcome = self.fire_hook(
+        let outcome = self.run_user_prompt_submit_hook(turn_id, prompt.to_string());
+        Self::apply_admission_outcome(
             ::hooks::USER_PROMPT_SUBMIT,
-            ::hooks::HookPayload {
-                turn_id,
-                prompt: Some(prompt.to_string()),
-                detail: prompt.chars().take(200).collect(),
-                ..Default::default()
-            },
-        );
-        Self::apply_admission_outcome(::hooks::USER_PROMPT_SUBMIT, outcome)
+            outcome.should_stop,
+            outcome.stop_reason,
+            outcome.additional_contexts,
+        )
     }
 
-    /// Queue user input for the active regular task.
+    /// 将用户输入排入活跃的常规任务队列。
     pub async fn steer_input(
         &self,
         user_message: &str,
@@ -522,7 +737,7 @@ impl Session {
             .await
     }
 
-    /// Queue user input only when the expected active turn still owns the session.
+    /// 仅当预期的活跃 turn 仍持有会话时，将用户输入排入队列。
     pub async fn steer_input_for_turn(
         &self,
         user_message: &str,
@@ -571,11 +786,12 @@ impl Session {
                     return Err(error);
                 }
             };
-        if let Err(error) = self.services.agent_control.persist_main_steer_with_id(
-            &self.services.agent_path,
-            message_id.clone(),
-            payload,
-        ) {
+        if let Err(error) = self
+            .services
+            .agent_control
+            .persist_main_steer_with_id(&self.services.agent_path, message_id.clone(), payload)
+            .await
+        {
             running.1.retract_input(&message_id);
             return Err(error);
         }
@@ -625,16 +841,15 @@ impl Session {
 
     pub(crate) async fn record_turn_input(&self, input: TurnInput) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
-        self.persist_turn_input(&input, None, None)?;
+        self.persist_turn_input(&input, None).await?;
         self.record_turn_input_in_memory_unlocked(&input, None)
             .await;
         Ok(())
     }
 
-    pub(crate) fn persist_turn_input(
+    pub(crate) async fn persist_turn_input(
         &self,
         input: &TurnInput,
-        finish_reason: Option<&str>,
         memory_marker: Option<&str>,
     ) -> anyhow::Result<()> {
         let TurnInput {
@@ -644,32 +859,18 @@ impl Session {
         } = input;
         self.services
             .sessions
-            .ensure_session(&self.session_id, "tauri")?;
-        let media_assets: Vec<types::MediaAsset> = image_data_urls
-            .iter()
-            .map(|url| url.trim())
-            .filter(|url| !url.is_empty())
-            .map(|url| {
-                let mime = url
-                    .strip_prefix("data:")
-                    .and_then(|rest| rest.split(';').next())
-                    .unwrap_or("image/*")
-                    .to_string();
-                types::MediaAsset::data_url(types::MediaKind::Image, url, mime)
+            .ensure_session(&self.session_id, "tauri")
+            .await?;
+        let item = response_item_for_turn_input(content, image_data_urls, memory_marker);
+        self.services
+            .sessions
+            .append_response_item(NewResponseItem {
+                session_id: &self.session_id,
+                item: &item,
+                token_count: None,
+                finish_reason: None,
             })
-            .collect();
-        let media_json = if media_assets.is_empty() {
-            None
-        } else {
-            Some(serde_json::to_string(&media_assets)?)
-        };
-        self.services.sessions.append_message(NewMessage {
-            content: Some(content),
-            compressed_content: memory_marker,
-            media_json: media_json.as_deref(),
-            finish_reason,
-            ..NewMessage::empty(&self.session_id, "user")
-        })?;
+            .await?;
         #[cfg(test)]
         if let Some(hook) = self
             .services
@@ -699,9 +900,14 @@ impl Session {
             image_data_urls,
             client_message_id: _,
         } = input;
-        let mut message = Message::user_with_images(content, image_data_urls);
-        message.compressed_content = marker.map(str::to_string);
-        self.record_items_unlocked(vec![message]);
+        let item = response_item_for_turn_input(content, image_data_urls, marker);
+        if let Err(error) = self
+            .persist_rollout_items(std::slice::from_ref(&item))
+            .await
+        {
+            tracing::warn!(%error, "failed to persist turn input response item");
+        }
+        self.record_response_items_unlocked(vec![item]);
         #[cfg(test)]
         if let Some(hook) = self
             .services
@@ -714,20 +920,21 @@ impl Session {
         }
     }
 
-    pub(crate) fn ensure_durable_turn_input_marker(&self, marker: &str) -> anyhow::Result<bool> {
-        let messages = self.services.sessions.get_messages(&self.session_id)?;
-        let Some(message) = messages.iter().find(|message| {
-            message.role == "user"
-                && (message.finish_reason.as_deref() == Some(marker)
-                    || message.compressed_content.as_deref() == Some(marker))
+    pub(crate) async fn ensure_durable_turn_input_marker(
+        &self,
+        marker: &str,
+    ) -> anyhow::Result<bool> {
+        let messages = self
+            .services
+            .sessions
+            .get_response_items(&self.session_id)
+            .await?;
+        let Some(_message) = messages.iter().find(|message| {
+            matches!(&message.item, agent_protocol::ResponseItem::Message { role, .. } if role == "user")
+                && response_item_memory_marker(&message.item) == Some(marker)
         }) else {
             return Ok(false);
         };
-        if message.compressed_content.as_deref() != Some(marker) {
-            self.services
-                .sessions
-                .update_message_compressed_content(message.id, Some(marker))?;
-        }
         Ok(true)
     }
 
@@ -755,7 +962,7 @@ impl Session {
             .expect("turn input memory-write hook mutex poisoned") = hook;
     }
 
-    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    /// 兼容适配器，供尚未迁移到当前命名的调用方使用。
     #[deprecated(note = "use start_or_steer_turn")]
     pub async fn run_turn(
         &self,
@@ -765,7 +972,7 @@ impl Session {
         self.start_or_steer_turn(user_message, submission_id).await
     }
 
-    /// Compatibility adapter for callers not yet migrated to Codex naming.
+    /// 兼容适配器，供尚未迁移到当前命名的调用方使用。
     #[deprecated(note = "use start_or_steer_turn_with_images")]
     pub async fn run_turn_with_images(
         &self,
@@ -783,26 +990,28 @@ impl Session {
     /// 与 Agent Thread 路径共享同一捕获入口。
     pub(crate) async fn capture_step_context(&self) -> anyhow::Result<Arc<StepContext>> {
         self.reload_tools_and_mcp().await?;
-        let mut history = self.provider_history().await;
-        if let Some(ctx) = self.take_inject_context().await {
-            history.push(Message::user(&format!("[astro:hook-context]\n{ctx}")));
-        }
-        let tool_router = {
-            let registry = self
-                .services
-                .tool_registry
-                .read()
-                .expect("tool registry lock poisoned");
-            let specs = tools::filter_schemas(
-                self.lock_state().interaction_mode,
-                registry.schemas_for_api(),
-            );
-            Arc::new(crate::runtime::ToolRouter::from_registry(&registry, specs))
+        let extension_snapshot = self.extension_snapshot_for_current_turn().await?;
+        let feature_flags = types::ToolModeFeatureFlags {
+            code_mode: extension_snapshot.feature_enabled("code_mode"),
+            code_mode_only: extension_snapshot.feature_enabled("code_mode_only"),
         };
+        let mut history = self.provider_response_history().await;
+        let prompt_context = self.prompt_context_history();
+        if let Some(ctx) = self.take_inject_context().await {
+            history.push(agent_protocol::ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![agent_protocol::ContentItem::InputText {
+                    text: format!("[astro:hook-context]\n{ctx}"),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            });
+        }
         let turn_context = {
             let state = self.lock_state();
             state.current_turn_context.clone().unwrap_or_else(|| {
-                Arc::new(TurnContext::new(
+                Arc::new(TurnContext::new_with_roots(
                     state
                         .turn
                         .current_turn_id()
@@ -812,10 +1021,43 @@ impl Session {
                     state.interaction_mode,
                     state.permission_profile.clone(),
                     state.project_root.clone(),
+                    state.workspace_roots.clone(),
                 ))
             })
         };
-        let step_context = Arc::new(StepContext::new(turn_context, history, tool_router));
+        let interaction_mode = turn_context.mode();
+        let requested_tool_mode = self
+            .lock_state()
+            .model_ctx
+            .model_spec()
+            .map(|spec| spec.requested_tool_mode(feature_flags))
+            .unwrap_or_else(|| feature_flags.requested_mode());
+        let supports_search_tool = self
+            .lock_state()
+            .model_ctx
+            .model_spec()
+            .is_none_or(|spec| spec.profile.supports_search_tool);
+        let discovered_deferred = discovered_deferred_tool_names(&history);
+        let tool_router = {
+            let registry = self
+                .services
+                .tool_registry
+                .read()
+                .expect("tool registry lock poisoned");
+            Arc::new(crate::runtime::tool_router::build_tool_router(
+                &registry,
+                interaction_mode,
+                requested_tool_mode,
+                supports_search_tool,
+                &discovered_deferred,
+            )?)
+        };
+        let step_context = Arc::new(StepContext::new(
+            turn_context,
+            history,
+            prompt_context,
+            tool_router,
+        ));
         self.lock_state().current_step_context = Some(Arc::clone(&step_context));
         Ok(step_context)
     }
@@ -869,7 +1111,9 @@ mod tests {
     async fn initial_inputs_are_persisted_as_one_logical_user_message() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "coalesced-initial".into()).unwrap();
+        let session = Session::with_session_id(config, "coalesced-initial".into())
+            .await
+            .unwrap();
 
         session
             .prepare_turn(&[input("first"), input("second")])
@@ -885,7 +1129,9 @@ mod tests {
     async fn initial_input_ack_is_emitted_only_after_db_and_memory_recording() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "initial-input-ack".into()).unwrap();
+        let session = Session::with_session_id(config, "initial-input-ack".into())
+            .await
+            .unwrap();
         session.set_current_turn_id("turn-initial-ack").await;
         let events = session.subscribe_turn_events("turn-initial-ack").await;
         let memory_recorded = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -920,7 +1166,9 @@ mod tests {
     async fn initial_input_write_failure_does_not_emit_ack() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "initial-input-no-ack".into()).unwrap();
+        let session = Session::with_session_id(config, "initial-input-no-ack".into())
+            .await
+            .unwrap();
         session.set_current_turn_id("turn-initial-no-ack").await;
         let events = session.subscribe_turn_events("turn-initial-no-ack").await;
         session.set_turn_input_after_db_write_hook(Some(Arc::new(|| {
@@ -944,7 +1192,9 @@ mod tests {
     async fn later_prompt_block_discards_staged_context_and_all_input() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "atomic-admission".into()).unwrap();
+        let session = Session::with_session_id(config, "atomic-admission".into())
+            .await
+            .unwrap();
         session
             .hook_bus()
             .register(::hooks::USER_PROMPT_SUBMIT, |input| {
@@ -969,7 +1219,9 @@ mod tests {
     async fn session_start_block_retries_same_source() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "retry-session-start".into()).unwrap();
+        let session = Session::with_session_id(config, "retry-session-start".into())
+            .await
+            .unwrap();
         let hits = Arc::new(AtomicUsize::new(0));
         let sources = Arc::new(std::sync::Mutex::new(Vec::new()));
         let hook_hits = Arc::clone(&hits);
@@ -1002,12 +1254,13 @@ mod tests {
     async fn subagent_start_is_context_injection_only() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Session::with_session_id(config, "subagent-start-context-only".into()).unwrap();
+        let session = Session::with_session_id(config, "subagent-start-context-only".into())
+            .await
+            .unwrap();
         session.set_subagent_hook_context(
             "thread-child".into(),
             "researcher".into(),
-            "/root/researcher".into(),
+            "/root/child".into(),
         );
         session.hook_bus().register(::hooks::SUBAGENT_START, |_| {
             ::hooks::HookOutcome::Block("must not cancel child admission".into())
@@ -1027,8 +1280,11 @@ mod tests {
     async fn concurrent_session_start_admission_fires_once() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "concurrent-session-start".into()).unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "concurrent-session-start".into())
+                .await
+                .unwrap(),
+        );
         let hits = Arc::new(AtomicUsize::new(0));
         let first_entered = Arc::new(tokio::sync::Notify::new());
         let second_entered = Arc::new(tokio::sync::Notify::new());
@@ -1091,7 +1347,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
         config.context_budget_chars = 64;
-        let session = Session::with_session_id(config, "budgeted-admission".into()).unwrap();
+        let session = Session::with_session_id(config, "budgeted-admission".into())
+            .await
+            .unwrap();
         session
             .hook_bus()
             .register(::hooks::USER_PROMPT_SUBMIT, |_| {
@@ -1110,12 +1368,13 @@ mod tests {
     async fn capture_step_context_reuses_the_turn_snapshot() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session = Session::with_session_id(config, "step-context-test".into()).unwrap();
+        let session = Session::with_session_id(config, "step-context-test".into())
+            .await
+            .unwrap();
         session
             .set_interaction_mode(types::InteractionMode::Plan)
             .await;
         session.set_current_turn_id("turn-1").await;
-
         let first = session.capture_step_context().await.unwrap();
         let second = session.capture_step_context().await.unwrap();
 
@@ -1130,16 +1389,142 @@ mod tests {
             first.tool_router.model_visible_specs().as_ref(),
             second.tool_router.model_visible_specs().as_ref()
         );
-        assert!(first.advertises_tool("file_ops"));
-        assert!(!first.advertises_tool("terminal"));
+        let prompt_contract = crate::prompt::PromptContract::from_base_instructions("base");
+        let sampling_prompt = crate::streaming::build_prompt(&prompt_contract, first.as_ref());
+        assert_eq!(sampling_prompt.instructions, "base");
+        assert_eq!(
+            sampling_prompt.tools.as_ref(),
+            first.tool_router.model_visible_specs().as_ref()
+        );
+        assert!(!first.routes_tool("web_search"));
+        assert!(!first.routes_tool("exec_command"));
+    }
+
+    fn visible_tool_names(step: &StepContext) -> Vec<String> {
+        step.tool_router
+            .model_visible_specs()
+            .iter()
+            .filter_map(|spec| spec.get("name").and_then(serde_json::Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn code_mode_only_feature_keeps_business_tools_nested() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[features]\ncode_mode_only = true\n",
+        )
+        .unwrap();
+        let session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "code-mode-only-feature".into(),
+        )
+        .await
+        .unwrap();
+
+        let step = session.capture_step_context().await.unwrap();
+        let visible = visible_tool_names(&step);
+        assert_eq!(visible, vec!["exec", "wait"]);
+        assert!(step.routes_tool("exec_command"));
+        assert!(!step.tool_router.model_can_call(None, "exec_command"));
+    }
+
+    #[tokio::test]
+    async fn model_catalog_tool_mode_overrides_feature_flag() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[features]\ncode_mode_only = true\n",
+        )
+        .unwrap();
+        let mut session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "model-tool-mode-override".into(),
+        )
+        .await
+        .unwrap();
+        session.set_model(
+            types::ModelSpec::new("openai", "gpt-test").with_tool_mode(types::ToolMode::Direct),
+        );
+
+        let step = session.capture_step_context().await.unwrap();
+        let visible = visible_tool_names(&step);
+        assert!(visible.contains(&"exec_command".to_string()));
+        assert!(!visible.contains(&"exec".to_string()));
+        assert!(!step.routes_tool("exec"));
+    }
+
+    #[tokio::test]
+    async fn code_mode_only_fails_closed_when_control_is_missing() {
+        let dir = TempDir::new().unwrap();
+        let mut session = Session::with_session_id(
+            crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+            "code-mode-only-unavailable".into(),
+        )
+        .await
+        .unwrap();
+        session.set_model(
+            types::ModelSpec::new("openai", "gpt-test")
+                .with_tool_mode(types::ToolMode::CodeModeOnly),
+        );
+        session.tool_registry_mut().unregister("wait");
+
+        let error = session.capture_step_context().await.unwrap_err();
+        assert!(error.to_string().contains("CodeModeOnly"));
+    }
+
+    #[test]
+    fn deferred_routes_come_only_from_completed_tool_search_outputs() {
+        let history = vec![
+            agent_protocol::ResponseItem::ToolSearchOutput {
+                id: None,
+                call_id: Some("search-ok".into()),
+                status: "completed".into(),
+                execution: "client".into(),
+                tools: vec![
+                    serde_json::json!({"type": "function", "name": "web_search"}),
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {"name": "legacy_shape"}
+                    }),
+                    serde_json::json!({
+                        "type": "namespace",
+                        "name": "mcp__calendar",
+                        "tools": [{"type": "function", "name": "list_events"}]
+                    }),
+                ],
+                internal_chat_message_metadata_passthrough: None,
+            },
+            agent_protocol::ResponseItem::ToolSearchOutput {
+                id: None,
+                call_id: Some("search-failed".into()),
+                status: "failed".into(),
+                execution: "client".into(),
+                tools: vec![serde_json::json!({"name": "must_not_route"})],
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ];
+
+        assert_eq!(
+            discovered_deferred_tool_names(&history),
+            HashSet::from([
+                types::ToolName::plain("web_search"),
+                types::ToolName::namespaced("mcp__calendar", "list_events"),
+            ])
+        );
     }
 
     #[tokio::test]
     async fn tool_router_freezes_dynamic_handler_for_step() {
         let dir = TempDir::new().unwrap();
         let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "tool-router-snapshot".into()).unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "tool-router-snapshot".into())
+                .await
+                .unwrap(),
+        );
         let entry = || types::ToolEntry {
             name: "router_snapshot_probe".into(),
             toolset: "core".into(),

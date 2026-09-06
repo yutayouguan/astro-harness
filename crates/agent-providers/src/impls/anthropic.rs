@@ -1,4 +1,4 @@
-//! Anthropic Messages API — 原生 CompletionModel 实现。
+//! Anthropic Messages API — 非 Agent Chat 兼容模型实现。
 //!
 //! 消息格式、SSE 事件、认证方式均与 OpenAI 不同，不走 compat 层。
 
@@ -8,9 +8,9 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+    Capabilities, Capable, ChatCompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 const ANTHROPIC_VERSION: &str = "2024-10-22";
 const ANTHROPIC_BETA: &str = "prompt-caching-2024-07-31,pdfs-2024-09-25,token-counting-2024-11-01,interleaved-thinking-2025-05-14";
@@ -82,15 +82,16 @@ impl FromClient<Anthropic> for AnthropicCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for AnthropicCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for AnthropicCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         if self.api_key.is_empty() {
             return Err(anyhow!("缺少 Anthropic API Key"));
         }
         let base = self.base_url.trim_end_matches('/').trim_end_matches("/v1");
         let url = format!("{base}/v1/messages");
 
-        let (system, api_messages) = to_anthropic_messages(&request.messages);
+        let messages = request.input_with_instructions();
+        let (system, api_messages) = to_anthropic_messages(&messages);
 
         let model = if request.model.is_empty() {
             &self.model
@@ -112,7 +113,7 @@ impl CompletionModel for AnthropicCompletionModel {
             body["system"] = system;
         }
 
-        // Extended Thinking
+        // 扩展推理
         if let Some(ref tc) = request.thinking {
             if tc.enabled {
                 let raw_budget = match tc.effort.trim() {
@@ -129,19 +130,30 @@ impl CompletionModel for AnthropicCompletionModel {
             }
         }
 
-        // Tools
+        // 工具定义
         if !request.tools.is_empty() {
-            let tools: Vec<Value> = request.tools.iter().map(|t| {
-                json!({"name": t.name, "description": t.description, "input_schema": t.parameters})
-            }).collect();
-            body["tools"] = Value::Array(tools);
+            let tools: Vec<Value> = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.parameters,
+                    })
+                })
+                .collect();
+            if !tools.is_empty() {
+                body["tools"] = Value::Array(tools);
+            }
         }
 
         if let Some(tc) = request.additional_params.get("tool_choice") {
             body["tool_choice"] = tc.clone();
         }
 
-        // additional_params merge
+        // 额外参数合并
         if let Some(extra) = request.additional_params.as_object() {
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
@@ -149,6 +161,11 @@ impl CompletionModel for AnthropicCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_anthropic(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let auth = Anthropic.auth_headers(&self.api_key);
         let response = self
@@ -169,15 +186,17 @@ impl CompletionModel for AnthropicCompletionModel {
     }
 }
 
-// ─── Message Conversion ──────────────────────────────────
+// ─── 消息转换 ──────────────────────────────────
 
 /// 公开供 token_count 等旧模块调用。
-pub fn to_anthropic_messages_public(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
+pub fn to_anthropic_messages_public(
+    messages: &[crate::types::ChatCompletionMessage],
+) -> (Value, Vec<Value>) {
     to_anthropic_messages(messages)
 }
 
-fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Value>) {
-    use crate::types::message::*;
+fn to_anthropic_messages(messages: &[crate::types::ChatCompletionMessage]) -> (Value, Vec<Value>) {
+    use crate::types::request_content::*;
     let mut system = String::new();
     let mut api_msgs = Vec::new();
     let mut pending_tool_results: Vec<Value> = Vec::new();
@@ -191,13 +210,15 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
 
     for m in messages {
         match m {
-            Message::System { content } => {
+            // Anthropic 只有一个顶层 system 通道；内部的 developer 角色一并降级到此通道。
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
                 if !system.is_empty() {
-                    system.push('\n');
+                    system.push_str("\n\n");
                 }
                 system.push_str(content);
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 is_error,
@@ -209,7 +230,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                 }
                 pending_tool_results.push(block);
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 flush(&mut pending_tool_results, &mut api_msgs);
                 let mut blocks = Vec::new();
                 for c in content {
@@ -242,7 +263,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
                 }
                 api_msgs.push(json!({"role": "assistant", "content": blocks}));
             }
-            Message::User { content } => {
+            ChatCompletionMessage::User { content } => {
                 flush(&mut pending_tool_results, &mut api_msgs);
                 let blocks = anthropic_user_content(content);
                 api_msgs.push(json!({"role": "user", "content": blocks}));
@@ -251,7 +272,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
     }
     flush(&mut pending_tool_results, &mut api_msgs);
 
-    // prompt caching on system + last user message
+    // Prompt 缓存：system 消息 + 最后一条 user 消息
     let system_value = if system.is_empty() {
         Value::Null
     } else {
@@ -270,7 +291,7 @@ fn to_anthropic_messages(messages: &[crate::types::Message]) -> (Value, Vec<Valu
 }
 
 fn anthropic_user_content(content: &[crate::types::UserContent]) -> Value {
-    use crate::types::message::UserContent;
+    use crate::types::request_content::UserContent;
     if content.len() == 1 {
         if let UserContent::Text { text } = &content[0] {
             return json!(text);
@@ -333,6 +354,7 @@ fn extract_anthropic_delta(data: &str) -> Option<crate::types::StreamChunk> {
                         .and_then(|s| s.as_str())
                         .unwrap_or("")
                         .to_string(),
+                    signature: None,
                 }),
                 "thinking" => {
                     let sig = block
@@ -433,6 +455,10 @@ fn parse_anthropic_usage(u: &Value) -> Option<crate::types::stream::Usage> {
         cache_write_tokens: cache_write,
         reasoning_tokens: 0,
         request_count: 1,
+        reported_total_tokens: None,
+        cache_read_reported: u.get("cache_read_input_tokens").is_some(),
+        cache_write_reported: u.get("cache_creation_input_tokens").is_some(),
+        reasoning_reported: false,
     })
 }
 
@@ -478,20 +504,27 @@ mod tests {
     #[test]
     fn anthropic_has_chat() {
         let client = ProviderClient::new("test-key", Anthropic);
-        let _model = client.completion_model("claude-opus-4-8");
+        let _model = client.chat_completion_model("claude-opus-4-8");
     }
 
     #[test]
     fn system_with_cache_control() {
-        let msgs = vec![crate::types::Message::system("You are helpful.")];
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::system("You are helpful."),
+            crate::types::ChatCompletionMessage::developer("Follow project policy."),
+        ];
         let (sys, _) = to_anthropic_messages(&msgs);
         let blocks = sys.as_array().unwrap();
         assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(
+            blocks[0]["text"],
+            "You are helpful.\n\nFollow project policy."
+        );
     }
 
     #[test]
     fn thinking_block_in_assistant() {
-        let msgs = vec![crate::types::Message::assistant(vec![
+        let msgs = vec![crate::types::ChatCompletionMessage::assistant(vec![
             crate::types::AssistantContent::Thinking {
                 text: "hmm".into(),
                 signature: Some("sig".into()),
@@ -503,6 +536,36 @@ mod tests {
         assert_eq!(content[0]["type"], "thinking");
         assert_eq!(content[0]["signature"], "sig");
         assert_eq!(content[1]["type"], "text");
+    }
+
+    #[test]
+    fn mixed_text_tool_call_and_result_keep_anthropic_pairing() {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::assistant(vec![
+                AssistantContent::Text {
+                    text: "Searching now.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_1".into(),
+                    name: "search".into(),
+                    arguments: json!({"q": "rust"}),
+                    signature: None,
+                }),
+            ]),
+            crate::types::ChatCompletionMessage::tool_result("call_1", "done", false),
+        ];
+
+        let (_, api) = to_anthropic_messages(&msgs);
+        assert_eq!(api.len(), 2);
+        assert_eq!(api[0]["role"], "assistant");
+        assert_eq!(api[0]["content"][0]["type"], "text");
+        assert_eq!(api[0]["content"][1]["type"], "tool_use");
+        assert_eq!(api[0]["content"][1]["id"], "call_1");
+        assert_eq!(api[1]["role"], "user");
+        assert_eq!(api[1]["content"][0]["type"], "tool_result");
+        assert_eq!(api[1]["content"][0]["tool_use_id"], "call_1");
     }
 
     #[test]

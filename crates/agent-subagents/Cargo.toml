@@ -5,6 +5,7 @@ edition = "2021"
 description = "Codex-style first-class subagent threads, custom agent configuration, and lifecycle control"
 
 [dependencies]
+agent-protocol = { path = "../agent-protocol" }
 agent-config = { path = "../agent-config" }
 anyhow = { workspace = true }
 types = { path = "../agent-types" }
@@ -15,7 +16,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 chrono = { version = "0.4", features = ["clock", "serde"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
+agent-db = { path = "../agent-db" }
 toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 

@@ -80,10 +80,14 @@ regex 匹配任意嵌套深度，优于按 writable root 逐个生成 subpath de
 - **网络隔离**: 代理环境变量注入 + 离线标记（NPM/Cargo/Pip/Git SSH）
 - `assign_process_to_job()` 将子进程绑定到 Job Object
 
-### v3 计划
+### v3 已实现
+
+- **Restricted Token**: `CreateRestrictedToken` + `WRITE_RESTRICTED | DISABLE_MAX_PRIVILEGE | LUA_TOKEN`
+- **Capability SID**: `generate_capability_sid()` 生成 `S-1-5-21-{random}` 合成标识符
+
+### v4 计划
 
 - **WFP 网络过滤**: Windows Filtering Platform 端口级阻塞（ICMP/DNS/SMB）
-- **Restricted Token**: `CreateRestrictedToken` + capability SIDs + `WRITE_RESTRICTED`
 - **私有桌面隔离**: `CreateDesktopW` 防窗口消息攻击
 
 ## 否认检测
@@ -113,5 +117,5 @@ ToolOrchestrator::run
 |------|------|------|
 | A | macOS 参数化路径 + regex 保护 + .codex | ✓ 已实现 |
 | B | Linux Bubblewrap 后端 | ✓ 已实现 |
-| C | Windows Job Object + ACL v2 | ✓ 已实现（Job Object + ACL + 离线标记） |
+| C | Windows Job Object + ACL + Restricted Token v3 | ✓ 已实现 |
 | D | 设计文档 | ✓ 本文档 |

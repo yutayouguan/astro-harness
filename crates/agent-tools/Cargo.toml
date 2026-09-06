@@ -18,7 +18,9 @@ skills = { path = "../agent-skills" }
 artifacts = { path = "../agent-artifacts" }
 a2ui = { path = "../agent-a2ui" }
 hooks = { path = "../agent-hooks" }
+workflow = { path = "../agent-workflow" }
 tokio = { workspace = true, features = ["process", "time", "rt", "macros"] }
+tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }
@@ -33,6 +35,8 @@ urlencoding = "2"
 regex = "1"
 futures = "0.3"
 bm25 = "2"
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake"] }
+portable-pty = "0.9"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

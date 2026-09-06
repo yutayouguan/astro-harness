@@ -1,4 +1,10 @@
-import { TextField, NumberField, SelectField, cfgStr, cfgNum } from "./ConfigField";
+import {
+  TextField,
+  NumberField,
+  SelectField,
+  cfgStr,
+  cfgNum,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -15,7 +21,11 @@ const STYLE_OPTIONS = [
   { value: "headline", label: "一句话标题" },
 ];
 
-export default function SummarizationConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function SummarizationConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

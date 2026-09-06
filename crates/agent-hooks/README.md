@@ -1,61 +1,58 @@
 # hooks
 
-Astro 三总线 Hook 体系：Plugin（进程内同步回调）、Gateway（外部清单文件发现）、Shell（配置驱动的异步 shell 命令），统一通过 `HookRuntime` 聚合调度。
+Astro 的 typed lifecycle hook runtime。它聚合四类执行面：进程内 Plugin、配置驱动的 Command/MCP handler、Gateway manifest 和 legacy Shell observer。
 
-## 核心职责
+## 执行面
 
-- **Plugin Bus** -- 进程内同步钩子总线，支持注册回调、按事件名触发，返回 `HookOutcome`（Continue / Block / Skip / Modify / Rewrite 等）可拦截或变更 Agent 行为
-- **Gateway Registry** -- 基于文件系统发现 `hooks/{name}/HOOK.yaml` 清单，按事件订阅外部 hook handler，支持日志 fallback 注册
-- **Shell Runner** -- 从 `AstroConfig.hooks` 配置映射加载，按事件名异步执行 shell 命令
-- **统一调度** -- `HookRuntime::dispatch()` 一次投递同时触达三套 transport，Plugin 决定流程走向，Gateway 和 Shell 并行通知
-- **UI 时间线** -- 通过 `UiTimelineSlot` 在 Plugin Bus 上安装 UI 录制回调，每轮 chat 热替换 sender
+| 执行面 | 作用 | 是否影响控制流 |
+| --- | --- | --- |
+| `PluginHookBus` | 进程内同步扩展 | 是，按事件专属 outcome 聚合 |
+| `CommandHookRunner` | `hooks.json` / `config.toml` 的 command 或 `mcp_tool` | 是，仅限支持的 canonical 事件和结果字段 |
+| `GatewayHookRegistry` | `HOOK.yaml` 文件发现 | 当前为观察/通知 |
+| `ShellHookRunner` | `config.yaml` 旧式命令映射 | 异步观察，不参与决策 |
 
-## 模块结构
+`HookRuntime` 是聚合入口。`with_mcp_executor()` 在 Session 边界绑定 MCP 调用能力，并创建 session-owned 异步任务域；`shutdown()` 取消并排空该 session 的异步 command hooks。
 
-| 文件 | 职责 |
-|------|------|
-| `lib.rs` | `HookRuntime` 聚合句柄（plugin + gateway + shell + ui_slot）、`bootstrap_from_root()`、`dispatch()` 统一投递、集成测试 |
-| `event.rs` | `HookEvent` 类型化枚举（PreToolUse / PostToolUse / PreLlmCall / SessionStart / Stop 等 20+ 事件） |
-| `names.rs` | canonical 事件名常量（`PRE_TOOL_USE` / `POST_LLM_CALL` 等）、`is_mutating_hook()` 判断可影响流程的钩子 |
-| `outcome.rs` | `HookOutcome` 枚举（Continue / Block / Skip / Modify / Rewrite / ReplaceText / InjectContext / KeepGoing）、`HookInput` / `HookPayload` 投递载荷 |
-| `plugin.rs` | `PluginHookBus` -- 进程内同步回调总线，按事件名注册/触发/移除 handler |
-| `gateway.rs` | `GatewayHookRegistry` -- 文件系统清单发现（`HOOK.yaml`）、`DiscoveredHook` / `HookManifest`、handler 注册与触发 |
-| `shell.rs` | `ShellHookRunner` -- 从 HashMap 配置构建、按事件名排队异步 shell 命令、支持 schedule 查询 |
-| `config.rs` | `AstroConfig` YAML 加载、`default_astro_root()` 数据根路径解析 |
-| `context.rs` | `PluginContext` -- 持有 plugin bus + gateway 引用的便捷上下文 |
-| `ui.rs` | `UiTimelineSlot` / `UiTimelineGeneration` / `UiHookEvent` -- UI 事件录制与时间线管理 |
+## Canonical command 事件
 
-## 核心类型与 API
+Command/MCP handler 只接受以下精确名称：
 
-- `HookRuntime` -- 三套 transport 的聚合句柄，`new()` / `bootstrap_from_root()` / `dispatch()` / `fire_plugin()` / `fire_gateway()`
-- `PluginHookBus` -- 进程内同步回调总线，`register(event, callback)` / `fire(event, payload)` / `remove(event)`
-- `GatewayHookRegistry` -- 文件发现型 hook 注册表，`discover(root)` / `register_handler(name, callback)` / `fire(event, payload)`
-- `ShellHookRunner` -- 配置驱动的 shell 命令运行器，`from_map(config)` / `fire_async(event, payload)` / `scheduled()` / `has_event(name)`
-- `HookEvent` -- 20+ 种事件的类型化枚举，`as_str()` 返回 canonical 名称
-- `HookOutcome` -- 钩子返回值枚举，决定流程走向：Continue（放行）、Block（阻止）、Skip（跳过）、Modify / Rewrite（变更内容）
-- `HookPayload` -- 投递载荷，携带 prompt / detail / tool_name 等上下文
-- `UiTimelineSlot` -- UI 录制槽，每轮 chat 热替换 sender，`install()` 注册到 plugin bus
+`PreToolUse`、`PermissionRequest`、`PostToolUse`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`Stop`、`Interrupt`。
 
-## 设计要点
+大小写或旧 snake_case 名称不会自动归一化。Plugin bus 另有 LLM/API/transform/gateway 等 Astro 内部事件，完整定义见 `src/event.rs`。
 
-- **Canonical 事件名** -- 所有 transport 统一使用 PascalCase canonical 名（如 `PreToolUse`），不接受 legacy snake_case（如 `pre_tool_call`）
-- **可变与观察** -- `is_mutating_hook()` 区分可影响流程的钩子（PreToolUse / Stop / Transform* 等）与纯观察型钩子（PostToolUse / SessionStart 等）
-- **投递顺序** -- Plugin 先于 Gateway 先于 Shell；Plugin 的 Block/Skip 不阻止 Gateway 和 Shell 执行（三路并行通知）
-- **热替换** -- UI 时间线 sender 每轮 chat 热替换，不中断已注册的 plugin handler
+## 关键模块
 
-## Crate 关系
+| 路径 | 职责 |
+| --- | --- |
+| `src/lib.rs` | `HookRuntime` 聚合、分发和 shutdown |
+| `src/event.rs` / `names.rs` | canonical 事件 |
+| `src/lifecycle_events.rs` | session、prompt、compact、stop、interrupt typed contracts |
+| `src/tool_events.rs` | pre/permission/post tool typed contracts |
+| `src/command.rs` | command/MCP 配置、信任、执行、输出校验、异步所有权 |
+| `src/mcp.rs` | session-bound `HookMcpExecutor` |
+| `src/run.rs` | `HookRunRecord`、生命周期 observer 和 recent runs |
+| `src/plugin.rs` | 进程内 plugin bus |
+| `src/gateway.rs` | manifest discovery |
+| `src/shell.rs` | legacy shell observer |
+| `src/ui.rs` | UI timeline slot |
 
-| 方向 | crate |
-|------|-------|
-| 被依赖 | `agent`（核心运行时在每轮 LLM 调用、工具执行前后触发 hook）、`tools`（工具审批逻辑）、`server`（gRPC 服务启动时 bootstrap） |
-| 无内部依赖 | 本 crate 不依赖 workspace 内其他 crate |
+## 不变量
 
-## 测试
+1. 生命周期入口使用 typed request/outcome，不跨事件复用一套宽松 JSON 语义。
+2. command 配置 `deny_unknown_fields`；输出只接受对应事件允许的字段，非法输出记录错误并 fail-open。
+3. `SessionEnd` 和 `Interrupt` 超时限制为 1–3 秒；`SessionEnd` 强制同步。
+4. command 输出上限 1 MiB，环境值上限 8 KiB；敏感环境变量不会继承。
+5. 每个 session 最多并发 8 个异步 hook；runtime shutdown 时取消并排空。
+6. project hooks 只在项目已信任时加载；内容 hash 改变会使已批准状态失效。
+7. `HookStarted` / `HookCompleted` 用于 live UI，不写入 durable rollout。
+8. 当前没有 executor-scoped plugin/request metadata；作用域由 process plugin bus、session runtime、turn/step request 明确承载。
+
+## 文档与验证
+
+- [运行契约](../../docs/hooks.md)
+- [详细设计](../../docs/04-详细设计阶段/01-核心引擎层/08-Hooks系统详细设计.md)
 
 ```bash
-# 全部测试（含 lib.rs 中的集成测试）
 cargo test -p hooks
-
-# 单个测试
-cargo test -p hooks dispatch_reaches_all_transports_with_canonical_name -- --nocapture
 ```

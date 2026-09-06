@@ -7,10 +7,11 @@ import {
 } from "./composerResolve.ts";
 
 test("peels leading skill slashes and keeps the rest", () => {
-  const r = peelLeadingSkillSlashes(
-    "/alpha /beta fix issue #1",
-    ["alpha", "beta", "gamma"],
-  );
+  const r = peelLeadingSkillSlashes("/alpha /beta fix issue #1", [
+    "alpha",
+    "beta",
+    "gamma",
+  ]);
   assert.deepEqual(r.skills, ["alpha", "beta"]);
   assert.equal(r.rest, "fix issue #1");
 });

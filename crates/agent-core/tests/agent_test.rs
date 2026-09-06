@@ -1,8 +1,8 @@
 //! Agent 主循环（`AgentLoop`）回合与工具调用测试。
 
 use agent::runtime::*;
+use agent_protocol::ResponseItem;
 use tempfile::TempDir;
-use types::message::*;
 
 fn test_config(dir: &TempDir) -> AgentConfig {
     AgentConfig::with_defaults(dir.path().to_path_buf())
@@ -11,7 +11,7 @@ fn test_config(dir: &TempDir) -> AgentConfig {
 #[tokio::test]
 async fn test_agent_loop_creates_task_id() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let task_id = agent.new_task_id();
     assert!(!task_id.is_empty());
     assert_eq!(task_id.len(), 36);
@@ -22,7 +22,7 @@ async fn test_turn_budget_enforcement() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.max_turns = 2;
-    let agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).await.unwrap();
     assert!(!agent.is_budget_exhausted().await);
     agent.increment_turn().await;
     agent.increment_turn().await;
@@ -32,12 +32,15 @@ async fn test_turn_budget_enforcement() {
 #[tokio::test]
 async fn test_message_alternation_validation() {
     let messages = vec![
-        Message::system("You are an assistant"),
-        Message::user("Hello"),
-        Message::assistant("Hi there!"),
+        ResponseItem::developer_text("You are an assistant"),
+        ResponseItem::user_text("Hello"),
+        ResponseItem::assistant_text("Hi there!"),
     ];
     assert!(validate_message_order(&messages));
-    let invalid = vec![Message::user("First"), Message::user("Second")];
+    let invalid = vec![
+        ResponseItem::user_text("First"),
+        ResponseItem::user_text("Second"),
+    ];
     assert!(!validate_message_order(&invalid));
 }
 
@@ -56,7 +59,7 @@ async fn test_prompt_builder_layers() {
 #[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
 
     let wrote = agent
         .handle_tool_call_async(
@@ -72,7 +75,7 @@ async fn test_agent_loop_memory_injection() {
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
     // 工具写入只改 live；新 AgentLoop（新 session）open/reload 会把盘上内容固化进 snapshot
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         TurnResult::Continue { system_prompt, .. } => {
@@ -84,11 +87,11 @@ async fn test_agent_loop_memory_injection() {
 }
 
 #[tokio::test]
-async fn test_agent_loop_fts_recall_after_long_session() {
+async fn test_agent_loop_fts_does_not_duplicate_visible_history() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.recent_turns = 2;
-    let agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).await.unwrap();
 
     agent.start_or_steer_turn("消息一", "task-1").await.unwrap();
     agent.record_assistant_message("回复一").await.unwrap();
@@ -102,10 +105,13 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 
     match result {
         TurnResult::Continue { system_prompt, .. } => {
-            assert!(
-                system_prompt.contains("Aurora")
-                    || agent.recalled_context().await.contains("Aurora")
-            );
+            assert!(!system_prompt.contains("[Recalled Context]"));
+            assert!(agent.recalled_context().await.is_empty());
+            assert!(agent
+                .provider_response_history()
+                .await
+                .iter()
+                .any(|message| message.content_str().contains("Aurora")));
         }
         _ => panic!("expected Continue"),
     }
@@ -114,7 +120,7 @@ async fn test_agent_loop_fts_recall_after_long_session() {
 #[tokio::test]
 async fn test_memory_tools_registered() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let registry = agent.tool_registry().await;
     let names: Vec<_> = registry
         .available_tools()
@@ -131,15 +137,14 @@ async fn test_memory_tools_registered() {
 #[tokio::test]
 async fn test_set_model_agno_style_entry() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let mut agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     agent.set_chat_credentials("openai", "gpt-old", "sk-test", "https://api.openai.com/v1");
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: "openai".into(),
         backend_id: "openai".into(),
         model: "gpt-old".into(),
         api_key: "sk-test".into(),
         base_url: "https://api.openai.com/v1".into(),
-        api_mode: String::new(),
     }]);
 
     let spec = types::ModelSpec::parse("claude:claude-sonnet-4-5")
@@ -150,7 +155,7 @@ async fn test_set_model_agno_style_entry() {
     assert_eq!(agent.chat_provider(), "claude");
     assert_eq!(agent.chat_model(), "claude-sonnet-4-5");
     assert_eq!(agent.temperature(), 0.2);
-    let primary = &agent.chat_targets()[0];
+    let primary = &agent.model_targets()[0];
     assert_eq!(primary.backend_id, "claude");
     assert_eq!(primary.model, "claude-sonnet-4-5");
     assert_eq!(primary.api_key, "sk-test");
@@ -171,14 +176,13 @@ async fn test_set_model_agno_style_entry() {
 #[tokio::test]
 async fn test_set_fallback_models_keeps_primary() {
     let dir = TempDir::new().unwrap();
-    let mut agent = AgentLoop::new(test_config(&dir)).unwrap();
-    agent.set_chat_targets(vec![types::ChatTarget {
+    let mut agent = AgentLoop::new(test_config(&dir)).await.unwrap();
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: "claude".into(),
         backend_id: "claude".into(),
         model: "opus".into(),
         api_key: "sk-claude".into(),
         base_url: "https://api.anthropic.com".into(),
-        api_mode: String::new(),
     }]);
 
     agent.set_fallback_models(&[
@@ -189,7 +193,7 @@ async fn test_set_fallback_models_keeps_primary() {
         types::ModelSpec::parse("zhipu:glm").unwrap(),
     ]);
 
-    let chain = agent.chat_targets();
+    let chain = agent.model_targets();
     assert_eq!(chain.len(), 4); // primary + 3 fallbacks
     assert_eq!(chain[0].backend_id, "claude");
     assert_eq!(chain[0].model, "opus");
@@ -212,7 +216,7 @@ async fn test_set_fallback_models_keeps_primary() {
 #[tokio::test]
 async fn run_turn_clears_prior_cancel_signal() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     agent.cancel_signal().cancel();
     let result = agent
         .start_or_steer_turn("重试", "task-retry")
@@ -225,7 +229,7 @@ async fn run_turn_clears_prior_cancel_signal() {
 #[tokio::test]
 async fn system_prompt_includes_interaction_mode_guidance() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
 
     agent
         .set_interaction_mode(tools::InteractionMode::Plan)
@@ -235,24 +239,62 @@ async fn system_prompt_includes_interaction_mode_guidance() {
         plan_prompt.contains("Interaction mode: Plan") && plan_prompt.contains("交互模式：Plan"),
         "Plan guidance missing from system prompt:\n{plan_prompt}"
     );
-    // mode 应出现在 TOOL_GUIDANCE 之前（预算截断时优先保留）
+    // 固定工具规则属于稳定基础指令；动态 mode 保持 developer 角色。
     let mode_pos = plan_prompt.find("Interaction mode: Plan").expect("mode");
     let tool_pos = plan_prompt.find("# 工具使用").expect("tool guidance");
     assert!(
-        mode_pos < tool_pos,
-        "mode guidance should precede TOOL_GUIDANCE"
+        tool_pos < mode_pos,
+        "TOOL_GUIDANCE should stay in stable base instructions"
     );
 
     agent
-        .set_interaction_mode(tools::InteractionMode::Ask)
+        .set_interaction_mode(tools::InteractionMode::Agent)
         .await;
-    let ask_prompt = agent.build_system_prompt().await;
+    let agent_prompt = agent.build_system_prompt().await;
     assert!(
-        ask_prompt.contains("Interaction mode: Ask") && ask_prompt.contains("交互模式：Ask"),
-        "Ask guidance missing from system prompt:\n{ask_prompt}"
+        agent_prompt.contains("Interaction mode: Agent")
+            && agent_prompt.contains("交互模式：Agent"),
+        "Agent guidance missing from system prompt:\n{agent_prompt}"
     );
 
     // 估算层与真实组装共用同源 guidance+timestamp
     let (system_chars, _, _, _) = agent.system_prompt_layer_chars().await;
     assert!(system_chars > 0);
+}
+
+#[tokio::test]
+async fn prompt_contract_separates_base_developer_and_user_context() {
+    let dir = TempDir::new().unwrap();
+    let mut config = test_config(&dir);
+    config.static_override = Some(agent::prompt::context::StaticContext {
+        soul: "STABLE_SOUL".into(),
+        identity: "STABLE_IDENTITY".into(),
+        agent_md: "PROJECT_INSTRUCTIONS".into(),
+        tools_md: String::new(),
+        memory: "MEMORY_CONTEXT".into(),
+        user_profile: "USER_CONTEXT".into(),
+        daily: "DAILY_CONTEXT".into(),
+    });
+    let agent = AgentLoop::new(config).await.unwrap();
+    std::fs::write(
+        agent.workspace_dir().join("TOOLS.md"),
+        "LOCAL_TOOL_INSTRUCTIONS",
+    )
+    .unwrap();
+
+    let prompt = agent.build_prompt_contract().await;
+
+    assert!(prompt.base_instructions.contains("STABLE_SOUL"));
+    assert!(prompt.base_instructions.contains("STABLE_IDENTITY"));
+    assert!(!prompt.base_instructions.contains("PROJECT_INSTRUCTIONS"));
+    assert!(!prompt.base_instructions.contains("MEMORY_CONTEXT"));
+    assert_eq!(prompt.context.len(), 2);
+    assert_eq!(prompt.context[0].role(), Some("developer"));
+    assert!(prompt.base_instructions.contains("# 工具使用"));
+    assert!(!prompt.context[0].text_content().contains("# 工具使用"));
+    assert_eq!(prompt.context[1].role(), Some("user"));
+    assert!(prompt.context[1]
+        .text_content()
+        .contains("LOCAL_TOOL_INSTRUCTIONS"));
+    assert!(prompt.context[1].text_content().contains("MEMORY_CONTEXT"));
 }

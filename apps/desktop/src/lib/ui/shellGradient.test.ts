@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  DEFAULT_SHELL_COLOR_PREFS,
   DEFAULT_SHELL_GRADIENT,
   effectiveUnifiedTone,
   isNearBlack,
@@ -13,6 +14,10 @@ import {
   underlayFromGradient,
   unifiedSurfaceMode,
 } from "./shellGradient.ts";
+
+test("defaults new installations to the dynamic color style", () => {
+  assert.equal(DEFAULT_SHELL_COLOR_PREFS.style, "dynamic");
+});
 
 test("detects near white and near black", () => {
   assert.equal(isNearWhite("#ffffff"), true);

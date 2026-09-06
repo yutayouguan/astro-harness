@@ -31,6 +31,7 @@ GET https://openrouter.ai/api/v1/models/count
 | `image` | 图像生成模型 |
 | `audio` | 音频输出模型 |
 | `embeddings` | 嵌入模型 |
+| `rerank` | 重排模型 |
 | `all` | 全部模型 |
 
 ```bash
@@ -38,6 +39,10 @@ curl "https://openrouter.ai/api/v1/models?output_modalities=image"
 curl "https://openrouter.ai/api/v1/models?output_modalities=text,image"
 curl "https://openrouter.ai/api/v1/models?output_modalities=all"
 ```
+
+Desktop 模型市场使用 `all` 结果，并严格按 `architecture.output_modalities`
+将条目分为生成、嵌入和重排三类；不使用模型名称猜测类型。嵌入模型可写入
+OpenRouter 的独立 `embedding_model` 配置，重排模型在运行时执行链接入前仅作目录展示。
 
 ### `supported_parameters` — 按能力过滤
 
@@ -266,7 +271,8 @@ curl "https://openrouter.ai/api/v1/models?offset=0&limit=500"
 | 音频输入 | Gemini 3.5/3.6 Flash、Inkling、Meta Muse Spark |
 | 图像输出 | Gemini 3 Pro/3.1 Flash Image（目前唯一支持） |
 | 文件输入 | Claude 系列、GPT-5.6 系列、Grok、Gemini Flash |
-| 嵌入模型 | 需用 `output_modalities=embeddings` 过滤 |
+| 嵌入模型 | `output_modalities` 包含 `embeddings` |
+| 重排模型 | `output_modalities` 包含 `rerank` |
 
 ---
 

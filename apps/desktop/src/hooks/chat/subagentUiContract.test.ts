@@ -66,3 +66,33 @@ test("hierarchy styling uses depth and honors reduced motion", () => {
   assert.match(css, /var\(--depth/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
+
+test("subagent controls live in the pinned summary instead of the composer", () => {
+  const app = source("../../App.tsx");
+  const chatView = source("../../components/chat/ChatView.tsx");
+  const rightPanel = source("../../components/chat/ChatRightPanel.tsx");
+  const panel = source("../../components/chat/SubagentsPanel.tsx");
+  const css = source("../../styles/features/chat/subagents.css");
+
+  assert.match(app, /useSubagentThreads\(chat\.sessionId\)/);
+  assert.match(app, /header-summary-badge/);
+  assert.match(app, /subagentRoots=\{subagents\.roots\}/);
+  assert.match(
+    app,
+    /subagentRootServiceTier=\{\s*subagents\.state\.rootServiceTier\s*\}/,
+  );
+  assert.doesNotMatch(
+    chatView,
+    /SubagentActivityBar|SubagentsPanel|useSubagentThreads/,
+  );
+  assert.match(
+    rightPanel,
+    /type ChatRightTab = "summary" \| "context" \| "branches"/,
+  );
+  assert.match(rightPanel, /<ChatAgentInfo\s+variant="summary"/);
+  assert.match(rightPanel, /<SubagentActivityBar[\s\S]+?showEmpty/);
+  assert.match(rightPanel, /rootServiceTier=\{subagentRootServiceTier\}/);
+  assert.match(rightPanel, /<SubagentsPanel\s+embedded/);
+  assert.match(panel, /embedded\?: boolean/);
+  assert.match(css, /\.subagents-panel\.is-embedded/);
+});

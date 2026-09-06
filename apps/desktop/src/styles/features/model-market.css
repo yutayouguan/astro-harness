@@ -1,6 +1,27 @@
 /* ── Model Market ────────────────────────────────── */
 
 .model-market {
+  --model-market-switcher-border: color-mix(
+    in srgb,
+    var(--glass-edge) 72%,
+    transparent
+  );
+  --model-market-switcher-background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 78%,
+    transparent
+  );
+  --model-market-switcher-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  --model-market-card-border: var(--settings-panel-border, var(--glass-edge));
+  --model-market-card-background: var(
+    --settings-panel-background,
+    var(--glass-fill)
+  );
+  --model-market-card-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
   flex: 1;
   min-height: 0;
   display: flex;
@@ -8,8 +29,6 @@
   gap: 0;
   overflow: hidden;
   padding: 4px 2px 0;
-  --tone: var(--tone-indigo);
-  --tone-soft: var(--tone-indigo-soft);
 }
 
 .model-market-main {
@@ -20,7 +39,6 @@
   gap: 12px;
   overflow: hidden;
 }
-
 
 /* ── Toolbar: search + sort + refresh ────────────── */
 
@@ -40,10 +58,18 @@
   padding: 8px 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
+    transparent
+  );
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .model-market-search:focus-within {
@@ -69,7 +95,9 @@
   color: var(--ink-mute);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .model-market-search-clear:hover {
@@ -97,9 +125,15 @@
   padding: 3px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
+    transparent
+  );
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
   flex-shrink: 0;
 }
 
@@ -114,7 +148,9 @@
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.16s ease, background 0.16s ease;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
 }
 
 .model-market-sort-btn:hover {
@@ -144,9 +180,15 @@
   padding: 3px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
+    transparent
+  );
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.1));
   flex-shrink: 0;
 }
 
@@ -161,7 +203,9 @@
   cursor: pointer;
   color: var(--ink-mute);
   background: transparent;
-  transition: color 0.16s ease, background 0.16s ease;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
 }
 
 .model-market-view-btn:hover {
@@ -177,7 +221,11 @@
 
 html[data-theme="dark"] .model-market-view-btn.active {
   color: color-mix(in srgb, #fff 14%, var(--tone));
-  background: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
+  background: color-mix(
+    in srgb,
+    var(--tone-soft) 55%,
+    rgba(255, 255, 255, 0.06)
+  );
 }
 
 .model-market-refresh {
@@ -188,11 +236,17 @@ html[data-theme="dark"] .model-market-view-btn.active {
   height: 36px;
   border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
+    transparent
+  );
   color: var(--ink-mute);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.16s ease, background 0.16s ease;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
 }
 
 .model-market-refresh:hover {
@@ -205,7 +259,9 @@ html[data-theme="dark"] .model-market-view-btn.active {
 }
 
 @keyframes mm-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Scroll-reveal animation ─────────────────────── */
@@ -242,6 +298,52 @@ html[data-theme="dark"] .model-market-view-btn.active {
 
 /* ── Filters row ─────────────────────────────────── */
 
+.model-market-type-tabs {
+  display: flex;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 72%,
+    transparent
+  );
+}
+
+.model-market-type-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-mute);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.model-market-type-btn > span {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-size: 10px;
+  text-align: center;
+}
+
+.model-market-type-btn.active {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 24%, transparent);
+}
+
 .model-market-filters {
   display: flex;
   align-items: center;
@@ -261,7 +363,11 @@ html[data-theme="dark"] .model-market-view-btn.active {
   font-weight: 600;
   cursor: pointer;
   color: var(--ink-mute);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.35)) 72%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--glass-panel, rgba(255, 255, 255, 0.35)) 72%,
+    transparent
+  );
   transition: all 0.16s ease;
 }
 
@@ -429,11 +535,18 @@ html[data-theme="dark"] .model-market-view-btn.active {
   gap: 8px;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
-  background: color-mix(in srgb, var(--glass-panel, rgba(255, 255, 255, 0.45)) 92%, transparent);
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  border: 1px solid var(--model-market-card-border);
+  background: var(--model-market-card-background);
+  backdrop-filter: var(--model-market-card-filter);
+  -webkit-backdrop-filter: var(--model-market-card-filter);
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
   text-align: left;
   width: 100%;
 }
@@ -545,12 +658,12 @@ html[data-theme="dark"] .model-market-view-btn.active {
 
 html[data-theme="dark"] .model-market-sort-btn.active {
   color: color-mix(in srgb, #fff 14%, var(--tone));
-  background: color-mix(in srgb, var(--tone-soft) 55%, rgba(255, 255, 255, 0.06));
+  background: color-mix(
+    in srgb,
+    var(--tone-soft) 55%,
+    rgba(255, 255, 255, 0.06)
+  );
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-}
-
-html[data-theme="dark"] .model-market-card {
-  background: color-mix(in srgb, var(--glass-panel, rgba(30, 30, 40, 0.55)) 92%, transparent);
 }
 
 html[data-theme="dark"] .model-market-filter-btn.active {
@@ -599,7 +712,9 @@ html[data-theme="dark"] .model-market-filter-btn.active {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .mm-detail-item:hover {
@@ -779,7 +894,11 @@ html[data-theme="dark"] .model-market-filter-btn.active {
 .mm-detail-body {
   padding: 10px 14px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--glass-inner, rgba(255,255,255,0.06)) 50%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--glass-inner, rgba(255, 255, 255, 0.06)) 50%,
+    transparent
+  );
   border: 1px solid color-mix(in srgb, var(--glass-edge) 50%, transparent);
   font-size: 13px;
   line-height: 1.65;
@@ -798,7 +917,11 @@ html[data-theme="dark"] .model-market-filter-btn.active {
   gap: 2px;
   padding: 8px 12px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--glass-inner, rgba(255,255,255,0.06)) 50%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--glass-inner, rgba(255, 255, 255, 0.06)) 50%,
+    transparent
+  );
   border: 1px solid color-mix(in srgb, var(--glass-edge) 40%, transparent);
 }
 
@@ -848,6 +971,48 @@ html[data-theme="dark"] .model-market-filter-btn.active {
   border: 1px solid color-mix(in srgb, var(--tone) 20%, transparent);
 }
 
+.mm-runtime-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mm-runtime-copy,
+.mm-runtime-error {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mm-runtime-copy.is-ready {
+  color: var(--success, #22c55e);
+}
+
+.mm-runtime-copy.is-unavailable,
+.mm-runtime-error {
+  color: var(--ink-mute);
+}
+
+.mm-runtime-button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+  border-radius: 8px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mm-runtime-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 html[data-theme="dark"] .mm-detail-item.is-selected {
-  background: color-mix(in srgb, var(--tone) 16%, rgba(255,255,255,0.04));
+  background: color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.04));
 }

@@ -71,6 +71,11 @@ export function buildWorkspaceMenuItems(opts: {
       disabled: none,
     },
     {
+      action: "openInVscode",
+      labelKey: "workspace.menu.openInVscode",
+      disabled: none,
+    },
+    {
       action: "trash",
       labelKey: "workspace.menu.trash",
       disabled: none,

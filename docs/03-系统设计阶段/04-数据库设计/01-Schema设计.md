@@ -2,9 +2,11 @@
 
 > 阶段：系统设计 | 状态：定稿 | 说明：21 表 + 3 虚拟表 + 1 视图 DDL（权威）
 
+> **当前 Harness 基线（2026-08-29）**：本文的“单一 `agent.db`”和表清单是历史方案，不是当前运行时事实源。当前 Harness 使用 rollout 事件源，并由 `{base}/data/` 中的 `state.db`、`subagents-v2.db`、`usage.db`、`artifacts.db`、`knowledge.db`、`cron_v1.db` 等职责数据库形成投影。当前字段与迁移以各 crate schema 和测试为准。
+
 ## 一、总体说明
 
-**DB 架构决策：单一全局 `agent.db`**
+**历史 DB 架构决策：单一全局 `agent.db`**
 
 全部工作区数据存入 `~/.astro/agent.db` 这一个 SQLite 文件，通过 `workspace_id` 外键实现逻辑隔离。不采用"每工作区独立 SQLite"方案，原因：跨工作区聚合查询（成本汇总、全局搜索、Skill 统计）是 P1 需求；独立文件方案需运行时 `ATTACH DATABASE` 拼接，迁移管理复杂度高。知识库向量索引、媒体文件、AI 产物仍物理隔离于各工作区目录。
 
@@ -300,7 +302,7 @@ CREATE TABLE IF NOT EXISTS media_tasks (
     progress_pct INTEGER CHECK(progress_pct BETWEEN 0 AND 100),
     file_paths   TEXT NOT NULL DEFAULT '[]',             -- JSON 数组，本地缓存绝对路径
     error        TEXT,
-    provider     TEXT NOT NULL,                          -- "google" / "minmax"
+    provider     TEXT NOT NULL,                          -- "google" / "minimax"
     model        TEXT NOT NULL,
     created_at   INTEGER NOT NULL DEFAULT (unixepoch('now','subsec')*1000),
     finished_at  INTEGER

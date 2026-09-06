@@ -9,46 +9,46 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Checklist item as an object.
+/// 清单条目（对象形式）。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TodoItemObject {
     pub text: String,
-    /// Whether completed; omitted means incomplete.
+    /// 是否完成；省略表示未完成。
     #[serde(default)]
     pub done: Option<bool>,
 }
 
-/// Checklist item: plain string, or `{ text, done }` object.
+/// 清单条目：纯字符串，或 `{ text, done }` 对象。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum TodoItem {
-    /// Text only; defaults to incomplete.
+    /// 仅文本；默认为未完成。
     Text(String),
-    /// Object with completion state.
+    /// 带完成状态的对象。
     Object(TodoItemObject),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TodoAction {
-    /// Create a new checklist (default).
+    /// 创建新清单（默认）。
     #[default]
     Create,
-    /// Update an existing checklist by plan_id.
+    /// 按 plan_id 更新已有清单。
     Update,
 }
 
-/// Arguments for the `todo` tool.
+/// `todo` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TodoArgs {
-    /// Action: "create" (default) or "update".
+    /// 操作："create"（默认）或 "update"。
     #[serde(default)]
     pub action: TodoAction,
-    /// List title; default `Todo`.
+    /// 列表标题；默认 `Todo`。
     #[serde(default)]
     pub title: Option<String>,
     pub items: Vec<TodoItem>,
-    /// Plan file stem (e.g. "20260722-a1b2c3") for action=update.
+    /// 计划文件名前缀（如 "20260722-a1b2c3"），action=update 时使用。
     #[serde(default)]
     pub plan_id: Option<String>,
 }

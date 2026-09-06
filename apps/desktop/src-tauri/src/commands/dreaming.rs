@@ -11,7 +11,6 @@ use memory::dreaming::{
     DreamAgentReport, DreamJob, DreamMemoryUpdate, DreamRunReport, DreamingState,
 };
 use memory::{list_pending, load_memory_config};
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
@@ -56,8 +55,20 @@ fn active_ui_provider() -> Result<UiProvider, String> {
     let state = providers_commands::get_providers_state()?;
     let id = state
         .active_provider_id
-        .or_else(|| state.providers.first().map(|p| p.id.clone()))
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        .filter(|id| {
+            state
+                .providers
+                .iter()
+                .any(|p| p.id == *id && p.enabled && p.supports_responses_api)
+        })
+        .or_else(|| {
+            state
+                .providers
+                .iter()
+                .find(|p| p.enabled && p.supports_responses_api)
+                .map(|p| p.id.clone())
+        })
+        .ok_or_else(|| "请先配置并启用支持 Responses API 的提供商".to_string())?;
     providers_commands::find_provider(&id)
 }
 
@@ -86,11 +97,7 @@ async fn complete_chat(
         previous_interaction_id: None,
         api_mode: String::new(),
     };
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
-    let mut stream = providers::dispatch::chat_stream(backend_id, messages, vec![], &config)
+    let mut stream = providers::dispatch::agent_responses_prompt(backend_id, system, user, &config)
         .await
         .map_err(|e| format!("入梦调用模型失败: {e}"))?;
     let mut out = String::new();
@@ -246,26 +253,25 @@ pub async fn set_dreaming_enabled_cmd(enabled: bool) -> Result<DreamingStatusDto
     Ok(status_from_state(&base, &state))
 }
 
-/// 取 UI 当前激活（或列表首个）供应商，并展开为 ChatTarget。
-fn active_chat_target() -> Result<types::ChatTarget, String> {
+/// 取 UI 当前激活（或列表首个）供应商，并展开为 ModelTarget。
+fn active_model_target() -> Result<types::ModelTarget, String> {
     let ui = active_ui_provider()?;
     if ui.model.trim().is_empty() {
         return Err("激活提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(types::ChatTarget {
+    Ok(types::ModelTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
-        api_mode: ui.api_mode,
     })
 }
 
 /// 解析入梦辅助路由（preferred + 可选 primary fallback）。
 fn resolve_dreaming_targets() -> Result<AuxiliaryTargets, String> {
-    let primary = active_chat_target()?;
+    let primary = active_model_target()?;
     resolve_auxiliary_targets(memory::AuxiliaryKind::Dreaming, &primary)
 }
 

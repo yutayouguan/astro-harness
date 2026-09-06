@@ -1,25 +1,39 @@
-//! 聊天交互模式（Agent / Plan / Ask）的工具能力档。
+//! 聊天交互模式（Agent / Plan）的工具能力档。
 //!
 //! 交互模式下的工具可见性过滤。
 
 pub use types::InteractionMode;
 
-/// Plan / Ask 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
-/// `memory` 全写，不在此列；`skills` / `file_ops` / `todo` 另有 action 级限制。
+/// Plan 下明确允许的工具名（其余非 MCP 默认拒绝；MCP 默认拒绝）。
+/// `memory` 全写，不在此列；`skills` / `todo` 另有 action 级限制。
 const READONLY_ALLOW: &[&str] = &[
-    "file_ops", // action 级再拦写
     "web_search",
     "web_fetch",
+    "tool_search",
+    "exec",
+    "wait",
+    "browser_open",
+    "browser_snapshot",
+    "browser_scroll",
+    "browser_wait",
+    "browser_screenshot",
+    "browser_tabs",
+    "browser_tab_open",
+    "browser_tab_switch",
+    "browser_tab_close",
+    "browser_back",
+    "browser_forward",
+    "browser_reload",
+    "browser_downloads",
+    "browser_close",
     "context_search",
     "skills", // action 级仅 list/load/view/curate
     "ask_user",
-    "todo", // Ask 模式下硬拦
+    "request_user_input_async",
+    "todo",
     "switch_mode",
     "present",
 ];
-
-/// `file_ops` 只读 operation。
-const FILE_OPS_READ: &[&str] = &["read", "list", "search"];
 
 /// `skills` 只读 / 加载类 action（禁 manage 写盘）。
 const SKILLS_READ: &[&str] = &["list", "load", "view", "curate", "search"];
@@ -30,9 +44,6 @@ pub fn tool_visible_in_mode(mode: InteractionMode, name: &str) -> bool {
         return true;
     }
     if name.starts_with("mcp__") {
-        return false;
-    }
-    if mode == InteractionMode::Ask && name == "todo" {
         return false;
     }
     if name == "memory" || name == "pin_context" {
@@ -63,32 +74,11 @@ pub fn check_tool_call(
             mode.as_str()
         ));
     }
-    if mode == InteractionMode::Ask && name == "todo" {
-        return Err(
-            "[blocked by ask mode] todo writes checklist files. Stay read-only, or switch to Plan/Agent."
-                .into(),
-        );
-    }
     if !READONLY_ALLOW.contains(&name) {
         return Err(format!(
             "[blocked by {} mode] Tool `{name}` is not available. Stay read-only, or call switch_mode(to=\"agent\", …) after the plan is ready.",
             mode.as_str()
         ));
-    }
-    if name == "file_ops" {
-        let op = args
-            .get("operation")
-            .or_else(|| args.get("action"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_ascii_lowercase();
-        if !FILE_OPS_READ.iter().any(|o| *o == op) {
-            return Err(format!(
-                "[blocked by {} mode] file_ops operation `{op}` writes or mutates the workspace. Only read/list/search are allowed. Call switch_mode(to=\"agent\") to execute.",
-                mode.as_str()
-            ));
-        }
     }
     if name == "skills" {
         let action = args
@@ -120,9 +110,9 @@ pub fn check_tool_call(
             }
         }
     }
-    if name == "terminal" {
+    if name == "exec_command" {
         return Err(format!(
-            "[blocked by {} mode] terminal is disabled (side effects). Call switch_mode(to=\"agent\") when ready to execute.",
+            "[blocked by {} mode] exec_command is disabled (side effects). Call switch_mode(to=\"agent\") when ready to execute.",
             mode.as_str()
         ));
     }
@@ -139,10 +129,30 @@ pub fn filter_schemas(
     }
     schemas
         .into_iter()
-        .filter(|s| {
-            s.pointer("/function/name")
-                .and_then(|n| n.as_str())
-                .is_some_and(|name| tool_visible_in_mode(mode, name))
+        .filter_map(|mut schema| {
+            if schema.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
+                let namespace = schema.get("name")?.as_str()?.to_string();
+                let tools = schema.get_mut("tools")?.as_array_mut()?;
+                tools.retain(|tool| {
+                    tool.get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|name| {
+                            tool_visible_in_mode(mode, &format!("{namespace}_{name}"))
+                        })
+                });
+                return (!tools.is_empty()).then_some(schema);
+            }
+            let name =
+                if schema.get("type").and_then(serde_json::Value::as_str) == Some("tool_search") {
+                    Some("tool_search")
+                } else {
+                    schema
+                        .get("name")
+                        .or_else(|| schema.pointer("/function/name"))
+                        .and_then(serde_json::Value::as_str)
+                };
+            name.is_some_and(|name| tool_visible_in_mode(mode, name))
+                .then_some(schema)
         })
         .collect()
 }
@@ -151,27 +161,6 @@ pub fn filter_schemas(
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn plan_blocks_write_file_ops() {
-        let err = check_tool_call(
-            InteractionMode::Plan,
-            "file_ops",
-            &json!({ "operation": "write", "path": "a.md", "content": "x" }),
-        )
-        .unwrap_err();
-        assert!(err.contains("blocked"));
-    }
-
-    #[test]
-    fn plan_allows_read_file_ops() {
-        assert!(check_tool_call(
-            InteractionMode::Plan,
-            "file_ops",
-            &json!({ "operation": "read", "path": "a.md" }),
-        )
-        .is_ok());
-    }
 
     #[test]
     fn plan_blocks_memory_and_skills_manage() {
@@ -196,23 +185,17 @@ mod tests {
     }
 
     #[test]
-    fn ask_blocks_todo() {
-        assert!(check_tool_call(InteractionMode::Ask, "todo", &json!({ "title": "t" }),).is_err());
-        assert!(!tool_visible_in_mode(InteractionMode::Ask, "todo"));
-        assert!(tool_visible_in_mode(InteractionMode::Plan, "todo"));
-    }
-
-    #[test]
     fn system_guidance_mentions_mode() {
         assert!(InteractionMode::Agent.system_guidance().contains("Agent"));
+        assert!(InteractionMode::Agent
+            .system_guidance()
+            .contains("compact todo"));
         assert!(InteractionMode::Plan.system_guidance().contains("Plan"));
-        assert!(InteractionMode::Ask.system_guidance().contains("Ask"));
+        assert!(InteractionMode::Plan
+            .system_guidance()
+            .contains("explicit user approval"));
         // 中英并列，避免英文 UI 丢失指引
-        for mode in [
-            InteractionMode::Agent,
-            InteractionMode::Plan,
-            InteractionMode::Ask,
-        ] {
+        for mode in [InteractionMode::Agent, InteractionMode::Plan] {
             let g = mode.system_guidance();
             assert!(
                 g.contains("Interaction mode:") && g.contains("交互模式："),
@@ -223,20 +206,37 @@ mod tests {
     }
 
     #[test]
-    fn agent_allows_write() {
-        assert!(check_tool_call(
-            InteractionMode::Agent,
-            "file_ops",
-            &json!({ "operation": "write", "path": "a.md", "content": "x" }),
-        )
-        .is_ok());
+    fn plan_hides_terminal_in_schema() {
+        assert!(!tool_visible_in_mode(InteractionMode::Plan, "exec_command"));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "browser_tabs"));
+        assert!(tool_visible_in_mode(
+            InteractionMode::Plan,
+            "browser_tab_switch"
+        ));
+        assert!(tool_visible_in_mode(
+            InteractionMode::Plan,
+            "browser_downloads"
+        ));
+        assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
+        assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
     }
 
     #[test]
-    fn plan_hides_terminal_in_schema() {
-        assert!(!tool_visible_in_mode(InteractionMode::Plan, "terminal"));
-        assert!(tool_visible_in_mode(InteractionMode::Plan, "web_search"));
-        assert!(tool_visible_in_mode(InteractionMode::Plan, "switch_mode"));
-        assert!(!tool_visible_in_mode(InteractionMode::Plan, "memory"));
+    fn plan_filters_native_browser_namespace_by_registered_policy_names() {
+        let schemas = vec![serde_json::json!({
+            "type": "namespace",
+            "name": "browser",
+            "description": "Browser tools",
+            "tools": [
+                {"type": "function", "name": "snapshot", "parameters": {}},
+                {"type": "function", "name": "click", "parameters": {}}
+            ]
+        })];
+
+        let filtered = filter_schemas(InteractionMode::Plan, schemas);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["tools"].as_array().map(Vec::len), Some(1));
+        assert_eq!(filtered[0]["tools"][0]["name"], "snapshot");
     }
 }

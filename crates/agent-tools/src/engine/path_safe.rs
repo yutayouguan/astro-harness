@@ -1,6 +1,6 @@
 //! Workspace 相对路径安全解析：防止 `..`、symlink 与目录逃逸攻击。
 //!
-//! 所有文件类工具（`file_ops`、`terminal` 等）在拼接用户给定相对路径前，
+//! 所有文件类工具（`terminal`、`apply_patch` 等）在拼接用户给定相对路径前，
 //! 须经 [`resolve_safe`] 校验，确保解析结果始终落在 Agent 工作区之内。
 
 use std::path::{Component, Path, PathBuf};
@@ -84,6 +84,31 @@ pub fn resolve_safe(workspace: &Path, rel: &str) -> anyhow::Result<PathBuf> {
     Ok(cur)
 }
 
+/// 在项目的多个授权根内解析路径。相对路径始终相对主 cwd，绝对路径必须属于任一 root。
+pub fn resolve_safe_in_roots(
+    primary: &Path,
+    workspace_roots: &[PathBuf],
+    input: &str,
+) -> anyhow::Result<PathBuf> {
+    let candidate = Path::new(input.trim());
+    if !candidate.is_absolute() {
+        return resolve_safe(primary, input);
+    }
+    let mut roots = Vec::with_capacity(workspace_roots.len() + 1);
+    roots.push(primary.to_path_buf());
+    roots.extend(workspace_roots.iter().cloned());
+    for root in roots {
+        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+        if let Ok(relative) = candidate
+            .strip_prefix(&root)
+            .or_else(|_| candidate.strip_prefix(&canonical_root))
+        {
+            return resolve_safe(&canonical_root, relative.to_string_lossy().as_ref());
+        }
+    }
+    anyhow::bail!("路径越界：绝对路径不属于当前项目的工作目录")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,5 +182,35 @@ mod tests {
         {
             let _ = (link, target_dir);
         }
+    }
+
+    #[test]
+    fn absolute_path_can_target_secondary_workspace_root() {
+        let primary = tempfile::tempdir().unwrap();
+        let secondary = tempfile::tempdir().unwrap();
+        let target = secondary.path().join("notes.txt");
+        let resolved = resolve_safe_in_roots(
+            primary.path(),
+            &[primary.path().to_path_buf(), secondary.path().to_path_buf()],
+            target.to_string_lossy().as_ref(),
+        )
+        .unwrap();
+        assert_eq!(
+            resolved,
+            secondary.path().canonicalize().unwrap().join("notes.txt")
+        );
+    }
+
+    #[test]
+    fn absolute_path_outside_all_workspace_roots_is_rejected() {
+        let primary = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let error = resolve_safe_in_roots(
+            primary.path(),
+            &[primary.path().to_path_buf()],
+            outside.path().join("secret").to_string_lossy().as_ref(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("不属于"));
     }
 }

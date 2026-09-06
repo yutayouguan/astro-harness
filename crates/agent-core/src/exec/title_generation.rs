@@ -4,7 +4,6 @@
 //! （[`session::SessionStore::set_session_title_if_empty`]），迟到任务不会覆盖手动标题。
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::{info, warn};
@@ -25,7 +24,7 @@ pub struct TitleChangedNotify {
 pub struct TitleGenerationJob {
     pub memory_dir: std::path::PathBuf,
     pub session_id: String,
-    pub targets: Vec<types::ChatTarget>,
+    pub targets: Vec<types::ModelTarget>,
 }
 
 /// 从当前 [`AgentLoop`] 构造标题任务。
@@ -71,11 +70,11 @@ fn build_title_prompt(user: &str, assistant: &str) -> String {
 
 /// 按 preferred→fallback 完成标题文本。
 pub async fn complete_title_with_targets<F, Fut>(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&types::ChatTarget) -> Fut,
+    F: FnMut(&types::ModelTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no title targets".to_string();
@@ -103,9 +102,10 @@ where
 pub async fn maybe_generate_session_title(
     job: TitleGenerationJob,
 ) -> anyhow::Result<Option<TitleChangedNotify>> {
-    let store = open_store(&job.memory_dir)?;
+    let store = open_store(&job.memory_dir).await?;
     let meta = store
-        .get_session(&job.session_id)?
+        .get_session(&job.session_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("session not found"))?;
     if meta
         .title
@@ -117,7 +117,7 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let Some((user, assistant)) = store.first_turn_text(&job.session_id)? else {
+    let Some((user, assistant)) = store.first_turn_text(&job.session_id).await? else {
         return Ok(None);
     };
     drop(store);
@@ -132,7 +132,7 @@ pub async fn maybe_generate_session_title(
         let prompt = prompt.clone();
         let target = target.clone();
         async move {
-            complete_title_chat(&target, &prompt)
+            complete_title_response(&target, &prompt)
                 .await
                 .map_err(|e| e.to_string())
         }
@@ -146,8 +146,10 @@ pub async fn maybe_generate_session_title(
         return Ok(None);
     }
 
-    let store = open_store(&job.memory_dir)?;
-    let wrote = store.set_session_title_if_empty(&job.session_id, &title)?;
+    let store = open_store(&job.memory_dir).await?;
+    let wrote = store
+        .set_session_title_if_empty(&job.session_id, &title)
+        .await?;
     if !wrote {
         info!(
             session = %job.session_id,
@@ -163,12 +165,15 @@ pub async fn maybe_generate_session_title(
     }))
 }
 
-fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
+async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
     memory::ensure_workspace(memory_dir)?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+    session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await
 }
 
-async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {
+async fn complete_title_response(
+    target: &types::ModelTarget,
+    prompt: &str,
+) -> anyhow::Result<String> {
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -184,9 +189,13 @@ async fn complete_title_chat(target: &types::ChatTarget, prompt: &str) -> anyhow
         additional_params: serde_json::Value::Null,
         ..ProviderConfig::default()
     };
-    let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "Generate a concise title for this agent task.",
+        prompt,
+        &config,
+    )
+    .await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
@@ -207,21 +216,19 @@ mod tests {
     #[tokio::test]
     async fn preferred_failure_falls_back() {
         let targets = vec![
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: "a".into(),
                 backend_id: "deepseek".into(),
                 model: "mini".into(),
                 api_key: "k1".into(),
                 base_url: "https://a".into(),
-                api_mode: String::new(),
             },
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: "b".into(),
                 backend_id: "openai".into(),
                 model: "gpt".into(),
                 api_key: "k2".into(),
                 base_url: "https://b".into(),
-                api_mode: String::new(),
             },
         ];
         let mut calls = 0usize;

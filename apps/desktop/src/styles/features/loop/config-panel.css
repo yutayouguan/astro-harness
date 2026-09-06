@@ -1,0 +1,1053 @@
+/* ── Config panel (右侧) ──────────────────────────────────────── */
+
+.loop-config-panel {
+  position: relative;
+  width: var(--loop-inspector-width, 360px);
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 30;
+  box-shadow: -8px 0 28px rgba(15, 23, 42, 0.045);
+}
+
+/* scroll body */
+.loop-config-panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* node type header row */
+.loop-config-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+
+.loop-config-node-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loop-config-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.loop-config-node-type {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 校验 badge */
+.loop-config-validation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
+  color: var(--error, #ef4444);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.loop-config-node-actions {
+  display: flex;
+  gap: 2px;
+}
+.loop-config-node-actions .loop-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+}
+.loop-config-node-actions .loop-icon-btn:hover {
+  background: var(--glass-hover);
+}
+
+/* body padding */
+.loop-config-panel-body {
+  padding: 0 20px 20px;
+}
+
+/* field */
+.loop-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.loop-config-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* input */
+.loop-config-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.loop-config-input:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
+}
+.loop-config-input:focus {
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-input::placeholder {
+  color: var(--ink-tertiary);
+}
+.loop-config-input[type="number"] {
+  border-radius: 8px;
+  -moz-appearance: textfield;
+}
+.loop-config-input[type="number"]::-webkit-inner-spin-button,
+.loop-config-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.loop-config-placeholder {
+  font-size: 13px;
+  color: var(--ink-tertiary);
+  text-align: center;
+  padding: 32px 16px;
+}
+
+/* ── Step logs ── */
+
+.loop-config-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loop-step-log {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--glass-dim);
+  border: 1px solid var(--border);
+}
+
+.loop-step-log-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.loop-step-log-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.loop-step-log-dot--success {
+  background: #22c55e;
+}
+.loop-step-log-dot--failure {
+  background: #ef4444;
+}
+.loop-step-log-dot--skipped {
+  background: #f59e0b;
+}
+.loop-step-log-dot--fallback {
+  background: #8b5cf6;
+}
+
+.loop-step-log-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loop-step-log-time {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  margin-left: auto;
+}
+
+.loop-step-log-output,
+.loop-step-log-error {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: "SF Mono", "Menlo", monospace;
+  line-height: 1.4;
+  overflow: auto;
+  max-height: 120px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.loop-step-log-output {
+  background: var(--glass-panel);
+  color: var(--ink-secondary);
+}
+
+.loop-step-log-error {
+  background: color-mix(in srgb, #ef4444 8%, transparent);
+  color: #ef4444;
+}
+
+/* textarea */
+.loop-config-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.6;
+  outline: none;
+  resize: vertical;
+  min-height: 88px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.loop-config-textarea:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
+}
+.loop-config-textarea:focus {
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-textarea::placeholder {
+  color: var(--ink-tertiary);
+}
+
+/* select */
+.loop-config-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.loop-config-select:hover {
+  border-color: color-mix(in srgb, var(--ink-secondary) 40%, var(--border));
+}
+.loop-config-select:focus {
+  border-color: var(--tone, #6366f1);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+.loop-config-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* label row (label + ai button) */
+.loop-config-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* AI assist button */
+.loop-config-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 30%, var(--border));
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
+  color: var(--tone, #6366f1);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+.loop-config-ai-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone, #6366f1) 14%, transparent);
+  border-color: var(--tone, #6366f1);
+}
+.loop-config-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.loop-config-ai-btn.is-loading {
+  pointer-events: none;
+}
+@keyframes loop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loop-spin {
+  animation: loop-spin 0.8s linear infinite;
+}
+
+/* ai model intro */
+.loop-config-ai-model-intro {
+  font-size: 13px;
+  color: var(--ink-secondary);
+  line-height: 1.6;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, #6366f1) 15%, var(--border));
+}
+.loop-config-ai-btn-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+  color: var(--tone, #6366f1);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* ── 辅助模型面板 ── */
+
+.loop-ai-model-status {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--glass-dim);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.loop-ai-model-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.loop-ai-model-status-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-all;
+}
+.loop-ai-model-provider {
+  color: var(--tone, #6366f1);
+}
+.loop-ai-model-sep {
+  color: var(--ink-tertiary);
+  font-weight: 400;
+}
+.loop-ai-model-name {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+.loop-ai-model-status-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+.loop-ai-model-reset {
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.loop-ai-model-reset:hover {
+  border-color: var(--error, #ef4444);
+  color: var(--error, #ef4444);
+}
+.loop-ai-model-custom-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+/* ── 结构化编辑器 StructuredEditors ── */
+
+.se-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.se-kv-row,
+.se-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.se-kv-key {
+  flex: 2;
+  min-width: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.se-kv-sep {
+  color: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+.se-kv-val {
+  flex: 3;
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.se-cell {
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.se-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+}
+.se-remove:hover {
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
+  color: var(--error, #ef4444);
+}
+.se-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+  align-self: flex-start;
+}
+.se-add-btn:hover:not(:disabled) {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+}
+.se-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.se-row-header {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 4px;
+}
+.se-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  padding-left: 8px;
+}
+.se-col-action {
+  width: 22px;
+  flex-shrink: 0;
+}
+
+/* Tags */
+.se-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.se-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+  color: var(--tone, #6366f1);
+  font-size: 12px;
+  font-weight: 500;
+}
+.se-tag-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: var(--tone, #6366f1);
+  cursor: pointer;
+  opacity: 0.6;
+}
+.se-tag-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--tone, #6366f1) 20%, transparent);
+}
+
+/* ── 模板变量自动补全 ── */
+
+.ac-wrap {
+  position: relative;
+}
+.ac-dropdown {
+  position: fixed;
+  z-index: 200;
+  min-width: 280px;
+  max-width: 400px;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  padding: 4px;
+}
+.ac-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+  transition: background 0.08s;
+}
+.ac-item:hover,
+.ac-item.is-selected {
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+}
+.ac-item-node {
+  font-weight: 600;
+  color: var(--tone, #6366f1);
+  font-size: 12px;
+}
+.ac-item-dot {
+  color: var(--ink-tertiary);
+}
+.ac-item-field {
+  flex: 1;
+  font-size: 12px;
+}
+.ac-item-ref {
+  font-size: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: var(--ink-tertiary);
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.ac-hint {
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+/* hint text */
+.loop-config-hint {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  line-height: 1.5;
+}
+.loop-config-hint-inline {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-weight: 400;
+}
+
+/* ── 文件选择器 FilePathField / FileArrayField ── */
+
+.loop-config-file-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.loop-config-file-input {
+  flex: 1;
+  min-width: 0;
+}
+.loop-config-file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+.loop-config-file-btn:hover {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, var(--bg0, #fff));
+}
+.loop-config-file-btn.is-active {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 10%, var(--bg0, #fff));
+}
+
+.loop-config-file-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.loop-config-file-add-btn:hover {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+  background: color-mix(in srgb, var(--tone, #6366f1) 6%, transparent);
+}
+.loop-config-file-add-btn.is-active {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+}
+
+.loop-config-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.loop-config-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--glass-dim);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.loop-config-file-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-family: "SF Mono", "Menlo", monospace;
+}
+.loop-config-file-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+}
+.loop-config-file-remove:hover {
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
+  color: var(--error, #ef4444);
+}
+
+.loop-config-file-var-wrap {
+  position: relative;
+}
+
+/* ── 上游变量下拉菜单 ── */
+
+.loop-var-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+}
+.loop-var-empty {
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+.loop-var-group {
+  margin-bottom: 2px;
+}
+.loop-var-group-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.loop-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+  transition: background 0.1s;
+}
+.loop-var-item:hover {
+  background: color-mix(in srgb, var(--tone, #6366f1) 8%, transparent);
+}
+.loop-var-item-label {
+  flex: 1;
+}
+.loop-var-item-ref {
+  font-size: 11px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: var(--ink-tertiary);
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* divider */
+.loop-config-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+
+.loop-config-json-viewer {
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--glass-dim);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: "SF Mono", "Menlo", monospace;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* section */
+.loop-config-section {
+  margin-bottom: 18px;
+}
+
+.loop-config-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+/* row layout */
+.loop-config-field--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+/* toggle switch (used in cards) */
+.loop-config-checkbox {
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  background: color-mix(in srgb, var(--ink-tertiary) 30%, transparent);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.loop-config-checkbox::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg0, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s;
+}
+.loop-config-checkbox:checked {
+  background: var(--tone, #6366f1);
+}
+.loop-config-checkbox:checked::after {
+  transform: translateX(16px);
+}
+
+/* ── Upstream fields collapsible ──────────────────────────────── */
+
+.loop-config-upstream {
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.loop-config-upstream-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--border) 30%, transparent);
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.loop-config-upstream-toggle:hover {
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.loop-config-upstream-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+  color: var(--tone, #6366f1);
+  font-weight: 500;
+}
+
+.loop-config-upstream-add {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tone, #6366f1);
+}
+.loop-config-upstream-add:hover {
+  text-decoration: underline;
+}
+
+.loop-config-upstream-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.loop-config-upstream-count {
+  font-size: 10px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--tone, #6366f1);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 上游字段映射行 */
+.loop-upstream-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.loop-upstream-field-name {
+  width: 80px;
+  flex-shrink: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.loop-upstream-field-eq {
+  color: var(--ink-tertiary);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.loop-upstream-field-ref-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  position: relative;
+}
+.loop-upstream-field-ref {
+  flex: 1;
+  min-width: 0;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.loop-upstream-field-pick {
+  width: 30px;
+}
+.loop-upstream-field-dropdown {
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+}
+
+.loop-config-upstream-add-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+  align-self: flex-start;
+}
+.loop-config-upstream-add-row:hover {
+  border-color: var(--tone, #6366f1);
+  color: var(--tone, #6366f1);
+}
+
+/* ── Config row (side-by-side fields) ─────────────────────────── */
+
+.loop-config-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Preset save row ──────────────────────────────────────────── */
+
+.loop-config-preset {
+  margin-bottom: 8px;
+}
+.loop-config-preset .loop-config-label {
+  margin-bottom: 2px;
+}
+
+.loop-config-preset-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+.loop-config-preset-row .loop-config-input {
+  flex: 1;
+}
+
+.loop-btn--sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* ── Native checkbox (not toggle) ─────────────────────────────── */
+
+.loop-config-checkbox-native {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tone, #6366f1);
+  cursor: pointer;
+  border-radius: 4px;
+}

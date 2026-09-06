@@ -1,0 +1,309 @@
+/* ── Sidebar session items ────────────────────────── */
+
+.session-status-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  margin-left: 2px;
+  transition: opacity 120ms ease;
+}
+
+.session-status-icon-spin {
+  color: var(--tone-blue, #2563eb);
+  animation: session-status-spin 0.85s linear infinite;
+}
+
+.session-status-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone, var(--tone-blue));
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 12%, transparent);
+}
+
+.session-status-icon-awaiting {
+  color: var(--danger, #e11d48);
+}
+
+.session-status-icon-error {
+  color: var(--danger, #e11d48);
+}
+
+@keyframes session-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-status-icon-spin {
+    animation: none;
+  }
+}
+
+.sidebar-session-item.is-awaiting .sidebar-session-title,
+.sidebar-session-item.is-errored .sidebar-session-title {
+  color: var(--danger, #e11d48);
+}
+
+.sidebar-session-item.is-unread .sidebar-session-title {
+  font-weight: 650;
+}
+
+.sidebar-session-main .sidebar-session-pin-mark {
+  flex-shrink: 0;
+  opacity: 0.55;
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-session-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  transition:
+    background 0.14s ease,
+    transform 0.2s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    box-shadow 0.14s ease;
+}
+
+.sidebar-session-item:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 8%, transparent);
+  transform: translateX(2px);
+}
+
+.sidebar-session-item:active {
+  transform: scale(0.98);
+  transition-duration: 0.06s;
+}
+
+.sidebar-session-item.is-active {
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--tone-blue)) 12%,
+    transparent
+  );
+}
+
+.sidebar-session-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 66px 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 450;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+
+.sidebar-session-item.is-active .sidebar-session-main {
+  font-weight: 550;
+}
+
+.sidebar-session-main svg {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.sidebar-session-item.is-active .sidebar-session-main svg {
+  opacity: 0.8;
+  color: var(--tone, var(--tone-blue));
+}
+
+.sidebar-session-title-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  margin-right: 2px;
+}
+
+.sidebar-session-title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session-title-measure {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: max-content;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sidebar-session-item:is(:hover, :focus-within)
+  .sidebar-session-title[data-scrollable="true"] {
+  display: inline-block;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: sidebar-title-scroll 7s ease-in-out 0.3s infinite;
+}
+
+/* 起始停顿保持在 0.6s 内：延迟 + 首段 hold 就是用户等待的时间 */
+@keyframes sidebar-title-scroll {
+  0%,
+  8% {
+    transform: translateX(0);
+  }
+  42%,
+  58% {
+    transform: translateX(var(--scroll-distance, -40px));
+  }
+  92%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-session-item:is(:hover, :focus-within)
+    .sidebar-session-title[data-scrollable="true"] {
+    animation: none;
+  }
+}
+
+.sidebar-session-expand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: color 0.1s;
+}
+
+.sidebar-session-expand:hover {
+  color: var(--ink);
+}
+
+.sidebar-session-expand svg {
+  opacity: 0.6;
+}
+
+.sidebar-session-time {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  color: var(--ink-mute);
+  opacity: 0.6;
+  margin-right: 2px;
+}
+
+/* hover/focus 时次要信息真正让出布局空间，避免只把文字变透明却继续挤压标题 */
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-time,
+.sidebar-session-item:is(:hover, :focus-within) .session-status-icon {
+  display: none;
+}
+
+.sidebar-session-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.sidebar-session-action-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition:
+    background 0.08s,
+    color 0.08s;
+}
+
+.sidebar-session-action-btn.is-pin {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.9);
+  transition:
+    background 80ms ease,
+    color 80ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.sidebar-session-item:is(:hover, :focus-within)
+  .sidebar-session-action-btn.is-pin {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.sidebar-session-action-btn.is-more {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.9);
+  transition:
+    background 80ms ease,
+    color 80ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.sidebar-session-item:is(:hover, :focus-within)
+  .sidebar-session-action-btn.is-more {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.sidebar-session-action-btn:hover {
+  background: color-mix(in srgb, var(--tone, #64748b) 14%, transparent);
+  color: var(--ink);
+}
+
+.sidebar-session-action-btn:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--tone-blue)) 42%, transparent);
+  outline-offset: -2px;
+}
+
+@media (hover: none) {
+  .sidebar-session-action-btn.is-pin {
+    display: none;
+  }
+
+  .sidebar-session-action-btn.is-more {
+    opacity: 0.64;
+    pointer-events: auto;
+    transform: none;
+  }
+}

@@ -13,7 +13,8 @@ export type ReasoningEffort =
   | "medium"
   | "high"
   | "xhigh"
-  | "max";
+  | "max"
+  | "persistent";
 
 /** OpenRouter `reasoning` 对象（档位 / 默认开关） */
 export type ModelReasoningMeta = {
@@ -22,10 +23,30 @@ export type ModelReasoningMeta = {
   default_enabled?: boolean | null;
   mandatory?: boolean | null;
   supports_max_tokens?: boolean | null;
+  persistent_instructions?: string | null;
+};
+
+export type ModelRuntimeProfile = {
+  supports_search_tool: boolean;
+  supports_parallel_tool_calls: boolean;
+  support_verbosity: boolean;
+  default_verbosity?: "low" | "medium" | "high" | null;
+  apply_patch_tool_type?: "freeform" | null;
+  web_search_tool_type: "text" | "text_and_image";
+  input_modalities: Array<"text" | "image" | "audio" | "file">;
+  effective_context_window_percent: number;
+  auto_compact_token_limit?: number | null;
+  supports_reasoning_summaries: boolean;
+  multi_agent_version?: "v1" | "v2" | null;
 };
 
 /** 聊天附件媒体类型 */
-export type ChatAttachmentKind = "image" | "video" | "audio" | "file";
+export type ChatAttachmentKind =
+  | "image"
+  | "video"
+  | "audio"
+  | "file"
+  | "folder";
 
 /** 用户消息附件 */
 export type ChatAttachment = {
@@ -43,7 +64,40 @@ export type ChatAttachment = {
 };
 
 /** 聊天活动条类型 */
-export type ChatActivityKind = "tool" | "skill" | "mcp" | "hook" | "memory" | "status";
+export type ChatActivityKind =
+  | "tool"
+  | "skill"
+  | "mcp"
+  | "hook"
+  | "memory"
+  | "status";
+export type ToolExecutionMode = "serial" | "parallel";
+export type ToolFileChange = {
+  root?: string;
+  path: string;
+  move_path?: string;
+  kind: "add" | "update" | "delete" | "move";
+  before_content?: string;
+  after_content?: string;
+  additions: number;
+  deletions: number;
+  reversible: boolean;
+};
+export type ChatActivityStatus =
+  | "waiting"
+  | "running"
+  | "retrying"
+  | "done"
+  | "partial"
+  | "error"
+  | "declined"
+  | "interrupted";
+export type TurnStatus =
+  | "waiting"
+  | "running"
+  | "done"
+  | "error"
+  | "interrupted";
 
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
@@ -55,16 +109,22 @@ export type ChatActivity = {
   input?: string;
   /** 工具 result / 记忆 content */
   output?: string;
-  status?: "running" | "done" | "error";
+  status?: ChatActivityStatus;
   /** 开始时刻（ms） */
   at?: number;
   /** 调用耗时（秒），完成态写入 */
   durationSec?: number;
+  /** 同一次模型响应产生的工具执行批次。 */
+  batchId?: string;
+  /** 后端实际选择的批次调度方式。 */
+  executionMode?: ToolExecutionMode;
   /** 结构化媒体（优先于从 output 文本 regex 解析） */
   media?: Array<{
     kind: "image" | "video" | "audio" | "html" | "code";
     path: string;
   }>;
+  /** 写工具返回的精确 before/after 变更。 */
+  fileChanges?: ToolFileChange[];
 };
 
 /** A2UI surface 生命周期 */
@@ -90,22 +150,45 @@ export type PendingInterrupt = {
   reason: string;
   message?: string;
   responseSchema?: unknown;
+  /** 被暂停的工具调用；用于把活动行切换为“等待”状态。 */
+  toolCallId?: string;
   /** 所属助手消息 id */
   assistantMessageId?: string;
+  /** Transport metadata used to route non-HITL control responses. */
+  metadata?: Record<string, unknown>;
 };
 
 /** 单条助手回复的 token 用量（来自流式 usage 事件） */
-export type MessageTokenUsage = {
+export type TurnTokenUsage = {
+  /** Provider 语义的总输入，包含 cache read/write。 */
   promptTokens: number;
+  uncachedInputTokens: number;
   completionTokens: number;
   totalTokens: number;
+  providerTotalTokens?: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  requestCount: number;
+  cacheReadReported: boolean;
+  cacheWriteReported: boolean;
+  reasoningReported: boolean;
 };
 
-/** 聊天列表中的用户或助手消息 */
-export type ChatMessage = {
+export type AsyncUserInputQuestion = {
+  title: string;
+  options?: string[];
+};
+
+/** UI 会话时间线中的用户或助手展示条目。 */
+export type ConversationEntry = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Non-blocking assistant update emitted while the turn continues. */
+  delivery?: "async";
+  /** Structured questions attached to a non-blocking assistant update. */
+  asyncQuestions?: AsyncUserInputQuestion[];
   /** DeepSeek 等 thinking 模式下的推理过程 */
   reasoning?: string;
   /** 思考耗时（秒），用于折叠头展示 */
@@ -115,13 +198,15 @@ export type ChatMessage = {
   /** 本轮墙钟耗时（秒）：发起→结束，对齐 Hermes TUI 回合计时 */
   generationDurationSec?: number;
   /** 本轮流式 usage，挂在助手消息上供气泡角标展示 */
-  usage?: MessageTokenUsage;
+  usage?: TurnTokenUsage;
   /**
    * 生成速度（tokens/秒）：completion_tokens / 生成耗时。
    * 耗时优先取首 token→结束，否则取开始流式→结束。
    */
   tokensPerSec?: number;
   error?: boolean;
+  /** 当前助手回合的终态，供思考与过程摘要展示。 */
+  turnStatus?: TurnStatus;
   attachments?: ChatAttachment[];
   activities?: ChatActivity[];
   /** Anthropic citations（引用信息） */
@@ -136,7 +221,7 @@ export type ChatMessage = {
   createdAt?: number;
 };
 
-/** 助手气泡内可交错的时间线段 */
+/** 助手气泡内可交错的时间线段，顺序与模型事件到达顺序一致。 */
 export type ChatTimelineSegment =
   | {
       type: "reasoning";
@@ -146,9 +231,17 @@ export type ChatTimelineSegment =
       durationSec?: number;
     }
   | {
+      type: "text";
+      id: string;
+      text: string;
+      at: number;
+    }
+  | {
       type: "activity";
       id: string;
       at: number;
+      batchId?: string;
+      executionMode?: ToolExecutionMode;
     }
   | {
       type: "surface";
@@ -156,37 +249,49 @@ export type ChatTimelineSegment =
       at: number;
     };
 
-/** `get_chat_history` 返回的活动条（已折叠进助手消息） */
-export type ChatHistoryActivityDto = {
+/** UI 内部的历史活动投影，不是持久化协议。 */
+export type HistoryActivityProjection = {
   id: string;
   kind: string;
   title: string;
   input?: string | null;
   output?: string | null;
   status?: string | null;
-  /** 结构化媒体（来自 messages.media_json）；缺省时前端可从 output 解析 */
+  /** 结构化媒体（来自 ResponseItem metadata）；缺省时前端可从 output 解析 */
   media?: Array<{ kind: string; path: string }> | null;
+  fileChanges?: ToolFileChange[] | null;
 };
 
-/** `get_chat_history` 单条气泡（user / assistant，含 reasoning + activities） */
-export type ChatHistoryMessageDto = {
+export type ResponseItemDto = {
+  type: string;
+  [key: string]: unknown;
+};
+
+export type StoredResponseItemDto = {
   id: string;
-  role: string;
-  content: string;
-  reasoning?: string | null;
-  activities?: ChatHistoryActivityDto[];
-  segments?: ChatTimelineSegment[] | null;
-  uiSurfaces?: UiSurface[] | null;
+  item: ResponseItemDto;
+  timestamp: number;
+  tokenCount?: number | null;
+  finishReason?: string | null;
 };
 
-/** `get_chat_history` 整包响应 */
-export type ChatHistoryDto = {
+/** `get_chat_history` 直接返回原生 Responses items，不持久化 UI 投影。 */
+export type ResponseItemHistoryDto = {
   sessionId: string | null;
-  messages: ChatHistoryMessageDto[];
+  items: StoredResponseItemDto[];
   /** 会话结束原因，如 `compacted`；未结束为 null */
   endReason?: string | null;
   /** 结束时间（epoch 秒）；未结束为 null */
   endedAt?: number | null;
+  /** 临时 Side 会话；离开时自动丢弃 */
+  ephemeral?: boolean;
+  parentSessionId?: string | null;
+  /** UI 隐藏、但模型仍继承的 turn 数 */
+  excludedTurnCount?: number;
+  providerId?: string | null;
+  backendId?: string | null;
+  model?: string | null;
+  reasoningEffort?: string | null;
 };
 
 /** 聊天后备链条目（写入 providers.json） */
@@ -229,9 +334,7 @@ export type ProviderDto = {
   supports_asr?: boolean;
   supports_embedding?: boolean;
   embedding_model?: string;
-  /** 当前 API 协议模式（chat_completions / responses / anthropic_messages 等） */
-  api_mode?: string;
-  /** 是否支持 Responses API 模式切换 */
+  /** 是否可用于 Agent Responses API */
   supports_responses_api?: boolean;
   /** 配置来源：builtin / toml / user */
   config_source?: string;
@@ -241,6 +344,7 @@ export type ProviderDto = {
 export type ProvidersStateDto = {
   providers: ProviderDto[];
   active_provider_id: string | null;
+  active_image_provider_id: string | null;
 };
 
 /** 辅助模型任务 id（对齐 `memory::AuxiliaryKind` / `common::AuxiliaryTask`） */
@@ -617,6 +721,9 @@ export type ModelDefaultParams = {
 /** 模型元信息（列表 / 选择器） */
 export type ModelInfo = {
   id: string;
+  profile?: ModelRuntimeProfile;
+  /** 模型目录工具模式；存在时覆盖全局 feature flag。 */
+  tool_mode?: "direct" | "code_mode" | "code_mode_only" | null;
   display_name?: string | null;
   description?: string | null;
   canonical_slug?: string | null;
@@ -651,9 +758,6 @@ export type FileEntryDto = {
   size: number;
 };
 
-/** Skill 商店来源 id */
-export type SkillStoreId = "skillhub" | "skillsdotsh" | "clawhub";
-
 /** 本机已安装 Skill */
 export type InstalledSkill = {
   id: string;
@@ -664,6 +768,9 @@ export type InstalledSkill = {
   enabled: boolean;
   scope?: "astro" | "machine" | string;
   linked?: boolean;
+  provenance?: "packaged" | "user" | "agent" | "project" | "external" | string;
+  editable?: boolean;
+  shadowed_by?: string | null;
 };
 
 /** 商店搜索结果条目 */
@@ -676,6 +783,9 @@ export type StoreSkill = {
   installs: number | null;
   install_ref: string;
   homepage: string | null;
+  icon_url: string | null;
+  category?: string | null;
+  requires_api_key?: boolean | null;
 };
 
 /** 商店详情 */
@@ -799,16 +909,73 @@ export type SkillUpdateRow = {
 /** 侧栏近期会话 */
 export type RecentSessionDto = {
   sessionId: string;
+  source: string;
+  projectId?: string | null;
   summary: string;
+  providerId?: string | null;
+  backendId?: string | null;
+  model?: string | null;
+  reasoningEffort?: string | null;
   createdAt: string | null;
   endReason?: string | null;
   archivedAt?: string | null;
   pinnedAt?: string | null;
 };
 
+/** 分支画布中的节点。聊天 fork 与 Agent spawn 通过 edgeKind 严格区分。 */
+export type BranchGraphNodeDto = {
+  id: string;
+  kind: "turn" | "branchHead" | "agent";
+  sessionId: string;
+  parentId: string | null;
+  edgeKind: "continuation" | "fork" | "side" | "spawn" | null;
+  title: string;
+  preview: string;
+  status: string;
+  createdAt: string | null;
+  sourceMessageId: number | null;
+  turnIndex: number | null;
+  model: string | null;
+  agentPath: string | null;
+  isCurrent: boolean;
+  canFork: boolean;
+  isEphemeral: boolean;
+  /** turn 节点的完整用户输入；用于在此轮前分支时回填输入框 */
+  userMessage?: string | null;
+};
+
+/** 当前会话所在整棵聊天谱系，以及附着的子 Agent 执行层。 */
+export type BranchGraphDto = {
+  rootSessionId: string;
+  currentSessionId: string;
+  nodes: BranchGraphNodeDto[];
+  branchCount: number;
+  turnCount: number;
+  agentCount: number;
+  sideCount: number;
+};
+
+/** 后端持久化的项目实体 */
+export type ProjectDto = {
+  id: string;
+  name: string;
+  icon?: string | null;
+  roots: string[];
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** 产物分类筛选 */
 export type ArtifactCategory =
-  | "all" | "doc" | "sheet" | "image" | "av" | "code" | "pdf_ppt" | "other";
+  | "all"
+  | "doc"
+  | "sheet"
+  | "image"
+  | "av"
+  | "code"
+  | "pdf_ppt"
+  | "other";
 
 /** 单条产物记录 */
 export type ArtifactDto = {

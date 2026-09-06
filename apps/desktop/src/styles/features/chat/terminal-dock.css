@@ -1,0 +1,449 @@
+html {
+  --terminal-dock-bg: color-mix(in srgb, var(--sidebar-bg) 96%, black 4%);
+  --terminal-screen-bg: var(--sidebar-bg);
+}
+
+.terminal-dock {
+  --terminal-dock-height: 260px;
+  position: relative;
+  flex: 0 0 0;
+  min-height: 0;
+  max-height: 65vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-top: 0 solid transparent;
+  background: var(--terminal-dock-bg);
+  box-shadow: 0 -10px 28px rgba(var(--shadow-ink), 0.07);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(44px);
+  transform-origin: bottom center;
+  transition:
+    flex-basis 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-top-width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 300ms;
+}
+
+html[data-wallpaper="true"][data-theme="light"] {
+  --terminal-dock-bg: rgba(232, 242, 247, 0.42);
+  --terminal-screen-bg: rgba(0, 0, 0, 0);
+}
+
+html[data-wallpaper="true"][data-theme="dark"] {
+  --terminal-dock-bg: rgba(7, 10, 18, 0.48);
+  --terminal-screen-bg: rgba(0, 0, 0, 0);
+}
+
+html[data-wallpaper="true"] .terminal-dock {
+  box-shadow:
+    0 -14px 34px rgba(var(--shadow-ink), 0.13),
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.16));
+  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.16));
+}
+
+html[data-wallpaper="true"] .terminal-dock-header {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 58%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 8%, transparent),
+    transparent
+  );
+}
+
+html[data-wallpaper="true"] .terminal-dock-screen .xterm,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-viewport,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-rows,
+html[data-wallpaper="true"] .terminal-dock-screen .xterm-screen canvas {
+  background: var(--terminal-screen-bg) !important;
+  background-color: var(--terminal-screen-bg) !important;
+}
+
+.chat-layout-with-right:has(.terminal-dock.is-open) {
+  border-radius: 28px 28px 0 0;
+}
+
+.terminal-dock.is-open {
+  flex-basis: var(--terminal-dock-height);
+  border-top-width: 0.5px;
+  border-top-color: color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.terminal-dock.is-resizing {
+  user-select: none;
+  transition: none;
+}
+
+.terminal-dock-resizer {
+  position: absolute;
+  z-index: 3;
+  top: -5px;
+  right: 0;
+  left: 0;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.terminal-dock-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 42px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-soft) 34%, transparent);
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.14s ease;
+}
+
+.terminal-dock-resizer:hover::after,
+.terminal-dock-resizer:focus-visible::after {
+  opacity: 1;
+}
+
+.terminal-dock-header {
+  flex: 0 0 34px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 8px 3px 12px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  user-select: none;
+}
+
+.terminal-dock-identity,
+.terminal-dock-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.terminal-dock-identity strong {
+  color: var(--ink);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.terminal-dock-identity > span:not(.terminal-dock-status) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-dock-shared {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-soft) 56%, transparent);
+  color: var(--tone);
+}
+
+.terminal-dock-status {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.terminal-dock-status.is-running {
+  background: #38b86b;
+  box-shadow: 0 0 0 3px rgba(56, 184, 107, 0.12);
+}
+
+.terminal-dock-actions button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.terminal-dock-actions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--tone) 20%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  color: var(--ink);
+}
+
+.terminal-dock-actions button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.terminal-tabs-dock .terminal-dock-header {
+  padding: 4px 10px 3px 12px;
+}
+
+.terminal-tab-list {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab {
+  min-width: 92px;
+  max-width: 180px;
+  height: 27px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--ink-mute);
+  background: transparent;
+}
+
+.terminal-tab:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.terminal-tab.is-active {
+  border-color: color-mix(in srgb, var(--tone) 22%, transparent);
+  background: color-mix(in srgb, var(--tone-soft) 52%, transparent);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
+}
+
+.terminal-tab-main,
+.terminal-tab-close,
+.terminal-tab-add {
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.terminal-tab-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+}
+
+.terminal-tab-main > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-main > svg {
+  flex: 0 0 auto;
+  opacity: 0.72;
+}
+
+.terminal-tab-main:focus-visible,
+.terminal-tab-close:focus-visible,
+.terminal-tab-add:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 42%, transparent);
+  outline-offset: -2px;
+}
+
+.terminal-tab-close {
+  width: 23px;
+  flex: 0 0 23px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  opacity: 0;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.is-active .terminal-tab-close,
+.terminal-tab-close:focus-visible {
+  opacity: 0.72;
+}
+
+.terminal-tab-close:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--danger, #d14f4f);
+}
+
+.terminal-tab-close:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.terminal-tab-add {
+  width: 27px;
+  flex: 0 0 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.terminal-tab-add:hover:not(:disabled),
+.terminal-tab-add:focus-visible {
+  background: color-mix(in srgb, var(--tone-soft) 48%, transparent);
+  color: var(--ink);
+}
+
+.terminal-tab-add:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.terminal-tab-rename {
+  width: 100px;
+  min-width: 0;
+  height: 21px;
+  margin: 0 3px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  border-radius: 5px;
+  outline: none;
+  background: var(--sidebar-bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.terminal-tabs-dock .terminal-dock-actions {
+  flex: 0 0 auto;
+}
+
+.terminal-dock-loading {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  color: var(--ink-mute);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .terminal-tabs-dock .terminal-dock-shared,
+  .terminal-tabs-dock .terminal-dock-error {
+    display: none;
+  }
+}
+
+.terminal-dock-error {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--danger, #d14f4f);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-dock-screen {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 10px 0 14px;
+  overflow: hidden;
+}
+
+.terminal-dock-screen .xterm {
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--terminal-screen-bg);
+  box-shadow: none;
+}
+
+.terminal-dock-screen .xterm,
+.terminal-dock-screen .xterm-screen,
+.terminal-dock-screen .xterm-viewport {
+  height: 100%;
+}
+
+.terminal-dock-screen,
+.terminal-dock-screen .xterm,
+.terminal-dock-screen .xterm-screen,
+.terminal-dock-screen .xterm-viewport {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.terminal-dock-screen .xterm-viewport {
+  scrollbar-width: thin;
+  background: transparent !important;
+}
+
+.terminal-dock-screen .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: 999px;
+  opacity: 0.58;
+}
+
+.terminal-dock-screen
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar
+  > .slider:hover,
+.terminal-dock-screen
+  .xterm
+  .xterm-scrollable-element
+  > .scrollbar
+  > .slider.active {
+  opacity: 0.9;
+}
+
+@media (max-height: 560px) {
+  .terminal-dock {
+    max-height: 55vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-dock {
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .terminal-dock {
+    background: var(--surface-panel-background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  html[data-wallpaper="true"][data-theme="light"] {
+    --terminal-screen-bg: rgb(255, 255, 255);
+  }
+
+  html[data-wallpaper="true"][data-theme="dark"] {
+    --terminal-screen-bg: rgb(4, 6, 12);
+  }
+}

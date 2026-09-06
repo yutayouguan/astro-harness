@@ -5,16 +5,14 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  height: 36px;
+  height: var(--plugins-control-h, 36px);
   padding: 3px;
   border-radius: 12px;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12)),
-    color-mix(in srgb, var(--glass-fill) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--chip-border));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(12px) saturate(1.15);
-  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  background: var(--plugins-shell-bg);
+  border: 1px solid var(--plugins-shell-border);
+  box-shadow: var(--plugins-shell-shadow);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
 }
 
 .skills-view-btn {
@@ -24,10 +22,13 @@
   border-radius: 9px;
   background: transparent;
   color: var(--ink-mute);
-    display: grid;
-    place-items: center;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .skills-view-btn:hover {
@@ -37,28 +38,8 @@
 
 .skills-view-btn.is-active {
   color: var(--tone);
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.22)),
-    color-mix(in srgb, var(--tone-soft) 80%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-html[data-theme="dark"] .skills-view-toggle {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 6, 18, 0.42);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .skills-view-btn.is-active {
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--tone-soft) 60%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
-  color: color-mix(in srgb, #fff 18%, var(--tone));
+  background: var(--plugins-active-bg);
+  box-shadow: var(--plugins-active-shadow);
 }
 
 /* List view */
@@ -80,7 +61,7 @@ html[data-theme="dark"] .skills-view-btn.is-active {
 }
 
 .skills-gallery.is-list .tool-card.skill-card:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .skills-gallery.is-list .skill-card-top {
@@ -105,6 +86,12 @@ html[data-theme="dark"] .skills-view-btn.is-active {
   height: 18px;
 }
 
+.skills-gallery.is-list .skill-card-icon .skills-store-icon-image {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
 .skills-gallery.is-list .skill-card-badge {
   font-size: 9px;
 }
@@ -117,8 +104,8 @@ html[data-theme="dark"] .skills-view-btn.is-active {
 .skills-gallery.is-list .skill-card-desc {
   flex: 1 1 200px;
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 0;
+  border-radius: 0;
 }
 
 .skills-gallery.is-list .skill-card-desc p {
@@ -133,6 +120,10 @@ html[data-theme="dark"] .skills-view-btn.is-active {
   display: none;
 }
 
+.skills-gallery.is-list .skill-card-taxonomy {
+  flex: 0 0 auto;
+}
+
 .skills-gallery.is-list .skill-card-actions,
 .skills-gallery.is-list .skill-card-actions.is-store {
   display: flex;
@@ -141,6 +132,8 @@ html[data-theme="dark"] .skills-view-btn.is-active {
   align-items: center;
   gap: 6px;
   margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
   flex: 0 0 auto;
   margin-left: auto;
   min-width: 0;

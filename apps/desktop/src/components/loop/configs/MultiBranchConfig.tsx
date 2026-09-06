@@ -14,7 +14,11 @@ interface ConfigProps {
 
 function parseBranches(raw: unknown): BranchItem[] {
   if (typeof raw === "string") {
-    try { return JSON.parse(raw); } catch { return []; }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
   }
   if (Array.isArray(raw)) return raw as BranchItem[];
   return [];
@@ -36,8 +40,14 @@ export default function MultiBranchConfig({ config, onChange }: ConfigProps) {
     update(branches.filter((_, i) => i !== idx));
   };
 
-  const updateBranch = (idx: number, field: keyof BranchItem, value: string) => {
-    const next = branches.map((b, i) => i === idx ? { ...b, [field]: value } : b);
+  const updateBranch = (
+    idx: number,
+    field: keyof BranchItem,
+    value: string,
+  ) => {
+    const next = branches.map((b, i) =>
+      i === idx ? { ...b, [field]: value } : b,
+    );
     update(next);
   };
 
@@ -67,7 +77,10 @@ export default function MultiBranchConfig({ config, onChange }: ConfigProps) {
             </button>
           </div>
         ))}
-        <button className="loop-btn loop-btn--secondary loop-btn--sm" onClick={addBranch}>
+        <button
+          className="loop-btn loop-btn--secondary loop-btn--sm"
+          onClick={addBranch}
+        >
           <Plus size={12} />
           <span>添加分支</span>
         </button>

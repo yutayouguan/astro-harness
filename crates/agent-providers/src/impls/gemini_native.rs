@@ -1,4 +1,4 @@
-//! Google Gemini Native `streamGenerateContent` — 原生 CompletionModel 实现。
+//! Google Gemini Native `streamGenerateContent` — 非 Agent Chat 兼容模型实现。
 //!
 //! 与 Interactions API 不同，此协议使用 `POST /v1beta/models/{model}:streamGenerateContent`，
 //! 支持 `function_declarations` 工具调用和 `thinkingConfig`。
@@ -9,9 +9,9 @@ use reqwest::Client as HttpClient;
 use serde_json::{json, Value};
 
 use crate::traits::{
-    Capabilities, Capable, CompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
+    Capabilities, Capable, ChatCompletionModel, FromClient, Nothing, ProviderClient, ProviderExt,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream};
 
 // ─── Provider Extension ─────────────────────────────────
 
@@ -72,8 +72,8 @@ impl FromClient<GeminiNative> for GeminiNativeCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for GeminiNativeCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ChatCompletionModel for GeminiNativeCompletionModel {
+    async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream> {
         let model = if request.model.is_empty() {
             &self.model
         } else {
@@ -87,7 +87,8 @@ impl CompletionModel for GeminiNativeCompletionModel {
         };
         let url = format!("{base}/models/{model}:streamGenerateContent?alt=sse");
 
-        let (system_instruction, contents) = to_native_contents(&request.messages);
+        let messages = request.input_with_instructions();
+        let (system_instruction, contents) = to_native_contents(&messages);
 
         let mut body = json!({ "contents": contents });
 
@@ -97,30 +98,30 @@ impl CompletionModel for GeminiNativeCompletionModel {
             });
         }
 
-        // Tools → function_declarations
+        // 工具定义 → function_declarations
         if !request.tools.is_empty() {
-            let tools = crate::google::tools::openai_tools_to_gemini_native(
-                &request
-                    .tools
-                    .iter()
-                    .map(|t| {
-                        json!({
-                            "type": "function",
-                            "function": {
-                                "name": t.name,
-                                "description": t.description,
-                                "parameters": t.parameters,
-                            }
-                        })
+            let function_tools = request
+                .tools
+                .iter()
+                .flat_map(|tool| tool.function_definitions())
+                .map(|tool| {
+                    json!({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters,
+                        }
                     })
-                    .collect::<Vec<_>>(),
-            );
+                })
+                .collect::<Vec<_>>();
+            let tools = crate::google::tools::openai_tools_to_gemini_native(&function_tools);
             if !tools.is_empty() {
                 body["tools"] = Value::Array(tools);
             }
         }
 
-        // generationConfig
+        // 生成参数
         let mut gen = serde_json::Map::new();
         if let Some(temp) = request.temperature {
             gen.insert("temperature".into(), json!(temp));
@@ -131,7 +132,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             }
         }
 
-        // thinkingConfig
+        // 推理配置
         if let Some(ref tc) = request.thinking {
             let budget = if tc.enabled {
                 match tc.effort.trim() {
@@ -152,7 +153,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
             body["generationConfig"] = Value::Object(gen);
         }
 
-        // additional_params merge
+        // 额外参数合并
         if let Some(extra) = request.additional_params.as_object() {
             if let Some(obj) = body.as_object_mut() {
                 for (k, v) in extra {
@@ -162,6 +163,7 @@ impl CompletionModel for GeminiNativeCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_gemini_native(&mut body, request.tool_choice.as_ref());
 
         let auth = GeminiNative.auth_headers(&self.api_key);
         let response = self
@@ -178,19 +180,37 @@ impl CompletionModel for GeminiNativeCompletionModel {
     }
 }
 
-// ─── Message Conversion ──────────────────────────────────
+// ─── 消息转换 ──────────────────────────────────
 
-fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Vec<Value>) {
-    use crate::types::message::*;
-    let mut system = None;
+fn to_native_contents(
+    messages: &[crate::types::ChatCompletionMessage],
+) -> (Option<String>, Vec<Value>) {
+    use crate::types::request_content::*;
+    let mut instruction_parts = Vec::new();
     let mut contents = Vec::new();
+
+    // ChatCompletionMessage::Tool 只保留 call id，Gemini functionResponse 还要求原始函数名。
+    let mut call_names = std::collections::HashMap::new();
+    for message in messages {
+        if let ChatCompletionMessage::Assistant { content } = message {
+            for part in content {
+                if let AssistantContent::ToolCall(call) = part {
+                    call_names.insert(call.id.as_str(), call.name.as_str());
+                }
+            }
+        }
+    }
 
     for m in messages {
         match m {
-            Message::System { content } => {
-                system = Some(content.clone());
+            // Gemini 只有一个 system_instruction 字段；developer 角色降级到此字段。
+            ChatCompletionMessage::System { content }
+            | ChatCompletionMessage::Developer { content } => {
+                if !content.trim().is_empty() {
+                    instruction_parts.push(content.clone());
+                }
             }
-            Message::User { content } => {
+            ChatCompletionMessage::User { content } => {
                 let parts: Vec<Value> = content
                     .iter()
                     .map(|c| match c {
@@ -208,24 +228,33 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                     .collect();
                 contents.push(json!({"role": "user", "parts": parts}));
             }
-            Message::Tool {
+            ChatCompletionMessage::Tool {
                 tool_call_id,
                 content,
                 ..
             } => {
-                let response_value: Value =
-                    serde_json::from_str(content).unwrap_or_else(|_| json!({"result": content}));
+                // REST 契约规定 response 必须是 JSON object。
+                let response_value = match serde_json::from_str::<Value>(content) {
+                    Ok(Value::Object(fields)) => Value::Object(fields),
+                    Ok(value) => json!({"result": value}),
+                    Err(_) => json!({"result": content}),
+                };
+                let name = call_names
+                    .get(tool_call_id.as_str())
+                    .copied()
+                    .unwrap_or("tool");
                 contents.push(json!({
-                    "role": "model",
+                    "role": "user",
                     "parts": [{
                         "functionResponse": {
-                            "name": tool_call_id,
+                            "id": tool_call_id,
+                            "name": name,
                             "response": response_value,
                         }
                     }]
                 }));
             }
-            Message::Assistant { content } => {
+            ChatCompletionMessage::Assistant { content } => {
                 let mut parts = Vec::new();
                 for c in content {
                     match c {
@@ -243,6 +272,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
                             };
                             parts.push(json!({
                                 "functionCall": {
+                                    "id": tc.id,
                                     "name": tc.name,
                                     "args": args,
                                 }
@@ -262,6 +292,7 @@ fn to_native_contents(messages: &[crate::types::Message]) -> (Option<String>, Ve
             }
         }
     }
+    let system = (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n"));
     (system, contents)
 }
 
@@ -279,7 +310,7 @@ fn inline_or_file_data(url: &str, mime_hint: &str) -> Value {
     json!({"text": format!("[media: {url}]")})
 }
 
-// ─── SSE Parsing ─────────────────────────────────────────
+// ─── SSE 解析 ─────────────────────────────────────────
 
 fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
     use crate::types::stream::{StreamChunk, Usage};
@@ -287,7 +318,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         return Vec::new();
     };
 
-    // Error
+    // 错误
     if let Some(err) = v.get("error") {
         let msg = err
             .get("message")
@@ -309,7 +340,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         if let Some(parts) = parts {
             let mut tool_index = 0u32;
             for part in parts {
-                // Thinking (thought: true)
+                // 推理过程（thought: true）
                 if part
                     .get("thought")
                     .and_then(|t| t.as_bool())
@@ -340,6 +371,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
                         index: tool_index,
                         id: format!("call_{name}_{tool_index}"),
                         name,
+                        signature: None,
                     });
                     chunks.push(StreamChunk::ToolCallDelta {
                         index: tool_index,
@@ -349,7 +381,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
                     continue;
                 }
 
-                // Text
+                // 文本内容
                 if let Some(text) = part
                     .get("text")
                     .and_then(|t| t.as_str())
@@ -360,7 +392,7 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
             }
         }
 
-        // Finish reason
+        // 结束原因
         if let Some(reason) = candidate
             .get("finishReason")
             .and_then(|f| f.as_str())
@@ -378,9 +410,9 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
         }
     }
 
-    // Usage from usageMetadata
+    // Token 用量（usageMetadata）
     if let Some(u) = v.get("usageMetadata") {
-        let input = u
+        let input_total = u
             .get("promptTokenCount")
             .and_then(|x| x.as_u64())
             .unwrap_or(0) as u32;
@@ -396,14 +428,22 @@ fn extract_native_chunks(data: &str) -> Vec<crate::types::StreamChunk> {
             .get("cachedContentTokenCount")
             .and_then(|x| x.as_u64())
             .unwrap_or(0) as u32;
-        if input > 0 || output > 0 {
+        let reported_total_tokens = u
+            .get("totalTokenCount")
+            .and_then(|x| x.as_u64())
+            .map(|x| x.min(u64::from(u32::MAX)) as u32);
+        if input_total > 0 || output > 0 || reasoning > 0 {
             chunks.push(StreamChunk::Usage(Usage {
-                input_tokens: input,
-                output_tokens: output,
+                input_tokens: input_total.saturating_sub(cached),
+                output_tokens: output.saturating_add(reasoning),
                 cache_read_tokens: cached,
                 cache_write_tokens: 0,
                 reasoning_tokens: reasoning,
                 request_count: 1,
+                reported_total_tokens,
+                cache_read_reported: u.get("cachedContentTokenCount").is_some(),
+                cache_write_reported: false,
+                reasoning_reported: u.get("thoughtsTokenCount").is_some(),
             }));
         }
     }
@@ -420,17 +460,18 @@ mod tests {
     #[test]
     fn gemini_native_has_chat() {
         let client = ProviderClient::new("test-key", GeminiNative);
-        let _model = client.completion_model("gemini-3.6-flash");
+        let _model = client.chat_completion_model("gemini-3.6-flash");
     }
 
     #[test]
     fn system_instruction_extracted() {
         let msgs = vec![
-            crate::types::Message::system("Be helpful"),
-            crate::types::Message::user_text("Hi"),
+            crate::types::ChatCompletionMessage::system("Be helpful"),
+            crate::types::ChatCompletionMessage::developer("Follow project policy"),
+            crate::types::ChatCompletionMessage::user_text("Hi"),
         ];
         let (sys, contents) = to_native_contents(&msgs);
-        assert_eq!(sys.as_deref(), Some("Be helpful"));
+        assert_eq!(sys.as_deref(), Some("Be helpful\n\nFollow project policy"));
         assert_eq!(contents.len(), 1);
         assert_eq!(contents[0]["role"], "user");
     }
@@ -466,7 +507,7 @@ mod tests {
 
     #[test]
     fn extract_usage_metadata() {
-        let data = r#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}"#;
+        let data = r#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5,"thoughtsTokenCount":3,"cachedContentTokenCount":4,"totalTokenCount":18}}"#;
         let chunks = extract_native_chunks(data);
         let types: Vec<&str> = chunks
             .iter()
@@ -479,8 +520,13 @@ mod tests {
             .collect();
         assert_eq!(types, vec!["Text", "Done", "Usage"]);
         if let StreamChunk::Usage(u) = &chunks[2] {
-            assert_eq!(u.input_tokens, 10);
-            assert_eq!(u.output_tokens, 5);
+            assert_eq!(u.input_tokens, 6);
+            assert_eq!(u.cache_read_tokens, 4);
+            assert_eq!(u.output_tokens, 8);
+            assert_eq!(u.reasoning_tokens, 3);
+            assert_eq!(u.reported_total_tokens, Some(18));
+            assert!(u.cache_read_reported);
+            assert!(u.reasoning_reported);
         }
     }
 
@@ -524,8 +570,8 @@ mod tests {
 
     #[test]
     fn tool_call_in_assistant_message() {
-        let msgs = vec![crate::types::Message::assistant(vec![
-            crate::types::AssistantContent::ToolCall(crate::types::message::ToolCall {
+        let msgs = vec![crate::types::ChatCompletionMessage::assistant(vec![
+            crate::types::AssistantContent::ToolCall(crate::types::request_content::ToolCall {
                 id: "call_1".into(),
                 name: "search".into(),
                 arguments: json!({"q": "rust"}),
@@ -536,6 +582,44 @@ mod tests {
         assert_eq!(contents.len(), 1);
         assert_eq!(contents[0]["role"], "model");
         assert!(contents[0]["parts"][0].get("functionCall").is_some());
+        assert_eq!(contents[0]["parts"][0]["functionCall"]["id"], "call_1");
         assert_eq!(contents[0]["parts"][0]["functionCall"]["name"], "search");
+    }
+
+    #[test]
+    fn mixed_text_tool_call_and_result_keep_native_pairing() {
+        use crate::types::request_content::{AssistantContent, ToolCall};
+
+        let msgs = vec![
+            crate::types::ChatCompletionMessage::assistant(vec![
+                AssistantContent::Text {
+                    text: "Searching now.".into(),
+                },
+                AssistantContent::ToolCall(ToolCall {
+                    id: "call_1".into(),
+                    name: "search".into(),
+                    arguments: json!({"q": "rust"}),
+                    signature: None,
+                }),
+            ]),
+            crate::types::ChatCompletionMessage::tool_result("call_1", "[1, 2]", false),
+        ];
+
+        let (_, contents) = to_native_contents(&msgs);
+        assert_eq!(contents.len(), 2);
+        assert_eq!(contents[0]["role"], "model");
+        assert_eq!(contents[0]["parts"][0]["text"], "Searching now.");
+        assert_eq!(contents[0]["parts"][1]["functionCall"]["id"], "call_1");
+        assert_eq!(contents[0]["parts"][1]["functionCall"]["name"], "search");
+        assert_eq!(contents[1]["role"], "user");
+        assert_eq!(contents[1]["parts"][0]["functionResponse"]["id"], "call_1");
+        assert_eq!(
+            contents[1]["parts"][0]["functionResponse"]["name"],
+            "search"
+        );
+        assert_eq!(
+            contents[1]["parts"][0]["functionResponse"]["response"],
+            json!({"result": [1, 2]})
+        );
     }
 }

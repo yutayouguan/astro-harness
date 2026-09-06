@@ -1,5 +1,6 @@
 //! 会话管理 Tauri 命令：历史记录、分叉、归档、置顶、删除、标题生成。
 
+use futures::StreamExt;
 use serde::Serialize;
 use tauri::AppHandle;
 use uuid::Uuid;
@@ -14,7 +15,13 @@ use super::common::open_sessions;
 #[serde(rename_all = "camelCase")]
 pub struct RecentSessionDto {
     pub session_id: String,
+    pub source: String,
+    pub project_id: Option<String>,
     pub summary: String,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub created_at: Option<String>,
     pub end_reason: Option<String>,
     pub archived_at: Option<String>,
@@ -23,89 +30,52 @@ pub struct RecentSessionDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatHistoryActivityDto {
+pub struct StoredResponseItemDto {
     pub id: String,
-    pub kind: String,
-    pub title: String,
-    pub input: Option<String>,
-    pub output: Option<String>,
-    pub status: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub media: Vec<ChatHistoryMediaDto>,
+    pub item: agent_protocol::ResponseItem,
+    pub timestamp: f64,
+    pub token_count: Option<i64>,
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatHistoryMediaDto {
-    pub kind: String,
-    pub path: String,
-}
-
-/// 从 `messages.media_json`（MediaAsset 数组）提取 UI 预览用 kind/path。
-fn history_media_from_json(media: Option<&serde_json::Value>) -> Vec<ChatHistoryMediaDto> {
-    let Some(serde_json::Value::Array(arr)) = media else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|item| {
-            let kind = item.get("kind")?.as_str()?;
-            let kind =
-                match kind {
-                    "image" | "video" | "audio" | "html" => kind,
-                    "file" => {
-                        // 文件类：仅 html 进入内嵌预览
-                        let path = media_ref_path(item.get("reference")?)?;
-                        if path.rsplit('.').next().is_some_and(|e| {
-                            matches!(e.to_ascii_lowercase().as_str(), "html" | "htm")
-                        }) {
-                            "html"
-                        } else {
-                            return None;
-                        }
-                    }
-                    _ => return None,
-                };
-            let path = media_ref_path(item.get("reference")?)?;
-            if path.is_empty() {
-                return None;
-            }
-            Some(ChatHistoryMediaDto {
-                kind: kind.to_string(),
-                path: path.to_string(),
-            })
-        })
-        .collect()
-}
-
-fn media_ref_path(reference: &serde_json::Value) -> Option<&str> {
-    reference
-        .get("workspace_path")
-        .or_else(|| reference.get("data_url"))
-        .or_else(|| reference.get("remote_uri"))
-        .and_then(|v| v.as_str())
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistoryMessageDto {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub reasoning: Option<String>,
-    pub activities: Vec<ChatHistoryActivityDto>,
-    pub segments: Option<serde_json::Value>,
-    pub ui_surfaces: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistoryDto {
+pub struct ResponseItemHistoryDto {
     pub session_id: Option<String>,
-    pub messages: Vec<ChatHistoryMessageDto>,
+    pub items: Vec<StoredResponseItemDto>,
     /// 会话结束原因（如 `compacted`）；未结束为 `None`
     pub end_reason: Option<String>,
     /// 结束时间（epoch 秒）；未结束为 `None`
     pub ended_at: Option<f64>,
+    /// 临时 Side 会话不进入普通会话列表，离开时丢弃。
+    pub ephemeral: bool,
+    pub parent_session_id: Option<String>,
+    /// 模型仍可见、但 UI 不重复展示的继承回合数。
+    pub excluded_turn_count: i64,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
+fn exclude_inherited_turns(
+    items: Vec<StoredResponseItemDto>,
+    inherited_turn_count: i64,
+) -> Vec<StoredResponseItemDto> {
+    let inherited_turn_count = inherited_turn_count.max(0) as usize;
+    if inherited_turn_count == 0 {
+        return items;
+    }
+    let mut seen_users = 0usize;
+    let first_local = items.iter().position(|stored| {
+        if stored.item.role() == Some("user") {
+            seen_users += 1;
+        }
+        seen_users > inherited_turn_count
+    });
+    first_local
+        .map(|index| items.into_iter().skip(index).collect())
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +90,19 @@ fn parse_session_filter(filter: &str) -> Result<session::SessionListFilter, Stri
     }
 }
 
+fn parse_session_placement(
+    placement: Option<&str>,
+) -> Result<session::SessionPlacementFilter, String> {
+    match placement.unwrap_or("all") {
+        "all" => Ok(session::SessionPlacementFilter::All),
+        "pinned" => Ok(session::SessionPlacementFilter::Pinned),
+        "project" => Ok(session::SessionPlacementFilter::Project),
+        "automation" => Ok(session::SessionPlacementFilter::Automation),
+        "recent" => Ok(session::SessionPlacementFilter::Recent),
+        _ => Err("invalid session placement".into()),
+    }
+}
+
 fn validate_session_title(title: &str) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() {
@@ -128,7 +111,10 @@ fn validate_session_title(title: &str) -> Result<String, String> {
     Ok(title.to_string())
 }
 
-fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
+fn recent_session_dto(
+    s: session::RecentSession,
+    settings: Option<&agent_protocol::ThreadSettingsSnapshot>,
+) -> RecentSessionDto {
     let summary = s
         .title
         .filter(|t| !t.trim().is_empty())
@@ -146,12 +132,36 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
         .map(|dt| dt.to_rfc3339());
     RecentSessionDto {
         session_id: s.id,
+        source: s.source,
+        project_id: s.project_id,
         summary,
+        provider_id: settings.and_then(|value| value.provider_id.clone()),
+        backend_id: settings.map(|value| value.provider.clone()),
+        model: settings.map(|value| value.model.clone()),
+        reasoning_effort: settings
+            .map(|value| value.reasoning_effort.clone())
+            .filter(|value| !value.trim().is_empty()),
         created_at,
         end_reason: s.end_reason,
         archived_at,
         pinned_at,
     }
+}
+
+async fn persisted_thread_settings(
+    session_id: &str,
+) -> Option<agent_protocol::ThreadSettingsSnapshot> {
+    let root = home::default_memory_dir().join("sessions").join("rollouts");
+    let path = agent_rollout::find_rollout(&root, session_id).ok()??;
+    let items = agent_rollout::read_rollout(&path).await.ok()?;
+    agent_rollout::latest_thread_settings(&items)
+}
+
+async fn persisted_thread_settings_at(
+    path: Option<std::path::PathBuf>,
+) -> Option<agent_protocol::ThreadSettingsSnapshot> {
+    let items = agent_rollout::read_rollout(&path?).await.ok()?;
+    agent_rollout::latest_thread_settings(&items)
 }
 
 // ---------------------------------------------------------------------------
@@ -164,76 +174,115 @@ fn recent_session_dto(s: session::RecentSession) -> RecentSessionDto {
 pub async fn get_chat_history(
     session_id: Option<String>,
     limit: Option<i32>,
-) -> Result<ChatHistoryDto, String> {
-    let store = open_sessions()?;
+) -> Result<ResponseItemHistoryDto, String> {
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(200).clamp(1, 500) as usize;
 
     let sid = match session_id.filter(|s| !s.is_empty()) {
         Some(s) => s,
-        None => match store.latest_session_id().map_err(|e| e.to_string())? {
+        None => match store.latest_session_id().await.map_err(|e| e.to_string())? {
             Some(s) => s,
             None => {
-                return Ok(ChatHistoryDto {
+                return Ok(ResponseItemHistoryDto {
                     session_id: None,
-                    messages: vec![],
+                    items: vec![],
                     end_reason: None,
                     ended_at: None,
+                    ephemeral: false,
+                    parent_session_id: None,
+                    excluded_turn_count: 0,
+                    provider_id: None,
+                    backend_id: None,
+                    model: None,
+                    reasoning_effort: None,
                 });
             }
         },
     };
 
-    let meta = store.get_session(&sid).map_err(|e| e.to_string())?;
+    let meta = store.get_session(&sid).await.map_err(|e| e.to_string())?;
+    let thread_settings = persisted_thread_settings(&sid).await;
     let end_reason = meta.as_ref().and_then(|s| s.end_reason.clone());
     let ended_at = meta.as_ref().and_then(|s| s.ended_at);
+    let ephemeral = meta
+        .as_ref()
+        .is_some_and(|session| session.branch_kind.as_deref() == Some("side"));
+    let parent_session_id = ephemeral
+        .then(|| {
+            meta.as_ref()
+                .and_then(|session| session.parent_session_id.clone())
+        })
+        .flatten();
+    let excluded_turn_count = if ephemeral {
+        meta.as_ref()
+            .and_then(|session| session.branch_inherited_turn_count)
+            .unwrap_or(0)
+            .max(0)
+    } else {
+        0
+    };
 
-    let messages = store
-        .build_chat_history(&sid, limit)
+    let mut items = store
+        .get_response_items(&sid)
+        .await
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|m| ChatHistoryMessageDto {
-            id: format!("db-{}", m.id),
-            role: m.role,
-            content: m.content,
-            reasoning: m.reasoning,
-            activities: m
-                .activities
-                .into_iter()
-                .map(|a| ChatHistoryActivityDto {
-                    id: a.id,
-                    kind: a.kind,
-                    title: a.title,
-                    input: a.input,
-                    output: a.output,
-                    status: a.status,
-                    media: history_media_from_json(a.media.as_ref()),
-                })
-                .collect(),
-            segments: m.segments,
-            ui_surfaces: m.ui_surfaces,
+        .map(|stored| StoredResponseItemDto {
+            id: format!("db-{}", stored.id),
+            item: stored.item,
+            timestamp: stored.timestamp,
+            token_count: stored.token_count,
+            finish_reason: stored.finish_reason,
         })
         .collect();
+    if ephemeral {
+        items = exclude_inherited_turns(items, excluded_turn_count);
+    }
+    if items.len() > limit {
+        items = items.split_off(items.len() - limit);
+    }
 
-    Ok(ChatHistoryDto {
+    Ok(ResponseItemHistoryDto {
         session_id: Some(sid),
-        messages,
+        items,
         end_reason,
         ended_at,
+        ephemeral,
+        parent_session_id,
+        excluded_turn_count,
+        provider_id: thread_settings
+            .as_ref()
+            .and_then(|value| value.provider_id.clone()),
+        backend_id: thread_settings.as_ref().map(|value| value.provider.clone()),
+        model: thread_settings
+            .as_ref()
+            .map(|value| value.model.clone())
+            .or_else(|| meta.as_ref().and_then(|value| value.model.clone())),
+        reasoning_effort: thread_settings
+            .as_ref()
+            .map(|value| value.reasoning_effort.clone())
+            .filter(|value| !value.trim().is_empty()),
     })
 }
 
-/// 从当前会话分支：复制截止到第 `keep_chat_bubbles` 条聊天气泡的消息到新会话。
+/// 从当前会话分支。
+///
+/// 新调用方使用 `source_message_id + boundary`，分别对应 Codex 的
+/// `lastTurnId` / `beforeTurnId`。`keep_chat_bubbles` 仅保留给旧调用方。
 #[tauri::command]
 pub async fn fork_chat_session(
     source_session_id: String,
-    keep_chat_bubbles: i32,
+    keep_chat_bubbles: Option<i32>,
     new_session_id: Option<String>,
+    source_message_id: Option<i64>,
+    boundary: Option<String>,
+    ephemeral: Option<bool>,
+    exclude_turns: Option<bool>,
 ) -> Result<String, String> {
     let source = source_session_id.trim();
     if source.is_empty() {
         return Err("source_session_id 不能为空".into());
     }
-    let keep = keep_chat_bubbles.max(0) as usize;
     let new_id = new_session_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -241,10 +290,74 @@ pub async fn fork_chat_session(
         return Err("新会话 id 不能与源会话相同".into());
     }
 
-    let store = open_sessions()?;
-    store
-        .fork_session(source, &new_id, keep)
+    let store = open_sessions().await?;
+    let is_ephemeral = ephemeral.unwrap_or(false);
+    if is_ephemeral && exclude_turns != Some(true) {
+        return Err("ephemeral fork requires exclude_turns=true".into());
+    }
+    let boundary = boundary.as_deref().unwrap_or("through_turn");
+    if !matches!(boundary, "through_turn" | "before_turn") {
+        return Err(format!("invalid fork boundary: {boundary}"));
+    }
+    if source_message_id.is_none() && boundary == "before_turn" {
+        return Err("before_turn fork requires source_message_id".into());
+    }
+
+    if let Some(message_id) = source_message_id {
+        match (boundary, is_ephemeral) {
+            ("through_turn", false) => {
+                store
+                    .fork_session_at_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("through_turn", true) => {
+                store
+                    .fork_side_session_at_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("before_turn", false) => {
+                store
+                    .fork_session_before_user_message(source, &new_id, message_id)
+                    .await
+            }
+            ("before_turn", true) => {
+                store
+                    .fork_side_session_before_user_message(source, &new_id, message_id)
+                    .await
+            }
+            _ => unreachable!("fork boundary validated above"),
+        }
         .map_err(|e| e.to_string())?;
+    } else if is_ephemeral {
+        let message_id = store
+            .get_response_items(source)
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .rev()
+            .find(|message| message.role() == Some("user"))
+            .map(|message| message.id)
+            .ok_or_else(|| "cannot fork an empty session".to_string())?;
+        store
+            .fork_side_session_at_user_message(source, &new_id, message_id)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        let keep = match keep_chat_bubbles {
+            Some(keep) => keep.max(0) as usize,
+            None => store
+                .get_response_items(source)
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter(|message| matches!(message.role(), Some("user" | "assistant")))
+                .count(),
+        };
+        store
+            .fork_session(source, &new_id, keep)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     Ok(new_id)
 }
 
@@ -260,41 +373,93 @@ pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Re
     if start >= end {
         return Ok(());
     }
-    let store = open_sessions()?;
+    let store = open_sessions().await?;
     store
         .remove_chat_bubbles(sid, start, end)
+        .await
         .map_err(|e| e.to_string())
 }
 
 /// 按 active / archived 筛选会话供侧栏展示。
+/// `project_id` 优先；兼容旧调用仍支持 `project_root`。
 #[tauri::command]
 pub async fn list_sessions(
     filter: String,
     limit: Option<i32>,
+    project_root: Option<String>,
+    project_id: Option<String>,
+    placement: Option<String>,
 ) -> Result<Vec<RecentSessionDto>, String> {
     let filter = parse_session_filter(&filter)?;
-    let store = open_sessions()?;
+    let placement = parse_session_placement(placement.as_deref())?;
+    let store = open_sessions().await?;
     let limit = limit.unwrap_or(50).clamp(1, 200) as usize;
-    Ok(store
-        .list_sessions(filter, limit)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(recent_session_dto)
-        .collect())
+    let sessions = if let Some(pid) = project_id.filter(|s| !s.is_empty()) {
+        store
+            .list_sessions_by_project_placement(filter, placement, limit, &pid)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        store
+            .list_sessions_filtered_by_placement(filter, placement, limit, project_root.as_deref())
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    let rollout_root = home::default_memory_dir().join("sessions").join("rollouts");
+    let session_ids = sessions
+        .iter()
+        .map(|session| session.id.clone())
+        .collect::<Vec<_>>();
+    let mut rollout_paths =
+        agent_rollout::find_rollouts(&rollout_root, &session_ids).map_err(|e| e.to_string())?;
+    Ok(futures::stream::iter(sessions.into_iter().map(|session| {
+        let path = rollout_paths.remove(&session.id);
+        async move {
+            let settings = persisted_thread_settings_at(path).await;
+            recent_session_dto(session, settings.as_ref())
+        }
+    }))
+    .buffered(8)
+    .collect()
+    .await)
 }
 
 /// 兼容旧调用：仅列出未归档会话。
 #[tauri::command]
 pub async fn list_recent_sessions(limit: Option<i32>) -> Result<Vec<RecentSessionDto>, String> {
-    list_sessions("active".into(), limit).await
+    list_sessions("active".into(), limit, None, None, None).await
+}
+
+/// 设置会话的项目根目录（兼容旧调用，内部转 project_id）。
+#[tauri::command]
+pub async fn set_session_project_root(
+    session_id: String,
+    project_root: Option<String>,
+) -> Result<(), String> {
+    let store = open_sessions().await?;
+    // 兼容：尝试按 root 路径查找 project 并关联
+    if let Some(root) = project_root.as_deref().filter(|r| !r.is_empty()) {
+        if let Ok(Some(proj)) = store.find_project_by_root(root).await {
+            return store
+                .assign_session_to_project(&session_id, &proj.id)
+                .await
+                .map_err(|e| e.to_string());
+        }
+    }
+    store
+        .set_session_project_root(&session_id, project_root.as_deref())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 重命名会话。
 #[tauri::command]
 pub async fn rename_session(session_id: String, title: String) -> Result<(), String> {
     let title = validate_session_title(&title)?;
-    open_sessions()?
+    open_sessions()
+        .await?
         .set_session_title(&session_id, &title)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -308,7 +473,7 @@ pub async fn regenerate_session_title(
         emit_session_event, now_ts_ms, SessionEventDto, SessionMetadataChangedDto,
     };
     use crate::meta::auxiliary_resolver::{
-        primary_chat_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
+        primary_model_target_for_session, resolve_auxiliary_targets, ResolvedTarget,
     };
 
     let sid = session_id.trim().to_string();
@@ -317,14 +482,15 @@ pub async fn regenerate_session_title(
     }
 
     let (user, assistant) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .first_turn_text(&sid)
+            .await
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "会话尚无完整首轮对话，无法生成标题".to_string())?
     };
 
-    let primary = primary_chat_target_for_session(&sid)?;
+    let primary = primary_model_target_for_session(&sid).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::TitleGeneration, &primary)?;
     let chain: Vec<&ResolvedTarget> = std::iter::once(&targets.preferred)
         .chain(targets.fallback.as_ref())
@@ -343,7 +509,6 @@ pub async fn regenerate_session_title(
 
     async fn complete_one(target: &ResolvedTarget, prompt: &str) -> Result<String, String> {
         use futures::StreamExt;
-        use providers::types::message::Message as ProviderMessage;
         use providers::types::stream::StreamChunk;
         use providers::ProviderConfig;
 
@@ -363,11 +528,14 @@ pub async fn regenerate_session_title(
             previous_interaction_id: None,
             api_mode: String::new(),
         };
-        let messages = vec![ProviderMessage::user_text(prompt)];
-        let mut stream =
-            providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-                .await
-                .map_err(|e| e.to_string())?;
+        let mut stream = providers::dispatch::agent_responses_prompt(
+            &target.backend_id,
+            "Generate a concise title for the supplied conversation.",
+            prompt,
+            &config,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         let mut out = String::new();
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| e.to_string())?;
@@ -405,8 +573,10 @@ pub async fn regenerate_session_title(
         return Err("模型未返回可用标题".into());
     }
 
-    open_sessions()?
+    open_sessions()
+        .await?
         .set_session_title(&sid, &title)
+        .await
         .map_err(|e| e.to_string())?;
 
     emit_session_event(
@@ -431,32 +601,40 @@ pub async fn regenerate_session_title(
 /// 归档会话。
 #[tauri::command]
 pub async fn archive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions()
+        .await?
         .archive_session(&session_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
 /// 取消归档会话。
 #[tauri::command]
 pub async fn unarchive_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions()
+        .await?
         .unarchive_session(&session_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
 /// 置顶会话。
 #[tauri::command]
 pub async fn pin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions()
+        .await?
         .pin_session(&session_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
 /// 取消置顶。
 #[tauri::command]
 pub async fn unpin_session(session_id: String) -> Result<(), String> {
-    open_sessions()?
+    open_sessions()
+        .await?
         .unpin_session(&session_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -475,8 +653,201 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
             "release_session before delete failed; deleting DB anyway"
         );
     }
-    open_sessions()?
+    open_sessions()
+        .await?
         .delete_session_permanently(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Project commands
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDto {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub roots: Vec<String>,
+    pub position: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+fn project_to_dto(p: session::Project) -> ProjectDto {
+    ProjectDto {
+        id: p.id,
+        name: p.name,
+        icon: p.icon,
+        roots: p.roots,
+        position: p.position,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+    }
+}
+
+fn default_project_root() -> Result<String, String> {
+    let root = home::agent_workspace_dir(&home::default_memory_dir(), home::DEFAULT_AGENT_ID);
+    std::fs::create_dir_all(&root)
+        .map_err(|e| format!("create default project workspace {}: {e}", root.display()))?;
+    Ok(root.to_string_lossy().into_owned())
+}
+
+pub(super) async fn ensure_default_project_in_store(
+    store: &session::SessionStore,
+) -> Result<ProjectDto, String> {
+    let root = default_project_root()?;
+    let project = store
+        .ensure_default_project(
+            session::DEFAULT_PROJECT_NAME,
+            session::DEFAULT_PROJECT_ICON,
+            &root,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(project))
+}
+
+#[tauri::command]
+pub async fn list_projects() -> Result<Vec<ProjectDto>, String> {
+    let store = open_sessions().await?;
+    ensure_default_project_in_store(&store).await?;
+    Ok(store
+        .list_projects()
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(project_to_dto)
+        .collect())
+}
+
+#[tauri::command]
+pub async fn create_project(name: String, roots: Vec<String>) -> Result<ProjectDto, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("project name cannot be empty".into());
+    }
+    let store = open_sessions().await?;
+    let root_refs: Vec<&str> = roots.iter().map(|s| s.as_str()).collect();
+    let proj = store
+        .create_project(name, &root_refs)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+#[tauri::command]
+pub async fn update_project(
+    project_id: String,
+    name: Option<String>,
+    icon: Option<Option<String>>,
+    roots: Option<Vec<String>>,
+) -> Result<ProjectDto, String> {
+    let store = open_sessions().await?;
+    let root_strs: Option<Vec<&str>> = roots
+        .as_ref()
+        .map(|v| v.iter().map(|s| s.as_str()).collect());
+    let icon_ref: Option<Option<&str>> = icon.as_ref().map(|opt| opt.as_deref());
+    let proj = store
+        .update_project(&project_id, name.as_deref(), icon_ref, root_strs.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(project_to_dto(proj))
+}
+
+#[tauri::command]
+pub async fn delete_project(project_id: String) -> Result<Vec<String>, String> {
+    let store = open_sessions().await?;
+    store
+        .delete_project(&project_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn move_project(
+    project_id: String,
+    before_project_id: Option<String>,
+) -> Result<(), String> {
+    let store = open_sessions().await?;
+    store
+        .move_project(&project_id, before_project_id.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn assign_session_to_project(
+    session_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let store = open_sessions().await?;
+    store
+        .assign_session_to_project(&session_id, &project_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Session status / side-session / project stubs
+// ---------------------------------------------------------------------------
+
+/// List status of each session (active / idle / terminated).
+#[tauri::command]
+pub async fn list_session_statuses() -> Result<Vec<serde_json::Value>, String> {
+    // Stub added during sqlx-migration merge – full implementation pending.
+    Ok(Vec::new())
+}
+
+/// Discard an ephemeral side session that is no longer needed.
+#[tauri::command]
+pub async fn discard_side_session(session_id: String) -> Result<(), String> {
+    let store = open_sessions().await?;
+    let Some(metadata) = store
+        .get_session(&session_id)
+        .await
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(());
+    };
+    if metadata.branch_kind.as_deref() != Some("side") {
+        return Err("refusing to discard a non-side session".into());
+    }
+    store
+        .delete_session_permanently(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Ensure the built-in default project exists, creating it if absent.
+#[tauri::command]
+pub async fn ensure_default_project() -> Result<ProjectDto, String> {
+    let store = open_sessions().await?;
+    ensure_default_project_in_store(&store).await
+}
+
+/// Assign session to project only if it is not already assigned.
+#[tauri::command]
+pub async fn assign_session_to_project_if_unassigned(
+    session_id: String,
+    project_id: String,
+) -> Result<(), String> {
+    let store = open_sessions().await?;
+    store
+        .assign_session_to_project_if_unassigned(&session_id, &project_id)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// 清理上次进程遗留的临时 Side 会话。
+pub async fn cleanup_stale_side_sessions() -> Result<usize, String> {
+    let store = open_sessions().await?;
+    store
+        .delete_stale_side_sessions()
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -486,8 +857,46 @@ pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_session_filter, validate_session_title};
-    use session::SessionListFilter;
+    use super::{
+        exclude_inherited_turns, parse_session_filter, parse_session_placement,
+        validate_session_title, StoredResponseItemDto,
+    };
+    use session::{SessionListFilter, SessionPlacementFilter};
+
+    fn history_item(id: &str, role: &str) -> StoredResponseItemDto {
+        StoredResponseItemDto {
+            id: id.into(),
+            item: agent_protocol::ResponseItem::text_message(role, id),
+            timestamp: 0.0,
+            token_count: None,
+            finish_reason: None,
+        }
+    }
+
+    #[test]
+    fn excludes_only_inherited_turns_from_side_history() {
+        let items = vec![
+            history_item("u1", "user"),
+            history_item("a1", "assistant"),
+            history_item("u2", "user"),
+            history_item("a2", "assistant"),
+        ];
+
+        let visible = exclude_inherited_turns(items, 1);
+        assert_eq!(
+            visible
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["u2", "a2"]
+        );
+    }
+
+    #[test]
+    fn inherited_only_side_history_is_empty() {
+        let items = vec![history_item("u1", "user"), history_item("a1", "assistant")];
+        assert!(exclude_inherited_turns(items, 1).is_empty());
+    }
 
     #[test]
     fn parses_supported_session_filters() {
@@ -499,6 +908,19 @@ mod tests {
             parse_session_filter("archived").unwrap(),
             SessionListFilter::Archived
         );
+    }
+
+    #[test]
+    fn parses_supported_session_placements() {
+        assert_eq!(
+            parse_session_placement(None).unwrap(),
+            SessionPlacementFilter::All
+        );
+        assert_eq!(
+            parse_session_placement(Some("automation")).unwrap(),
+            SessionPlacementFilter::Automation
+        );
+        assert!(parse_session_placement(Some("unknown")).is_err());
     }
 
     #[test]

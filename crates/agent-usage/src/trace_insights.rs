@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use types::truncate_chars;
 
 use crate::db::{period_window, UsageDb, UsagePeriod};
-use home::default_memory_dir;
+use home::{data_dir, default_memory_dir};
 use session::SessionStore;
 
 /// 列表默认条数
@@ -90,14 +90,16 @@ pub struct TraceInsightsQuery {
 }
 
 /// 查询 Tracing 洞察（会话列表 + 含 I/O 的调用链）
-pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsights> {
+pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsights> {
     let (start, end) = period_window(q.period, q.as_of.as_deref())?;
     let agent = q.agent_id.filter(|s| !s.is_empty());
-    let db = UsageDb::open_default()?;
-    let summaries = db.list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)?;
+    let db = UsageDb::open_default().await?;
+    let summaries = db
+        .list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)
+        .await?;
 
-    let sessions_dir = default_memory_dir().join("sessions");
-    let store = SessionStore::open_sessions_dir(&sessions_dir).ok();
+    let sessions_dir = data_dir(&default_memory_dir());
+    let store = SessionStore::open_sessions_dir(&sessions_dir).await.ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
     let mut kpi = TraceKpis {
@@ -106,9 +108,11 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     };
 
     for s in summaries {
-        let usage_rows = db.list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)?;
+        let usage_rows = db
+            .list_trace_events(&s.session_id, TRACE_EVENTS_LIMIT)
+            .await?;
         let (mut events, preview_title) = if let Some(store) = store.as_ref() {
-            match spans_from_chat_history(store, &s.session_id, &s.agent_id) {
+            match spans_from_chat_history(store, &s.session_id, &s.agent_id).await {
                 Ok(built) if !built.0.is_empty() => built,
                 _ => (
                     usage_rows_to_events(&usage_rows, &s.agent_id),
@@ -123,7 +127,7 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
         };
         // 与会话列表保持同一标题真源：优先 sessions.title；
         // 旧会话尚未生成标题时，才回退首条用户消息预览。
-        let title = resolved_trace_title(store.as_ref(), &s.session_id, preview_title);
+        let title = resolved_trace_title(store.as_ref(), &s.session_id, preview_title).await;
 
         merge_usage_into_spans(&mut events, &usage_rows);
         propagate_turn_ids(&mut events);
@@ -156,16 +160,19 @@ pub fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<TraceInsigh
     Ok(TraceInsights { kpis: kpi, traces })
 }
 
-fn resolved_trace_title(
+async fn resolved_trace_title(
     store: Option<&SessionStore>,
     session_id: &str,
     preview_title: String,
 ) -> String {
-    store
-        .and_then(|store| store.get_session(session_id).ok().flatten())
-        .and_then(|session| session.title)
-        .filter(|title| !title.trim().is_empty())
-        .unwrap_or(preview_title)
+    if let Some(store) = store {
+        if let Ok(Some(session)) = store.get_session(session_id).await {
+            if let Some(title) = session.title.filter(|t| !t.trim().is_empty()) {
+                return title;
+            }
+        }
+    }
+    preview_title
 }
 
 fn usage_rows_to_events(
@@ -199,37 +206,37 @@ fn usage_rows_to_events(
 
 /// 从原始会话消息构建 LangSmith 风格 span 链；返回 (events, title)。
 ///
-/// 不使用 `build_chat_history`，因为它会合并连续 assistant 气泡，导致工具循环中的
+/// 直接遍历原生 `ResponseItem`，不使用 UI 气泡折叠，避免工具循环中的
 /// 多次 LLM 调用被压成一条，输入、输出和耗时也无法逐次对应。
-fn spans_from_chat_history(
+async fn spans_from_chat_history(
     store: &SessionStore,
     session_id: &str,
     agent_id: &str,
 ) -> anyhow::Result<(Vec<TraceEvent>, String)> {
-    let messages = store.get_messages(session_id)?;
+    let messages = store.get_response_items(session_id).await?;
     if messages.is_empty() {
         return Ok((Vec::new(), String::new()));
     }
 
-    let mut events = Vec::new();
+    let mut trace = TraceBuilder::new(agent_id);
     let mut title = String::new();
-    let mut pending_tools: std::collections::HashMap<String, (usize, f64)> =
-        std::collections::HashMap::new();
     let mut last_llm_input: Option<String> = None;
     let mut last_input_at: Option<f64> = None;
 
-    for msg in messages {
-        let ts = epoch_to_rfc3339(msg.timestamp);
-        match msg.role.as_str() {
-            "user" => {
-                let content = msg.content.unwrap_or_default();
+    for stored in messages {
+        use session::ResponseItem;
+
+        let ts = epoch_to_rfc3339(stored.timestamp);
+        match &stored.item {
+            ResponseItem::Message { role, .. } if role == "user" => {
+                let content = stored.text();
                 if title.is_empty() && !content.trim().is_empty() {
                     title = truncate_chars(&content, 80);
                 }
                 last_llm_input = nonempty_truncated(&content);
-                last_input_at = Some(msg.timestamp);
-                events.push(TraceEvent {
-                    id: format!("user-{}", msg.id),
+                last_input_at = Some(stored.timestamp);
+                trace.events.push(TraceEvent {
+                    id: format!("user-{}", stored.id),
                     ts,
                     kind: "user".into(),
                     name: "user".into(),
@@ -246,154 +253,234 @@ fn spans_from_chat_history(
                     turn_id: None,
                 });
             }
-            "assistant" => {
-                let parent = format!("llm-{}", msg.id);
-                let output = msg.content.as_deref().and_then(nonempty_truncated);
-                let has_tool_calls = matches!(msg.tool_calls.as_ref(), Some(serde_json::Value::Array(a)) if !a.is_empty());
-                let reasoning = msg
-                    .reasoning
-                    .as_deref()
-                    .or(msg.reasoning_content.as_deref())
-                    .and_then(nonempty_truncated);
-
-                if has_tool_calls || output.is_some() || reasoning.is_some() {
-                    events.push(TraceEvent {
-                        id: parent.clone(),
-                        ts: ts.clone(),
-                        kind: "llm".into(),
-                        name: "assistant".into(),
-                        agent_id: agent_id.to_string(),
-                        input_tokens: 0,
-                        output_tokens: 0,
-                        total_tokens: 0,
-                        cost_usd: 0.0,
-                        duration_ms: last_input_at
-                            .and_then(|start| elapsed_ms(start, msg.timestamp)),
-                        parent_id: None,
-                        status: Some("ok".into()),
-                        input: last_llm_input.clone(),
-                        output,
-                        turn_id: None,
-                    });
-                }
-
-                if let Some(serde_json::Value::Array(calls)) = msg.tool_calls.as_ref() {
-                    for call in calls {
-                        let Some((id, tool_name, input)) = parse_tool_call(call) else {
-                            continue;
-                        };
-                        let (kind, name) = classify_activity(&tool_name, input.as_deref());
-                        let idx = events.len();
-                        pending_tools.insert(id.clone(), (idx, msg.timestamp));
-                        events.push(TraceEvent {
-                            id: format!("act-{id}"),
-                            ts: ts.clone(),
-                            kind: kind.into(),
-                            name,
-                            agent_id: agent_id.to_string(),
-                            input_tokens: 0,
-                            output_tokens: 0,
-                            total_tokens: 0,
-                            cost_usd: 0.0,
-                            duration_ms: None,
-                            parent_id: Some(parent.clone()),
-                            status: Some("running".into()),
-                            input: input.as_deref().and_then(nonempty_truncated),
-                            output: None,
-                            turn_id: None,
-                        });
-                    }
-                }
+            ResponseItem::Message { role, .. } if role == "assistant" => {
+                let output = nonempty_truncated(&stored.text());
+                trace.events.push(TraceEvent {
+                    id: format!("llm-{}", stored.id),
+                    ts,
+                    kind: "llm".into(),
+                    name: "assistant".into(),
+                    agent_id: agent_id.to_string(),
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    duration_ms: last_input_at
+                        .and_then(|start| elapsed_ms(start, stored.timestamp)),
+                    parent_id: None,
+                    status: Some("ok".into()),
+                    input: last_llm_input.clone(),
+                    output,
+                    turn_id: None,
+                });
                 last_llm_input = None;
                 last_input_at = None;
             }
-            "tool" => {
-                let output = msg.content.as_deref().and_then(nonempty_truncated);
-                let is_error = msg
-                    .content
-                    .as_deref()
-                    .map(|s| s.starts_with("工具错误") || s.starts_with("Tool error"))
-                    .unwrap_or(false);
-                let status = if is_error { "error" } else { "done" };
-                let call_id = msg.tool_call_id.as_deref().unwrap_or("");
-                if let Some((idx, started_at)) = pending_tools.remove(call_id) {
-                    if let Some(event) = events.get_mut(idx) {
-                        event.output = output.clone();
-                        event.status = Some(status.into());
-                        event.duration_ms = elapsed_ms(started_at, msg.timestamp);
-                        if event.name == "tool" {
-                            if let Some(name) = msg.tool_name.as_deref() {
-                                event.name = name.to_string();
-                            }
-                        }
-                    }
-                } else {
-                    let tool_name = msg.tool_name.as_deref().unwrap_or("tool");
-                    let (kind, name) = classify_activity(tool_name, None);
-                    events.push(TraceEvent {
-                        id: format!("tool-{}", msg.id),
-                        ts,
-                        kind: kind.into(),
-                        name,
-                        agent_id: agent_id.to_string(),
-                        input_tokens: 0,
-                        output_tokens: 0,
-                        total_tokens: 0,
-                        cost_usd: 0.0,
-                        duration_ms: None,
-                        parent_id: None,
-                        status: Some(status.into()),
-                        input: None,
-                        output,
-                        turn_id: None,
-                    });
-                }
-                last_llm_input = msg.content.as_deref().and_then(nonempty_truncated);
-                last_input_at = Some(msg.timestamp);
+            ResponseItem::FunctionCall {
+                call_id,
+                name,
+                arguments,
+                ..
+            } => {
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    call_id,
+                    name,
+                    Some(arguments.clone()),
+                );
+            }
+            ResponseItem::CustomToolCall {
+                call_id,
+                name,
+                input,
+                ..
+            } => {
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    call_id,
+                    name,
+                    Some(input.clone()),
+                );
+            }
+            ResponseItem::ToolSearchCall {
+                call_id, arguments, ..
+            } => {
+                let id = call_id.clone().unwrap_or_else(|| stored.id.to_string());
+                trace.push_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    &id,
+                    "tool_search",
+                    Some(arguments.to_string()),
+                );
+            }
+            ResponseItem::FunctionCallOutput {
+                call_id,
+                name,
+                output,
+                ..
+            } => {
+                let output = output.to_text();
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    call_id.as_deref(),
+                    name.as_deref(),
+                    output.clone(),
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
+            }
+            ResponseItem::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+                ..
+            } => {
+                let output = output.to_text();
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    Some(call_id),
+                    name.as_deref(),
+                    output.clone(),
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
+            }
+            ResponseItem::ToolSearchOutput { call_id, tools, .. } => {
+                let output = serde_json::to_string(tools).ok();
+                trace.finish_tool(
+                    TraceItem::new(stored.timestamp, stored.id),
+                    call_id.as_deref(),
+                    Some("tool_search"),
+                    output.clone(),
+                );
+                last_llm_input = output.as_deref().and_then(nonempty_truncated);
+                last_input_at = Some(stored.timestamp);
             }
             _ => {}
         }
-        if events.len() >= TRACE_EVENTS_LIMIT {
+        if trace.events.len() >= TRACE_EVENTS_LIMIT {
             break;
         }
     }
 
-    Ok((events, title))
+    Ok((trace.events, title))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TraceItem {
+    timestamp: f64,
+    item_id: i64,
+}
+
+impl TraceItem {
+    fn new(timestamp: f64, item_id: i64) -> Self {
+        Self { timestamp, item_id }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PendingToolTrace {
+    event_index: usize,
+    started_at: f64,
+}
+
+/// 构建单个会话的 Trace，并维护工具调用与结果之间的配对状态。
+struct TraceBuilder<'a> {
+    events: Vec<TraceEvent>,
+    pending_tools: std::collections::HashMap<String, PendingToolTrace>,
+    agent_id: &'a str,
+}
+
+impl<'a> TraceBuilder<'a> {
+    fn new(agent_id: &'a str) -> Self {
+        Self {
+            events: Vec::new(),
+            pending_tools: std::collections::HashMap::new(),
+            agent_id,
+        }
+    }
+
+    fn push_tool(
+        &mut self,
+        item: TraceItem,
+        call_id: &str,
+        tool_name: &str,
+        input: Option<String>,
+    ) {
+        let (kind, name) = classify_activity(tool_name, input.as_deref());
+        self.pending_tools.insert(
+            call_id.to_string(),
+            PendingToolTrace {
+                event_index: self.events.len(),
+                started_at: item.timestamp,
+            },
+        );
+        self.events.push(TraceEvent {
+            id: format!("act-{call_id}-{}", item.item_id),
+            ts: epoch_to_rfc3339(item.timestamp),
+            kind: kind.into(),
+            name,
+            agent_id: self.agent_id.to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            duration_ms: None,
+            parent_id: None,
+            status: Some("running".into()),
+            input: input.as_deref().and_then(nonempty_truncated),
+            output: None,
+            turn_id: None,
+        });
+    }
+
+    fn finish_tool(
+        &mut self,
+        item: TraceItem,
+        call_id: Option<&str>,
+        tool_name: Option<&str>,
+        output: Option<String>,
+    ) {
+        let output = output.as_deref().and_then(nonempty_truncated);
+        let is_error = output
+            .as_deref()
+            .is_some_and(|text| text.starts_with("工具错误") || text.starts_with("Tool error"));
+        let status = if is_error { "error" } else { "done" };
+        if let Some(pending) = call_id.and_then(|id| self.pending_tools.remove(id)) {
+            if let Some(event) = self.events.get_mut(pending.event_index) {
+                event.output = output;
+                event.status = Some(status.into());
+                event.duration_ms = elapsed_ms(pending.started_at, item.timestamp);
+                if event.name == "tool" {
+                    event.name = tool_name.unwrap_or("tool").to_string();
+                }
+            }
+            return;
+        }
+        let (kind, name) = classify_activity(tool_name.unwrap_or("tool"), None);
+        self.events.push(TraceEvent {
+            id: format!("tool-{}", item.item_id),
+            ts: epoch_to_rfc3339(item.timestamp),
+            kind: kind.into(),
+            name,
+            agent_id: self.agent_id.to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cost_usd: 0.0,
+            duration_ms: None,
+            parent_id: None,
+            status: Some(status.into()),
+            input: None,
+            output,
+            turn_id: None,
+        });
+    }
 }
 
 fn elapsed_ms(start: f64, end: f64) -> Option<i64> {
     let ms = ((end - start) * 1000.0).round() as i64;
     (ms >= 0).then_some(ms)
-}
-
-fn parse_tool_call(call: &serde_json::Value) -> Option<(String, String, Option<String>)> {
-    let id = call.get("id")?.as_str()?.trim().to_string();
-    if id.is_empty() {
-        return None;
-    }
-    let name = call
-        .get("name")
-        .and_then(|v| v.as_str())
-        .or_else(|| {
-            call.get("function")
-                .and_then(|f| f.get("name"))
-                .and_then(|v| v.as_str())
-        })
-        .unwrap_or("tool")
-        .to_string();
-    let input = call
-        .get("arguments")
-        .cloned()
-        .or_else(|| {
-            call.get("function")
-                .and_then(|f| f.get("arguments"))
-                .cloned()
-        })
-        .map(|v| match v {
-            serde_json::Value::String(s) => s,
-            other => other.to_string(),
-        });
-    Some((id, name, input))
 }
 
 fn classify_activity(title: &str, input: Option<&str>) -> (&'static str, String) {
@@ -518,8 +605,7 @@ fn unique_kinds(events: &[TraceEvent]) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::db::{NewUsageEvent, UsageDb};
-    use serde_json::json;
-    use session::{NewMessage, SessionStore};
+    use session::SessionStore;
     use tempfile::TempDir;
 
     use home::test_env::AstroMemoryDirGuard;
@@ -561,27 +647,30 @@ mod tests {
         }
     }
 
-    #[test]
-    fn trace_title_prefers_stored_session_title() {
+    #[tokio::test]
+    async fn trace_title_prefers_stored_session_title() {
         let dir = TempDir::new().unwrap();
-        let store = SessionStore::open(&dir.path().join("state.db")).unwrap();
-        store.ensure_session("s-title", "test").unwrap();
+        let store = SessionStore::open(&dir.path().join("state.db"))
+            .await
+            .unwrap();
+        store.ensure_session("s-title", "test").await.unwrap();
         store
             .set_session_title("s-title", "云南采菌子女孩")
+            .await
             .unwrap();
 
         assert_eq!(
-            resolved_trace_title(Some(&store), "s-title", "首条用户消息".into()),
+            resolved_trace_title(Some(&store), "s-title", "首条用户消息".into()).await,
             "云南采菌子女孩"
         );
         assert_eq!(
-            resolved_trace_title(Some(&store), "missing", "首条用户消息".into()),
+            resolved_trace_title(Some(&store), "missing", "首条用户消息".into()).await,
             "首条用户消息"
         );
     }
 
-    #[test]
-    fn propagate_turn_ids_fills_user_and_tool_before_llm() {
+    #[tokio::test]
+    async fn propagate_turn_ids_fills_user_and_tool_before_llm() {
         let mut events = vec![
             TraceEvent {
                 id: "u1".into(),
@@ -641,11 +730,11 @@ mod tests {
         assert_eq!(events[2].turn_id.as_deref(), Some("turn-abc"));
     }
 
-    #[test]
-    fn list_trace_events_includes_turn_id() {
+    #[tokio::test]
+    async fn list_trace_events_includes_turn_id() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("usage.db");
-        let db = UsageDb::new(path).unwrap();
+        let db = UsageDb::new(path).await.unwrap();
         db.insert(NewUsageEvent {
             ts: "2026-07-14T12:00:00Z".into(),
             kind: "llm".into(),
@@ -668,17 +757,18 @@ mod tests {
             billing_mode: None,
             meta_json: None,
         })
+        .await
         .unwrap();
-        let rows = db.list_trace_events("sess-1", 50).unwrap();
+        let rows = db.list_trace_events("sess-1", 50).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].turn_id.as_deref(), Some("turn-abc"));
     }
 
-    #[test]
-    fn traces_group_by_session_and_order_events() {
+    #[tokio::test]
+    async fn traces_group_by_session_and_order_events() {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::open_default().await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",
@@ -690,6 +780,7 @@ mod tests {
             total_tokens: 15,
             cost_usd: 0.01,
         }))
+        .await
         .unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:01Z",
@@ -702,6 +793,7 @@ mod tests {
             total_tokens: 0,
             cost_usd: 0.0,
         }))
+        .await
         .unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T11:00:00Z",
@@ -714,6 +806,7 @@ mod tests {
             total_tokens: 2,
             cost_usd: 0.0,
         }))
+        .await
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -721,6 +814,7 @@ mod tests {
             as_of: Some("2026-07-13T12:00:00Z".into()),
             agent_id: None,
         })
+        .await
         .unwrap();
         assert_eq!(insights.kpis.traces, 2);
         assert_eq!(insights.kpis.events, 3);
@@ -736,53 +830,49 @@ mod tests {
         assert_eq!(s1.events[1].kind, "tool");
     }
 
-    #[test]
-    fn chat_history_builds_io_chain_and_merges_llm_usage() {
+    #[tokio::test]
+    async fn chat_history_builds_io_chain_and_merges_llm_usage() {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
-        let sessions = dir.path().join("sessions");
+        let sessions = data_dir(dir.path());
         std::fs::create_dir_all(&sessions).unwrap();
-        let store = SessionStore::open(&sessions.join("state.db")).unwrap();
-        store.ensure_session("s-io", "test").unwrap();
-        store.set_session_title("s-io", "云南采菌子女孩").unwrap();
-        store
-            .append_message(NewMessage {
-                content: Some("帮我查天气"),
-                ..NewMessage::empty("s-io", "user")
-            })
+        let store = SessionStore::open(&sessions.join("state.db"))
+            .await
             .unwrap();
+        store.ensure_session("s-io", "test").await.unwrap();
         store
-            .append_message(NewMessage {
-                content: Some("好的"),
-                tool_calls: Some(json!([{
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {
-                        "name": "web_search",
-                        "arguments": "{\"query\":\"weather\"}"
-                    }
-                }])),
-                ..NewMessage::empty("s-io", "assistant")
-            })
+            .set_session_title("s-io", "云南采菌子女孩")
+            .await
             .unwrap();
+        let response_items = vec![
+            session::ResponseItem::user_text("帮我查天气"),
+            session::ResponseItem::assistant_text("好的"),
+            session::ResponseItem::FunctionCall {
+                id: None,
+                name: "web_search".into(),
+                namespace: None,
+                arguments: r#"{"query":"weather"}"#.into(),
+                encrypted_function_args: None,
+                call_id: "call_1".into(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            session::ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: Some("call_1".into()),
+                name: Some("web_search".into()),
+                namespace: None,
+                output: session::FunctionCallOutputPayload::from_text("晴天 25°C".into()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            session::ResponseItem::assistant_text("今天晴，约 25°C。"),
+        ];
         store
-            .append_message(NewMessage {
-                content: Some("晴天 25°C"),
-                tool_call_id: Some("call_1"),
-                tool_name: Some("web_search"),
-                ..NewMessage::empty("s-io", "tool")
-            })
-            .unwrap();
-        store
-            .append_message(NewMessage {
-                content: Some("今天晴，约 25°C。"),
-                reasoning: Some("先搜索再回答"),
-                ..NewMessage::empty("s-io", "assistant")
-            })
+            .append_response_items("s-io", &response_items)
+            .await
             .unwrap();
 
-        let db = UsageDb::new(dir.path().join("usage.db")).unwrap();
+        let db = UsageDb::open_default().await.unwrap();
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:00Z",
             kind: "llm",
@@ -794,8 +884,8 @@ mod tests {
             total_tokens: 140,
             cost_usd: 0.02,
         }))
+        .await
         .unwrap();
-        // 第二轮 assistant 也对应一条 llm usage
         db.insert(evt(Evt {
             ts: "2026-07-13T10:00:05Z",
             kind: "llm",
@@ -807,6 +897,7 @@ mod tests {
             total_tokens: 70,
             cost_usd: 0.01,
         }))
+        .await
         .unwrap();
 
         let insights = query_trace_insights(TraceInsightsQuery {
@@ -814,6 +905,7 @@ mod tests {
             as_of: Some("2026-07-13T12:00:00Z".into()),
             agent_id: None,
         })
+        .await
         .unwrap();
         let tr = insights
             .traces

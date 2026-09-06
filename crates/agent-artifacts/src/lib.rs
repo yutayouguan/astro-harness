@@ -1,5 +1,5 @@
-//! 文件空间（Artifact）索引：`~/.astro/sessions/artifacts.db`。
-//! Knowledge Content DB：`~/.astro/sessions/knowledge.db`（FTS，无向量）。
+//! 文件空间（Artifact）索引：`~/.astro/data/artifacts.db`。
+//! Knowledge Content DB：`~/.astro/data/knowledge.db`（FTS，无向量）。
 
 pub mod content_db;
 pub mod db;

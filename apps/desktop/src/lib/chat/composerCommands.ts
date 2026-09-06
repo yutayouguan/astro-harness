@@ -10,7 +10,6 @@ export type SlashAction =
   | "new_chat"
   | "help"
   | "undo"
-  | "retry"
   | "stop"
   | "status"
   | "usage"
@@ -92,13 +91,6 @@ export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
     descKey: "chat.slashUndo",
     action: "undo",
     icon: "↶",
-  },
-  {
-    name: "retry",
-    aliases: ["regenerate"],
-    descKey: "chat.slashRetry",
-    action: "retry",
-    icon: "↻",
   },
   {
     name: "stop",
@@ -218,8 +210,7 @@ export function resolveBuiltinSlash(name: string): BuiltinSlashCommand | null {
   if (exact) return exact;
 
   const prefixHits = BUILTIN_SLASH_COMMANDS.filter(
-    (c) =>
-      c.name.startsWith(n) || c.aliases?.some((a) => a.startsWith(n)),
+    (c) => c.name.startsWith(n) || c.aliases?.some((a) => a.startsWith(n)),
   );
   return prefixHits[0] ?? null;
 }

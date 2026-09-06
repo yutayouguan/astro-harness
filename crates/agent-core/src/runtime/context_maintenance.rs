@@ -1,31 +1,49 @@
 //! AgentLoop 上下文维护：tool 结果压缩、provider 历史折叠与上下文占用估算。
 
 use session::ConversationStore;
-use types::message::{Message, Role};
 
 use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompressionManager};
 
 use super::AgentLoop;
 
 impl AgentLoop {
-    /// Provider 发送用历史：若有 mid-run handoff 则折叠中间轮次。
-    pub async fn provider_history(&self) -> Vec<Message> {
+    /// Canonical provider history. Mid-run handoff truncates only the local
+    /// view and preserves every retained ResponseItem verbatim.
+    pub async fn provider_response_history(&self) -> Vec<agent_protocol::ResponseItem> {
         let (handoff, history) = {
             let state = self.lock_state();
             (
                 state.compression.mid_run_handoff.clone(),
-                state.clone_history(),
+                state.clone_response_history(),
             )
         };
-        match handoff {
-            Some(handoff) => crate::exec::mid_run_summary::collapse_history_with_handoff(
-                &history,
-                &handoff,
-                self.config_protect_first_n(),
-                self.config_protect_last_n(),
-            ),
-            None => history,
+        let Some(handoff) = handoff else {
+            return history;
+        };
+        let first = self.config_protect_first_n().min(history.len());
+        let last = self
+            .config_protect_last_n()
+            .min(history.len().saturating_sub(first));
+        if history.len() <= first + last {
+            return history;
         }
+        let mut out = Vec::with_capacity(first + 1 + last);
+        out.extend_from_slice(&history[..first]);
+        out.push(agent_protocol::ResponseItem::Message {
+            id: None,
+            role: "user".into(),
+            content: vec![agent_protocol::ContentItem::InputText {
+                text: format!(
+                    "{}\n{}",
+                    crate::exec::mid_run_summary::MID_RUN_SUMMARY_MARK,
+                    handoff.trim()
+                ),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        });
+        out.extend_from_slice(&history[history.len() - last..]);
+        out
     }
 
     /// 当前会话占用比例（ceil chars/4 ÷ context_window）。
@@ -38,7 +56,7 @@ impl AgentLoop {
 
     /// Run 内 tool 上下文维护：委托 [`CompressionPolicy`] 生成计划，执行 prune/LLM 摘要/head-tail。
     ///
-    /// 不变量：`content` 全文保留；仅改 `compressed_content`（Provider 视图）。
+    /// 不变量：item 原始内容保留；仅改 metadata 中的 Provider 视图。
     pub async fn maintain_tool_context(&self) -> anyhow::Result<ContextMaintenanceResult> {
         let mut result = ContextMaintenanceResult::default();
         if !self.compression_config().enabled {
@@ -50,10 +68,14 @@ impl AgentLoop {
                 result.thrashing_disabled = true;
                 return Ok(result);
             }
-            state.clone_history()
+            state.clone_response_history()
         };
 
-        let stored = self.services.sessions.get_messages(&self.session_id)?;
+        let stored = self
+            .services
+            .sessions
+            .get_response_items(&self.session_id)
+            .await?;
         let protect_last_n = self.compression_config().protect_last_n.max(1);
 
         let plan = self
@@ -73,23 +95,8 @@ impl AgentLoop {
             return Ok(result);
         }
 
-        let pre = self.fire_hook(
-            ::hooks::PRE_COMPACT,
-            ::hooks::HookPayload {
-                turn_id: self.current_turn_id().await,
-                trigger: Some("auto".into()),
-                detail: format!(
-                    "prune={} compress={}",
-                    plan.prune.len(),
-                    plan.compress.len()
-                ),
-                ..Default::default()
-            },
-        );
-        if matches!(
-            pre,
-            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
-        ) {
+        let pre = self.run_pre_compact_hook(self.current_turn_id().await, "auto");
+        if pre.should_stop {
             result.hook_stopped = true;
             return Ok(result);
         }
@@ -103,8 +110,8 @@ impl AgentLoop {
             let Some(stored_msg) = stored.iter().find(|m| m.id == target.message_id) else {
                 continue;
             };
-            let content = stored_msg.content.as_deref().unwrap_or_default();
-            self.apply_tool_compressed_view(stored_msg, content, &view)
+            let content = stored_msg.text();
+            self.apply_tool_compressed_view(stored_msg, &content, &view)
                 .await?;
             result.pruned += 1;
         }
@@ -150,7 +157,11 @@ impl AgentLoop {
                     .unwrap_or_else(|| job.content.clone())
             };
 
-            let stored_again = self.services.sessions.get_messages(&self.session_id)?;
+            let stored_again = self
+                .services
+                .sessions
+                .get_response_items(&self.session_id)
+                .await?;
             let Some(stored_msg) = stored_again.iter().find(|m| m.id == job.message_id) else {
                 continue;
             };
@@ -181,44 +192,44 @@ impl AgentLoop {
                 state.compression.pending_recommend_compact = true;
             }
         }
-        let post = self.fire_hook(
-            ::hooks::POST_COMPACT,
-            ::hooks::HookPayload {
-                turn_id: self.current_turn_id().await,
-                trigger: Some("auto".into()),
-                detail: format!(
-                    "pruned={} compressed={} llm_summarized={}",
-                    result.pruned, result.compressed, result.llm_summarized
-                ),
-                ..Default::default()
-            },
-        );
-        result.hook_stopped = matches!(
-            post,
-            ::hooks::HookOutcome::Block(_) | ::hooks::HookOutcome::Skip(_)
-        );
+        let post = self.run_post_compact_hook(self.current_turn_id().await, "auto");
+        result.hook_stopped = post.should_stop;
         Ok(result)
     }
 
     async fn apply_tool_compressed_view(
         &self,
-        stored_msg: &::session::StoredMessage,
+        stored_msg: &::session::StoredResponseItem,
         content: &str,
         view: &str,
     ) -> anyhow::Result<()> {
         self.services
             .sessions
-            .update_message_compressed_content(stored_msg.id, Some(view))?;
+            .update_response_item_compressed_content(stored_msg.id, Some(view))
+            .await?;
         let mut state = self.lock_state();
-        if let Some(runtime_msg) = state.history.iter_mut().find(|m| {
-            m.role == Role::Tool
-                && match (&m.tool_call_id, &stored_msg.tool_call_id) {
-                    (Some(a), Some(b)) => a == b,
-                    (None, None) => m.content_str() == content,
-                    _ => false,
-                }
+        if let Some(agent_protocol::ResponseItem::FunctionCallOutput {
+            internal_chat_message_metadata_passthrough,
+            ..
+        }) = state.history.iter_mut().find(|item| {
+            matches!(
+                item,
+                agent_protocol::ResponseItem::FunctionCallOutput { call_id, output, .. }
+                    if match (call_id, stored_msg.call_id()) {
+                        (Some(a), Some(b)) => a == b,
+                        (None, None) => output.text_content() == Some(content),
+                        _ => false,
+                    }
+            )
         }) {
-            runtime_msg.compressed_content = Some(view.to_string());
+            let metadata = internal_chat_message_metadata_passthrough
+                .get_or_insert_with(|| serde_json::json!({}));
+            if let Some(object) = metadata.as_object_mut() {
+                object.insert(
+                    "astro_compressed_output".to_string(),
+                    serde_json::Value::String(view.to_string()),
+                );
+            }
         }
         Ok(())
     }
@@ -252,14 +263,16 @@ mod tests {
         let session = AgentLoop::new(super::super::Config::with_defaults(
             dir.path().to_path_buf(),
         ))
+        .await
         .unwrap();
         session.record_user_message("run tool").await.unwrap();
         session
             .record_assistant_message_with_tools(
                 "",
-                Some(vec![types::message::ToolCall {
+                Some(vec![types::model_tool::ToolCall {
                     id: "call-1".into(),
                     name: "echo".into(),
+                    namespace: None,
                     arguments: serde_json::json!({}),
                     signature: None,
                 }]),

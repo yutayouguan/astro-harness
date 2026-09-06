@@ -14,44 +14,105 @@ pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 pub const PROTECTED_METADATA_DIRS: &[&str] = &[".git", ".agents", ".astro", ".codex"];
 
-/// Check if sandbox-exec is available.
+/// 检查 sandbox-exec 是否可用。
 pub fn probe() -> bool {
     Path::new(SANDBOX_EXEC).is_file()
 }
 
-/// Build a tokio async command wrapping the program under the Seatbelt sandbox.
+/// 构建 tokio 异步命令，在 Seatbelt 沙箱下包装程序。
 pub fn seatbelt_tokio_command(policy: &SandboxPolicy, program: &str) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
-    for (i, root) in policy.writable_roots.iter().enumerate() {
-        command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-    }
+    append_param_args(&mut command, policy);
     command.arg(program);
     command
 }
 
-/// Build a std sync command wrapping the program under the Seatbelt sandbox.
+/// 构建 std 同步命令，在 Seatbelt 沙箱下包装程序。
 pub fn seatbelt_std_command(policy: &SandboxPolicy, program: &str) -> std::process::Command {
     let mut command = std::process::Command::new(SANDBOX_EXEC);
     command.arg("-p").arg(seatbelt_profile(policy));
-    for (i, root) in policy.writable_roots.iter().enumerate() {
-        command.arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
-    }
+    append_param_args(&mut command, policy);
     command.arg(program);
     command
 }
 
-/// Generate the SBPL profile string for the given sandbox policy.
+trait SandboxExecArgs {
+    fn push_arg(&mut self, arg: String);
+}
+
+impl SandboxExecArgs for tokio::process::Command {
+    fn push_arg(&mut self, arg: String) {
+        self.arg(arg);
+    }
+}
+
+impl SandboxExecArgs for std::process::Command {
+    fn push_arg(&mut self, arg: String) {
+        self.arg(arg);
+    }
+}
+
+fn append_param_args(cmd: &mut impl SandboxExecArgs, policy: &SandboxPolicy) {
+    for (i, root) in policy.writable_roots.iter().enumerate() {
+        cmd.push_arg(format!("-DWRITABLE_ROOT_{i}={}", root.display()));
+    }
+    for (i, root) in policy.readable_roots.iter().enumerate() {
+        cmd.push_arg(format!("-DREADABLE_ROOT_{i}={}", root.display()));
+    }
+}
+
+/// 受限读取模式下的平台默认可读路径。
+const RESTRICTED_READ_PLATFORM_DEFAULTS: &[&str] = &[
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/dev",
+    "/etc",
+    "/var",
+    "/tmp",
+    "/private",
+    "/System",
+    "/Library",
+    "/Applications",
+];
+
+/// 根据给定的沙箱策略生成 SBPL profile 字符串。
 pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
-    let mut profile = String::from(concat!(
-        "(version 1)\n",
-        "(deny default)\n",
-        "(allow file-read*)\n",
+    let mut profile = String::from(concat!("(version 1)\n", "(deny default)\n",));
+
+    // 文件读取规则：受限或完整
+    if policy.readable_roots.is_empty() {
+        profile.push_str("(allow file-read*)\n");
+    } else {
+        for path in RESTRICTED_READ_PLATFORM_DEFAULTS {
+            profile.push_str(&format!("(allow file-read* (subpath \"{path}\"))\n"));
+        }
+        for (i, _root) in policy.readable_roots.iter().enumerate() {
+            profile.push_str(&format!(
+                "(allow file-read* (subpath (param \"READABLE_ROOT_{i}\")))\n"
+            ));
+        }
+        // 可写根目录隐式可读
+        for i in 0..policy.writable_roots.len() {
+            profile.push_str(&format!(
+                "(allow file-read* (subpath (param \"WRITABLE_ROOT_{i}\")))\n"
+            ));
+        }
+    }
+
+    profile.push_str(concat!(
         "(allow process*)\n",
         "(allow sysctl-read)\n",
         "(allow mach-lookup)\n",
         "(allow ipc-posix-shm)\n",
         "(allow signal)\n",
+        // 交互式 Shell 需要在继承的 PTY 从设备上调用 tcsetpgrp/TIOCSPGRP。
+        // 仅对 macOS 伪终端设备放行 file-ioctl，避免全局开放该权限。
+        "(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))\n",
+        // Shells and common CLI programs expect the null device to be writable even in
+        // read-only mode. This discards bytes and does not broaden filesystem access.
+        "(allow file-write* (literal \"/dev/null\"))\n",
     ));
 
     if policy.mode == SandboxMode::WorkspaceWrite {
@@ -72,12 +133,11 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
             profile.push_str("(allow network-bind (local ip \"*:*\"))\n");
             profile.push_str("(allow network-inbound (local ip \"localhost:*\"))\n");
             profile.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n");
-            if !managed_network.loopback_ports.is_empty() {
-                profile.push_str(
-                    "; allow DNS lookups while application traffic remains proxy-routed\n",
-                );
-                profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
-            }
+        }
+        if !managed_network.loopback_ports.is_empty() {
+            profile
+                .push_str("; allow DNS lookups while application traffic remains proxy-routed\n");
+            profile.push_str("(allow network-outbound (remote ip \"*:53\"))\n");
         }
         for port in &managed_network.loopback_ports {
             profile.push_str(&format!(
@@ -122,6 +182,17 @@ mod tests {
     }
 
     #[test]
+    fn profile_allows_ioctl_only_on_pty_slaves() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy =
+            SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
+        let profile = seatbelt_profile(&policy);
+
+        assert!(profile.contains("(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))"));
+        assert!(!profile.contains("(allow file-ioctl)"));
+    }
+
+    #[test]
     fn managed_network_allows_only_exact_proxy_port() {
         let dir = tempfile::tempdir().unwrap();
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], false)
@@ -133,13 +204,14 @@ mod tests {
         let profile = seatbelt_profile(&policy);
 
         assert!(profile.contains("(allow network-outbound (remote ip \"localhost:43117\"))"));
+        assert!(profile.contains("(allow network-outbound (remote ip \"*:53\"))"));
         assert!(!profile.contains("(allow network*)"));
         assert!(!profile.contains("localhost:*"));
         assert!(!profile.contains("network-bind"));
     }
 
     #[test]
-    fn local_binding_adds_loopback_rules_and_dns() {
+    fn local_binding_adds_loopback_rules() {
         let dir = tempfile::tempdir().unwrap();
         let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), [], false)
             .unwrap()
@@ -165,6 +237,62 @@ mod tests {
 
         assert!(profile.contains("(deny default)"));
         assert!(!profile.contains("WRITABLE_ROOT"));
-        assert!(!profile.contains("file-write*"));
+        assert!(profile.contains("(allow file-write* (literal \"/dev/null\"))"));
+        assert!(!profile.contains("(allow file-write* (subpath"));
+    }
+
+    #[test]
+    fn every_sandbox_mode_can_discard_output_to_dev_null() {
+        let dir = tempfile::tempdir().unwrap();
+        for mode in [SandboxMode::ReadOnly, SandboxMode::WorkspaceWrite] {
+            let policy = SandboxPolicy::new(mode, dir.path(), Vec::new(), false).unwrap();
+            assert!(
+                seatbelt_profile(&policy).contains("(allow file-write* (literal \"/dev/null\"))")
+            );
+        }
+    }
+
+    #[test]
+    fn default_policy_has_full_read_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy =
+            SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false).unwrap();
+        let profile = seatbelt_profile(&policy);
+
+        assert!(profile.contains("(allow file-read*)"));
+        assert!(!profile.contains("READABLE_ROOT"));
+    }
+
+    #[test]
+    fn restricted_read_replaces_global_with_parameterized() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = SandboxPolicy::new(SandboxMode::WorkspaceWrite, dir.path(), Vec::new(), false)
+            .unwrap()
+            .with_restricted_read(vec![dir.path().to_path_buf()]);
+        let profile = seatbelt_profile(&policy);
+
+        assert!(
+            !profile.contains("(allow file-read*)\n"),
+            "should not have global file-read"
+        );
+        assert!(profile.contains("READABLE_ROOT_0"));
+        assert!(profile.contains("(allow file-read* (subpath \"/usr\"))"));
+        assert!(profile.contains("(allow file-read* (subpath \"/bin\"))"));
+        assert!(profile.contains("(allow file-read* (subpath \"/dev\"))"));
+        // Writable roots should also be readable
+        assert!(profile.contains("(allow file-read* (subpath (param \"WRITABLE_ROOT_0\")))"));
+    }
+
+    #[test]
+    fn restricted_read_changes_policy_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = SandboxPolicy::new(SandboxMode::ReadOnly, dir.path(), [], false).unwrap();
+        let restricted = base
+            .clone()
+            .with_restricted_read(vec![dir.path().to_path_buf()]);
+        assert_ne!(
+            base.profile_hash_material(),
+            restricted.profile_hash_material()
+        );
     }
 }

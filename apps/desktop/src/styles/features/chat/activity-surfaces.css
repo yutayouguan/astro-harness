@@ -1,0 +1,623 @@
+/* Unified visual contract for reasoning, tool details, and composer task progress. */
+.bubble.assistant {
+  --activity-row-height: 36px;
+  --activity-row-radius: 10px;
+  --activity-panel-radius: 12px;
+  --activity-edge: color-mix(in srgb, var(--ink) 8%, transparent);
+  --activity-fill: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  --activity-hover: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 6%,
+    transparent
+  );
+}
+
+/* Reasoning and individual tool calls use the same quiet status-row grammar. */
+.bubble.assistant .msg-reasoning,
+.bubble.assistant .msg-timeline-body > .msg-activity {
+  margin: 0 4px 0 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--activity-edge);
+  border-radius: var(--activity-row-radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 52%),
+    var(--activity-fill);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1))) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+    saturate(1.12);
+  transition:
+    border-color 160ms ease-out,
+    background 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.bubble.assistant .msg-reasoning-toggle,
+.bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-toggle,
+.bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-summary {
+  min-height: var(--activity-row-height);
+  padding: 0 10px;
+  border-radius: inherit;
+}
+
+.bubble.assistant .msg-reasoning-toggle {
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.bubble.assistant .msg-reasoning-label,
+.bubble.assistant .msg-activity-title {
+  color: color-mix(in srgb, var(--ink) 86%, var(--ink-mute));
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.bubble.assistant .msg-reasoning-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-mute);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.bubble.assistant .msg-reasoning-chevron {
+  margin-left: auto;
+  color: var(--ink-mute);
+}
+
+.bubble.assistant .msg-reasoning-toggle:hover,
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity
+  .msg-activity-toggle:hover {
+  background: var(--activity-hover);
+}
+
+.bubble.assistant .msg-reasoning-toggle:active,
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity
+  .msg-activity-toggle:active {
+  transform: scale(0.995);
+}
+
+.bubble.assistant .msg-reasoning.is-open,
+.bubble.assistant .msg-timeline-body > .msg-activity.is-open {
+  border-color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 11%,
+    var(--activity-edge)
+  );
+  border-radius: var(--activity-panel-radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 42%),
+    color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 4px 14px color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.bubble.assistant .msg-reasoning-body {
+  max-height: 12rem;
+  margin: 0;
+  padding: 2px 10px 10px 32px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* Expanded tool details remain one inset reading plane, not stacked cards. */
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity.is-open
+  .msg-activity-collapse-inner {
+  padding: 0 10px 10px;
+}
+
+.bubble.assistant .msg-activity-io {
+  gap: 0;
+  margin-top: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bubble.assistant .msg-activity-io-block {
+  gap: 0;
+  padding: 8px 10px 9px;
+}
+
+.bubble.assistant .msg-activity-io-block.is-input {
+  padding: 0;
+}
+
+.bubble.assistant .msg-activity-io-block + .msg-activity-io-block {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.bubble.assistant .msg-activity-io-label {
+  color: var(--ink-mute);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.bubble.assistant .msg-activity-io-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.bubble.assistant .msg-activity-io-disclosure:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.bubble.assistant .msg-activity-io-chevron {
+  color: var(--ink-mute);
+}
+
+.bubble.assistant .msg-activity-input-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bubble.assistant .msg-activity-input-collapse.is-open {
+  grid-template-rows: 1fr;
+}
+
+.bubble.assistant .msg-activity-input-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bubble.assistant .msg-activity-detail.is-input {
+  padding: 0 10px 9px;
+}
+
+.bubble.assistant .msg-activity-detail.is-output {
+  margin-top: 4px;
+}
+
+/* Keep semantic color on the rail/icon; completed surfaces stay neutral. */
+.bubble.assistant .msg-reasoning:not(.is-active) .msg-reasoning-icon,
+.bubble.assistant .msg-activity:not(.is-running) .msg-activity-kind-icon {
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 58%,
+    var(--ink-mute)
+  );
+}
+
+.bubble.assistant .msg-reasoning.is-active {
+  animation: none;
+}
+
+html[data-theme="dark"] .bubble.assistant {
+  --activity-edge: rgba(255, 255, 255, 0.075);
+  --activity-fill: rgba(255, 255, 255, 0.025);
+}
+
+html[data-theme="dark"] .bubble.assistant .msg-reasoning,
+html[data-theme="dark"] .bubble.assistant .msg-timeline-body > .msg-activity,
+html[data-theme="dark"] .bubble.assistant .msg-reasoning.is-open,
+html[data-theme="dark"]
+  .bubble.assistant
+  .msg-timeline-body
+  > .msg-activity.is-open {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    rgba(255, 255, 255, 0.024);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .bubble.assistant .msg-activity-io {
+  border-color: rgba(255, 255, 255, 0.065);
+  background: rgba(0, 0, 0, 0.11);
+}
+
+/* Compact task status stays centered over the composer instead of spanning it. */
+.composer-shell .chat-scroll-latest {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 7px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--glass-edge));
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 58%),
+    color-mix(in srgb, var(--ink) 3.5%, var(--glass-panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 4px 14px color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-soft);
+  cursor: pointer;
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(1.12);
+  animation: chat-scroll-latest-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 100ms ease-out;
+}
+
+.composer-shell .chat-scroll-latest:hover {
+  color: var(--ink);
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 24%,
+    var(--glass-edge)
+  );
+}
+
+.composer-shell .chat-scroll-latest:active {
+  transform: scale(0.94);
+}
+
+.composer-shell .chat-scroll-latest:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.chat-scroll-latest-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.chat-scroll-latest-dots > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: chat-scroll-latest-dot 900ms ease-in-out infinite;
+}
+
+.chat-scroll-latest-dots > span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.chat-scroll-latest-dots > span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes chat-scroll-latest-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-scroll-latest-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.42;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-1.5px);
+  }
+}
+
+.composer-shell .todo-progress-float {
+  align-self: center;
+  width: max-content;
+  max-width: min(calc(100% - 32px), 520px);
+  margin: 0 auto 6px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, var(--glass-edge));
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), transparent 54%),
+    color-mix(in srgb, var(--ink) 3.5%, var(--glass-panel));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1))) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+    saturate(1.12);
+}
+
+.composer-shell .todo-progress-section.is-todo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.composer-shell .todo-progress-toggle {
+  width: 100%;
+  height: 34px;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.composer-shell .todo-progress-current-separator {
+  color: var(--ink-mute);
+  opacity: 0.55;
+}
+
+.composer-shell .todo-progress-current {
+  max-width: min(240px, 28vw);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-weight: 480;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-shell .todo-progress-popover {
+  right: auto;
+  left: 50%;
+  width: min(420px, calc(100vw - 48px));
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.42),
+      rgba(255, 255, 255, 0.14)
+    ),
+    color-mix(in srgb, var(--ink) 3%, var(--glass-panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 10px 28px color-mix(in srgb, var(--ink) 9%, transparent);
+  transform: translateX(-50%);
+  transform-origin: center bottom;
+}
+
+.composer-shell .todo-progress-section.is-files .todo-progress-popover {
+  right: auto;
+  left: 50%;
+  transform-origin: center bottom;
+}
+
+html[data-theme="dark"] .composer-shell .todo-progress-float,
+html[data-theme="dark"] .composer-shell .todo-progress-popover,
+html[data-theme="dark"] .composer-shell .chat-scroll-latest {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.045), transparent 56%),
+    rgba(10, 8, 20, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes todo-progress-popover-docked-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.composer-shell .todo-progress-popover {
+  animation: todo-progress-popover-docked-in 160ms
+    cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 700px) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-timeline-body > .msg-activity {
+    margin-right: 0;
+  }
+
+  .composer-shell .todo-progress-float {
+    width: max-content;
+    max-width: calc(100% - 16px);
+    margin-inline: auto;
+  }
+
+  .composer-shell .todo-progress-current {
+    max-width: 42vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-reasoning-toggle,
+  .bubble.assistant .msg-timeline-body > .msg-activity,
+  .bubble.assistant .msg-timeline-body > .msg-activity .msg-activity-toggle,
+  .bubble.assistant .msg-activity-input-collapse,
+  .composer-shell .chat-scroll-latest,
+  .chat-scroll-latest-dots > span,
+  .composer-shell .todo-progress-popover {
+    animation: none;
+    transition: none;
+  }
+}
+
+.turn-change-card {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg1) 88%, transparent);
+}
+
+.turn-change-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.turn-change-card-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--glass-subtle);
+  color: var(--text-secondary);
+}
+
+.turn-change-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.turn-change-card-title strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+.turn-change-card-title b,
+.turn-change-file-list b {
+  color: var(--success);
+  font-weight: 600;
+}
+.turn-change-card-title em,
+.turn-change-file-list em {
+  color: var(--danger);
+  font-style: normal;
+  font-weight: 600;
+}
+.turn-change-card-note,
+.turn-change-undo-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.turn-change-review-btn {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.turn-change-file-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.turn-change-file-list > button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.turn-change-file-list > button:hover {
+  background: var(--glass-hover);
+}
+.turn-change-file-list > button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.turn-change-file-list > button > span:last-child {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+.turn-change-artifact {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.turn-change-artifact > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.turn-change-expand {
+  justify-content: flex-start !important;
+}
+.turn-change-expand svg {
+  transition: transform 160ms ease;
+}
+.turn-change-expand svg.is-expanded {
+  transform: rotate(180deg);
+}
+.turn-change-undo-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 10px 8px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+}
+.turn-change-action-error {
+  margin: 0;
+  padding: 0 14px 10px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-timeline-body > .msg-activity,
+  .composer-shell .todo-progress-float,
+  .composer-shell .todo-progress-popover {
+    background: var(--panel-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .bubble.assistant .msg-reasoning,
+  .bubble.assistant .msg-timeline-body > .msg-activity,
+  .bubble.assistant .msg-activity-io,
+  .composer-shell .chat-scroll-latest,
+  .composer-shell .todo-progress-float,
+  .composer-shell .todo-progress-popover {
+    border-color: color-mix(in srgb, var(--ink) 32%, transparent);
+  }
+}

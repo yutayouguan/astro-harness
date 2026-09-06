@@ -34,7 +34,11 @@ export function resolveAgentIconSrc(agent: AgentIconInfo): string | null {
   const raw = [agent.avatar, agent.emoji].find((v) => isAgentIconSrc(v));
   if (!raw) return null;
   const src = raw!.trim();
-  if (/^https?:\/\//i.test(src) || src.startsWith("data:image/") || src.startsWith("asset:")) {
+  if (
+    /^https?:\/\//i.test(src) ||
+    src.startsWith("data:image/") ||
+    src.startsWith("asset:")
+  ) {
     return src;
   }
   if (isTauri()) {

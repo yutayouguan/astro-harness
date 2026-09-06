@@ -1,9 +1,11 @@
 //! 文件系统 Tauri 命令：列目录、读写文件、剪贴板、下载、删除、移动、复制。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 use tauri::Manager;
 
-use super::common::{bootstrap_workspace, memory_root, workspace_dir};
+use super::common::{bootstrap_workspace, memory_root, open_sessions, workspace_dir};
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -24,6 +26,67 @@ pub struct FileBase64Dto {
     pub mime: String,
     pub size: u64,
     pub base64: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitDiffDto {
+    pub path: String,
+    pub relative_path: String,
+    pub patch: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub is_binary: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnFileChangeDto {
+    pub root: Option<String>,
+    pub path: String,
+    pub source_path: Option<String>,
+    pub before_content: Option<String>,
+    pub after_content: Option<String>,
+    pub reversible: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnFileApplyResult {
+    pub status: String,
+    pub applied_paths: Vec<String>,
+    pub conflicted_paths: Vec<String>,
+}
+
+fn rooted_turn_path(root: Option<&str>, path: &str) -> String {
+    if Path::new(path).is_absolute() {
+        path.to_string()
+    } else if let Some(root) = root {
+        Path::new(root).join(path).to_string_lossy().into_owned()
+    } else {
+        path.to_string()
+    }
+}
+
+fn turn_file_change_matches(
+    change: &TurnFileChangeDto,
+    source: &Path,
+    target: &Path,
+    reverted: bool,
+) -> bool {
+    let source_content = std::fs::read_to_string(source).ok();
+    let target_content = std::fs::read_to_string(target).ok();
+    if source != target {
+        if reverted {
+            source_content == change.before_content && target_content.is_none()
+        } else {
+            source_content.is_none() && target_content == change.after_content
+        }
+    } else if reverted {
+        source_content == change.before_content
+    } else {
+        source_content == change.after_content
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +112,125 @@ fn resolve_memory_path(path: &str) -> Result<std::path::PathBuf, String> {
     Ok(p)
 }
 
+/// 读取项目 roots。项目文件 API 仅使用这些 roots，不复用记忆沙箱边界。
+pub(super) async fn project_roots(project_id: &str) -> Result<Vec<std::path::PathBuf>, String> {
+    let project_id = project_id.trim();
+    if project_id.is_empty() {
+        return Err("project_id 不能为空".into());
+    }
+    let project = open_sessions()
+        .await?
+        .get_project(project_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "项目不存在".to_string())?;
+    if project.roots.is_empty() {
+        return Err("项目没有可用根目录".into());
+    }
+    Ok(project.roots.into_iter().map(Into::into).collect())
+}
+
+/// 在多个项目根内解析路径。
+///
+/// 已存在路径必须在 canonicalize 后仍位于某个 root 内；不存在路径则验证
+/// 最近存在祖先，阻止通过目录 symlink 把后续写入导向 root 外。
+pub(super) fn resolve_project_path(
+    roots: &[std::path::PathBuf],
+    path: &str,
+) -> Result<std::path::PathBuf, String> {
+    use std::path::Component;
+
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("路径不能为空".into());
+    }
+    let candidate = std::path::PathBuf::from(raw);
+    if !candidate.is_absolute() {
+        return Err("项目路径必须是绝对路径".into());
+    }
+    if candidate
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err("项目路径不能包含 ..".into());
+    }
+
+    let canonical_roots = roots
+        .iter()
+        .map(|root| {
+            let canonical = root
+                .canonicalize()
+                .map_err(|e| format!("项目根目录不可访问（{}）: {e}", root.display()))?;
+            if !canonical.is_dir() {
+                return Err(format!("项目根路径不是目录: {}", root.display()));
+            }
+            Ok((root, canonical))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    // symlink_metadata 能识别 dangling symlink；这种路径必须进入 canonicalize
+    // 并失败，而不能被当作安全的“不存在路径”继续写入。
+    if std::fs::symlink_metadata(&candidate).is_ok() {
+        let canonical = candidate
+            .canonicalize()
+            .map_err(|e| format!("无法解析项目路径（可能是失效符号链接）: {e}"))?;
+        if canonical_roots
+            .iter()
+            .any(|(_, root)| canonical.as_path() == root.as_path() || canonical.starts_with(root))
+        {
+            return Ok(candidate);
+        }
+        return Err("路径不属于该项目".into());
+    }
+
+    let matching_roots = canonical_roots
+        .iter()
+        .filter(|(raw_root, canonical_root)| {
+            candidate.starts_with(raw_root) || candidate.starts_with(canonical_root)
+        })
+        .collect::<Vec<_>>();
+    if matching_roots.is_empty() {
+        return Err("路径不属于该项目".into());
+    }
+
+    let mut ancestor = candidate.as_path();
+    while std::fs::symlink_metadata(ancestor).is_err() {
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| "找不到已存在的父目录".to_string())?;
+    }
+    let canonical_ancestor = ancestor
+        .canonicalize()
+        .map_err(|e| format!("无法解析父目录（可能是失效符号链接）: {e}"))?;
+    if matching_roots.iter().any(|(_, root)| {
+        canonical_ancestor.as_path() == root.as_path()
+            || canonical_ancestor.starts_with(root.as_path())
+    }) {
+        Ok(candidate)
+    } else {
+        Err("路径不属于该项目".into())
+    }
+}
+
+fn ensure_not_project_root(
+    roots: &[std::path::PathBuf],
+    path: &std::path::Path,
+    operation: &str,
+) -> Result<(), String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("无法解析路径: {e}"))?;
+    for root in roots {
+        let root = root
+            .canonicalize()
+            .map_err(|e| format!("项目根目录不可访问（{}）: {e}", root.display()))?;
+        if canonical == root {
+            return Err(format!("不能{operation}项目根目录"));
+        }
+    }
+    Ok(())
+}
+
 /// 净化文件/目录名，去掉危险字符。
 fn sanitize_entry_name(name: &str) -> Result<String, String> {
     let name = name.trim();
@@ -62,6 +244,70 @@ fn sanitize_entry_name(name: &str) -> Result<String, String> {
         return Err("无效的名称".into());
     }
     Ok(name.to_string())
+}
+
+fn project_review_path(roots: &[PathBuf], requested: &str) -> Result<(PathBuf, PathBuf), String> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err("文件路径不能为空".into());
+    }
+
+    let path = PathBuf::from(requested);
+    if path.is_absolute() {
+        let resolved = resolve_project_path(roots, requested)?;
+        let root = roots
+            .iter()
+            .find(|root| resolved.starts_with(root.as_path()))
+            .cloned()
+            .ok_or_else(|| "文件不属于该项目".to_string())?;
+        return Ok((root, resolved));
+    }
+
+    let candidates = roots
+        .iter()
+        .map(|root| (root.clone(), root.join(&path)))
+        .collect::<Vec<_>>();
+    let selected = candidates
+        .iter()
+        .find(|(_, candidate)| std::fs::symlink_metadata(candidate).is_ok())
+        .or_else(|| candidates.first())
+        .ok_or_else(|| "项目没有可用根目录".to_string())?;
+    let resolved = resolve_project_path(roots, &selected.1.to_string_lossy())?;
+    Ok((selected.0.clone(), resolved))
+}
+
+fn run_git(root: &Path, args: &[&str]) -> Result<Output, String> {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .output()
+        .map_err(|error| format!("无法运行 git: {error}"))
+}
+
+fn git_stdout(output: Output, operation: &str, allow_diff_exit: bool) -> Result<String, String> {
+    if output.status.success() || (allow_diff_exit && output.status.code() == Some(1)) {
+        return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        format!("{operation}失败")
+    } else {
+        format!("{operation}失败: {detail}")
+    })
+}
+
+fn count_patch_changes(patch: &str) -> (usize, usize) {
+    patch.lines().fold((0, 0), |(additions, deletions), line| {
+        if line.starts_with('+') && !line.starts_with("+++") {
+            (additions + 1, deletions)
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            (additions, deletions + 1)
+        } else {
+            (additions, deletions)
+        }
+    })
 }
 
 /// 比较两条路径是否指向同一位置（规范化后）。
@@ -134,6 +380,56 @@ fn guess_mime(name: &str) -> String {
     .into()
 }
 
+/// 用 Visual Studio Code 打开文件或文件夹。
+fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
+    let missing = || "未找到 Visual Studio Code，请先安装或把 `code` 加入 PATH".to_string();
+
+    #[cfg(target_os = "macos")]
+    {
+        let opened = std::process::Command::new("open")
+            .args(["-b", "com.microsoft.VSCode"])
+            .arg(path)
+            .status()
+            .ok()
+            .is_some_and(|status| status.success());
+        if opened {
+            return Ok(());
+        }
+        std::process::Command::new("code")
+            .arg(path)
+            .spawn()
+            .map_err(|_| missing())?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let candidates = ["code.cmd", "code"];
+        for program in candidates {
+            if std::process::Command::new(program)
+                .arg(path)
+                .spawn()
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+        return Err(missing());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("code")
+            .arg(path)
+            .spawn()
+            .map_err(|_| missing())?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = path;
+        Err(missing())
+    }
+}
+
 /// 用系统默认应用打开路径。
 fn open_path_with_system(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -172,6 +468,449 @@ fn open_path_with_system(path: &std::path::Path) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
+
+/// 列出项目目录（包含隐藏项），目录优先并按名称排序。
+#[tauri::command]
+pub async fn project_list_files(
+    project_id: String,
+    path: String,
+) -> Result<Vec<FileEntryDto>, String> {
+    let roots = project_roots(&project_id).await?;
+    let directory = resolve_project_path(&roots, &path)?;
+    if !directory.is_dir() {
+        return Err("路径不是目录".into());
+    }
+
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(&directory).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+
+        // 不跟随越界目录 symlink；指向项目内的 symlink 仍可正常浏览。
+        let metadata = if file_type.is_symlink() {
+            if resolve_project_path(&roots, &entry_path.to_string_lossy()).is_ok() {
+                std::fs::metadata(&entry_path).ok()
+            } else {
+                std::fs::symlink_metadata(&entry_path).ok()
+            }
+        } else {
+            entry.metadata().ok()
+        };
+        let is_dir = metadata.as_ref().is_some_and(|metadata| metadata.is_dir())
+            && (!file_type.is_symlink()
+                || resolve_project_path(&roots, &entry_path.to_string_lossy()).is_ok());
+        let size = if is_dir {
+            0
+        } else {
+            metadata.map(|metadata| metadata.len() as i64).unwrap_or(0)
+        };
+        entries.push(FileEntryDto {
+            path: entry_path.to_string_lossy().into_owned(),
+            name,
+            is_dir,
+            size,
+        });
+    }
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
+    });
+    Ok(entries)
+}
+
+/// 读取项目内 UTF-8 文本文件。
+#[tauri::command]
+pub async fn project_read_file(project_id: String, path: String) -> Result<String, String> {
+    let roots = project_roots(&project_id).await?;
+    let path = resolve_project_path(&roots, &path)?;
+    if path.is_dir() {
+        return Err("路径是目录".into());
+    }
+    std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+/// 返回项目内单个文件相对 HEAD 的统一 diff，供聊天右侧审查面板展示。
+#[tauri::command]
+pub async fn project_git_diff(
+    project_id: String,
+    path: String,
+) -> Result<ProjectGitDiffDto, String> {
+    const MAX_PATCH_BYTES: usize = 2 * 1024 * 1024;
+
+    let roots = project_roots(&project_id).await?;
+    let (project_root, file_path) = project_review_path(&roots, &path)?;
+    let repo_root_raw = git_stdout(
+        run_git(&project_root, &["rev-parse", "--show-toplevel"])?,
+        "定位 Git 仓库",
+        false,
+    )?;
+    let repo_root = PathBuf::from(repo_root_raw.trim());
+    let relative_path = file_path
+        .strip_prefix(&repo_root)
+        .map_err(|_| "文件不属于当前 Git 仓库".to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    let status = git_stdout(
+        run_git(
+            &repo_root,
+            &[
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--",
+                &relative_path,
+            ],
+        )?,
+        "读取文件状态",
+        false,
+    )?;
+    let is_untracked = status.lines().any(|line| line.starts_with("?? "));
+    let patch = if is_untracked {
+        git_stdout(
+            run_git(
+                &repo_root,
+                &[
+                    "diff",
+                    "--no-index",
+                    "--no-ext-diff",
+                    "--no-color",
+                    "--unified=3",
+                    "--",
+                    "/dev/null",
+                    &file_path.to_string_lossy(),
+                ],
+            )?,
+            "读取未跟踪文件差异",
+            true,
+        )?
+    } else {
+        let has_head = run_git(&repo_root, &["rev-parse", "--verify", "HEAD"])?
+            .status
+            .success();
+        if has_head {
+            git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "HEAD",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取文件差异",
+                false,
+            )?
+        } else {
+            let staged = git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--cached",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取暂存区差异",
+                false,
+            )?;
+            let unstaged = git_stdout(
+                run_git(
+                    &repo_root,
+                    &[
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-color",
+                        "--unified=3",
+                        "--",
+                        &relative_path,
+                    ],
+                )?,
+                "读取工作区差异",
+                false,
+            )?;
+            format!("{staged}{unstaged}")
+        }
+    };
+
+    if patch.len() > MAX_PATCH_BYTES {
+        return Err("文件差异过大，无法在审查面板中完整显示".into());
+    }
+    let (additions, deletions) = count_patch_changes(&patch);
+    let is_binary = patch
+        .lines()
+        .any(|line| line.starts_with("Binary files ") || line.starts_with("GIT binary patch"));
+
+    Ok(ProjectGitDiffDto {
+        path: file_path.to_string_lossy().into_owned(),
+        relative_path,
+        patch,
+        additions,
+        deletions,
+        is_binary,
+    })
+}
+
+/// 按 turn 冻结快照撤销或重新应用文件修改；预检失败时不写入任何文件。
+#[tauri::command]
+pub async fn apply_turn_file_changes(
+    project_id: String,
+    changes: Vec<TurnFileChangeDto>,
+    revert: bool,
+) -> Result<TurnFileApplyResult, String> {
+    let roots = project_roots(&project_id).await?;
+    let mut resolved = Vec::with_capacity(changes.len());
+    let mut conflicts = Vec::new();
+    for change in changes {
+        if change.reversible != Some(true) {
+            conflicts.push(change.path.clone());
+            continue;
+        }
+        let source = change.source_path.as_deref().unwrap_or(&change.path);
+        let source = rooted_turn_path(change.root.as_deref(), source);
+        let target = rooted_turn_path(change.root.as_deref(), &change.path);
+        let (_, source_path) = project_review_path(&roots, &source)?;
+        let (_, target_path) = project_review_path(&roots, &target)?;
+        if !turn_file_change_matches(&change, &source_path, &target_path, !revert) {
+            conflicts.push(change.path.clone());
+            continue;
+        }
+        let desired = if revert {
+            change.before_content.clone()
+        } else {
+            change.after_content.clone()
+        };
+        resolved.push((change, source_path, target_path, desired));
+    }
+    if !conflicts.is_empty() {
+        return Ok(TurnFileApplyResult {
+            status: "conflict".into(),
+            applied_paths: Vec::new(),
+            conflicted_paths: conflicts,
+        });
+    }
+    if revert {
+        resolved.reverse();
+    }
+    let mut applied = Vec::new();
+    for (change, source, target, desired) in resolved {
+        let is_move = change
+            .source_path
+            .as_deref()
+            .is_some_and(|p| p != change.path);
+        let apply_result = (|| -> Result<(), String> {
+            if is_move {
+                if revert {
+                    if let Some(parent) = source.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&source, change.before_content.as_deref().unwrap_or(""))
+                        .map_err(|e| e.to_string())?;
+                    if target.exists() {
+                        std::fs::remove_file(&target).map_err(|e| e.to_string())?;
+                    }
+                } else {
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&target, change.after_content.as_deref().unwrap_or(""))
+                        .map_err(|e| e.to_string())?;
+                    if source.exists() {
+                        std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+                    }
+                }
+            } else if let Some(content) = desired {
+                if let Some(parent) = source.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&source, content).map_err(|e| e.to_string())?;
+            } else if source.exists() {
+                std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        })();
+        if apply_result.is_err() {
+            return Ok(TurnFileApplyResult {
+                status: "partial".into(),
+                applied_paths: applied,
+                conflicted_paths: vec![change.path],
+            });
+        }
+        applied.push(change.path);
+    }
+    Ok(TurnFileApplyResult {
+        status: "success".into(),
+        applied_paths: applied,
+        conflicted_paths: Vec::new(),
+    })
+}
+
+/// Inspect the authoritative workspace state for a persisted turn change set.
+#[tauri::command]
+pub async fn inspect_turn_file_changes(
+    project_id: String,
+    changes: Vec<TurnFileChangeDto>,
+) -> Result<TurnFileApplyResult, String> {
+    let roots = project_roots(&project_id).await?;
+    let mut all_applied = true;
+    let mut all_reverted = true;
+    let mut conflicts = Vec::new();
+    for change in changes {
+        let source = change.source_path.as_deref().unwrap_or(&change.path);
+        let source = rooted_turn_path(change.root.as_deref(), source);
+        let target = rooted_turn_path(change.root.as_deref(), &change.path);
+        let (_, source_path) = project_review_path(&roots, &source)?;
+        let (_, target_path) = project_review_path(&roots, &target)?;
+        let applied = turn_file_change_matches(&change, &source_path, &target_path, false);
+        let reverted = turn_file_change_matches(&change, &source_path, &target_path, true);
+        all_applied &= applied;
+        all_reverted &= reverted;
+        if !applied && !reverted {
+            conflicts.push(change.path);
+        }
+    }
+    let status = if all_applied {
+        "applied"
+    } else if all_reverted {
+        "reverted"
+    } else {
+        "conflict"
+    };
+    Ok(TurnFileApplyResult {
+        status: status.into(),
+        applied_paths: Vec::new(),
+        conflicted_paths: conflicts,
+    })
+}
+
+/// 用系统默认应用打开项目根目录内的文件或目录。
+#[tauri::command]
+pub async fn project_open_path_externally(project_id: String, path: String) -> Result<(), String> {
+    let roots = project_roots(&project_id).await?;
+    let path = resolve_project_path(&roots, &path)?;
+    if !path.exists() {
+        return Err("路径不存在".into());
+    }
+    open_path_with_system(&path)
+}
+
+/// 写入项目内 UTF-8 文本文件；缺失的父目录会一并创建。
+#[tauri::command]
+pub async fn project_write_file(
+    project_id: String,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    let roots = project_roots(&project_id).await?;
+    let path = resolve_project_path(&roots, &path)?;
+    if path.is_dir() {
+        return Err("不能写入目录".into());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+/// 在项目目录下新建空文件。
+#[tauri::command]
+pub async fn project_create_file(
+    project_id: String,
+    parent: String,
+    name: String,
+) -> Result<FileEntryDto, String> {
+    let name = sanitize_entry_name(&name)?;
+    let roots = project_roots(&project_id).await?;
+    let parent = resolve_project_path(&roots, &parent)?;
+    if !parent.is_dir() {
+        return Err("父路径不是目录".into());
+    }
+    let path = resolve_project_path(&roots, &parent.join(&name).to_string_lossy())?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    options.open(&path).map_err(|e| e.to_string())?;
+    Ok(file_entry_dto(&path, &name, false))
+}
+
+/// 在项目目录下新建目录。
+#[tauri::command]
+pub async fn project_create_directory(
+    project_id: String,
+    parent: String,
+    name: String,
+) -> Result<FileEntryDto, String> {
+    let name = sanitize_entry_name(&name)?;
+    let roots = project_roots(&project_id).await?;
+    let parent = resolve_project_path(&roots, &parent)?;
+    if !parent.is_dir() {
+        return Err("父路径不是目录".into());
+    }
+    let path = resolve_project_path(&roots, &parent.join(&name).to_string_lossy())?;
+    std::fs::create_dir(&path).map_err(|e| e.to_string())?;
+    Ok(file_entry_dto(&path, &name, true))
+}
+
+/// 重命名项目内路径；项目 root 本身不可重命名。
+#[tauri::command]
+pub async fn project_rename_path(
+    project_id: String,
+    path: String,
+    new_name: String,
+) -> Result<FileEntryDto, String> {
+    let new_name = sanitize_entry_name(&new_name)?;
+    let roots = project_roots(&project_id).await?;
+    let source = resolve_project_path(&roots, &path)?;
+    if !source.exists() {
+        return Err("路径不存在".into());
+    }
+    ensure_not_project_root(&roots, &source, "重命名")?;
+    if source.file_name().and_then(|name| name.to_str()) == Some(new_name.as_str()) {
+        return Ok(file_entry_dto(&source, &new_name, source.is_dir()));
+    }
+    let parent = source
+        .parent()
+        .ok_or_else(|| "路径没有父目录".to_string())?;
+    let destination = resolve_project_path(&roots, &parent.join(&new_name).to_string_lossy())?;
+    if std::fs::symlink_metadata(&destination).is_ok() {
+        return Err("文件或目录已存在".into());
+    }
+    std::fs::rename(&source, &destination).map_err(|e| e.to_string())?;
+    Ok(file_entry_dto(
+        &destination,
+        &new_name,
+        destination.is_dir(),
+    ))
+}
+
+/// 将项目内路径移入系统废纸篓；项目 roots 本身不可删除。
+#[tauri::command]
+pub async fn project_trash_paths(project_id: String, paths: Vec<String>) -> Result<u32, String> {
+    let roots = project_roots(&project_id).await?;
+    let mut resolved = Vec::with_capacity(paths.len());
+    for path in paths {
+        let path = resolve_project_path(&roots, &path)?;
+        if !path.exists() {
+            return Err(format!("路径不存在: {}", path.display()));
+        }
+        ensure_not_project_root(&roots, &path, "删除")?;
+        resolved.push(path);
+    }
+    for path in &resolved {
+        trash::delete(path).map_err(|e| e.to_string())?;
+    }
+    Ok(resolved.len() as u32)
+}
 
 /// 在沙箱内列举工作区 / 文件空间路径。
 #[tauri::command]
@@ -227,6 +966,21 @@ pub async fn open_path_externally(path: String) -> Result<(), String> {
         return Err("文件不存在".into());
     }
     open_path_with_system(&p)
+}
+
+/// 用 VS Code 打开路径。优先按项目根校验，否则回退到记忆沙箱。
+#[tauri::command]
+pub async fn open_path_in_vscode(path: String, project_id: Option<String>) -> Result<(), String> {
+    let resolved = if let Some(project_id) = project_id.filter(|id| !id.trim().is_empty()) {
+        let roots = project_roots(&project_id).await?;
+        resolve_project_path(&roots, &path)?
+    } else {
+        resolve_memory_path(&path)?
+    };
+    if !resolved.exists() {
+        return Err("路径不存在".into());
+    }
+    open_path_with_vscode(&resolved)
 }
 
 /// 在系统文件管理器中显示路径。
@@ -496,14 +1250,16 @@ pub async fn write_file(
 
     if as_artifact.unwrap_or(false) {
         let mem = home::default_memory_dir();
-        if let Ok(db) = artifacts::open_default(&mem) {
-            let _ = db.register(
-                &path,
-                artifacts::ArtifactSource::AgentWrite,
-                session_id.as_deref(),
-                None,
-                None,
-            );
+        if let Ok(db) = artifacts::open_default(&mem).await {
+            let _ = db
+                .register(
+                    &path,
+                    artifacts::ArtifactSource::AgentWrite,
+                    session_id.as_deref(),
+                    None,
+                    None,
+                )
+                .await;
         }
     }
     Ok(())
@@ -683,4 +1439,132 @@ pub async fn delete_path(path: String) -> Result<(), String> {
         std::fs::remove_file(&p).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod project_path_tests {
+    use super::{
+        count_patch_changes, ensure_not_project_root, project_review_path, resolve_project_path,
+    };
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    #[test]
+    fn accepts_existing_child_in_any_project_root() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        let file = second.path().join("src").join("main.rs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "fn main() {}").unwrap();
+
+        let resolved = resolve_project_path(
+            &[first.path().to_path_buf(), second.path().to_path_buf()],
+            &file.to_string_lossy(),
+        )
+        .unwrap();
+        assert_eq!(resolved, file);
+    }
+
+    #[test]
+    fn rejects_parent_dir_even_when_lexically_below_root() {
+        let root = TempDir::new().unwrap();
+        let escaped = root.path().join("nested").join("..").join("outside.txt");
+        let error = resolve_project_path(&[root.path().to_path_buf()], &escaped.to_string_lossy())
+            .unwrap_err();
+        assert!(error.contains(".."));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let link = root.path().join("outside-link");
+        symlink(outside.path(), &link).unwrap();
+
+        let existing = link.join(".");
+        assert!(
+            resolve_project_path(&[root.path().to_path_buf()], &existing.to_string_lossy())
+                .is_err()
+        );
+
+        let missing = link.join("new").join("file.txt");
+        assert!(
+            resolve_project_path(&[root.path().to_path_buf()], &missing.to_string_lossy()).is_err()
+        );
+    }
+
+    #[test]
+    fn accepts_missing_write_path_when_nearest_parent_is_inside_root() {
+        let root = TempDir::new().unwrap();
+        let existing_parent = root.path().join("existing");
+        std::fs::create_dir(&existing_parent).unwrap();
+        let missing = existing_parent.join("new").join("deep").join("file.txt");
+
+        let resolved =
+            resolve_project_path(&[root.path().to_path_buf()], &missing.to_string_lossy()).unwrap();
+        assert_eq!(resolved, missing);
+    }
+
+    #[test]
+    fn protects_each_project_root_from_mutation() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        let roots: Vec<PathBuf> = vec![first.path().to_path_buf(), second.path().to_path_buf()];
+
+        let error = ensure_not_project_root(&roots, second.path(), "删除").unwrap_err();
+        assert!(error.contains("项目根目录"));
+
+        let child = second.path().join("child");
+        std::fs::create_dir(&child).unwrap();
+        ensure_not_project_root(&roots, &child, "删除").unwrap();
+    }
+
+    #[test]
+    fn resolves_relative_review_path_inside_project_root() {
+        let root = TempDir::new().unwrap();
+        let file = root.path().join("src").join("main.rs");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "fn main() {}\n").unwrap();
+
+        let (selected_root, selected_file) =
+            project_review_path(&[root.path().to_path_buf()], "src/main.rs").unwrap();
+        assert_eq!(selected_root, root.path());
+        assert_eq!(selected_file, file);
+    }
+
+    #[test]
+    fn counts_only_changed_patch_lines() {
+        let patch = "--- a/file.rs\n+++ b/file.rs\n@@ -1,2 +1,3 @@\n-old\n+new\n+extra\n context\n";
+        assert_eq!(count_patch_changes(patch), (2, 1));
+    }
+}
+
+#[cfg(test)]
+mod turn_change_tests {
+    use super::*;
+
+    #[test]
+    fn detects_applied_reverted_and_conflicted_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.txt");
+        let change = TurnFileChangeDto {
+            root: None,
+            path: "a.txt".into(),
+            source_path: None,
+            before_content: Some("before".into()),
+            after_content: Some("after".into()),
+            reversible: Some(true),
+        };
+        std::fs::write(&path, "after").unwrap();
+        assert!(turn_file_change_matches(&change, &path, &path, false));
+        assert!(!turn_file_change_matches(&change, &path, &path, true));
+        std::fs::write(&path, "before").unwrap();
+        assert!(turn_file_change_matches(&change, &path, &path, true));
+        std::fs::write(&path, "user edit").unwrap();
+        assert!(!turn_file_change_matches(&change, &path, &path, false));
+        assert!(!turn_file_change_matches(&change, &path, &path, true));
+    }
 }

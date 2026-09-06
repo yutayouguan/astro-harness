@@ -1,6 +1,6 @@
 //! MCP 连接池与工具调用。
 //!
-//! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露限定名工具。
+//! 按 Agent 加载配置、维持 RunningService，并向 ToolRegistry 暴露原生命名空间工具。
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -10,7 +10,7 @@ use std::process::Stdio;
 use anyhow::{anyhow, Context};
 use futures::{stream, StreamExt};
 use http::{header::AUTHORIZATION, HeaderName, HeaderValue};
-use rmcp::model::{CallToolRequestParams, ContentBlock, Tool as RmcpTool};
+use rmcp::model::{CallToolRequestParams, ContentBlock, ElicitRequestParams, Tool as RmcpTool};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{Peer, RoleClient, ServiceExt};
@@ -24,15 +24,17 @@ use crate::config::{
     load_mcp_servers_layered, merge_discovered, persist_discovered_layered, DiscoveredTool,
     McpHttpAuth, McpServerConfig, McpTransportType,
 };
+use crate::elicitation::McpElicitationBroker;
 use crate::names::{
-    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, MCP_TOOLSET,
+    is_mcp_tool_name, parse_qualified_name, qualify_tool_name, sanitize_server_id, tool_namespace,
+    MCP_TOOLSET,
 };
 
 /// 同时启动的 MCP Server 上限。
 pub const MAX_PARALLEL_MCP_STARTUPS: usize = 4;
 /// 自动重连退避上限。
 pub const MAX_MCP_RETRY_DELAY_SECS: u64 = 30;
-/// 单个 Server instructions 的内存上限；保留开头以符合 Codex 的 512 字符自包含建议。
+/// 单个 Server instructions 的内存上限。
 pub const MAX_MCP_SERVER_INSTRUCTIONS_CHARS: usize = 16_384;
 /// 单个 Agent 所有已连接 Server instructions 的总上限。
 pub const MAX_TOTAL_MCP_INSTRUCTIONS_CHARS: usize = 65_536;
@@ -44,6 +46,7 @@ pub const MAX_TOTAL_MCP_INSTRUCTIONS_CHARS: usize = 65_536;
 pub struct McpExecutionContext {
     sandbox_policy: sandbox::SandboxPolicy,
     working_dir: PathBuf,
+    allowed_working_roots: Vec<PathBuf>,
     sandbox_audit: Option<sandbox::SandboxAuditMetadata>,
 }
 
@@ -66,9 +69,35 @@ impl McpExecutionContext {
         }
         Ok(Self {
             sandbox_policy,
+            allowed_working_roots: vec![working_dir.clone()],
             working_dir,
             sandbox_audit: None,
         })
+    }
+
+    /// 允许受信任扩展包中的 MCP Server 使用其包目录作为 cwd。
+    ///
+    /// 这里只扩大 cwd 校验边界，不增加沙箱写权限；扩展目录仍受当前 profile 约束。
+    pub fn with_additional_working_roots(
+        mut self,
+        roots: impl IntoIterator<Item = PathBuf>,
+    ) -> anyhow::Result<Self> {
+        for root in roots {
+            let root = root
+                .canonicalize()
+                .with_context(|| format!("resolve MCP allowed working root: {}", root.display()))?;
+            if !root.is_dir() {
+                anyhow::bail!(
+                    "MCP allowed working root is not a directory: {}",
+                    root.display()
+                );
+            }
+            if !self.allowed_working_roots.contains(&root) {
+                self.allowed_working_roots.push(root);
+            }
+        }
+        self.allowed_working_roots.sort();
+        Ok(self)
     }
 
     pub fn with_sandbox_audit(mut self, audit: sandbox::SandboxAuditMetadata) -> Self {
@@ -84,9 +113,14 @@ impl McpExecutionContext {
 
     fn fingerprint(&self) -> String {
         format!(
-            "{}|{}",
+            "{}|{}|{}",
             self.sandbox_policy.profile_hash_material(),
-            self.working_dir.to_string_lossy()
+            self.working_dir.to_string_lossy(),
+            self.allowed_working_roots
+                .iter()
+                .map(|root| root.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(";")
         )
     }
 }
@@ -96,6 +130,8 @@ impl McpExecutionContext {
 pub struct ToolEntrySpec {
     /// `mcp__{server}__{tool}` 限定名。
     pub qualified_name: String,
+    /// Responses API 原生命名空间 `mcp__{server}`。
+    pub namespace: String,
     /// 服务器 id。
     pub server_id: String,
     /// 原生工具名。
@@ -108,6 +144,8 @@ pub struct ToolEntrySpec {
     pub approval_mode: types::McpToolApprovalMode,
     /// Server 声明的非授权性风险提示。
     pub annotations: types::McpToolAnnotations,
+    /// 用户/扩展策略解析后的输出 token 预算。
+    pub output_token_limit: Option<usize>,
 }
 
 /// 已连接 Server 在 initialize 阶段返回的 guidance 快照。
@@ -283,11 +321,35 @@ struct ToolChangeHandler {
     server_id: String,
     /// 单调递增序列号，确保旧响应不覆盖新响应。
     next_seq: Arc<std::sync::atomic::AtomicU64>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 }
 
 impl rmcp::handler::client::ClientHandler for ToolChangeHandler {
     fn get_info(&self) -> rmcp::model::ClientInfo {
         rmcp::model::ClientInfo::default()
+    }
+
+    async fn create_elicitation(
+        &self,
+        request: ElicitRequestParams,
+        context: rmcp::service::RequestContext<rmcp::service::RoleClient>,
+    ) -> Result<rmcp::model::ElicitResult, rmcp::model::ErrorData> {
+        let request_id = serde_json::to_value(&context.id)
+            .map(|value| match value {
+                Value::String(value) => value,
+                value => value.to_string(),
+            })
+            .map_err(|error| rmcp::model::ErrorData::internal_error(error.to_string(), None))?;
+        let params = serde_json::to_value(request)
+            .map_err(|error| rmcp::model::ErrorData::internal_error(error.to_string(), None))?;
+        let Some(elicitation) = &self.elicitation else {
+            return Ok(rmcp::model::ElicitResult::new(
+                rmcp::model::ElicitationAction::Decline,
+            ));
+        };
+        elicitation
+            .request(self.server_id.clone(), request_id, params, context.ct)
+            .await
     }
 
     async fn on_tool_list_changed(
@@ -371,6 +433,10 @@ pub struct McpHub {
     retries: HashMap<String, RetryState>,
     /// 当前 session/profile 对 MCP 连接施加的不可变权限快照。
     execution_context: Option<McpExecutionContext>,
+    elicitation: Arc<McpElicitationBroker>,
+    event_streams: Arc<crate::McpEventStreamManager>,
+    event_stream_updates: Option<tokio::sync::mpsc::Receiver<crate::McpEventStreamUpdate>>,
+    event_stream_access_generation: tokio::sync::watch::Sender<u64>,
 }
 
 impl Default for McpHub {
@@ -383,6 +449,8 @@ impl Default for McpHub {
 impl McpHub {
     /// 创建未绑定 Agent、无连接的空 Hub。
     pub fn new() -> Self {
+        let (event_streams, event_stream_updates) = crate::McpEventStreamManager::new();
+        let (event_stream_access_generation, _) = tokio::sync::watch::channel(0_u64);
         Self {
             agent_id: None,
             servers: HashMap::new(),
@@ -391,7 +459,33 @@ impl McpHub {
             states: HashMap::new(),
             retries: HashMap::new(),
             execution_context: None,
+            elicitation: Arc::new(McpElicitationBroker::new()),
+            event_streams: Arc::new(event_streams),
+            event_stream_updates: Some(event_stream_updates),
+            event_stream_access_generation,
         }
+    }
+
+    pub fn event_stream_manager(&self) -> Arc<crate::McpEventStreamManager> {
+        Arc::clone(&self.event_streams)
+    }
+
+    pub fn event_stream_access_generation(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.event_stream_access_generation.subscribe()
+    }
+
+    pub fn take_event_stream_updates(
+        &mut self,
+    ) -> Option<tokio::sync::mpsc::Receiver<crate::McpEventStreamUpdate>> {
+        self.event_stream_updates.take()
+    }
+
+    pub fn elicitation_broker(&self) -> Arc<McpElicitationBroker> {
+        Arc::clone(&self.elicitation)
+    }
+
+    pub fn set_elicitation_broker(&mut self, broker: Arc<McpElicitationBroker>) {
+        self.elicitation = broker;
     }
 
     /// 当前绑定的 Agent id（若有）。
@@ -408,7 +502,16 @@ impl McpHub {
     ///
     /// 传 `None` 表示策略解析失败或尚未配置；所有连接都会 fail closed。
     pub fn set_execution_context(&mut self, context: Option<McpExecutionContext>) {
+        let changed = self
+            .execution_context
+            .as_ref()
+            .map(McpExecutionContext::fingerprint)
+            != context.as_ref().map(McpExecutionContext::fingerprint);
         self.execution_context = context;
+        if changed {
+            let next = self.event_stream_access_generation.borrow().wrapping_add(1);
+            self.event_stream_access_generation.send_replace(next);
+        }
     }
 
     /// 从磁盘重载：保留未变连接，重连变更项，断开已删除/禁用项
@@ -459,6 +562,7 @@ impl McpHub {
             .cloned()
             .collect();
         for id in drop_ids {
+            self.event_streams.abort_server(&id);
             self.servers.remove(&id);
         }
 
@@ -525,18 +629,22 @@ impl McpHub {
                 }
             }
             self.servers.remove(&sid);
+            self.event_streams.abort_server(&sid);
             self.states.insert(sid, McpLifecycleState::Connecting);
             connect_errors.remove(&sanitize_server_id(&cfg.id));
             pending.push(cfg);
         }
 
         let execution_context = self.execution_context.clone();
+        let elicitation = Arc::clone(&self.elicitation);
         let futures = pending
             .into_iter()
             .map(|cfg| {
                 let execution_context = execution_context.clone();
+                let elicitation = Arc::clone(&elicitation);
                 async move {
-                    let result = connect_server(&cfg, execution_context.as_ref()).await;
+                    let result =
+                        connect_server(&cfg, execution_context.as_ref(), Some(elicitation)).await;
                     (cfg, result)
                 }
             })
@@ -699,6 +807,7 @@ impl McpHub {
         self.retries.remove(&sid);
         self.last_connect_errors.remove(&sid);
         self.servers.remove(&sid);
+        self.event_streams.abort_server(&sid);
         self.states.insert(sid, McpLifecycleState::Disconnected);
         Ok(())
     }
@@ -774,6 +883,7 @@ impl McpHub {
                 let schema = Value::Object(tool.input_schema.as_ref().clone());
                 out.push(ToolEntrySpec {
                     qualified_name: qualify_tool_name(sid, native),
+                    namespace: tool_namespace(sid),
                     server_id: sid.clone(),
                     native_name: native.to_string(),
                     description: tool
@@ -784,6 +894,7 @@ impl McpHub {
                     schema,
                     approval_mode: rs.config.tool_approval_mode(native),
                     annotations: tool_annotations(tool),
+                    output_token_limit: rs.config.tool_output_token_limit(native),
                 });
             }
         }
@@ -906,16 +1017,16 @@ impl McpHub {
 
     /// 校验工具调用权限并返回 peer 克隆 + 超时配置，供 lock 外异步调用。
     ///
-    /// 成功时返回 `(peer, native_tool_name, timeout_secs)`；调用方在释放
+    /// 成功时返回 `(peer, native_tool_name, timeout_secs, output_token_limit)`；调用方在释放
     /// `MutexGuard` 后再执行 `call_tool_with_peer`。
     pub fn resolve_tool_peer(
         &self,
         qualified_name: &str,
-    ) -> anyhow::Result<(Peer<RoleClient>, String, u64)> {
+    ) -> anyhow::Result<(Peer<RoleClient>, String, u64, Option<usize>)> {
         if !is_mcp_tool_name(qualified_name) {
             anyhow::bail!("不是 MCP 工具: {qualified_name}");
         }
-        let (server_id, native) = parse_qualified_name(qualified_name)
+        let (server_id, sanitized_native) = parse_qualified_name(qualified_name)
             .ok_or_else(|| anyhow!("无效 MCP 工具名: {qualified_name}"))?;
 
         let rs = self
@@ -926,12 +1037,22 @@ impl McpHub {
         if !rs.config.enabled {
             anyhow::bail!("MCP server 已禁用: {server_id}");
         }
-        if !rs.config.is_tool_enabled(native) {
+
+        // sanitized name → 原始 native name 反查
+        let native = rs
+            .tools
+            .iter()
+            .find(|t| qualify_tool_name(server_id, t.name.as_ref()) == qualified_name)
+            .map(|t| t.name.to_string())
+            .unwrap_or_else(|| sanitized_native.to_string());
+
+        if !rs.config.is_tool_enabled(&native) {
             anyhow::bail!("MCP 工具已禁用: {qualified_name}");
         }
 
         let timeout_secs = rs.config.effective_tool_timeout_secs();
-        Ok((rs.peer.clone(), native.to_string(), timeout_secs))
+        let output_token_limit = rs.config.tool_output_token_limit(&native);
+        Ok((rs.peer.clone(), native, timeout_secs, output_token_limit))
     }
 
     fn resolve_broker_peer(
@@ -984,13 +1105,28 @@ impl McpHub {
     }
 
     /// 调用已连接 MCP 工具（按服务器与工具名）。
-    pub async fn call_tool(
+    pub fn call_tool(
         &self,
         qualified_name: &str,
         args: &Value,
-    ) -> anyhow::Result<types::ToolOutput> {
-        let (peer, native, timeout_secs) = self.resolve_tool_peer(qualified_name)?;
-        call_tool_with_peer(&peer, qualified_name, &native, args, timeout_secs).await
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<types::ToolOutput>> + Send + 'static>,
+    > {
+        let resolved = self.resolve_tool_peer(qualified_name);
+        let qualified_name = qualified_name.to_string();
+        let args = args.clone();
+        Box::pin(async move {
+            let (peer, native, timeout_secs, output_token_limit) = resolved?;
+            call_tool_with_peer(
+                &peer,
+                &qualified_name,
+                &native,
+                &args,
+                timeout_secs,
+                output_token_limit,
+            )
+            .await
+        })
     }
 
     /// 短连刷新某 server 的 discovered（供 UI refresh_mcp_tools）
@@ -1009,7 +1145,7 @@ impl McpHub {
             if !cfg.enabled && server_id.is_none() {
                 continue;
             }
-            match connect_server(cfg, Some(execution_context)).await {
+            match connect_server(cfg, Some(execution_context), None).await {
                 Ok(running) => {
                     let discovered: Vec<DiscoveredTool> = running
                         .tools
@@ -1042,7 +1178,10 @@ impl McpHub {
 const MAX_MEDIA_ASSETS: usize = 20;
 
 /// 将 MCP content blocks 转为结构化 ToolOutput（保留 image/media 信息）。
-fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
+fn content_to_tool_output(
+    blocks: &[ContentBlock],
+    output_token_limit: Option<usize>,
+) -> types::ToolOutput {
     let mut text_parts = Vec::new();
     let mut media_assets = Vec::new();
 
@@ -1093,7 +1232,11 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
     } else {
         text_parts.join("\n")
     };
-    let text = types::truncate_tool_result(&text, types::MAX_TOOL_RESULT_BYTES);
+    let max_bytes = output_token_limit
+        .map(|tokens| tokens.saturating_mul(24).div_ceil(5))
+        .unwrap_or(types::MAX_TOOL_RESULT_BYTES)
+        .min(types::MAX_TOOL_RESULT_BYTES);
+    let text = types::truncate_tool_result(&text, max_bytes);
 
     if media_assets.is_empty() {
         types::ToolOutput::Text(text)
@@ -1105,11 +1248,6 @@ fn content_to_tool_output(blocks: &[ContentBlock]) -> types::ToolOutput {
     }
 }
 
-/// 向下兼容的纯文本格式化（保持旧接口）。
-fn format_content(blocks: &[ContentBlock]) -> String {
-    content_to_tool_output(blocks).into_text()
-}
-
 /// 使用已解析的 `Peer` 执行 MCP 工具调用（lock-free，供 `Arc<Mutex<McpHub>>` 场景使用）。
 ///
 /// `qualified_name` 仅用于错误消息；`native` 是原生工具名（不含 `mcp__` 前缀）。
@@ -1119,6 +1257,7 @@ pub async fn call_tool_with_peer(
     native: &str,
     args: &Value,
     timeout_secs: u64,
+    output_token_limit: Option<usize>,
 ) -> anyhow::Result<types::ToolOutput> {
     let arguments = mcp_tool_arguments(args)?;
 
@@ -1136,20 +1275,21 @@ pub async fn call_tool_with_peer(
     .with_context(|| format!("call_tool {qualified_name}"))?;
 
     if result.is_error == Some(true) {
-        let msg = format_content(&result.content);
-        anyhow::bail!(
-            "MCP tool error: {}",
-            types::truncate_tool_result(&msg, types::MAX_TOOL_RESULT_BYTES)
-        );
+        let msg = content_to_tool_output(&result.content, output_token_limit).into_text();
+        anyhow::bail!("MCP tool error: {msg}");
     }
 
     if let Some(structured) = result.structured_content {
+        let max_bytes = output_token_limit
+            .map(|tokens| tokens.saturating_mul(24).div_ceil(5))
+            .unwrap_or(types::MAX_TOOL_RESULT_BYTES)
+            .min(types::MAX_TOOL_RESULT_BYTES);
         return Ok(types::ToolOutput::Text(types::truncate_tool_result(
             &structured.to_string(),
-            types::MAX_TOOL_RESULT_BYTES,
+            max_bytes,
         )));
     }
-    Ok(content_to_tool_output(&result.content))
+    Ok(content_to_tool_output(&result.content, output_token_limit))
 }
 
 /// 按配置建立 MCP 连接并拉取工具列表。
@@ -1159,13 +1299,14 @@ pub async fn call_tool_with_peer(
 async fn connect_server(
     cfg: &McpServerConfig,
     execution_context: Option<&McpExecutionContext>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 ) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
     let timeout_secs = cfg.effective_startup_timeout_secs();
     with_startup_timeout(
         &sid,
         timeout_secs,
-        connect_server_inner(cfg, execution_context),
+        connect_server_inner(cfg, execution_context, elicitation),
     )
     .await
 }
@@ -1261,6 +1402,7 @@ where
 async fn connect_server_inner(
     cfg: &McpServerConfig,
     execution_context: Option<&McpExecutionContext>,
+    elicitation: Option<Arc<McpElicitationBroker>>,
 ) -> anyhow::Result<RunningServer> {
     let sid = sanitize_server_id(&cfg.id);
     let execution_context = execution_context.ok_or_else(|| {
@@ -1276,6 +1418,7 @@ async fn connect_server_inner(
         state: Arc::clone(&shared_state),
         server_id: sid.clone(),
         next_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        elicitation,
     };
 
     let mut authenticated = false;
@@ -1323,7 +1466,7 @@ async fn connect_server_inner(
             }
             if cfg.auth == Some(McpHttpAuth::Chatgpt) {
                 anyhow::bail!(
-                    "ChatGPT session authentication is only available to trusted Codex first-party integrations"
+                    "ChatGPT session authentication is only available to trusted first-party integrations"
                 );
             }
             let map = resolve_http_headers(cfg)?;
@@ -1585,11 +1728,20 @@ fn resolve_server_working_dir(
     if !candidate.is_dir() {
         anyhow::bail!("MCP server cwd is not a directory: {}", candidate.display());
     }
-    if !candidate.starts_with(&execution_context.working_dir) {
+    if !execution_context
+        .allowed_working_roots
+        .iter()
+        .any(|root| candidate.starts_with(root))
+    {
         anyhow::bail!(
-            "MCP server cwd escapes the execution root: {} (root: {})",
+            "MCP server cwd escapes the execution root and allowed extension roots: {} (roots: {})",
             candidate.display(),
-            execution_context.working_dir.display()
+            execution_context
+                .allowed_working_roots
+                .iter()
+                .map(|root| root.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     Ok(candidate)
@@ -1677,6 +1829,24 @@ fn mcp_tool_arguments(args: &Value) -> anyhow::Result<Option<serde_json::Map<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn per_tool_output_limit_truncates_mcp_text() {
+        let output = content_to_tool_output(
+            &[ContentBlock::Text(rmcp::model::TextContent::new(
+                "x".repeat(100),
+            ))],
+            Some(1),
+        );
+        assert!(output.text().starts_with("xxxxx"));
+        assert!(output.text().contains("[truncated]"));
+        assert!(content_to_tool_output(
+            &[ContentBlock::Text(rmcp::model::TextContent::new("short"))],
+            Some(10),
+        )
+        .text()
+        .eq("short"));
+    }
 
     fn stdio_server(command: &str) -> McpServerConfig {
         McpServerConfig {
@@ -2029,7 +2199,9 @@ mod tests {
             .with_sandbox_audit(audit);
         let server = stdio_server("echo");
 
-        assert!(connect_server_inner(&server, Some(&context)).await.is_err());
+        assert!(connect_server_inner(&server, Some(&context), None,)
+            .await
+            .is_err());
         let events = sandbox::list_recent_sandbox_audits(dir.path(), 10).unwrap();
         assert!(events.iter().any(|event| {
             event.event == sandbox::SandboxAuditKind::Spawned
@@ -2064,6 +2236,14 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("escapes the execution root"), "{error}");
+
+        let context = context
+            .with_additional_working_roots([outside.path().to_path_buf()])
+            .unwrap();
+        assert_eq!(
+            resolve_server_working_dir(&server, &context).unwrap(),
+            outside.path().canonicalize().unwrap()
+        );
     }
 
     #[tokio::test]
@@ -2216,7 +2396,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_execution_context_fails_closed() {
-        let error = connect_server(&stdio_server("echo"), None)
+        let error = connect_server(&stdio_server("echo"), None, None)
             .await
             .err()
             .expect("missing policy must fail")
@@ -2239,7 +2419,7 @@ mod tests {
         server.r#type = McpTransportType::StreamableHttp;
         server.url = "https://example.invalid/mcp".into();
 
-        let error = connect_server(&server, Some(&context))
+        let error = connect_server(&server, Some(&context), None)
             .await
             .err()
             .expect("restricted network must fail")

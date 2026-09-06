@@ -21,7 +21,7 @@ test("lifts video with nested source", () => {
 
 test("skips fenced code blocks", () => {
   const src =
-    "正文<audio src=\"a.mp3\"></audio>\n```html\n<audio src=\"keep.mp3\"></audio>\n```\n";
+    '正文<audio src="a.mp3"></audio>\n```html\n<audio src="keep.mp3"></audio>\n```\n';
   const out = liftHtmlMediaTags(src);
   assert.match(out, /!\[audio\]\(a\.mp3\)/);
   assert.match(out, /<audio src="keep\.mp3"><\/audio>/);

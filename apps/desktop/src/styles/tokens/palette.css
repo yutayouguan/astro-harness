@@ -1,0 +1,86 @@
+/* Theme palettes only: raw brand, status, and contextual tone colors. */
+html[data-theme="dark"] {
+  --palette-accent: #c084fc;
+  --palette-accent-secondary: #60a5fa;
+  --palette-pink: #f472b6;
+  --palette-gold: #fbbf24;
+  --palette-danger: #fb7185;
+  --palette-danger-bg: rgba(244, 63, 94, 0.16);
+
+  --tone-blue: #60a5fa;
+  --tone-blue-soft: rgba(96, 165, 250, 0.16);
+  --tone-blue-glow: rgba(96, 165, 250, 0.32);
+  --tone-green: #4ade80;
+  --tone-green-soft: rgba(74, 222, 128, 0.16);
+  --tone-green-glow: rgba(74, 222, 128, 0.3);
+  --tone-purple: #a78bfa;
+  --tone-purple-soft: rgba(167, 139, 250, 0.16);
+  --tone-purple-glow: rgba(167, 139, 250, 0.32);
+  --tone-orange: #fbbf24;
+  --tone-orange-soft: rgba(251, 191, 36, 0.16);
+  --tone-orange-glow: rgba(251, 191, 36, 0.3);
+  --tone-pink: #f472b6;
+  --tone-pink-soft: rgba(244, 114, 182, 0.16);
+  --tone-pink-glow: rgba(244, 114, 182, 0.3);
+  --tone-cyan: #22d3ee;
+  --tone-cyan-soft: rgba(34, 211, 238, 0.16);
+  --tone-cyan-glow: rgba(34, 211, 238, 0.32);
+  --tone-indigo: #818cf8;
+  --tone-indigo-soft: rgba(129, 140, 248, 0.16);
+  --tone-indigo-glow: rgba(129, 140, 248, 0.32);
+  --tone-amber: #f59e0b;
+  --tone-amber-soft: rgba(245, 158, 11, 0.16);
+  --tone-amber-glow: rgba(245, 158, 11, 0.3);
+  --tone-teal: #2dd4bf;
+  --tone-teal-soft: rgba(45, 212, 191, 0.16);
+  --tone-teal-glow: rgba(45, 212, 191, 0.3);
+  --tone-aurora: #22d3ee;
+  --tone-aurora-soft: rgba(34, 211, 238, 0.16);
+  --tone-aurora-glow: rgba(34, 211, 238, 0.32);
+  --tone-twilight: #c084fc;
+  --tone-twilight-soft: rgba(192, 132, 252, 0.16);
+  --tone-twilight-glow: rgba(244, 114, 182, 0.3);
+}
+
+html[data-theme="light"] {
+  --palette-accent: #6366f1;
+  --palette-accent-secondary: #3b82f6;
+  --palette-pink: #ec4899;
+  --palette-gold: #f59e0b;
+  --palette-danger: #e11d48;
+  --palette-danger-bg: rgba(244, 63, 94, 0.1);
+
+  --tone-blue: #2563eb;
+  --tone-blue-soft: rgba(37, 99, 235, 0.14);
+  --tone-blue-glow: rgba(59, 130, 246, 0.45);
+  --tone-green: #16a34a;
+  --tone-green-soft: color-mix(in srgb, #16a34a 22%, #e8f8ec);
+  --tone-green-glow: rgba(34, 197, 94, 0.42);
+  --tone-purple: #7c3aed;
+  --tone-purple-soft: rgba(124, 58, 237, 0.14);
+  --tone-purple-glow: rgba(139, 92, 246, 0.45);
+  --tone-orange: #ea580c;
+  --tone-orange-soft: rgba(234, 88, 12, 0.14);
+  --tone-orange-glow: rgba(249, 115, 22, 0.42);
+  --tone-pink: #db2777;
+  --tone-pink-soft: rgba(219, 39, 119, 0.14);
+  --tone-pink-glow: rgba(236, 72, 153, 0.42);
+  --tone-cyan: #0891b2;
+  --tone-cyan-soft: rgba(8, 145, 178, 0.14);
+  --tone-cyan-glow: rgba(6, 182, 212, 0.45);
+  --tone-indigo: #4f46e5;
+  --tone-indigo-soft: rgba(79, 70, 229, 0.14);
+  --tone-indigo-glow: rgba(99, 102, 241, 0.45);
+  --tone-amber: #d97706;
+  --tone-amber-soft: rgba(217, 119, 6, 0.14);
+  --tone-amber-glow: rgba(245, 158, 11, 0.42);
+  --tone-teal: #0d9488;
+  --tone-teal-soft: rgba(13, 148, 136, 0.14);
+  --tone-teal-glow: rgba(20, 184, 166, 0.42);
+  --tone-aurora: #0891b2;
+  --tone-aurora-soft: rgba(8, 145, 178, 0.14);
+  --tone-aurora-glow: rgba(6, 182, 212, 0.45);
+  --tone-twilight: #8b5cf6;
+  --tone-twilight-soft: rgba(139, 92, 246, 0.14);
+  --tone-twilight-glow: rgba(236, 72, 153, 0.42);
+}

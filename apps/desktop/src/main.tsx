@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
+import { MorphiconProvider } from "./hooks/app/useMorphicons";
 import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
@@ -45,7 +46,8 @@ class RootErrorBoundary extends React.Component<
         <div
           style={{
             padding: 24,
-            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+            fontFamily:
+              'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             color: "var(--ink, #e2e8f0)",
             background: "var(--bg0, #0f172a)",
             minHeight: "100%",
@@ -67,13 +69,15 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <RootErrorBoundary>
       <ThemeProvider>
-        <LocaleProvider>
-          <ActiveAgentProvider>
-            <DialogProvider>
-              <App />
-            </DialogProvider>
-          </ActiveAgentProvider>
-        </LocaleProvider>
+        <MorphiconProvider>
+          <LocaleProvider>
+            <ActiveAgentProvider>
+              <DialogProvider>
+                <App />
+              </DialogProvider>
+            </ActiveAgentProvider>
+          </LocaleProvider>
+        </MorphiconProvider>
       </ThemeProvider>
     </RootErrorBoundary>
   </React.StrictMode>,

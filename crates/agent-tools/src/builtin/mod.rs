@@ -11,7 +11,7 @@ pub mod present;
 pub mod shell;
 
 pub use agents::{persona_create, subagent};
-pub use hitl::{ask_user, switch_mode};
+pub use hitl::{ask_user, request_user_input_async, switch_mode};
 pub use media::{
     audio_understand, image_gen, image_understand, music_gen, robotics, tts, video_gen,
     video_understand,
@@ -19,6 +19,7 @@ pub use media::{
 pub use memory::{context_tools, memory_tools, scheduled, skills_tool, todo};
 pub use present::present_shared;
 pub use shell::{
-    code_exec, context_remaining, file_ops, new_context_window, request_plugin_install, terminal,
-    tool_search, wait_for_environment, web_fetch, web_search,
+    apply_patch, browser, code_exec, code_mode, context_remaining, exec_command,
+    new_context_window, request_permissions, request_plugin_install, tool_search,
+    wait_for_environment, web_fetch, web_search, write_stdin,
 };

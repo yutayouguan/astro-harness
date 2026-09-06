@@ -8,23 +8,27 @@
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-agent-core详细设计.md](01-核心引擎层/01-agent-core详细设计.md) | agent-core Crate 完整实现：核心数据类型（AgentContext/Message/ToolCall）、run_agent_turn 编排循环、SQLite Repository 层、5 层记忆子系统、成本追踪 |
-| [02-agent-runtime详细设计.md](01-核心引擎层/02-agent-runtime详细设计.md) | agent-runtime 完整设计（合并）：round_loop 执行循环、Planner 自适应规划、HumanGuard 审批流、WASM/Shell 沙箱、后台任务调度、多会话并发、重试限流 |
+| [01-agent-core详细设计.md](01-核心引擎层/01-agent-core详细设计.md) | `Session` 为中心的 Harness 编排：runtime/tasks/streaming/prompt/control/timeline |
+| [02-agent-runtime详细设计.md](01-核心引擎层/02-agent-runtime详细设计.md) | `AstroThread -> submission_loop -> SessionTask -> multi_turn` 当前执行链与旧 runtime 迁移边界 |
 | [03-交互执行模式设计.md](01-核心引擎层/03-交互执行模式设计.md) | F-39/M-38 交互执行模式：自适应规划、Pending 消息队列、YOLO 开关、MultiTask |
-| [04-多执行后端系统设计.md](01-核心引擎层/04-多执行后端系统设计.md) | F-15/M-08 多执行后端：ExecutionBackend trait、LocalShell/Docker/SSH 实现、BackendRegistry 路由 |
+| [04-多执行后端系统设计.md](01-核心引擎层/04-多执行后端系统设计.md) | 本地子进程、跨平台 sandbox、managed network、Browser/MCP 运行环境与规划边界 |
 | [05-成本预算控制详细设计.md](01-核心引擎层/05-成本预算控制详细设计.md) | BudgetManager：三级预算模型、Token 计费、check_before_call 拦截、渐进降级、YOLO 强制关闭、费用统计报表 |
-| [06-子Agent派生详细设计.md](01-核心引擎层/06-子Agent派生详细设计.md) | F-30 子Agent派生：Supervisor 模式、权限交集继承、资源隔离、并发控制、深度限制、agent_spawn 工具 |
-| [07-Agent生命周期详细设计.md](01-核心引擎层/07-Agent生命周期详细设计.md) | Agent 生命周期：7 阶段状态机、AgentInstance 模型、SessionManager、会话持久化与恢复、崩溃恢复、配置热更新 |
-| [08-Hooks系统详细设计.md](01-核心引擎层/08-Hooks系统详细设计.md) | Hooks 扩展系统：18 种生命周期事件、HookRegistry/Pipeline、6 个内置 Hook、用户自定义（Shell/WASM）、hooks.toml 配置 |
-| [09-Checkpoint与状态快照详细设计.md](01-核心引擎层/09-Checkpoint与状态快照详细设计.md) | Checkpoint 机制：自动/手动快照、状态恢复（覆盖/分支）、工作流断点续传、增量存储、比较与回放 |
+| [06-子Agent派生详细设计.md](01-核心引擎层/06-子Agent派生详细设计.md) | Codex V2 Agent Threads：六工具控制面、持久 Agent Graph/mailbox/status、真实 Session 时间线 |
+| [07-Agent生命周期详细设计.md](01-核心引擎层/07-Agent生命周期详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 六级生命周期，以及完整 Realtime、Elicitation、TurnSettings、Guardian retry 和用户 Shell 控制边界 |
+| [08-Hooks系统详细设计.md](01-核心引擎层/08-Hooks系统详细设计.md) | Plugin、Command/MCP、Gateway、Shell 的 typed lifecycle、信任、异步运行与事件专属结果契约 |
+| [09-Checkpoint与状态快照详细设计.md](01-核心引擎层/09-Checkpoint与状态快照详细设计.md) | rollout append-only 事实源、snapshot + live boundary 与 SessionStore 可重建投影 |
 | [10-自主决策与行为进化详细设计.md](01-核心引擎层/10-自主决策与行为进化详细设计.md) | 自主进化：BehaviorEngine 行为策略、反馈信号收集、偏好学习模型、Prompt 自优化、工具模式学习、主动决策引擎 |
-| [11-Agent协作协议详细设计.md](01-核心引擎层/11-Agent协作协议详细设计.md) | Agent 协作：Debate/MapReduce/Voting 三种协议、AgentRole 角色定义、MessageBus 跨 Agent 通信、资源预算分配 |
+| [11-Agent协作协议详细设计.md](01-核心引擎层/11-Agent协作协议详细设计.md) | V2 Agent Graph/mailbox 已实现基础和 Debate/MapReduce/Voting 等目标协作协议的明确分界 |
+| [12-Agent事件与恢复详细设计.md](01-核心引擎层/12-Agent事件与恢复详细设计.md) | `Op/EventMsg/TurnItem` 统一协议、rollout 事件源、live boundary 与 SessionStore 投影 |
+| [13-Astro统一配置系统详细设计.md](01-核心引擎层/13-Astro统一配置系统详细设计.md) | Agent/项目分层配置、信任边界、热加载和运行时快照 |
+| [14-Agent-Harness执行外壳详细设计.md](01-核心引擎层/14-Agent-Harness执行外壳详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 执行层级，Reason→Act→Observe 闭环及安全、恢复和测试契约 |
+| [15-Agent-Tree状态投影详细设计.md](01-核心引擎层/15-Agent-Tree状态投影详细设计.md) | 根会话 Agent Tree 的持久图、活动游标、根服务层级、Desktop 快照与增量投影契约 |
 
 ## 02-Provider与模型层
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-agent-providers详细设计.md](02-Provider与模型层/01-agent-providers详细设计.md) | agent-providers 各 Provider 独立客户端实现（Anthropic/OpenAI/DeepSeek/MiniMax 等）、ProviderRegistry 路由与 fallback、流式响应处理 |
+| [01-agent-providers详细设计.md](02-Provider与模型层/01-agent-providers详细设计.md) | Agent Responses-only 路由、原生 `ResponseItem`、通用 Provider/媒体兼容边界与 fallback |
 | [02-多模型对比系统设计.md](02-Provider与模型层/02-多模型对比系统设计.md) | F-33/US-082 多模型对比：tokio 并发流式调用、CompareView 并排 UI、选优采纳、费用独立统计 |
 | [03-Provider故障转移设计.md](02-Provider与模型层/03-Provider故障转移设计.md) | F-14 故障转移：错误可重试性分类、指数退避+Jitter、熔断器、Provider 自动切换、流式续传、全链路降级 |
 | [04-离线与本地模型详细设计.md](02-Provider与模型层/04-离线与本地模型详细设计.md) | F-18 离线能力：Ollama Sidecar 生命周期、本地模型发现与注册、NetworkMonitor 离线检测、自动降级切换、在线恢复 |
@@ -35,8 +39,8 @@
 | 文件 | 说明 |
 | ---- | ---- |
 | [01-记忆系统详细设计.md](03-记忆与上下文/01-记忆系统详细设计.md) | 5 层记忆架构：情节/语义/持久/程序性/用户建模，KNN 向量检索、Weibull 衰减遗忘、MEMORY.md 快照、BM25 技能召回 |
-| [02-上下文压缩算法设计.md](03-记忆与上下文/02-上下文压缩算法设计.md) | F-07 上下文压缩：三级策略（滑动窗口/LLM摘要/紧急丢弃）、消息重要性评分、Prompt Cache 保护 |
-| [03-Persona与SystemPrompt注入设计.md](03-记忆与上下文/03-Persona与SystemPrompt注入设计.md) | F-11 Agent 人格：8 槽位注入顺序、SOUL.md 规范、/personality 预设库、SystemPromptBuilder |
+| [02-上下文压缩算法设计.md](03-记忆与上下文/02-上下文压缩算法设计.md) | tool context prune、LLM compaction、head/tail fallback、spill 和原始/压缩视图分离 |
+| [03-Persona与SystemPrompt注入设计.md](03-记忆与上下文/03-Persona与SystemPrompt注入设计.md) | PromptContract：稳定基础指令、角色化 dynamic context、用户输入与独立工具 schema |
 | [04-知识库RAG详细设计.md](03-记忆与上下文/04-知识库RAG详细设计.md) | F-05 知识库RAG：文档导入管道、RecursiveChunker 分块算法、BM25+向量混合检索（RRF）、knowledge_manage 工具 |
 | [05-记忆图谱详细设计.md](03-记忆与上下文/05-记忆图谱详细设计.md) | 记忆图谱：实体/关系抽取、SQLite 图查询（递归 CTE）、图谱增强检索、实体去重、vis-network 可视化 |
 | [_历史参考/用户建模系统设计.md](03-记忆与上下文/_历史参考/用户建模系统设计.md) | ⚠️ 已废弃 — 原用户建模设计，已被 01-记忆系统详细设计 的 L5 层取代，仅保留历史参考 |
@@ -46,15 +50,16 @@
 | 文件 | 说明 |
 | ---- | ---- |
 | [01-Skills系统详细设计.md](04-工具与扩展生态/01-Skills系统详细设计.md) | Skills 系统（对齐 Claude Code）：目录结构、动态上下文注入(!`cmd`)、$ARGUMENTS 参数、多级发现、调用控制、subagent 执行、Skill Hooks、BM25 召回、进化引擎、版本管理 |
-| [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | 工具系统：名词_动词命名规范、4 个原子批量工具（file_edit/memory_manage/skill_manage/knowledge_manage）、RiskLevel 风险分级、ToolOutput 统一格式 |
+| [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | ToolEntry/Registry/Definition/StepContext/Router/Output 执行链、动态暴露与审批边界 |
 | [03-MCP协议详细设计.md](04-工具与扩展生态/03-MCP协议详细设计.md) | Codex 对齐的 MCP Host/Client：STDIO/Streamable HTTP、分层配置、认证与 OAuth、Server Instructions、工具审批、连接状态机、迁移与验收 |
 | [04-PluginSDK开发者文档.md](04-工具与扩展生态/04-PluginSDK开发者文档.md) | Plugin SDK：Host API 参考（astro_*）、自定义工具/Hook/Skill 开发、测试调试、打包发布、完整示例 |
+| [05-Responses-API原生工具协议与Astro工具协议详细设计.md](04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md) | Responses API 原生 Function/Freeform/Namespace/ToolSearch/WebSearch 契约与 Astro 工具协议：Direct / CodeModeOnly 分层投影、QuickJS `exec/wait`、TypeScript 工具声明与 Responses 回放 |
 
 ## 05-桌面端与交互
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-Tauri桌面端详细设计.md](05-桌面端与交互/01-Tauri桌面端详细设计.md) | Tauri 桌面端 AppState 依赖注入容器（Arc RwLock）：ProviderRegistry/ToolRegistry/SkillRegistry/SessionManager/HumanGuard 初始化与生命周期 |
+| [01-Tauri桌面端详细设计.md](05-桌面端与交互/01-Tauri桌面端详细设计.md) | 内嵌 agent-server、Thread RPC、Op 提交、rollout/live 投影与 HITL 宿主边界 |
 | [02-前端组件详细设计.md](05-桌面端与交互/02-前端组件详细设计.md) | React 前端组件树、流式 Token 渲染、ApprovalDialog、Zustand 状态管理 |
 | [03-对话分支系统设计.md](05-桌面端与交互/03-对话分支系统设计.md) | 对话分支：parent_conversation_id 两字段模型、create_branch、递归 CTE 分支树 |
 | [04-全局搜索系统设计.md](05-桌面端与交互/04-全局搜索系统设计.md) | F-17 全局搜索：FTS5 消息搜索、文件实时扫描、session_search 工具、SearchModal UI |
@@ -65,7 +70,7 @@
 | [09-国际化详细设计.md](05-桌面端与交互/09-国际化详细设计.md) | F-20 国际化：i18next 前端 + fluent-rs 后端、Prompt 多语言模板、日期数字格式化、运行时语言切换 |
 | [10-快捷键与命令面板详细设计.md](05-桌面端与交互/10-快捷键与命令面板详细设计.md) | F-21 快捷键：ShortcutManager + useHotkeys、命令面板模糊搜索、自定义快捷键、上下文感知、无障碍性 |
 | [11-设置与补充功能详细设计.md](05-桌面端与交互/11-设置与补充功能详细设计.md) | 设置界面（SettingsManager 分层配置、Provider 配置页、主题系统）+ OpenRouter 模型目录同步 + OCR 截屏识别 |
-| [12-工作流编辑器详细设计.md](05-桌面端与交互/12-工作流编辑器详细设计.md) | F-08 工作流编辑器：React Flow 画布、18 种节点类型、AI 辅助创建（NL→DAG）、运行可视化、变量模板、Skill 编译 |
+| [12-工作流编辑器详细设计.md](05-桌面端与交互/12-工作流编辑器详细设计.md) | 29 种节点/6 类能力的 DAG 引擎、变量解析、执行持久化及与 Harness 的边界 |
 | [13-工作空间文件管理详细设计.md](05-桌面端与交互/13-工作空间文件管理详细设计.md) | F-10 文件管理：FileBrowser 组件、ai-docs 文档管理、文件预览、Agent 文件操作集成、存储配额 |
 | [14-多模态交互详细设计.md](05-桌面端与交互/14-多模态交互详细设计.md) | 多模态交互：图片/语音/视频/文件输入输出、ContentPart 统一消息模型、语音对话模式、上下文预算管理 |
 
@@ -82,6 +87,7 @@
 | [07-隐私与合规详细设计.md](06-安全与基础设施/07-隐私与合规详细设计.md) | F-10 隐私与合规：SensitiveFilter PII 过滤、Provider 数据声明、数据保留策略、用户数据导出/删除、GDPR 合规清单 |
 | [08-数据迁移详细设计.md](06-安全与基础设施/08-数据迁移详细设计.md) | US-101 数据迁移：MigrationRunner、在线大表迁移、Rust 数据转换迁移、自动备份、版本兼容性管理 |
 | [09-存储层详细设计.md](06-安全与基础设施/09-存储层详细设计.md) | 存储层：~/.astro/ 目录规范、StorageManager、Blob 内容寻址存储、缓存管理、临时文件、存储配额、清理策略 |
+| [10-权限系统改进详细设计.md](06-安全与基础设施/10-权限系统改进详细设计.md) | 工具可见性与授权分离、StepContext、HITL、workspace grant、sandbox/network 的逐层权限模型 |
 
 ## 07-工程管理
 

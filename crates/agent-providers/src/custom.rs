@@ -1,6 +1,6 @@
 //! TOML 驱动的自定义 OpenAI 兼容 provider — 用户在 config.toml 中声明即可接入。
 //!
-//! 只支持 Responses API 路径（与 Codex 对齐），不需要 thinking format / effort map 等兼容参数。
+//! 只支持 Responses API 路径，不需要 thinking format / effort map 等兼容参数。
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -11,13 +11,16 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::traits::CompletionModel;
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::traits::ResponsesModel;
+use crate::types::{CompletionStream, ResponsesRequest};
 
 /// 自定义模型声明（TOML 中的 `[[custom_providers.<id>.models]]`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomModelEntry {
     pub id: String,
+    /// 模型级工具模式，优先于全局 feature flag。
+    #[serde(default, deserialize_with = "::types::deserialize_optional_tool_mode")]
+    pub tool_mode: Option<::types::ToolMode>,
     #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]
@@ -91,9 +94,9 @@ pub fn read_env_key(env_keys: &[String]) -> Option<String> {
 /// 配置驱动的 Responses API 补全模型。
 ///
 /// 所有行为由运行时配置参数化，不依赖编译期 trait 常量。
-/// 统一走 Responses API，与 Codex 自定义 provider 行为一致。
+/// 统一走 Responses API。
 #[derive(Clone)]
-pub struct ConfigDrivenCompletionModel {
+pub struct ConfigDrivenResponsesModel {
     http: HttpClient,
     base_url: String,
     api_key: String,
@@ -101,7 +104,7 @@ pub struct ConfigDrivenCompletionModel {
     provider_id: String,
 }
 
-impl ConfigDrivenCompletionModel {
+impl ConfigDrivenResponsesModel {
     pub fn new(
         http: HttpClient,
         config: &CustomProviderConfig,
@@ -120,8 +123,8 @@ impl ConfigDrivenCompletionModel {
 }
 
 #[async_trait::async_trait]
-impl CompletionModel for ConfigDrivenCompletionModel {
-    async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+impl ResponsesModel for ConfigDrivenResponsesModel {
+    async fn stream(&self, request: ResponsesRequest) -> Result<CompletionStream> {
         if self.api_key.trim().is_empty() {
             anyhow::bail!("{} API Key 为空", self.provider_id);
         }
@@ -134,25 +137,15 @@ impl CompletionModel for ConfigDrivenCompletionModel {
             &request.model
         };
 
-        let input = crate::openai::responses::to_responses_input(&request.messages);
-
-        let instructions = request.messages.iter().find_map(|m| {
-            if let crate::types::message::Message::System { content } = m {
-                Some(content.clone())
-            } else {
-                None
-            }
-        });
+        let input = crate::openai::responses::to_native_responses_input(&request.input)?;
 
         let mut body = json!({
             "model": model,
             "input": input,
             "stream": true,
         });
-        if let Some(inst) = instructions {
-            if !inst.is_empty() {
-                body["instructions"] = json!(inst);
-            }
+        if !request.instructions.is_empty() {
+            body["instructions"] = json!(&request.instructions);
         }
         if let Some(temp) = request.temperature {
             let has_reasoning = request.thinking.as_ref().is_some_and(|tc| tc.enabled);
@@ -171,15 +164,8 @@ impl CompletionModel for ConfigDrivenCompletionModel {
             let tools: Vec<Value> = request
                 .tools
                 .iter()
-                .map(|t| {
-                    json!({
-                        "type": "function",
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": t.parameters,
-                    })
-                })
-                .collect();
+                .map(serde_json::to_value)
+                .collect::<Result<_, _>>()?;
             body["tools"] = Value::Array(tools);
             body["tool_choice"] = json!("auto");
         }
@@ -201,6 +187,11 @@ impl CompletionModel for ConfigDrivenCompletionModel {
                 }
             }
         }
+        crate::shared::tool_policy::apply_openai_responses(
+            &mut body,
+            request.tool_choice.as_ref(),
+            request.parallel_tool_calls,
+        );
 
         let response = self
             .http
@@ -212,9 +203,10 @@ impl CompletionModel for ConfigDrivenCompletionModel {
             .await
             .with_context(|| format!("连接 {} Responses API 失败: {url}", self.provider_id))?;
 
-        crate::shared::sse::sse_stream(
+        crate::shared::sse::sse_stream_with_terminal(
             response,
             Arc::new(crate::openai::responses::extract_responses_chunks),
+            true,
         )
         .await
     }

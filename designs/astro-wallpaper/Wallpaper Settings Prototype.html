@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astro 壁纸设置原型</title>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --tone: #6d5ce8;
+        --tone-strong: #5746d7;
+        --tone-soft: rgba(109, 92, 232, 0.15);
+        --ink: #24263a;
+        --ink-soft: #50546c;
+        --ink-mute: #777d94;
+        --edge: rgba(255, 255, 255, 0.48);
+        --edge-strong: rgba(109, 92, 232, 0.33);
+        --glass: rgba(248, 249, 255, 0.57);
+        --glass-strong: rgba(252, 252, 255, 0.72);
+        --glass-soft: rgba(248, 249, 255, 0.38);
+        --shadow-card: 0 12px 36px rgba(48, 48, 92, 0.11);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html, body, #root { width: 100%; min-width: 1080px; height: 100%; margin: 0; }
+      button, textarea, input { font: inherit; }
+      button { color: inherit; }
+
+      body {
+        overflow: hidden;
+        color: var(--ink);
+        background: #dfe5f2;
+      }
+
+      .stage {
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 12% 10%, rgba(183, 207, 255, 0.7), transparent 33%),
+          radial-gradient(circle at 90% 90%, rgba(198, 183, 255, 0.55), transparent 38%),
+          #e7ebf4;
+      }
+
+      .window {
+        position: relative;
+        width: min(1380px, calc(100vw - 40px));
+        height: min(860px, calc(100vh - 40px));
+        min-height: 720px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.74);
+        border-radius: 20px;
+        background: #e9e7f3;
+        box-shadow: 0 34px 90px rgba(40, 44, 74, 0.25), 0 3px 14px rgba(40, 44, 74, 0.16);
+      }
+
+      .window-wallpaper,
+      .window-shade {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .window-wallpaper {
+        background-position: 50% 50%;
+        background-size: cover;
+        transform: scale(1.035);
+        transition: opacity 480ms ease, filter 260ms ease, background-image 480ms ease;
+      }
+
+      .window-shade {
+        z-index: 1;
+        background: rgba(244, 245, 251, var(--shade, 0.2));
+        transition: background 180ms ease;
+      }
+
+      .shell {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 74px 250px minmax(0, 1fr);
+        grid-template-rows: 44px minmax(0, 1fr);
+        width: 100%;
+        height: 100%;
+      }
+
+      .titlebar {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+        background: rgba(246, 247, 252, 0.32);
+        backdrop-filter: blur(28px) saturate(1.25);
+      }
+
+      .traffic { display: flex; gap: 8px; }
+      .traffic i { width: 11px; height: 11px; display: block; border-radius: 50%; }
+      .traffic i:nth-child(1) { background: #ff5f57; }
+      .traffic i:nth-child(2) { background: #febc2e; }
+      .traffic i:nth-child(3) { background: #28c840; }
+      .window-title { margin-left: auto; margin-right: auto; font-size: 12px; color: rgba(36, 38, 58, 0.53); }
+
+      .rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 9px;
+        padding: 14px 10px;
+        border-right: 1px solid rgba(255, 255, 255, 0.38);
+        background: rgba(244, 246, 251, 0.36);
+        backdrop-filter: blur(28px) saturate(1.35);
+      }
+
+      .brand {
+        width: 38px;
+        height: 38px;
+        margin-bottom: 10px;
+        object-fit: contain;
+        border-radius: 11px;
+        box-shadow: 0 5px 16px rgba(64, 59, 135, 0.2);
+      }
+
+      .rail-button {
+        width: 42px;
+        height: 42px;
+        border: 0;
+        border-radius: 13px;
+        background: transparent;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-size: 18px;
+        color: rgba(50, 53, 76, 0.65);
+      }
+
+      .rail-button.active {
+        color: var(--tone-strong);
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: inset 0 0 0 1px rgba(109, 92, 232, 0.16), 0 6px 16px rgba(73, 64, 145, 0.1);
+      }
+
+      .settings-nav {
+        padding: 23px 16px 18px;
+        overflow-y: auto;
+        border-right: 1px solid rgba(255, 255, 255, 0.4);
+        background: rgba(245, 246, 252, 0.46);
+        backdrop-filter: blur(30px) saturate(1.35);
+        scrollbar-width: thin;
+      }
+
+      .settings-heading { margin: 0 0 18px 8px; font-size: 22px; letter-spacing: -0.03em; }
+      .settings-search {
+        width: 100%;
+        height: 34px;
+        margin-bottom: 17px;
+        padding: 0 12px;
+        border: 1px solid rgba(255, 255, 255, 0.54);
+        border-radius: 10px;
+        outline: none;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.38);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      }
+
+      .nav-label { margin: 16px 10px 7px; color: var(--ink-mute); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      .nav-row {
+        width: 100%;
+        min-height: 38px;
+        padding: 0 11px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 0;
+        border-radius: 11px;
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+        font-size: 13px;
+        text-align: left;
+      }
+
+      .nav-row span:first-child { width: 19px; text-align: center; color: var(--ink-mute); }
+      .nav-row.active {
+        color: var(--tone-strong);
+        font-weight: 650;
+        background: rgba(255, 255, 255, 0.6);
+        box-shadow: inset 0 0 0 1px rgba(109, 92, 232, 0.13), 0 4px 12px rgba(65, 59, 121, 0.08);
+      }
+
+      .content {
+        overflow: auto;
+        padding: 28px 38px 70px;
+        background: rgba(250, 250, 253, 0.22);
+        backdrop-filter: blur(8px) saturate(1.1);
+        scrollbar-width: thin;
+      }
+
+      .content-head {
+        max-width: 980px;
+        margin: 0 auto 18px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .eyebrow { margin: 0 0 5px; color: var(--tone-strong); font-size: 11px; font-weight: 750; letter-spacing: 0.08em; }
+      .content h1 { margin: 0; font-size: 25px; letter-spacing: -0.03em; }
+      .content-intro { margin: 7px 0 0; color: var(--ink-mute); font-size: 13px; line-height: 1.65; }
+
+      .prototype-note {
+        flex: 0 0 auto;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.44);
+        color: var(--ink-mute);
+        font-size: 11px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      }
+
+      .stack { max-width: 980px; margin: 0 auto; display: grid; gap: 14px; }
+      .card {
+        padding: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-radius: 20px;
+        background:
+          linear-gradient(155deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08)),
+          rgba(248, 249, 255, 0.46);
+        box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+        backdrop-filter: blur(18px) saturate(1.3);
+      }
+
+      .card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+      .card-icon {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(109, 92, 232, 0.2);
+        border-radius: 14px;
+        background: linear-gradient(150deg, rgba(255, 255, 255, 0.58), rgba(109, 92, 232, 0.15));
+        color: var(--tone-strong);
+        font-size: 18px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 3px 9px rgba(72, 62, 139, 0.09);
+      }
+
+      .card-title { margin: 0 0 4px; font-size: 15px; letter-spacing: -0.01em; }
+      .card-sub { margin: 0; color: var(--ink-mute); font-size: 12.5px; line-height: 1.48; }
+
+      .source-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+      .source-option {
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        padding: 10px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.58);
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.28);
+        cursor: pointer;
+        text-align: left;
+        transition: 150ms ease;
+      }
+
+      .source-option:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.42); }
+      .source-option.active {
+        border-color: var(--edge-strong);
+        background: rgba(239, 236, 255, 0.58);
+        box-shadow: inset 0 0 0 1px rgba(109, 92, 232, 0.12), 0 5px 14px rgba(79, 69, 150, 0.08);
+      }
+
+      .source-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.6); color: var(--tone-strong); }
+      .source-copy { display: grid; gap: 2px; }
+      .source-copy strong { font-size: 13px; }
+      .source-copy small { color: var(--ink-mute); font-size: 11.5px; }
+      .source-check { margin-left: auto; width: 16px; height: 16px; border: 1px solid rgba(83, 83, 113, 0.24); border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+      .source-option.active .source-check { border: 4px solid var(--tone); background: white; }
+
+      .wallpaper-layout { display: grid; grid-template-columns: minmax(300px, 1.15fr) minmax(330px, 0.85fr); gap: 16px; }
+      .preview {
+        position: relative;
+        min-height: 270px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.68);
+        border-radius: 17px;
+        background-position: 50% 50%;
+        background-size: cover;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 10px 26px rgba(40, 42, 75, 0.14);
+      }
+
+      .preview::after { content: ""; position: absolute; inset: 0; background: rgba(245, 246, 252, var(--preview-shade, 0.2)); }
+      .preview-chrome {
+        position: absolute;
+        z-index: 1;
+        inset: 18px;
+        display: grid;
+        grid-template-columns: 62px 1fr;
+        gap: 10px;
+      }
+
+      .preview-sidebar, .preview-main {
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        background: rgba(255, 255, 255, 0.37);
+        backdrop-filter: blur(12px) saturate(1.25);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      }
+      .preview-sidebar { border-radius: 12px; }
+      .preview-main { border-radius: 15px; padding: 17px; }
+      .preview-line { height: 8px; width: 55%; border-radius: 99px; background: rgba(44, 46, 70, 0.28); }
+      .preview-line.large { width: 72%; height: 12px; margin-bottom: 12px; }
+      .preview-bubble { width: 75%; height: 54px; margin-top: 20px; border-radius: 14px; background: rgba(255, 255, 255, 0.56); box-shadow: 0 6px 18px rgba(52, 48, 91, 0.08); }
+      .preview-caption {
+        position: absolute;
+        z-index: 2;
+        left: 12px;
+        bottom: 12px;
+        padding: 6px 9px;
+        border-radius: 999px;
+        background: rgba(25, 27, 46, 0.58);
+        backdrop-filter: blur(9px);
+        color: white;
+        font-size: 10px;
+      }
+
+      .controls { display: flex; min-width: 0; flex-direction: column; gap: 13px; }
+      .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+      .button {
+        min-height: 37px;
+        border: 1px solid rgba(83, 83, 113, 0.16);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.52);
+        color: var(--ink-soft);
+        cursor: pointer;
+        font-size: 12.5px;
+        font-weight: 630;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        transition: 150ms ease;
+      }
+      .button:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.72); }
+      .button.primary { border-color: rgba(109, 92, 232, 0.32); background: linear-gradient(180deg, #8474f3, #6b5ae1); color: white; box-shadow: 0 6px 16px rgba(91, 75, 201, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+      .button:disabled { opacity: 0.55; cursor: default; transform: none; }
+
+      .control-group { display: grid; gap: 7px; }
+      .control-label { display: flex; justify-content: space-between; color: var(--ink-soft); font-size: 11.5px; }
+      .control-label output { color: var(--ink-mute); }
+      input[type="range"] { width: 100%; accent-color: var(--tone); }
+      .fit-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .chip {
+        min-height: 30px;
+        border: 1px solid rgba(83, 83, 113, 0.14);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.34);
+        color: var(--ink-mute);
+        cursor: pointer;
+        font-size: 11px;
+      }
+      .chip.active { color: var(--tone-strong); border-color: rgba(109, 92, 232, 0.3); background: rgba(239, 236, 255, 0.64); font-weight: 650; }
+
+      .recent-label { margin: 2px 0 0; color: var(--ink-mute); font-size: 11px; font-weight: 650; }
+      .recent { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .recent-item {
+        position: relative;
+        aspect-ratio: 1.55;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 10px;
+        background-position: center;
+        background-size: cover;
+        cursor: pointer;
+      }
+      .recent-item.active { box-shadow: 0 0 0 2px var(--tone); }
+
+      .accent-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; }
+      .accent-card .card-head { margin: 0; }
+      .accent-options { display: flex; gap: 7px; }
+      .accent-dot { width: 30px; height: 30px; border: 0; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,.66), 0 0 0 1px rgba(62,62,90,.1); }
+      .accent-dot.active { box-shadow: inset 0 0 0 2px white, 0 0 0 2px var(--tone); }
+
+      .backdrop {
+        position: absolute;
+        z-index: 20;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        background: rgba(31, 31, 52, 0.22);
+        backdrop-filter: blur(7px);
+        animation: fade-in 180ms ease both;
+      }
+
+      .dialog {
+        width: min(620px, 94vw);
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.62);
+        border-radius: 22px;
+        background: rgba(249, 249, 253, 0.88);
+        box-shadow: 0 28px 76px rgba(34, 32, 69, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+        backdrop-filter: blur(30px) saturate(1.3);
+        animation: dialog-in 210ms cubic-bezier(.2,.8,.2,1) both;
+      }
+
+      .dialog-head { display: flex; align-items: flex-start; gap: 12px; }
+      .dialog-head-copy { flex: 1; }
+      .dialog h2 { margin: 1px 0 4px; font-size: 18px; letter-spacing: -0.02em; }
+      .dialog p { margin: 0; color: var(--ink-mute); font-size: 12.5px; line-height: 1.55; }
+      .close { width: 30px; height: 30px; border: 0; border-radius: 9px; background: rgba(90, 91, 115, 0.08); color: var(--ink-mute); cursor: pointer; }
+      .prompt-label { display: block; margin: 17px 0 7px; color: var(--ink-soft); font-size: 12px; font-weight: 650; }
+      .prompt {
+        width: 100%;
+        min-height: 112px;
+        resize: vertical;
+        padding: 12px 13px;
+        border: 1px solid rgba(91, 85, 142, 0.18);
+        border-radius: 13px;
+        outline: none;
+        background: rgba(255, 255, 255, 0.64);
+        color: var(--ink);
+        line-height: 1.55;
+        box-shadow: inset 0 1px 2px rgba(42, 41, 73, 0.04);
+      }
+      .prompt:focus { border-color: rgba(109, 92, 232, 0.46); box-shadow: 0 0 0 3px rgba(109, 92, 232, 0.1); }
+      .style-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+      .dialog-meta { margin-top: 15px; padding: 11px 12px; display: flex; align-items: center; gap: 10px; border-radius: 12px; background: rgba(109, 92, 232, 0.07); color: var(--ink-soft); font-size: 11.5px; }
+      .toggle { margin-left: auto; width: 34px; height: 20px; padding: 2px; border-radius: 99px; background: var(--tone); }
+      .toggle::after { content: ""; display: block; width: 16px; height: 16px; margin-left: 14px; border-radius: 50%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+      .dialog-actions { margin-top: 17px; display: flex; justify-content: flex-end; gap: 8px; }
+
+      .progress-box { padding: 34px 18px; display: grid; justify-items: center; gap: 14px; text-align: center; }
+      .spinner { width: 38px; height: 38px; border: 3px solid rgba(109, 92, 232, 0.14); border-top-color: var(--tone); border-radius: 50%; animation: spin 900ms linear infinite; }
+      .progress-bar { width: 240px; height: 5px; overflow: hidden; border-radius: 99px; background: rgba(109, 92, 232, 0.1); }
+      .progress-bar i { display: block; height: 100%; width: 62%; border-radius: inherit; background: linear-gradient(90deg, #6d5ce8, #9e7ae8); animation: progress 1.35s ease-in-out infinite alternate; }
+
+      .toast {
+        position: absolute;
+        z-index: 40;
+        right: 24px;
+        bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 10px 13px;
+        border: 1px solid rgba(255, 255, 255, 0.62);
+        border-radius: 13px;
+        background: rgba(247, 248, 253, 0.86);
+        box-shadow: 0 12px 30px rgba(43, 41, 75, 0.2);
+        backdrop-filter: blur(18px);
+        color: var(--ink-soft);
+        font-size: 12px;
+        animation: toast-in 260ms ease both;
+      }
+      .toast-check { width: 21px; height: 21px; display: grid; place-items: center; border-radius: 50%; background: #25a86a; color: white; font-weight: 800; }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes progress { from { transform: translateX(-52%); } to { transform: translateX(82%); } }
+      @keyframes fade-in { from { opacity: 0; } }
+      @keyframes dialog-in { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+      @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useEffect, useMemo, useRef, useState } = React;
+
+      const WALLPAPERS = {
+        valley: { id: "valley", name: "柔光山谷", src: "assets/valley-light.jpg" },
+        iridescence: { id: "iridescence", name: "虹彩流光", src: "assets/iridescence-light.jpg" },
+      };
+
+      function RailButton({ children, active = false, label }) {
+        return <button className={`rail-button ${active ? "active" : ""}`} aria-label={label} title={label}>{children}</button>;
+      }
+
+      function NavRow({ icon, children, active = false }) {
+        return <button className={`nav-row ${active ? "active" : ""}`}><span aria-hidden>{icon}</span><span>{children}</span></button>;
+      }
+
+      function SourceOption({ active, mark, title, description, onClick }) {
+        return (
+          <button className={`source-option ${active ? "active" : ""}`} onClick={onClick} role="radio" aria-checked={active}>
+            <span className="source-mark" aria-hidden>{mark}</span>
+            <span className="source-copy"><strong>{title}</strong><small>{description}</small></span>
+            <span className="source-check" aria-hidden></span>
+          </button>
+        );
+      }
+
+      function App() {
+        const [backgroundMode, setBackgroundMode] = useState("wallpaper");
+        const [wallpaper, setWallpaper] = useState(WALLPAPERS.valley);
+        const [fit, setFit] = useState("cover");
+        const [shade, setShade] = useState(34);
+        const [blur, setBlur] = useState(0);
+        const [dialog, setDialog] = useState(false);
+        const [generating, setGenerating] = useState(false);
+        const [prompt, setPrompt] = useState("宁静的未来山谷，柔和晨雾与紫蓝色天光，画面干净克制，适合作为桌面应用背景");
+        const [style, setStyle] = useState("自然摄影");
+        const [toast, setToast] = useState("");
+        const uploadRef = useRef(null);
+
+        const wallpaperStyle = useMemo(() => ({
+          backgroundImage: backgroundMode === "wallpaper" ? `url('${wallpaper.src}')` : "radial-gradient(circle at 18% 14%, #bfcfff, transparent 34%), radial-gradient(circle at 82% 85%, #ccbdf8, transparent 37%), linear-gradient(140deg, #e9eef9, #eae5f5)",
+          backgroundSize: fit === "stretch" ? "100% 100%" : fit,
+          filter: `blur(${blur}px) saturate(1.06)`,
+          opacity: backgroundMode === "wallpaper" ? 1 : 0.92,
+        }), [backgroundMode, wallpaper, fit, blur]);
+
+        useEffect(() => {
+          if (!toast) return;
+          const id = setTimeout(() => setToast(""), 2600);
+          return () => clearTimeout(id);
+        }, [toast]);
+
+        function uploadFile(event) {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const src = URL.createObjectURL(file);
+          setWallpaper({ id: `upload-${Date.now()}`, name: file.name, src });
+          setBackgroundMode("wallpaper");
+          setToast("已复制并应用新壁纸");
+        }
+
+        function generate() {
+          if (!prompt.trim()) return;
+          setGenerating(true);
+          window.setTimeout(() => {
+            setWallpaper(WALLPAPERS.iridescence);
+            setBackgroundMode("wallpaper");
+            setGenerating(false);
+            setDialog(false);
+            setToast("AI 壁纸已生成并自动应用");
+          }, 2200);
+        }
+
+        return (
+          <main className="stage" lang="zh" data-screen-label="Astro 壁纸设置">
+            <section className="window" aria-label="Astro 桌面应用设置原型">
+              <div className="window-wallpaper" style={wallpaperStyle}></div>
+              <div className="window-shade" style={{ "--shade": shade / 100 }}></div>
+              <div className="shell">
+                <header className="titlebar">
+                  <span className="traffic"><i></i><i></i><i></i></span>
+                  <span className="window-title">Astro · 设置</span>
+                </header>
+
+                <aside className="rail">
+                  <img className="brand" src="assets/astro-app-icon.png" alt="Astro" />
+                  <RailButton label="对话">⌁</RailButton>
+                  <RailButton label="文件">▱</RailButton>
+                  <RailButton label="自动化">↻</RailButton>
+                  <div style={{ flex: 1 }}></div>
+                  <RailButton active label="设置">⚙</RailButton>
+                </aside>
+
+                <aside className="settings-nav">
+                  <h2 className="settings-heading">设置</h2>
+                  <input className="settings-search" placeholder="搜索设置" aria-label="搜索设置" />
+                  <div className="nav-label">通用</div>
+                  <NavRow icon="◇">偏好设置</NavRow>
+                  <NavRow icon="◐" active>外观</NavRow>
+                  <NavRow icon="◍">对话</NavRow>
+                  <NavRow icon="›_">终端</NavRow>
+                  <div className="nav-label">智能体</div>
+                  <NavRow icon="▤">自动压缩</NavRow>
+                  <NavRow icon="◎">模型服务</NavRow>
+                  <NavRow icon="✧">工具与技能</NavRow>
+                  <NavRow icon="◌">记忆</NavRow>
+                  <div className="nav-label">扩展</div>
+                  <NavRow icon="⊙">浏览器</NavRow>
+                  <NavRow icon="⬡">模型市场</NavRow>
+                  <NavRow icon="◫">数据洞察</NavRow>
+                  <div className="nav-label">系统</div>
+                  <NavRow icon="△">诊断</NavRow>
+                  <NavRow icon="ⓘ">关于 Astro</NavRow>
+                </aside>
+
+                <section className="content">
+                  <div className="content-head">
+                    <div>
+                      <p className="eyebrow">APPEARANCE</p>
+                      <h1>外观</h1>
+                      <p className="content-intro">选择应用底层氛围，玻璃表面会自动保持内容清晰。</p>
+                    </div>
+                    <span className="prototype-note">可交互设计稿</span>
+                  </div>
+
+                  <div className="stack">
+                    <section className="card">
+                      <div className="card-head">
+                        <div className="card-icon" aria-hidden>▣</div>
+                        <div>
+                          <h2 className="card-title">全局背景</h2>
+                          <p className="card-sub">壁纸只改变底层画面；强调色、明暗主题与玻璃强度仍独立设置。</p>
+                        </div>
+                      </div>
+
+                      <div className="source-switch" role="radiogroup" aria-label="背景来源">
+                        <SourceOption active={backgroundMode === "color"} mark="◒" title="氛围配色" description="沿用多彩、统一与灵动配色" onClick={() => setBackgroundMode("color")} />
+                        <SourceOption active={backgroundMode === "wallpaper"} mark="▧" title="图片壁纸" description="上传图片，或让 AI 生成一张" onClick={() => setBackgroundMode("wallpaper")} />
+                      </div>
+
+                      {backgroundMode === "wallpaper" ? (
+                        <div className="wallpaper-layout">
+                          <div className="preview" style={{ backgroundImage: `url('${wallpaper.src}')`, backgroundSize: fit === "stretch" ? "100% 100%" : fit, "--preview-shade": shade / 100 }}>
+                            <div className="preview-chrome">
+                              <div className="preview-sidebar"></div>
+                              <div className="preview-main">
+                                <div className="preview-line large"></div>
+                                <div className="preview-line"></div>
+                                <div className="preview-bubble"></div>
+                              </div>
+                            </div>
+                            <span className="preview-caption">当前：{wallpaper.name}</span>
+                          </div>
+
+                          <div className="controls">
+                            <div className="action-row">
+                              <button className="button" onClick={() => uploadRef.current?.click()}>上传图片</button>
+                              <button className="button primary" onClick={() => setDialog(true)}>AI 生成</button>
+                              <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={uploadFile} />
+                            </div>
+
+                            <div className="control-group">
+                              <div className="control-label"><span>填充方式</span></div>
+                              <div className="fit-row">
+                                {[['cover','填满'],['contain','适应'],['stretch','拉伸']].map(([id,label]) => <button key={id} className={`chip ${fit === id ? 'active' : ''}`} onClick={() => setFit(id)}>{label}</button>)}
+                              </div>
+                            </div>
+
+                            <label className="control-group">
+                              <span className="control-label"><span>内容保护</span><output>{shade}%</output></span>
+                              <input type="range" min="0" max="55" value={shade} onChange={(event) => setShade(Number(event.target.value))} />
+                            </label>
+
+                            <label className="control-group">
+                              <span className="control-label"><span>柔化背景</span><output>{blur === 0 ? "关闭" : `${blur}px`}</output></span>
+                              <input type="range" min="0" max="12" value={blur} onChange={(event) => setBlur(Number(event.target.value))} />
+                            </label>
+
+                            <p className="recent-label">最近使用</p>
+                            <div className="recent">
+                              {[WALLPAPERS.valley, WALLPAPERS.iridescence].map((item) => (
+                                <button key={item.id} className={`recent-item ${wallpaper.id === item.id ? "active" : ""}`} style={{ backgroundImage: `url('${item.src}')` }} aria-label={item.name} onClick={() => setWallpaper(item)}></button>
+                              ))}
+                              <button className="recent-item" aria-label="上传新壁纸" onClick={() => uploadRef.current?.click()} style={{ background: "rgba(255,255,255,.42)", color: "#6d5ce8", fontSize: 20 }}>＋</button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ padding: "22px", borderRadius: 16, background: "rgba(255,255,255,.28)", color: "var(--ink-mute)", textAlign: "center", fontSize: 12.5 }}>
+                          已恢复现有配色背景；下方强调色设置保持不变。
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="card accent-card">
+                      <div className="card-head">
+                        <div className="card-icon" aria-hidden>◉</div>
+                        <div>
+                          <h2 className="card-title">界面强调色</h2>
+                          <p className="card-sub">与壁纸分离，确保按钮、选中态和状态提示始终可辨。</p>
+                        </div>
+                      </div>
+                      <div className="accent-options" aria-label="强调色">
+                        <button className="accent-dot" style={{ background: "#3b82f6" }} aria-label="蓝色"></button>
+                        <button className="accent-dot active" style={{ background: "#6d5ce8" }} aria-label="紫色"></button>
+                        <button className="accent-dot" style={{ background: "#0fa67a" }} aria-label="绿色"></button>
+                        <button className="accent-dot" style={{ background: "#e36558" }} aria-label="珊瑚色"></button>
+                      </div>
+                    </section>
+                  </div>
+                </section>
+              </div>
+
+              {dialog && (
+                <div className="backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !generating) setDialog(false); }}>
+                  <section className="dialog" role="dialog" aria-modal="true" aria-label="AI 生成壁纸">
+                    {generating ? (
+                      <div className="progress-box">
+                        <div className="spinner" aria-hidden></div>
+                        <div><h2>正在生成壁纸</h2><p>当前壁纸会一直保留，生成成功后再自动替换。</p></div>
+                        <div className="progress-bar"><i></i></div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="dialog-head">
+                          <div className="card-icon" aria-hidden>✦</div>
+                          <div className="dialog-head-copy"><h2>AI 生成壁纸</h2><p>使用“模型服务”中选定的图片模型，按当前窗口比例生成横向画面。</p></div>
+                          <button className="close" onClick={() => setDialog(false)} aria-label="关闭">×</button>
+                        </div>
+                        <label className="prompt-label" htmlFor="wallpaper-prompt">描述你想要的画面</label>
+                        <textarea id="wallpaper-prompt" className="prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)}></textarea>
+                        <div className="style-row" aria-label="风格">
+                          {["自然摄影", "抽象流体", "极简插画", "电影感"].map((item) => <button key={item} className={`chip ${style === item ? "active" : ""}`} onClick={() => setStyle(item)}>{item}</button>)}
+                        </div>
+                        <div className="dialog-meta"><span>生成成功后自动应用</span><span style={{ color: "var(--ink-mute)" }}>失败时保留当前壁纸</span><span className="toggle" aria-hidden></span></div>
+                        <div className="dialog-actions">
+                          <button className="button" onClick={() => setDialog(false)}>取消</button>
+                          <button className="button primary" disabled={!prompt.trim()} onClick={generate}>生成并应用</button>
+                        </div>
+                      </>
+                    )}
+                  </section>
+                </div>
+              )}
+
+              {toast && <div className="toast" role="status"><span className="toast-check">✓</span><span>{toast}</span></div>}
+            </section>
+          </main>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>

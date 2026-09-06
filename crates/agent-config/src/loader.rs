@@ -1,4 +1,4 @@
-//! Filesystem discovery for Codex-compatible local configuration layers.
+//! 本地配置层的文件系统发现。
 
 use std::fs;
 use std::io;
@@ -15,11 +15,10 @@ use crate::{
 pub const CONFIG_TOML_FILE: &str = "config.toml";
 pub const DOT_ASTRO_DIR: &str = ".astro";
 
-/// Machine-local keys that project configuration must not override.
+/// 项目配置不允许覆盖的机器本地键。
 ///
-/// This list follows the public Codex project-config contract. These values
-/// redirect credentials, provider traffic, host metadata, notifications, or
-/// telemetry and therefore belong to user/system layers only.
+/// 此列表遵循公开的项目配置契约。这些值涉及凭据重定向、Provider 流量、
+/// 主机元数据、通知或遥测，因此仅属于用户/系统层。
 pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
     "openai_base_url",
     "chatgpt_base_url",
@@ -102,8 +101,8 @@ pub struct LocalConfigLoad {
 }
 
 impl LocalConfigLoad {
-    /// Freeze the loaded layers into the immutable snapshot consumed by one
-    /// request, turn, or long-lived subsystem configuration generation.
+    /// 将已加载的层冻结为不可变快照，供单个请求、turn 或
+    /// 长期子系统配置生成使用。
     pub fn resolve(&self) -> EffectiveConfig {
         self.layers.resolve()
     }
@@ -142,12 +141,10 @@ pub enum LocalConfigError {
     InvalidProjectRootMarkers,
 }
 
-/// Loads local Codex-compatible configuration without interpreting
-/// product-specific fields.
+/// 加载本地配置，不解释产品特有字段。
 ///
-/// Layer order is defaults < system < user < profile < project(root-to-cwd)
-/// < session < request. Project files are discovered but never read unless the
-/// project root is trusted.
+/// 层顺序为 defaults < system < user < profile < project（根到工作目录）
+/// < session < request。项目文件会被发现但不会被读取，除非项目根目录已受信任。
 pub fn load_local_config(
     options: &LocalConfigOptions,
 ) -> Result<LocalConfigLoad, LocalConfigError> {
@@ -190,8 +187,8 @@ pub fn load_local_config(
         layers.push(layer);
     }
 
-    // Project discovery and trust are machine/user decisions. A selected
-    // profile cannot redirect project-root discovery or grant repository trust.
+    // 项目发现和信任是机器/用户层面的决策。选定的 profile
+    // 不能重定向项目根目录发现，也不能授予仓库信任。
     let discovery_config = ConfigLayerStack::new(discovery_layers).effective_config();
     let root_markers = project_root_markers(&discovery_config)?;
     let project_root = discover_project_root(&cwd, &root_markers);
@@ -224,7 +221,7 @@ pub fn load_local_config(
             dot_config_dir: dot_astro_dir,
         };
         if let Some(reason) = project_trust.disabled_reason() {
-            // Do not parse or otherwise consume untrusted repository content.
+            // 不解析也不消费不受信任的仓库内容。
             layers.push(
                 ConfigLayerEntry::from_value(source.clone(), TomlValue::Table(Default::default()))
                     .disabled(reason),

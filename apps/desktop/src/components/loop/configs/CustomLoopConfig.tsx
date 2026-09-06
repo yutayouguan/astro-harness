@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SelectField, cfgStr } from "./ConfigField";
-import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
+import {
+  KeyValueEditor,
+  KvEntry,
+  jsonToKvEntries,
+  kvEntriesToObj,
+} from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -9,7 +14,9 @@ interface ConfigProps {
 }
 
 export default function CustomLoopConfig({ config, onChange }: ConfigProps) {
-  const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
+  const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>(
+    [],
+  );
 
   useEffect(() => {
     invoke<{ id: string; name: string }[]>("list_loops")
@@ -32,7 +39,9 @@ export default function CustomLoopConfig({ config, onChange }: ConfigProps) {
       <KeyValueEditor
         label="输入映射"
         value={jsonToKvEntries(config.input_mapping)}
-        onChange={(v: KvEntry[]) => onChange({ ...config, input_mapping: kvEntriesToObj(v) })}
+        onChange={(v: KvEntry[]) =>
+          onChange({ ...config, input_mapping: kvEntriesToObj(v) })
+        }
         keyPlaceholder="子 Loop 输入名"
         valuePlaceholder="值 / {{var}}"
         hint="将当前上下文的变量映射到子 Loop 的输入"

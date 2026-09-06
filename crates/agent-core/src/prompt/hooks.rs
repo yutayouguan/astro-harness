@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use types::message::Message;
+use agent_protocol::ResponseItem;
 
 /// 协作式取消信号。
 #[derive(Clone, Default)]
@@ -36,7 +36,7 @@ impl CancelSignal {
 /// Prompt 循环因取消而中断。
 #[derive(Debug, Clone)]
 pub enum PromptCancelled {
-    Cancelled { history: Vec<Message> },
+    Cancelled { history: Vec<ResponseItem> },
 }
 
 impl std::fmt::Display for PromptCancelled {

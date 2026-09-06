@@ -16,7 +16,7 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Soft sandbox limits applied via `setrlimit` on Unix after fork / before exec.
+/// Unix 下 fork 后 exec 前通过 `setrlimit` 施加的软沙箱限制。
 const RLIM_CPU_SECS: u64 = 30;
 const RLIM_AS_BYTES: u64 = 512 * 1024 * 1024;
 const RLIM_FSIZE_BYTES: u64 = 32 * 1024 * 1024;
@@ -24,17 +24,17 @@ const RLIM_NOFILE: u64 = 64;
 // 注意：不设置 RLIMIT_NPROC。该限制按「用户」计数而非进程树；
 // 桌面环境宿主已有大量进程时，过低的 NPROC 会让子进程立刻 fork 失败。
 
-/// Environment variable names kept for the child process.
+/// 保留给子进程的环境变量名。
 const SAFE_ENV_KEYS: &[&str] = &[
     "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TMP",
     "TEMP", "SHELL", "PWD",
 ];
 
-/// Arguments for the `code_exec` tool.
+/// `code_exec` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CodeExecArgs {
     pub code: String,
-    /// Language: `python` (default) / `javascript`|`js` / `shell`|`bash`. Unknown languages error.
+    /// 语言：`python`（默认）/ `javascript`|`js` / `shell`|`bash`。未知语言会报错。
     #[serde(default)]
     pub language: Option<String>,
 }
@@ -49,7 +49,7 @@ language must be python|javascript (default python). \
 Runs through the active command sandbox policy with the workspace as cwd. \
 Guardrails: env scrubbing (no API keys/tokens), Unix resource limits (CPU/memory/file size/fd), 30s timeout. \
 stdout/stderr capped at 64KiB. \
-For shell commands, use terminal."
+For shell commands, use exec_command."
             .to_string(),
         schema: schema_for_args::<CodeExecArgs>(),
         check_fn: None,
@@ -79,10 +79,10 @@ fn is_sensitive_env_key(key: &str) -> bool {
     NEEDLES.iter().any(|n| upper.contains(n))
 }
 
-/// Build a scrubbed environment for code execution.
+/// 构建代码执行的净化环境。
 ///
-/// Starts empty, copies only allowlisted keys from the parent, and never copies
-/// keys whose names look like secrets.
+/// 从空 env 开始，仅从父进程拷贝白名单中的 key，
+/// 且永不拷贝名称疑似密钥的 key。
 pub(crate) fn scrubbed_env(
     parent: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
 ) -> HashMap<String, String> {
@@ -117,7 +117,7 @@ fn apply_unix_rlimits() {
     }
 }
 
-/// RAII helper so temp scripts are removed on timeout / early return too.
+/// RAII 辅助结构，确保临时脚本在超时或提前返回时也会被清理。
 struct TempScript(PathBuf);
 
 impl Drop for TempScript {
@@ -153,7 +153,7 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &serde_json::Value) -> anyhow
         "python" | "python3" | "py" => ("python3", vec![], "py"),
         "javascript" | "js" => ("node", vec![], "js"),
         "shell" | "bash" | "sh" => {
-            anyhow::bail!("code_exec 不再支持 shell；请使用 terminal 工具执行 shell 命令")
+            anyhow::bail!("code_exec 不再支持 shell；请使用 exec_command 工具执行 shell 命令")
         }
         other => {
             anyhow::bail!("code_exec 不支持 language={other}；请使用 python 或 javascript")
@@ -307,11 +307,13 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -319,10 +321,10 @@ mod tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         }
     }
 
@@ -361,8 +363,9 @@ mod tests {
     async fn code_exec_adds_proxy_after_secret_scrub() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -388,8 +391,9 @@ mod tests {
     async fn code_exec_managed_network_denial_is_typed() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -428,8 +432,9 @@ print(sock.recv(4096).decode())"#;
     async fn code_exec_without_managed_network_keeps_proxy_marker_absent() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -476,8 +481,9 @@ print(sock.recv(4096).decode())"#;
     async fn rejects_unknown_language() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -493,8 +499,9 @@ print(sock.recv(4096).decode())"#;
     async fn large_stdout_is_truncated() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -524,8 +531,9 @@ print(sock.recv(4096).decode())"#;
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -552,8 +560,9 @@ print(sock.recv(4096).decode())"#;
     async fn concurrent_same_language_no_clobber() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -574,8 +583,9 @@ print(sock.recv(4096).decode())"#;
         std::env::set_var("ASTRO_CODE_EXEC_TEST_SECRET_TOKEN", "should-not-leak");
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -600,8 +610,9 @@ print(sock.recv(4096).decode())"#;
     async fn timeout_cleans_temp_script() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -634,8 +645,9 @@ print(sock.recv(4096).decode())"#;
     async fn shell_language_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let memory = std::sync::RwLock::new(memory);
@@ -646,6 +658,6 @@ print(sock.recv(4096).decode())"#;
         )
         .await
         .unwrap_err();
-        assert!(err.to_string().contains("terminal"), "{err}");
+        assert!(err.to_string().contains("exec_command"), "{err}");
     }
 }

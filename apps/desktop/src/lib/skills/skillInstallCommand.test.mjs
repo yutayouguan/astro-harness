@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  storeConfigureCommand,
   storeInstallCommand,
   storeSkillDetailUrl,
 } from "./skillInstallCommand.ts";
@@ -22,7 +23,7 @@ test("SkillHub detail URL uses slug only, not owner/slug", () => {
   );
 });
 
-test("SkillHub install prompt links to slug detail page", () => {
+test("SkillHub install prompt pins Astro installer and target scope", () => {
   const skill = {
     id: "skillhub:user_x/demo-skill",
     name: "demo-skill",
@@ -33,42 +34,59 @@ test("SkillHub install prompt links to slug detail page", () => {
     install_ref: "skillhub:user_x/demo-skill",
     homepage: "https://api.skillhub.cn/user_x/demo-skill",
   };
-  const cmd = storeInstallCommand(skill);
+  const cmd = storeInstallCommand(skill, "project");
   assert.match(cmd, /详情：https:\/\/skillhub\.cn\/skills\/demo-skill/);
+  assert.match(cmd, /request_plugin_install/);
+  assert.match(cmd, /安装作用域：project/);
+  assert.match(cmd, /<当前项目>\/\.astro\/skills/);
+  assert.match(cmd, /tool_search/);
+  assert.doesNotMatch(cmd, /folder=/);
+  assert.match(cmd, /不要运行 SkillHub CLI/);
   assert.doesNotMatch(cmd, /api\.skillhub\.cn/);
 });
 
-test("ClawHub detail URL uses homepage or short link", () => {
+test("contextual SkillHub prompt lets the composer token carry the skill name", () => {
   const skill = {
-    id: "clawhub:outlit-sdk",
-    name: "Outlit SDK",
-    description: "desc",
-    source: "clawhub",
-    store: "clawhub",
-    installs: 1305,
-    install_ref: "clawhub:outlit-sdk",
-    homepage: "https://clawhub.ai/s/skills/outlit-sdk",
+    id: "skillhub:user_x/demo-skill",
+    name: "demo-skill",
+    description: "Demo skill",
+    source: "community",
+    store: "skillhub",
+    installs: null,
+    install_ref: "skillhub:user_x/demo-skill",
+    homepage: null,
   };
-  assert.equal(
-    storeSkillDetailUrl(skill),
-    "https://clawhub.ai/s/skills/outlit-sdk",
-  );
-  assert.match(storeInstallCommand(skill), /clawhub@latest install outlit-sdk/);
+  const cmd = storeInstallCommand(skill, "global", { contextual: true });
+  assert.match(cmd, /安装这个 SkillHub 技能/);
+  assert.doesNotMatch(cmd, /技能「demo-skill」/);
 });
 
-test("skills.sh detail URL prefers www host", () => {
+test("API-key Skill prompt keeps secrets out of chat and files", () => {
   const skill = {
-    id: "skillsdotsh:vercel-labs/skills/find-skills",
-    name: "find-skills",
-    description: "x",
-    source: "vercel-labs/skills",
-    store: "skillsdotsh",
-    installs: 1,
-    install_ref: "skillsdotsh:vercel-labs/skills/find-skills",
-    homepage: "https://skills.sh/vercel-labs/skills/find-skills",
+    id: "skillhub:user_x/keyed-skill",
+    name: "keyed-skill",
+    description: "",
+    source: "community",
+    store: "skillhub",
+    installs: null,
+    install_ref: "skillhub:user_x/keyed-skill",
+    homepage: null,
+    requires_api_key: true,
   };
-  assert.equal(
-    storeSkillDetailUrl(skill),
-    "https://www.skills.sh/vercel-labs/skills/find-skills",
+  const cmd = storeInstallCommand(skill);
+  assert.match(cmd, /requires_api_key=true/);
+  assert.match(cmd, /不要让我在对话中粘贴密钥/);
+  assert.match(cmd, /不要把密钥写入 Skill 或项目文件/);
+
+  const configure = storeConfigureCommand(skill, "project", {
+    contextual: true,
+  });
+  assert.match(configure, /这个 SkillHub 技能已经安装/);
+  assert.doesNotMatch(configure, /技能「keyed-skill」/);
+  assert.match(
+    configure,
+    /读取 <当前项目>\/\.astro\/skills\/keyed-skill\/SKILL\.md/,
   );
+  assert.match(configure, /不要要求我在对话中粘贴 API Key/);
+  assert.match(configure, /不要假装已经配置完成/);
 });

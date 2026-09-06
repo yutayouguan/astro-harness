@@ -1,0 +1,150 @@
+/* Segmented-control geometry and material ingredients. */
+:root {
+  --seg-shell-h: 36px;
+  --seg-item-h: 28px;
+  --seg-shell-radius: 12px;
+  --seg-shell-pad: 3px;
+  --seg-shell-gap: 2px;
+  --seg-item-radius: 9px;
+  --seg-item-pad: 0 13px;
+  --seg-item-gap: 7px;
+  --seg-item-font: 13px;
+  --seg-item-weight: 600;
+  --seg-item-color: var(--ink-mute);
+  --seg-shell-blur: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  --seg-item-blur-active: none;
+  --seg-shell-sheen-a: rgba(255, 255, 255, 0.58);
+  --seg-shell-sheen-b: rgba(255, 255, 255, 0.2);
+  --seg-shell-base: color-mix(in srgb, var(--glass-panel) 70%, transparent);
+  --seg-shell-tone-amt: 0%;
+  --seg-border-base: color-mix(in srgb, var(--glass-edge) 84%, transparent);
+  --seg-border-tone-amt: 0%;
+  --seg-shell-drop-geo: 0 5px 16px;
+  --seg-shell-drop-base: rgba(var(--shadow-ink), 0.04);
+  --seg-shell-drop-tone-amt: 7%;
+  --seg-shell-rim: rgba(255, 255, 255, 0.62);
+  --seg-item-sheen-a: rgba(255, 255, 255, 0.86);
+  --seg-item-sheen-b: rgba(255, 255, 255, 0.4);
+  --seg-item-base: var(--glass-panel);
+  --seg-item-tone-amt: 11%;
+  --seg-item-tone-hue: 100%;
+  --seg-item-ring-amt: 24%;
+  --seg-item-glow-amt: 10%;
+  --seg-item-rim: rgba(255, 255, 255, 0.82);
+  --seg-item-ink: var(--ink);
+  --seg-item-ink-amt: 100%;
+  --seg-hover-tone-amt: 10%;
+  --seg-hover-base: transparent;
+}
+
+html[data-theme="dark"] {
+  --seg-shell-sheen-a: rgba(255, 255, 255, 0.075);
+  --seg-shell-sheen-b: rgba(255, 255, 255, 0.018);
+  --seg-shell-base: rgba(8, 6, 18, 0.52);
+  --seg-shell-tone-amt: 28%;
+  --seg-border-base: rgba(255, 255, 255, 0.09);
+  --seg-border-tone-amt: 18%;
+  --seg-shell-drop-geo: 0 4px 14px;
+  --seg-shell-drop-base: rgba(0, 0, 0, 0.18);
+  --seg-shell-drop-tone-amt: 0%;
+  --seg-shell-rim: rgba(255, 255, 255, 0.07);
+  --seg-item-sheen-a: rgba(255, 255, 255, 0.12);
+  --seg-item-sheen-b: rgba(255, 255, 255, 0.035);
+  --seg-item-base: rgba(8, 6, 18, 0.42);
+  --seg-item-tone-amt: 54%;
+  --seg-item-tone-hue: 0%;
+  --seg-item-ring-amt: 30%;
+  --seg-item-glow-amt: 0%;
+  --seg-item-rim: rgba(255, 255, 255, 0.09);
+  --seg-item-ink: #fff;
+  --seg-item-ink-amt: 18%;
+  --seg-hover-tone-amt: 0%;
+  --seg-hover-base: rgba(255, 255, 255, 0.07);
+}
+
+/*
+ * Assemble tone-dependent values on each consumer. This is intentionally not
+ * on :root: local panel tones and portal-provided tones must remain effective.
+ */
+:is(
+  .skills-page,
+  .cron-page,
+  .loop-panel,
+  .providers-page-tabs,
+  .providers-detail-tabs,
+  .skills-main-tabs,
+  .skills-store-tabs,
+  .plugins-scope-tabs,
+  .plugins-personal-tabs,
+  .cron-tabs,
+  .tool-main-tabs,
+  .fs-tabs,
+  .files-mode-switch,
+  .mcp-add-drawer-tabs,
+  .loop-config-panel-tabs,
+  .mem-view-nav,
+  .memory-file-tabs,
+  .skills-preview-tabs,
+  .providers-page-tab,
+  .providers-detail-tab,
+  .skills-main-tab,
+  .skills-store-tab,
+  .skills-preview-tab,
+  .plugins-scope-tab,
+  .plugins-personal-tab,
+  .cron-tab,
+  .tool-main-tab,
+  .fs-tab,
+  .files-mode-tab,
+  .memory-file-tab,
+  .mem-view-tab,
+  .mcp-add-drawer-tab,
+  .loop-config-tab
+) {
+  --seg-shell-border: color-mix(
+    in srgb,
+    var(--tone) var(--seg-border-tone-amt),
+    var(--seg-border-base)
+  );
+  --seg-shell-bg:
+    linear-gradient(155deg, var(--seg-shell-sheen-a), var(--seg-shell-sheen-b)),
+    color-mix(
+      in srgb,
+      var(--tone-soft) var(--seg-shell-tone-amt),
+      var(--seg-shell-base)
+    );
+  --seg-shell-shadow:
+    var(--seg-shell-drop-geo)
+    color-mix(
+      in srgb,
+      var(--tone) var(--seg-shell-drop-tone-amt),
+      var(--seg-shell-drop-base)
+    ),
+    inset 0 1px 0 var(--seg-shell-rim);
+  --seg-item-color-hover: var(--tone);
+  --seg-item-bg-hover: color-mix(
+    in srgb,
+    var(--tone) var(--seg-hover-tone-amt),
+    var(--seg-hover-base)
+  );
+  --seg-item-color-active: color-mix(
+    in srgb,
+    var(--seg-item-ink) var(--seg-item-ink-amt),
+    var(--tone)
+  );
+  --seg-item-bg-active:
+    linear-gradient(165deg, var(--seg-item-sheen-a), var(--seg-item-sheen-b)),
+    color-mix(
+      in srgb,
+      color-mix(in srgb, var(--tone) var(--seg-item-tone-hue), var(--tone-soft))
+        var(--seg-item-tone-amt),
+      var(--seg-item-base)
+    );
+  --seg-item-shadow-active:
+    inset 0 0 0 1px
+    color-mix(in srgb, var(--tone) var(--seg-item-ring-amt), transparent),
+    inset 0 1px 0 var(--seg-item-rim),
+    0 2px 8px
+    color-mix(in srgb, var(--tone) var(--seg-item-glow-amt), transparent);
+}

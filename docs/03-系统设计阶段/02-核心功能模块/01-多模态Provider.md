@@ -1,6 +1,8 @@
 # 多模态 Provider 系统
 
-> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-08-22
+> **Harness 边界（2026-09-04）**：Provider 是 Model 网关和协议适配层，不拥有 Agent turn、工具权限或持久化生命周期。Agent 通过 `ResponsesRequest` 交付原生 Items/tool schemas；非 Agent 兼容调用使用 `ChatCompletionRequest`。两条请求类型不互相降级。契约详见 [Responses API 原生工具协议与 Astro 工具协议](../../04-详细设计阶段/04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md)。
+
+> 阶段：系统设计 | 状态：**实现定稿** | 更新：2026-09-04
 
 ## 架构概览
 
@@ -10,8 +12,9 @@
 dispatch (唯一入口)
   ├── register_provider() — 按 provider id + config.api_mode 路由
   │     ├── 内置厂商 → trait 系统 (OpenAICompatible / Anthropic / Google / ...)
-  │     └── TOML 自定义 → ConfigDrivenCompletionModel (Responses API)
-  ├── chat_stream() / chat_stream_direct() — 聊天补全
+  │     └── TOML 自定义 → ConfigDrivenResponsesModel (Responses API)
+  ├── agent_responses_stream() — Agent Responses-only
+  ├── chat_stream() / chat_stream_direct() — 非 Agent 兼容补全
   ├── generate_image() / text_to_speech() / generate_video() — 媒体
   └── verify() — 连通性探测
 ```
@@ -37,7 +40,8 @@ dispatch (唯一入口)
 ### 核心 Trait 层次
 
 ```text
-CompletionModel          — 聊天补全（唯一异步 trait）
+ResponsesModel           — Agent Responses 请求
+ChatCompletionModel      — 非 Agent 兼容补全
 EmbeddingModel           — 向量嵌入
 ImageGenModel            — 图像生成
 VideoGenModel            — 视频生成
@@ -45,7 +49,8 @@ TTSModel                 — 语音合成
 MusicGenModel            — 音乐生成
 
 ProviderExt              — 厂商基础（NAME, BASE_URL, auth_headers）
-OpenAICompatible: ProviderExt — OpenAI 兼容厂商 hook（声明式常量 + finalize hook）
+OpenAIResponsesCompatible: ProviderExt — Responses 线路 hook
+OpenAICompatible: ProviderExt — Chat Completions 兼容线路 hook
 Capabilities<Chat, Embedding, ImageGen, ...> — 编译期能力声明
 ```
 
@@ -58,8 +63,6 @@ impl OpenAICompatible for NewProvider {
     // 基础能力
     const STREAM_USAGE: bool = true;
     const SUPPORTS_TOOLS: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
-
     // Thinking 格式（4 种）
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::DeepSeek;
     //   None             — 不处理 thinking
@@ -70,10 +73,13 @@ impl OpenAICompatible for NewProvider {
     // Effort 映射表
     const EFFORT_MAP: &[(&str, &str)] = &[("max", "max"), ("xhigh", "max")];
 
-    // Responses API 行为
-    const RESPONSES_STORE_FALSE: bool = false;
-    const RESPONSES_PARALLEL_TOOLS: bool = false;
-    const RESPONSES_REASONING_SUMMARY: bool = false;
+}
+
+impl OpenAIResponsesCompatible for NewProvider {
+    const STORE_FALSE: bool = false;
+    const PARALLEL_TOOLS: bool = false;
+    const REASONING_SUMMARY: bool = false;
+    const SUPPORTS_PERSISTENT_REASONING: bool = false;
 }
 ```
 
@@ -83,7 +89,7 @@ impl OpenAICompatible for NewProvider {
 |---|---|---|
 | `OpenAICompletionModel<Ext>` | `compat/completion.rs` | Chat Completions 路径 |
 | `OpenAIResponsesModel<Ext>` | `compat/responses.rs` | Responses API 路径 |
-| `ConfigDrivenCompletionModel` | `custom.rs` | TOML 自定义 provider（仅 Responses） |
+| `ConfigDrivenResponsesModel` | `custom.rs` | TOML 自定义 provider（仅 Responses） |
 
 共享 thinking 转换：`apply_thinking_compat(ThinkingFormat, &[effort_map], body)` — 4 种格式统一处理。
 
@@ -114,6 +120,8 @@ default_effort = "high"
 - 统一走 Responses API
 - 运行时读取，修改后无需重启
 - TOML 声明的模型启动时注入 `~/.astro/cache/models.json`
+- 自定义 Provider 不获得 `persistent` capability；该能力仅由 OpenAI 模型目录的
+  `persistent_instructions` 打开
 
 ---
 
@@ -130,7 +138,7 @@ default_effort = "high"
 | `env_keys` | 环境变量名列表 |
 | `supports_responses` | 是否支持 Responses API 模式切换（前端 UI 标志） |
 | `supports_stream_usage` | 是否支持 stream_options.include_usage |
-| `image_mode` | 图片生成协议路由（OpenAi / GoogleInteractions / MiniMax） |
+| `image_mode` | 图片生成协议路由（OpenAi / AzureOpenAiV1 / GoogleInteractions / MiniMax） |
 | `default_*_model` | 各模态默认模型名 |
 
 ---
@@ -152,7 +160,18 @@ API 厂商端点 (/models)  →  OpenRouter 模型表  →  已知能力补丁
      前端模型选择器          运行时 context_window 查询
 ```
 
-`ModelInfo` 字段：id、display_name、description、context_window、max_output_tokens、capabilities（tools/vision/web/reasoning/file/audio/image_gen/video_gen/music_gen）、reasoning（supported_efforts/default_effort）、pricing、default_parameters、meta_source。
+`ModelInfo` 字段：id、display_name、description、context_window、max_output_tokens、capabilities（tools/vision/web/reasoning/file/audio/image_gen/video_gen/music_gen）、reasoning（supported_efforts/default_effort/persistent_instructions）、pricing、default_parameters、meta_source。
+
+### Persistent reasoning
+
+`persistent` 是本地 reasoning effort，不是直接透传给所有 Provider 的 wire 值：
+
+1. 只有 `backend_id = openai` 且模型目录带非空 `persistent_instructions` 时，Desktop 才显示该档位；
+2. 目录 enrich 只为 OpenAI 保留并规范化该字段，Azure、OpenRouter 与自定义 Provider 不获得隐式能力；
+3. Desktop 经 `ChatRequest.persistent_instructions` 传给 Server，Server 在初始配置与 active-turn 切换时再次校验；
+4. Provider adapter 消费内部 `astro_persistent_instructions`，将其合并进 instructions，并从最终 JSON 删除该内部键；
+5. OpenAI Responses wire 使用 `reasoning.effort = "disabled"`；其他 adapter 收到 `persistent` 明确失败；
+6. 切回普通 effort 后指令可留在 Session 中供再次启用，但不会注入普通请求。
 
 ---
 
@@ -177,16 +196,25 @@ pub struct ChatTarget {
 
 ## 能力矩阵（实际实现）
 
-| 能力 | Anthropic | OpenAI | Google | DeepSeek | MiniMax | 混元 | 智谱 | 百炼 | 火山 |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Responses API | — | ✓ | — | ✓ | ✓ | — | — | — | — |
-| 嵌入 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 图像生成 | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| TTS | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 视频生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 音乐生成 | — | — | ✓ | — | ✓ | ✓ | ✓ | — | ✓ |
-| ASR | — | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 能力 | Anthropic | OpenAI | Google | Azure | DeepSeek | MiniMax | 混元 | 智谱 | 百炼 | 火山 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 聊天 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Responses API | — | ✓ | — | ✓ | ✓ | ✓ | — | — | — | — |
+| Persistent reasoning | — | 目录门控 | — | — | — | — | — | — | — | — |
+| 嵌入 | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 图像生成 | — | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| TTS | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 视频生成 | — | — | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 音乐生成 | — | — | ✓ | — | — | ✓ | ✓ | ✓ | — | ✓ |
+| ASR | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+### Azure Foundry `gpt-image-2`
+
+Azure 的 Responses 和图片生成共用 OpenAI v1 base URL 与 Bearer 认证。新配置默认使用 `https://<resource>.services.ai.azure.com/openai/v1`，同时兼容 `https://<resource>.openai.azure.com/openai/v1`。聊天部署名与 `gpt-image-2` 媒体部署名独立配置，生图路由仍以 `ImageGenMode::AzureOpenAiV1` 与其他协议隔离。
+
+`ImageGenConfig` 传递尺寸、数量、PNG/JPEG/WebP、compression、quality 和 background。Provider 设置另存 `active_image_provider_id`，因此 Azure 可作为默认生图 Provider，而不改变默认聊天 Provider。Workflow 运行时从 keyring/环境变量注入凭据，不将 Key 写入节点 JSON。
+
+详细配置见 [Azure AI Foundry `gpt-image-2` 使用说明](../../azure-gpt-image-2.md)，分层和安全契约见 [接入设计](../../superpowers/specs/2026-09-01-azure-gpt-image-2-design.md)。
 
 ---
 
@@ -201,23 +229,26 @@ pub struct Registry {
 
 // DynProvider — 按能力组合
 DynProvider::new(id, name)
-    .with_completion(model)    // CompletionModel
+    .with_responses(model)       // ResponsesModel
+    .with_chat_completion(model) // ChatCompletionModel
     .with_embedding(model)     // EmbeddingModel
     .with_image_gen(model)     // ImageGenModel
     .with_tts(model)           // TTSModel
     .with_video_gen(model)     // VideoGenModel
     .with_music_gen(model)     // MusicGenModel
 
-// dispatch::register_provider — 按 id + api_mode 路由
+// dispatch::register_provider — Chat/media 与 Responses 能力独立挂载
 fn register_provider(reg, provider, config) {
     let responses = config.api_mode == "responses";
     match provider {
-        "openai" if responses => reg.register_openai_responses(...),
         "openai" => reg.register_openai(...),
-        "deepseek" if responses => reg.register_openai_compat_responses::<DeepSeek>(...),
+        "azure" => reg.register_azure(...),
         "deepseek" => register_compat::<DeepSeek>(...),
         // ...
         other => lookup_custom_provider(other) 或 fallback OpenAI compat
+    }
+    if responses {
+        reg.attach_responses::<Provider>(...);
     }
 }
 ```

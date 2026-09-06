@@ -195,7 +195,7 @@ impl HitlGate {
         // 先全部校验再发送，避免部分完成
         let mut prepared = Vec::with_capacity(items.len());
         for item in items {
-            if item.status != "resolved" && item.status != "cancelled" {
+            if item.status != "resolved" && item.status != "cancelled" && item.status != "timeout" {
                 return Err(format!("invalid resume status: {}", item.status));
             }
             let Some(waiting) = map.get(&item.interrupt_id) else {
@@ -262,7 +262,7 @@ impl HitlRegistry {
             .insert(gate.session_id().to_string(), gate);
     }
 
-    /// Atomically replace one session gate from a cancellation-safe synchronous commit.
+    /// 原子替换一个 session 闸门，用于取消安全的同步提交。
     pub fn replace_for_admission(&self, gate: Arc<HitlGate>) -> Option<Arc<HitlGate>> {
         self.inner
             .write()
@@ -536,6 +536,6 @@ mod tests {
         assert!(!is_exclusive_tool("web_search"));
         assert!(is_interactive_tool("ask_user"));
         assert!(!is_interactive_tool("switch_mode"));
-        assert!(!is_interactive_tool("terminal"));
+        assert!(!is_interactive_tool("exec_command"));
     }
 }

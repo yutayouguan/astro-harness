@@ -13,30 +13,39 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the unified `terminal` tool.
+/// 统一 `terminal` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TerminalArgs {
-    /// `run` (default) | `list` | `status` | `wait` | `kill`.
+    /// `run`（默认）| `list` | `status` | `wait` | `kill`。
     #[serde(default)]
     pub action: Option<String>,
-    /// Shell command (required for `run`).
+    /// Shell 命令（`run` 时必需）。
     #[serde(default)]
     pub command: Option<String>,
-    /// Optional workspace-relative working subdirectory (`run`).
+    /// 可选的工作区相对子目录（`run` 时使用）。
     #[serde(default)]
     pub cwd: Option<String>,
-    /// Timeout seconds: `run` default 60 max 900; `wait` default 30 max 600.
+    /// 超时秒数：`run` 默认 60 上限 900；`wait` 默认 30 上限 600。
     #[serde(default)]
     pub timeout_secs: Option<u64>,
-    /// If true with `run`, start background job and return id immediately.
+    /// `run` 时设为 true 则在后台启动任务并立即返回 id。
     #[serde(default)]
     pub background: Option<bool>,
-    /// Job id for `status` / `wait` / `kill`.
+    /// 任务 id，用于 `status` / `wait` / `kill`。
     #[serde(default)]
     pub id: Option<String>,
-    /// Byte offset for `status` / `wait` output paging.
+    /// `status` / `wait` 输出分页的字节偏移量。
     #[serde(default)]
     pub offset: Option<usize>,
+    /// 使用共享 PTY 终端；用户可在 Desktop Terminal Dock 中看到并接管。
+    #[serde(default)]
+    pub tty: Option<bool>,
+    /// PTY 命令写入后等待输出的毫秒数。
+    #[serde(default)]
+    pub yield_time_ms: Option<i64>,
+    /// PTY 返回输出的 token 预算。
+    #[serde(default)]
+    pub max_output_tokens: Option<usize>,
 }
 
 /// `timeout_secs` 上限，防止命令永久挂起占用执行器。
@@ -52,7 +61,7 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "terminal".to_string(),
         description: "Run a shell command or manage background jobs. \
 action=run (default): command required; cwd=project_root or workspace; timeout_secs max 900; \
-background=true returns job id. \
+background=true returns job id; tty=true runs in the shared Desktop terminal session. \
 action=list|status|wait|kill: manage background jobs (id required except list; \
 status/wait support offset; wait timeout_secs default 30 max 600). \
 stdout/stderr capped at 64KiB (run) / 60KiB per poll (jobs)."
@@ -124,12 +133,27 @@ async fn dispatch_run(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        crate::path_safe::resolve_safe(&root, rel)?
+        crate::path_safe::resolve_safe_in_roots(&root, &ctx.workspace_roots, rel)?
     } else {
         root
     };
     std::fs::create_dir_all(&cwd)?;
     let audit = ctx.sandbox_audit_metadata("terminal");
+
+    if parsed.tty.unwrap_or(false) {
+        if parsed.background.unwrap_or(false) {
+            anyhow::bail!("PTY terminal sessions cannot run with background=true");
+        }
+        return super::exec_command::run_in_shared_terminal(
+            ctx,
+            command,
+            &root,
+            &cwd,
+            parsed.yield_time_ms,
+            parsed.max_output_tokens,
+        )
+        .await;
+    }
 
     if parsed.background.unwrap_or(false) {
         if ctx.managed_network.is_some() {
@@ -309,11 +333,13 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: session_id.into(),
             turn_id: None,
             credentials: creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -321,10 +347,10 @@ mod tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         }
     }
 
@@ -363,8 +389,9 @@ mod tests {
     async fn terminal_uses_managed_proxy_environment() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -385,8 +412,9 @@ mod tests {
     async fn terminal_managed_network_rejects_background_before_spawn() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -422,8 +450,9 @@ mod tests {
     async fn terminal_managed_network_denial_is_typed() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -461,8 +490,9 @@ PY"#;
     async fn terminal_without_managed_network_keeps_inherited_environment() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -485,8 +515,9 @@ PY"#;
         std::fs::create_dir_all(&ws).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -500,11 +531,12 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws.clone(),
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            model_targets: &[],
             execution: None,
             permission_profile: Some(types::READ_ONLY_PROFILE.into()),
             skill_config_overrides: &[],
@@ -512,10 +544,10 @@ PY"#;
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let error = dispatch(&ctx, &serde_json::json!({"command": "touch denied.txt"}))
@@ -537,8 +569,9 @@ PY"#;
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -548,11 +581,12 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -560,10 +594,10 @@ PY"#;
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;
@@ -587,8 +621,9 @@ PY"#;
         let ws = dir.path().join("ws");
         std::fs::create_dir_all(&ws).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let bus = std::sync::Arc::new(hooks::PluginHookBus::new());
@@ -602,11 +637,12 @@ PY"#;
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: ws,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -614,10 +650,10 @@ PY"#;
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
 
         let n = types::MAX_TOOL_RESULT_BYTES + 8 * 1024;

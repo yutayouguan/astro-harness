@@ -514,7 +514,7 @@ mod tests {
             dir.path(),
             Some("s1".into()),
             None,
-            "terminal",
+            "exec_command",
             types::DANGER_FULL_ACCESS_PROFILE,
         );
         let id = spawn_background_sandboxed(

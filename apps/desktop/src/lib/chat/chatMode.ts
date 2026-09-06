@@ -1,20 +1,17 @@
-/** 用户直接选择的工作模式。 */
-export type ChatWorkMode = "agent" | "plan" | "ask";
+/** 用户直接选择的工作模式。问答由 Agent 自动判断，不再单列 Ask 模式。 */
+export type ChatWorkMode = "agent" | "plan";
 
 /** 发给后端的交互模式；独立任务调度与工作模式正交。 */
 export type ChatInteractionMode = ChatWorkMode;
 
 const STORAGE_KEY = "astro.chat.mode";
 
-/** 模式切换授权条默认倒计时（秒） */
-export const MODE_SWITCH_COUNTDOWN_SEC = 10;
-
 /** 可选模式列表（UI 顺序） */
-export const CHAT_MODES: ChatWorkMode[] = ["agent", "plan", "ask"];
+export const CHAT_MODES: ChatWorkMode[] = ["agent", "plan"];
 
 /** 把历史 MultiTask 顶层模式迁移为 Agent 工作模式。 */
 export function normalizeStoredChatMode(value: string | null): ChatWorkMode {
-  if (value === "plan" || value === "ask") return value;
+  if (value === "plan") return value;
   return "agent";
 }
 
@@ -43,6 +40,13 @@ export type ModeSwitchRequest = {
   reason: string;
   summary?: string;
 };
+
+/** 收窄到 Plan 不需要打断用户；恢复执行能力必须显式审阅。 */
+export function shouldAutoApproveModeSwitch(
+  request: ModeSwitchRequest | null,
+): boolean {
+  return request?.to === "plan";
+}
 
 /** 解析工具结果中的 `astro_mode_switch` JSON；无效则 null */
 export function parseModeSwitchResult(

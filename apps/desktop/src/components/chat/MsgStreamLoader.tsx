@@ -12,7 +12,10 @@ type Props = {
   visible?: boolean;
 };
 
-export default function MsgStreamLoader({ alone = false, visible = true }: Props) {
+export default function MsgStreamLoader({
+  alone = false,
+  visible = true,
+}: Props) {
   const { t } = useI18n();
   const [mounted, setMounted] = useState(visible);
   const [leaving, setLeaving] = useState(false);
@@ -24,7 +27,9 @@ export default function MsgStreamLoader({ alone = false, visible = true }: Props
       setLeaving(false);
       clearTimeout(timerRef.current);
     } else if (mounted) {
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const reduced = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
       if (reduced) {
         setMounted(false);
       } else {
@@ -46,7 +51,9 @@ export default function MsgStreamLoader({ alone = false, visible = true }: Props
       {Array.from({ length: CELLS }, (_, i) => (
         <span
           key={i}
-          style={{ animationDelay: `${(i % 3) * 0.12 + Math.floor(i / 3) * 0.08}s` }}
+          style={{
+            animationDelay: `${(i % 3) * 0.12 + Math.floor(i / 3) * 0.08}s`,
+          }}
         />
       ))}
     </div>

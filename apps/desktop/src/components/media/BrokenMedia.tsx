@@ -18,7 +18,9 @@ export default function BrokenMedia({
   const { t } = useI18n();
   const isNotFound = reason === "not-found";
   return (
-    <div className={`media-broken ${isNotFound ? "is-not-found" : ""} ${className ?? ""}`.trim()}>
+    <div
+      className={`media-broken ${isNotFound ? "is-not-found" : ""} ${className ?? ""}`.trim()}
+    >
       {isNotFound ? (
         <FileQuestion size={22} strokeWidth={1.8} aria-hidden />
       ) : (

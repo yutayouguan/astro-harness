@@ -22,9 +22,11 @@
     color-mix(in srgb, var(--glass-bg, var(--glass-panel)) 88%, transparent);
   border: none;
   box-shadow: 0 10px 32px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  animation: astro-toast-in 180ms ease-out;
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.2));
+  will-change: transform, opacity;
 }
 
 .astro-toast.tone-info {
@@ -136,12 +138,10 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   background: color-mix(in srgb, var(--toast-tone) 15%, transparent);
 }
 
-/* success：圆 → 勾描边；与 toast 入场重叠启动 */
+/* success：圆 → 勾描边，总时长控制在 180ms。 */
 .astro-toast-success-icon {
   display: block;
   overflow: visible;
-  transform-origin: center;
-  animation: astro-toast-success-pop 360ms ease-out;
 }
 
 .astro-toast-success-circle,
@@ -152,28 +152,16 @@ html[data-theme="dark"] .astro-toast.tone-warning {
 }
 
 .astro-toast-success-circle {
-  animation: astro-toast-draw-stroke 180ms ease-out forwards;
+  animation: astro-toast-draw-stroke 100ms ease-out forwards;
 }
 
 .astro-toast-success-check {
-  animation: astro-toast-draw-stroke 180ms ease-out 160ms forwards;
+  animation: astro-toast-draw-stroke 100ms ease-out 80ms forwards;
 }
 
 @keyframes astro-toast-draw-stroke {
   to {
     stroke-dashoffset: 0;
-  }
-}
-
-@keyframes astro-toast-success-pop {
-  0% {
-    transform: scale(0.86);
-  }
-  55% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
   }
 }
 
@@ -183,6 +171,28 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   min-width: 0;
   line-height: 1.45;
   word-break: break-word;
+}
+
+.astro-toast-action {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--toast-tone) 30%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--toast-tone) 12%, transparent);
+  color: var(--toast-tone);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.astro-toast-action:hover {
+  background: color-mix(in srgb, var(--toast-tone) 20%, transparent);
+}
+
+.astro-toast-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--toast-tone) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .astro-toast-close {
@@ -216,22 +226,7 @@ html[data-theme="dark"] .astro-toast.tone-warning {
   outline-offset: 1px;
 }
 
-@keyframes astro-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .astro-toast {
-    animation: none;
-  }
-
   .astro-toast-ring-progress {
     animation: none;
     stroke-dashoffset: 0;

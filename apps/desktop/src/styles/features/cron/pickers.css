@@ -1,0 +1,210 @@
+/* Date/time portals. Runtime z-index is assigned when each surface opens. */
+.cron-dt-pop {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  padding: 10px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.35));
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.36),
+      rgba(255, 255, 255, 0.12)
+    ),
+    color-mix(in srgb, var(--tone-soft) 48%, rgba(255, 255, 255, 0.82));
+  box-shadow: 0 14px 36px
+    color-mix(in srgb, var(--tone) 14%, rgba(15, 23, 42, 0.14));
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
+  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
+  animation: cron-dt-pop-in 0.16s
+    var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+html[data-theme="dark"] .cron-dt-pop {
+  border-color: color-mix(in srgb, var(--tone) 28%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--tone-soft) 28%, rgba(8, 6, 18, 0.9));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+}
+
+@keyframes cron-dt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cron-dt-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cron-dt-month {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cron-dt-nav {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+}
+
+.cron-dt-nav:hover {
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+}
+
+.cron-dt-weekdays,
+.cron-dt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cron-dt-weekdays {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--ink-mute);
+}
+
+.cron-dt-day {
+  width: 100%;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cron-dt-day.is-empty {
+  pointer-events: none;
+}
+
+.cron-dt-day:hover:not(.is-empty) {
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+}
+
+.cron-dt-day.is-today {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 35%, transparent);
+}
+
+.cron-dt-day.is-selected {
+  color: var(--tone);
+  background: var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+
+.cron-time-trigger {
+  width: 100%;
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 14%, rgba(255, 255, 255, 0.35));
+  font: inherit;
+  cursor: pointer;
+}
+
+.cron-time-trigger-value {
+  flex: 1;
+  text-align: left;
+  color: var(--ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cron-time-trigger.is-open {
+  border-color: color-mix(in srgb, var(--tone) 42%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 14%, transparent);
+}
+
+.cron-time-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  height: 230px;
+  min-height: 0;
+}
+
+.cron-time-column-wrap {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cron-time-column-label {
+  padding-inline: 7px;
+  color: var(--ink-mute);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cron-time-column {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone-soft) 32%, transparent);
+}
+
+.cron-time-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cron-time-option:hover {
+  background: color-mix(in srgb, var(--tone) 11%, transparent);
+  color: var(--tone);
+}
+
+.cron-time-option.is-selected {
+  background: var(--tone-soft);
+  color: var(--tone);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cron-dt-pop {
+    animation: none;
+  }
+}

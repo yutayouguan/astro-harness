@@ -46,6 +46,19 @@ pub struct InstalledSkill {
     /// 是否已链接到某 Agent。
     #[serde(default)]
     pub linked: bool,
+    /// 配置来源：packaged / user / agent / project / external。
+    #[serde(default)]
+    pub provenance: String,
+    /// 是否允许从管理界面修改。
+    #[serde(default = "default_true")]
+    pub editable: bool,
+    /// 若同名条目被更高层覆盖，记录覆盖它的作用域。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadowed_by: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// 商店搜索结果条目。
@@ -59,7 +72,7 @@ pub struct StoreSkill {
     pub description: String,
     /// 来源仓库或标识。
     pub source: String,
-    /// 商店名（skillhub / skills.sh 等）。
+    /// 商店名（当前固定为 `skillhub`）。
     pub store: String,
     /// 安装次数（若有）。
     pub installs: Option<u64>,
@@ -67,6 +80,15 @@ pub struct StoreSkill {
     pub install_ref: String,
     /// 主页。
     pub homepage: Option<String>,
+    /// SkillHub 列表图标。
+    #[serde(default)]
+    pub icon_url: Option<String>,
+    /// 市场侧场景分类（例如 `dev-programming`）。
+    #[serde(default)]
+    pub category: Option<String>,
+    /// 是否明确需要 API Key；来源未提供时为 `None`。
+    #[serde(default)]
+    pub requires_api_key: Option<bool>,
 }
 
 /// 商店详情（详情页 / 安装提示）。
@@ -110,32 +132,6 @@ pub struct StoreSkillDetail {
     pub owner_name: Option<String>,
     /// 是否认证。
     pub verified: Option<bool>,
-}
-
-/// 商店筛选：`skillhub` | `skillsdotsh` | `clawhub` | `all`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SkillStoreFilter {
-    /// 全部来源。
-    All,
-    /// 仅 SkillHub。
-    SkillHub,
-    /// 仅 skills.sh。
-    SkillsDotSh,
-    /// 仅 ClawHub。
-    ClawHub,
-}
-
-impl SkillStoreFilter {
-    /// 解析查询字符串；未知值返回 `None`。
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "all" => Some(Self::All),
-            "skillhub" => Some(Self::SkillHub),
-            "skillsdotsh" => Some(Self::SkillsDotSh),
-            "clawhub" => Some(Self::ClawHub),
-            _ => None,
-        }
-    }
 }
 
 /// 技能安装来源记录（`skill-origins.json` 单条）。

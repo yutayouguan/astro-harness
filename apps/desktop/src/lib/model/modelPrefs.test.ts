@@ -34,6 +34,22 @@ test("effortChoicesFromMeta uses supported_efforts when present", () => {
   assert.deepEqual(effortChoicesFromMeta(null, true), ["low", "high", "max"]);
 });
 
+test("effortChoicesFromMeta hides persistent without instructions", () => {
+  assert.deepEqual(
+    effortChoicesFromMeta({ supported_efforts: ["high", "persistent"] }, true),
+    ["high"],
+  );
+  assert.deepEqual(
+    effortChoicesFromMeta(
+      {
+        persistent_instructions: "stay active",
+      },
+      false,
+    ),
+    ["low", "high", "max", "persistent"],
+  );
+});
+
 test("clampPrefsToModelConfig snaps to real options", () => {
   const next = clampPrefsToModelConfig(basePrefs, {
     capsReasoning: true,

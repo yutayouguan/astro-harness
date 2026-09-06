@@ -6,14 +6,18 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
 import { Users } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import type { AgentInfo } from "../../types/agent";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import AgentAvatar from "./AgentAvatar";
 
 /** Agent 下拉切换器入参 */
@@ -36,31 +40,24 @@ type Props = {
   allOption?: { value: string; labelKey: MessageKey };
 };
 
-function agentSubline(
-  agent: AgentInfo,
-  defaultLabel: string,
-): string | null {
+function agentSubline(agent: AgentInfo, defaultLabel: string): string | null {
   if (agent.vibe?.trim()) return agent.vibe.trim();
   if (agent.is_default) return defaultLabel;
   return null;
 }
 
-function ChevronDown(props: SVGProps<SVGSVGElement>) {
+/** 触发器右侧展开箭头 */
+function PickerChevron({ open }: { open: boolean }) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <MorphToggleIcon
+      className="agent-picker-chevron"
+      active={open}
+      activeIcon={ChevronUpData}
+      inactiveIcon={ChevronDownData}
+      size={14}
+      strokeWidth={2.25}
       aria-hidden
-      {...props}
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
+    />
   );
 }
 
@@ -84,7 +81,9 @@ export default function AgentPicker({
   const menuRef = useRef<HTMLUListElement | null>(null);
   const listId = useId();
   const allSelected = Boolean(allOption && value === allOption.value);
-  const active = allSelected ? undefined : agents.find((a) => a.id === value) ?? agents[0];
+  const active = allSelected
+    ? undefined
+    : (agents.find((a) => a.id === value) ?? agents[0]);
   const defaultLabel = t("workspace.defaultAgent");
   const allOffset = allOption ? 1 : 0;
   const allIndex = allOption ? 0 : -1;
@@ -185,7 +184,8 @@ export default function AgentPicker({
 
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !menuRef.current) return;
-    const items = menuRef.current.querySelectorAll<HTMLElement>("[data-menu-index]");
+    const items =
+      menuRef.current.querySelectorAll<HTMLElement>("[data-menu-index]");
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
 
@@ -238,7 +238,7 @@ export default function AgentPicker({
           <span className="agent-picker-meta">
             <span className="agent-picker-name">{t(labelKey)}</span>
           </span>
-          <ChevronDown className="agent-picker-chevron" />
+          <PickerChevron open={false} />
         </button>
       </div>
     );
@@ -246,7 +246,7 @@ export default function AgentPicker({
 
   const activeSub = active ? agentSubline(active, defaultLabel) : null;
   const allLabel = allOption ? t(allOption.labelKey) : "";
-  const triggerLabel = allSelected ? allLabel : active?.name ?? "—";
+  const triggerLabel = allSelected ? allLabel : (active?.name ?? "—");
 
   const menu =
     open && typeof document !== "undefined"
@@ -390,7 +390,10 @@ export default function AgentPicker({
       >
         {allSelected && allOption ? (
           <>
-            <span className="agent-picker-all-icon agent-picker-all-icon--chip" aria-hidden>
+            <span
+              className="agent-picker-all-icon agent-picker-all-icon--chip"
+              aria-hidden
+            >
               <Users size={14} strokeWidth={2.1} />
             </span>
             <span className="agent-picker-meta">
@@ -412,7 +415,7 @@ export default function AgentPicker({
             <span className="agent-picker-name">—</span>
           </span>
         )}
-        <ChevronDown className="agent-picker-chevron" />
+        <PickerChevron open={open} />
       </button>
       {menu}
     </div>

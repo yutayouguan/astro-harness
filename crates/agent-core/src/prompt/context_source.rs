@@ -1,7 +1,7 @@
 //! 可插拔上下文源 + 字符预算（对齐 Agno ContextProvider 思路）。
 //!
 //! 各层通过 [`ContextSource::contribute`] 在共享 [`ContextBudget`] 下取字符；
-//! 优先级由调用方排列：static → inject → skills → guidance/timestamp → MCP → dynamic。
+//! 优先级由调用方排列；三层契约可独立于最终消息角色顺序分配预算。
 
 use crate::prompt::context::{DynamicContext, StaticContext};
 
@@ -139,7 +139,8 @@ pub struct RuntimeSystemLayers<'a> {
     pub mcp_instructions: &'a str,
 }
 
-/// 标准 Astro 层序组装：static → inject → skills → guidance → timestamp → MCP → dynamic。
+/// 旧的扁平 system prompt 组装器，仅保留给兼容调用和局部测试。
+/// 真实采样使用 `prompt::contract::assemble_prompt_contract`。
 pub fn assemble_system_layers(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,

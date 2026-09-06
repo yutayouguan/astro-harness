@@ -108,7 +108,7 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> anyhow::Result<()> 
             .enable_all()
             .build()?;
         rt.block_on(async {
-            let run_db = WorkflowRunDb::open_default()?;
+            let run_db = WorkflowRunDb::open_default().await?;
             workflow::engine::execute_workflow(&wf, trigger_input, "webhook", &run_db).await
         })
     })

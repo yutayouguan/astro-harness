@@ -11,7 +11,7 @@ use crate::types::media::{
     Embedding, GeneratedAudio, GeneratedImage, GeneratedVideo, ImageGenConfig, MusicGenConfig,
     TTSConfig, VideoGenConfig,
 };
-use crate::types::{CompletionRequest, CompletionStream};
+use crate::types::{ChatCompletionRequest, CompletionStream, ResponsesRequest};
 
 // ─── 宏：生成 Dyn trait + blanket impl + Box Clone ──────
 
@@ -51,9 +51,16 @@ macro_rules! dyn_model {
 // ─── 各能力的 Dyn trait ─────────────────────────────────
 
 dyn_model! {
-    /// 类型擦除的补全模型。
-    DynCompletionModel for CompletionModel {
-        async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream>;
+    /// 类型擦除的 Agent Responses 模型。
+    DynResponsesModel for ResponsesModel {
+        async fn stream(&self, prompt: ResponsesRequest) -> Result<CompletionStream>;
+    }
+}
+
+dyn_model! {
+    /// 类型擦除的非 Agent 兼容补全模型。
+    DynChatCompletionModel for ChatCompletionModel {
+        async fn stream(&self, request: ChatCompletionRequest) -> Result<CompletionStream>;
     }
 }
 
@@ -99,7 +106,8 @@ dyn_model! {
 pub struct DynProvider {
     pub id: String,
     pub name: &'static str,
-    completion: Option<Box<dyn DynCompletionModel>>,
+    responses: Option<Box<dyn DynResponsesModel>>,
+    chat_completion: Option<Box<dyn DynChatCompletionModel>>,
     embedding: Option<Box<dyn DynEmbeddingModel>>,
     image_gen: Option<Box<dyn DynImageGenModel>>,
     video_gen: Option<Box<dyn DynVideoGenModel>>,
@@ -112,7 +120,8 @@ impl DynProvider {
         Self {
             id: id.into(),
             name,
-            completion: None,
+            responses: None,
+            chat_completion: None,
             embedding: None,
             image_gen: None,
             video_gen: None,
@@ -121,8 +130,16 @@ impl DynProvider {
         }
     }
 
-    pub fn with_completion(mut self, model: impl CompletionModel + Clone + 'static) -> Self {
-        self.completion = Some(Box::new(model));
+    pub fn with_responses(mut self, model: impl ResponsesModel + Clone + 'static) -> Self {
+        self.responses = Some(Box::new(model));
+        self
+    }
+
+    pub fn with_chat_completion(
+        mut self,
+        model: impl ChatCompletionModel + Clone + 'static,
+    ) -> Self {
+        self.chat_completion = Some(Box::new(model));
         self
     }
 
@@ -151,8 +168,16 @@ impl DynProvider {
         self
     }
 
-    pub fn completion_model(&self) -> Option<&dyn DynCompletionModel> {
-        self.completion.as_deref()
+    pub fn replace_responses(&mut self, model: impl ResponsesModel + Clone + 'static) {
+        self.responses = Some(Box::new(model));
+    }
+
+    pub fn responses_model(&self) -> Option<&dyn DynResponsesModel> {
+        self.responses.as_deref()
+    }
+
+    pub fn chat_completion_model(&self) -> Option<&dyn DynChatCompletionModel> {
+        self.chat_completion.as_deref()
     }
 
     pub fn embedding_model(&self) -> Option<&dyn DynEmbeddingModel> {
@@ -175,8 +200,12 @@ impl DynProvider {
         self.music_gen.as_deref()
     }
 
-    pub fn has_completion(&self) -> bool {
-        self.completion.is_some()
+    pub fn has_responses(&self) -> bool {
+        self.responses.is_some()
+    }
+
+    pub fn has_chat_completion(&self) -> bool {
+        self.chat_completion.is_some()
     }
 }
 
@@ -185,7 +214,8 @@ impl std::fmt::Debug for DynProvider {
         f.debug_struct("DynProvider")
             .field("id", &self.id)
             .field("name", &self.name)
-            .field("has_completion", &self.completion.is_some())
+            .field("has_responses", &self.responses.is_some())
+            .field("has_chat_completion", &self.chat_completion.is_some())
             .field("has_embedding", &self.embedding.is_some())
             .field("has_image_gen", &self.image_gen.is_some())
             .field("has_video_gen", &self.video_gen.is_some())

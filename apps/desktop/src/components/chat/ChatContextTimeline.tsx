@@ -2,10 +2,14 @@
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
-import type { ChatActivity, ChatActivityKind, ChatMessage } from "../../types";
+import type {
+  ChatActivity,
+  ChatActivityKind,
+  ConversationEntry,
+} from "../../types";
 
 /** 上下文时间线入参 */
-type Props = { messages: ChatMessage[] };
+type Props = { messages: ConversationEntry[] };
 
 const CONTEXT_KINDS = new Set<ChatActivityKind>([
   "tool",
@@ -25,9 +29,14 @@ const KIND_KEYS: Record<ChatActivityKind, MessageKey> = {
 };
 
 const STATUS_KEYS: Record<NonNullable<ChatActivity["status"]>, MessageKey> = {
+  waiting: "chat.activity.status.waiting",
   running: "chat.activity.status.running",
+  retrying: "chat.activity.status.retrying",
   done: "chat.activity.status.done",
+  partial: "chat.activity.status.partial",
   error: "chat.activity.status.error",
+  declined: "chat.activity.status.declined",
+  interrupted: "chat.activity.status.interrupted",
 };
 
 export default function ChatContextTimeline({ messages }: Props) {
@@ -53,7 +62,10 @@ export default function ChatContextTimeline({ messages }: Props) {
       {activities.map((a) => {
         const open = openId === a.id;
         return (
-          <li key={a.id} className={a.status === "running" ? "is-running" : undefined}>
+          <li
+            key={a.id}
+            className={a.status === "running" ? "is-running" : undefined}
+          >
             <button
               type="button"
               className={`chat-context-item ${a.status === "running" ? "is-running" : ""}`}

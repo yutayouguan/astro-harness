@@ -52,27 +52,26 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 ## Workspace Crate Map
 
-所有 Rust crate 扁平放置在 `crates/agent-*` 下（package name 保持短名），Tauri 桌面应用在 `apps/desktop/`。共 25 个 crate：
+所有 Rust crate 扁平放置在 `crates/agent-*` 下（package name 保持短名），Tauri 桌面应用在 `apps/desktop/`。共 24 个 crate：
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装。 |
+| `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装、`git_worktree`（项目根解析与 worktree 隔离）。 |
 | `crates/agent-config` | `agent-config` | 分层配置原语：`ConfigLayer`、`ConfigLayerSource`（4 级优先级）、`ConfigKeyPath`、provenance 追溯。无产品特有字段，不做文件系统发现。 |
-| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：trait 系统（`OpenAICompatible` + `ThinkingFormat`）、数据驱动兼容、Responses API、TOML 自定义 provider、`ProviderProfile` 表、流式 `ChatStream`、fallback 链。支持 Google Interactions、OpenAI、Claude、DeepSeek、MiniMax、Ollama、Azure、混元等 15+ 厂商。 |
+| `crates/agent-providers` | `providers` | 多厂商 LLM/图像 Provider 层：Agent 使用独立 `ResponsesModel` / `ResponsesRequest`，Chat 兼容使用 `ChatCompletionModel` / `ChatCompletionRequest`；`attach_responses` 挂载 Responses 能力，二者不相互升级或降级。另含 TOML 自定义 provider、`ProviderProfile`、流式解析与 fallback。 |
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
-| `crates/agent-delegate` | `worktree` | 轻量级工具执行代理（已精简，核心子 Agent 逻辑迁移到 `agent-subagents`）。 |
 | `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
-| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、`ToolRegistry`（`ToolExposure` 三级暴露 Direct/Deferred/Hidden + BM25 工具搜索）、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。工具域：terminal、file_ops、code_exec、memory、skills、subagents（6 个 V2 工具）、tool_search、media 等。 |
+| `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、`ToolRegistry`（`ToolExposure` 六级暴露 Direct/DirectModelOnly/Deferred/DeferredModelOnly/CodeModeOnly/Hidden + BM25 工具搜索）、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。工具域：exec_command（原 terminal）、apply_patch（Freeform 补丁工具，替代 file_ops）、write_stdin、request_permissions、code_exec、memory、skills、subagents（6 个 V2 工具）、tool_search、media 等。`FreeformToolFormat` 支持非 JSON 工具输入（Lark 语法）。 |
 | `crates/agent-a2ui` | `a2ui` | AG-UI 声明式生成式 UI 表面：22 种组件（Text、Card、Button、Image、Audio、Video、Metric、ClarifyWizard 等）、模板、校验。 |
 | `crates/agent-server` | `server` | gRPC 服务端（tonic）：Thread submit/resume/subscribe RPC、`ThreadHistoryBuilder` 活跃 Turn 快照、per-connection 128 容量队列、慢消费者断连。`run_embedded()` 供 Tauri in-process 使用。 |
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`MediaAsset`、`ModelSpec`、`NetworkPolicy`、`PermissionProfile`、SQLite helpers、tool-spill。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、AgentThreadChanged 等 RPC。 |
 | `crates/agent-protocol` | `protocol` | Core 领域事件协议：`Event`、`EventMsg`、`TurnItem`、`Submission`。运行时唯一事件格式。 |
 | `crates/agent-rollout` | `rollout` | JSONL append-only 历史记录：`RolloutRecorder`、`PersistencePolicy`、`reconstruct` 重建。rollout 是线程历史的权威事实源。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v23，FTS5）— 消息、会话、billing、FTS 召回、rollout 投影重建。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 | `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
@@ -122,18 +121,31 @@ AstroThread::submit(Op)
 - **`streaming/`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary
 - **`exec/`** — 执行域：`AgentControlDirectory`（根级 AgentControl 进程目录）、`AgentRuntimeManager`（活跃 turn 管理）、subagents（单 turn 运行器）、dispatch（V2 6 工具分发 + 桌面控制面）、cron、background、memory review、title generation
 - **`compression`** — tool 结果压缩（原文保留，压缩视图给 provider）
-- **`control`** — HITL gate、中断状态机、schema 校验、smart approval、网络审批
+- **`control`** — HITL gate、中断状态机、schema 校验、smart approval（含 `SmartApprovalContext` 对话上下文）、`approval_cache`（会话级审批缓存，同命令模式不重复弹窗）、网络审批
 - **`prompt/`** — 上下文组装、hook 集成、消息变换、prompt builder、sanitization
 
 ### Codex V2 Agent Thread（子 Agent 系统）
 
 6 个模型工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。桌面控制面额外提供 `read_subagent_thread` 和 `close_subagent_thread`。
 
+与 Codex 原版差异：Codex V2 有 8 个工具（额外 `resume_agent`、`close_agent`）。Astro 精简为 6 个——`resume_agent` 的功能被 `followup_task` 吸收（可向已完成 agent 发后续任务并重新激活）；`close_agent` 从模型工具降级为桌面控制面操作（关闭 agent 是用户决策而非模型决策）。
+
 架构：一个 `AgentControl` per 根会话，所有后代共享。`subagents.db` 拥有线程图、邮箱、状态事件和迁移元数据；`SessionStore` 保持会话/工具时间线。
 
 状态：`PendingInit` → `Running` → `Completed { last_message }` / `Interrupted` / `Errored { message }` → `Shutdown`。
 
 配置：从 `~/.astro/agents` 和受信任的 `<project>/.astro/agents` 加载自定义 agent 定义；设置从 `~/.astro/config.toml` 和受信任的 `<project>/.astro/config.toml` 加载。`.codex` 不作为 Astro 配置输入。
+
+### 工具对齐（Codex → Astro）
+
+| Codex 工具 | Astro 工具 | 说明 |
+|---|---|---|
+| `apply_patch` (Freeform) | `apply_patch` (Freeform) | Lark 语法 diff 补丁，支持多文件批量增删改 |
+| `exec_command` | `exec_command` | Shell 命令执行，含 session 管理（`yield_time_ms`、`session_id`） |
+| `write_stdin` | `write_stdin` (stub) | 向运行中 session 写入 stdin |
+| `request_permissions` | `request_permissions` (stub) | 运行时请求额外权限 |
+| _(无)_ | _(原 file_ops 已移除)_ | 读/搜索/列目录归入 `exec_command` |
+| _(无)_ | _(原 terminal 已重命名)_ | → `exec_command` |
 
 ### Provider 架构（agent-providers）
 
@@ -159,17 +171,17 @@ id = "corp-v3"
 context_window = 128000
 reasoning = true
 ```
-自定义 provider 统一走 Responses API，由 `ConfigDrivenCompletionModel` 实现。TOML 声明的模型元数据在启动时注入 `models.json` 缓存。
+自定义 provider 统一走 Responses API，由 `ConfigDrivenResponsesModel` 实现。TOML 声明的模型元数据在启动时注入 `models.json` 缓存。
 
 **模型元数据**（三层合并）：API 厂商端点发现 → OpenRouter 模型表 enrich → 已知能力补丁 (`apply_known_capability_overrides`)。合并结果持久化到 `~/.astro/cache/models.json`，前端和运行时共用。
 
-**Provider Fallback 链**：`chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。`ChatTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
+**Provider Fallback 链**：`model_targets: Vec<ModelTarget>` — primary + 最多 `MAX_MODEL_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。`ModelTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
 
 **Profile 表**：`ProviderProfile` 静态表驱动（`PROFILES` 数组），每厂商一个条目。字段含 `supports_responses: bool`（UI 切换标志）。前端 `supports_responses_toggle()` 读此字段。
 
 ### 三总线 Hook 系统
 
-Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`PermissionRequest`、`Stop`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`PreApiRequest`、`PostApiRequest`、`TransformTerminalOutput`。事件名只接受 canonical 精确匹配。
+Plugin bus 事件（Codex 对齐命名 + Astro 扩展）：`PreLlmCall`、`PreToolUse`、`PermissionRequest`、`Stop`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`PreApiRequest`、`PostApiRequest`、`TransformTerminalOutput`、`TransformToolResult`、`TransformFinalLlmOutput`、`PostLlmCall`。事件名只接受 canonical 精确匹配。
 
 ### 上下文压缩
 
@@ -192,7 +204,7 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
     config.json        # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
   sessions/
-    state.db           # 消息、会话、FTS5（schema v17）
+    state.db           # 消息、会话、FTS5（schema v23）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
   cache/
@@ -209,7 +221,7 @@ Plugin bus 事件（Codex 对齐命名）：`PreLlmCall`、`PreToolUse`、`Permi
 
 ## Key Invariants
 
-1. **角色顺序**：`session_messages` 中相邻消息不得连续出现相同 role。由 `validate_message_order()` 强制。
+1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
 
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）。`increment_tool_round()` 耗尽时返回 `MaxDepthError`。
 

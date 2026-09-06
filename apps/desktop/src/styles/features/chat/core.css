@@ -1,4 +1,3 @@
-
 .message-list-wrap {
   flex: 1;
   min-height: 0;
@@ -12,11 +11,25 @@
   /* scroll（非 auto）：始终占住纵向滚动槽，避免自定义 webkit 滚动条出现/消失时左右抖 */
   overflow-x: hidden;
   overflow-y: scroll;
-  /* 右侧：Dock 留白 56px − 常驻滚动条 4px，内容宽度与原先无滚动条时一致 */
-  padding: 20px 52px 12px 20px;
+  /* 左侧给问答回合导航留白，右侧只保留常规阅读边距。 */
+  padding: 20px 20px calc(var(--composer-overlay-height, 112px) + 28px) 64px;
+  scroll-padding-block-end: calc(var(--composer-overlay-height, 112px) + 28px);
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* 主对话首屏避开悬浮标题栏；滚动容器自身从窗顶开始，内容滚动后会进入玻璃层背后。
+   选择器刻意限定 direct main chat，避免侧边聊天重复获得顶部留白。 */
+.content-pane--chat
+  > .page-body--chat
+  > .chat-layout-with-right
+  > .chat-main
+  > .chat-pane
+  > .message-list-wrap
+  > .message-list {
+  padding-top: var(--chat-header-overlay-height, 50px);
+  scroll-padding-block-start: var(--chat-header-overlay-height, 50px);
 }
 
 .message-list::-webkit-scrollbar {
@@ -49,25 +62,37 @@
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--scroll-thumb) 100%, rgba(15, 23, 42, 0.06));
+  background: color-mix(
+    in srgb,
+    var(--scroll-thumb) 100%,
+    rgba(15, 23, 42, 0.06)
+  );
 }
 
 .msg-row {
   display: flex;
   gap: 12px;
   width: min(100%, 860px);
-  animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.16s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
-
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes msg-row-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -80,103 +105,9 @@
   justify-content: flex-start;
 }
 
-/* 编辑截断：气泡与文字粒子消散 */
-.msg-row.is-dissolving {
-  position: relative;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.msg-row.is-dissolving .avatar,
-.msg-row.is-dissolving .msg-stack {
-  animation: msg-dissolve-fade 0.85s ease-out forwards;
-}
-
-.msg-row.is-dissolving .msg-actions {
-  opacity: 0 !important;
-}
-
-.msg-dissolve-layer {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.msg-dissolve-particle {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translate(-50%, -50%);
-  animation: msg-dissolve-fly 0.88s cubic-bezier(0.2, 0.7, 0.25, 1) forwards;
-  will-change: transform, opacity, filter;
-}
-
-.msg-dissolve-particle.is-char {
-  font-weight: 600;
-  line-height: 1;
-  color: color-mix(in srgb, var(--tone, #60a5fa) 35%, var(--ink));
-  text-shadow: 0 0 8px color-mix(in srgb, var(--tone, #60a5fa) 25%, transparent);
-  user-select: none;
-}
-
-.msg-dissolve-particle.is-dust {
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--tone, #60a5fa) 55%, #fff);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 40%, transparent);
-}
-
-@keyframes msg-dissolve-fade {
-  0% {
-    opacity: 1;
-    filter: blur(0);
-    transform: none;
-  }
-  35% {
-    opacity: 0.55;
-    filter: blur(0.6px);
-  }
-  100% {
-    opacity: 0;
-    filter: blur(6px);
-    transform: scale(0.96) translateY(-6px);
-  }
-}
-
-@keyframes msg-dissolve-fly {
-  0% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
-    filter: blur(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(
-        calc(-50% + var(--dx, 0px)),
-        calc(-50% + var(--dy, 0px))
-      )
-      scale(0.25)
-      rotate(var(--rot, 0deg));
-    filter: blur(2px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .msg-row.is-dissolving .avatar,
-  .msg-row.is-dissolving .msg-stack,
-  .msg-dissolve-particle {
-    animation: none !important;
-  }
-
-  .msg-row.is-dissolving .avatar,
-  .msg-row.is-dissolving .msg-stack {
-    opacity: 0;
-  }
-
-  .msg-dissolve-layer {
-    display: none;
+  .msg-row {
+    animation: msg-row-fade-in 0.1s ease-out both;
   }
 }
 
@@ -211,72 +142,189 @@
   box-sizing: border-box;
 }
 
-/* 助手气泡右下角 Tokens / 速度角标：常显，不与下方悬停操作条抢位 */
-.msg-token-stats {
-  align-self: flex-end;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: 0.01em;
-  color: var(--ink-mute);
-  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  user-select: none;
-  pointer-events: none;
+/* ── 工具 IO 薄玻璃；Markdown 内嵌表面由 markdown.css 统一控制 ── */
+html[data-theme] {
+  --chat-inset-radius: 10px;
 }
 
-.msg-token-stats-usage,
-.msg-token-stats-speed,
-.msg-token-stats-duration {
-  white-space: nowrap;
-}
-
-.msg-token-stats-speed,
-.msg-token-stats-duration + .msg-token-stats-usage {
-  opacity: 0.9;
-  padding-left: 8px;
-  border-left: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-}
-
-html[data-theme="dark"] .msg-token-stats {
-  color: color-mix(in srgb, var(--ink-mute) 92%, #fff);
-  border-color: rgba(255, 255, 255, 0.1);
+.bubble.assistant .msg-activity-detail {
+  border: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
-    rgba(18, 16, 32, 0.45);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, transparent 34%),
+    color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 color-mix(in srgb, var(--ink) 5%, transparent),
+    0 1px 3px color-mix(in srgb, var(--ink) 5%, transparent);
+  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.25), 1.3));
+  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+    saturate(min(var(--glass-saturate, 1.25), 1.3));
 }
 
-html[data-theme="light"] .msg-token-stats {
-  color: color-mix(in srgb, var(--ink-mute) 88%, #64748b);
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
+html[data-theme="dark"] .bubble.assistant .msg-activity-detail {
+  border-color: color-mix(in srgb, var(--glass-edge) 85%, transparent);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 45%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px) saturate(1.25);
-  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%),
+    rgba(6, 8, 18, 0.72);
+  box-shadow:
+    var(--glass-rim),
+    0 8px 22px rgba(0, 0, 0, 0.12);
 }
 
-.msg-token-stats {
-  animation: rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .bubble.assistant .msg-activity-detail {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--ink) 8%, rgba(248, 250, 253, 0.97));
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  .msg-token-stats {
-    animation: none;
+  html[data-theme="dark"] .bubble.assistant .msg-activity-detail {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(6, 8, 18, 0.92);
   }
 }
 
-/* AI 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
+/* ── 元信息：时间 / 用时 / token 统计统一为安静文字，不做胶囊描边 ── */
+.msg-meta-quiet,
+.msg-activity-time,
+.msg-activity-duration,
+.msg-timestamp,
+.msg-token-stats {
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--ink-mute);
+}
+
+html[data-theme="dark"] .msg-activity-time,
+html[data-theme="dark"] .msg-activity-duration,
+html[data-theme="dark"] .msg-timestamp,
+html[data-theme="dark"] .msg-token-stats {
+  color: color-mix(in srgb, var(--ink-mute) 72%, #fff);
+}
+
+.msg-activity.is-running .msg-activity-duration {
+  color: color-mix(in srgb, var(--tone, #60a5fa) 45%, var(--ink-mute));
+}
+
+/* 助手回答底部：操作靠左，易读用量摘要靠右，两者共享气泡内的稳定行。 */
+.assistant-message-footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-height: 34px;
+  margin-top: 12px;
+}
+
+.assistant-message-footer .msg-actions {
+  align-self: start;
+  margin-left: -3px;
+}
+
+.msg-token-stats {
+  justify-self: end;
+  align-self: start;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  line-height: 1.35;
+  user-select: none;
+  animation: rise 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.msg-token-stats.is-static {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+}
+
+.msg-token-stats-summary {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 34px;
+  padding: 4px 0;
+  border-radius: 8px;
+  list-style: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.msg-token-stats-summary::-webkit-details-marker {
+  display: none;
+}
+
+.msg-token-stats-summary > span + span::before,
+.msg-token-stats-details > span + span::before {
+  content: "·";
+  display: inline-block;
+  margin: 0 7px;
+  color: color-mix(in srgb, var(--ink-mute) 48%, transparent);
+}
+
+.msg-token-stats-summary:hover,
+.msg-token-stats-summary:focus-visible {
+  color: color-mix(in srgb, var(--ink-mute) 58%, var(--ink));
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.msg-token-stats-summary:focus-visible {
+  outline: 2px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.msg-token-stats-chevron {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  opacity: 0.72;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.msg-token-stats[open] .msg-token-stats-chevron {
+  transform: rotate(180deg);
+}
+
+.msg-token-stats-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: 4px;
+  color: color-mix(in srgb, var(--ink-mute) 88%, var(--ink));
+  animation: msg-token-details-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes msg-token-details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-token-stats,
+  .msg-token-stats-details {
+    animation: none;
+  }
+
+  .msg-token-stats-chevron {
+    transition: none;
+  }
+}
+
+/* 消息悬停操作条：玻璃液态小按钮，贴在气泡下方，不挡选中文字 */
 .msg-actions {
   display: inline-flex;
   align-items: center;
@@ -292,13 +340,23 @@ html[data-theme="light"] .msg-token-stats {
     background 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, var(--accent)) 14%, var(--glass-edge));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.2) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.2) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 40%, transparent);
-  box-shadow: var(--glass-rim), 0 6px 16px color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  box-shadow:
+    var(--glass-rim),
+    0 6px 16px
+    color-mix(in srgb, var(--tone, #2563eb) 10%, rgba(15, 23, 42, 0.06));
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
 }
 
 .msg-row.assistant:hover .msg-actions,
@@ -325,7 +383,8 @@ html[data-theme="light"] .msg-token-stats {
   transition:
     background 0.12s ease,
     color 0.12s ease,
-    opacity 0.12s ease;
+    opacity 0.12s ease,
+    transform 0.14s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .msg-action-btn:hover:not(:disabled) {
@@ -337,19 +396,8 @@ html[data-theme="light"] .msg-token-stats {
   color: var(--tone-green, #16a34a);
 }
 
-.msg-action-btn--danger:hover:not(:disabled) {
-  color: var(--danger, #e11d48);
-  background: color-mix(in srgb, var(--danger, #e11d48) 12%, transparent);
-}
-
-.msg-action-btn.is-active {
-  color: var(--tone, var(--accent));
-  background: color-mix(in srgb, var(--tone, var(--accent)) 15%, transparent);
-}
-
-@keyframes msg-tts-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.msg-action-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .msg-action-btn:disabled {
@@ -358,22 +406,57 @@ html[data-theme="light"] .msg-token-stats {
 }
 
 html[data-theme="dark"] .msg-actions {
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 20%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #60a5fa) 20%,
+    rgba(255, 255, 255, 0.12)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 40%, rgba(18, 16, 32, 0.5));
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 html[data-theme="light"] .msg-actions {
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 16%, rgba(148, 163, 184, 0.28));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #2563eb) 16%,
+    rgba(148, 163, 184, 0.28)
+  );
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.22) 100%),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.58) 0%,
+      rgba(255, 255, 255, 0.22) 100%
+    ),
     color-mix(in srgb, var(--tone-soft, transparent) 45%, transparent);
   box-shadow:
     var(--glass-rim),
-    0 6px 14px color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
+    0 6px 14px
+    color-mix(in srgb, var(--tone, #2563eb) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* 助手操作已内嵌在回答气泡中：常显并直接平铺，不再叠加一层悬浮容器。 */
+.bubble.assistant .assistant-message-footer .msg-actions {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: none;
 }
 
 .msg-row.is-focus-flash .bubble {
@@ -390,10 +473,11 @@ html[data-theme="light"] .msg-actions {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--tone-soft, transparent) 70%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 22%, var(--glass-edge));
+  background: var(--glass-layer, var(--glass-panel));
+  border: 0.5px solid var(--glass-edge);
+  box-shadow: var(--shadow-card), var(--glass-rim);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
   color: var(--tone, var(--ink));
   font-size: 11px;
   font-weight: 700;
@@ -416,13 +500,6 @@ html[data-theme="light"] .msg-actions {
   height: 20px;
   border-radius: 8px;
   object-fit: cover;
-}
-
-html[data-theme="dark"] .avatar {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)),
-    color-mix(in srgb, var(--tone-soft, transparent) 55%, rgba(8, 6, 18, 0.55));
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 28%, rgba(255, 255, 255, 0.1));
 }
 
 .avatar.error {
@@ -449,18 +526,117 @@ html[data-theme="dark"] .avatar {
       color-mix(in srgb, #fff 52%, transparent) 0%,
       color-mix(in srgb, #fff 16%, transparent) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 80%, transparent);
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(37, 99, 235, 0.14)) 80%,
+      transparent
+    );
   color: color-mix(in srgb, var(--ink) 86%, var(--tone, #2563eb));
-  border: 1px solid color-mix(in srgb, var(--tone, #2563eb) 26%, var(--glass-edge));
+  border: 1px solid
+    color-mix(in srgb, var(--tone, #2563eb) 26%, var(--glass-edge));
   border-bottom-right-radius: 8px;
   box-shadow:
     var(--glass-rim),
     0 8px 22px color-mix(in srgb, var(--tone, #2563eb) 14%, transparent);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.35));
   white-space: pre-wrap;
   width: fit-content;
   max-width: 100%;
+}
+
+.user-message-editor-btn:focus-visible,
+.user-message-editor-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, #2563eb) 64%, transparent);
+  outline-offset: 2px;
+}
+
+.bubble.user.is-editing {
+  width: min(620px, calc(100vw - 96px));
+  padding: 12px;
+  white-space: normal;
+}
+
+.user-message-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.user-message-editor-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  max-height: 240px;
+  padding: 10px 11px;
+  resize: none;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--assist-fill) 58%, transparent);
+  color: inherit;
+  font: inherit;
+  line-height: 1.55;
+  caret-color: var(--tone, #2563eb);
+}
+
+.user-message-editor-input:disabled {
+  opacity: 0.68;
+}
+
+.user-message-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.user-message-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.user-message-editor-btn.is-submit {
+  border-color: color-mix(in srgb, var(--tone, #2563eb) 30%, transparent);
+  background: color-mix(in srgb, var(--tone, #2563eb) 18%, transparent);
+}
+
+.user-message-editor-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.user-message-editor-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.user-message-editor-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .msg-row.user .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
 }
 
 html[data-theme="light"] .bubble.user {
@@ -470,9 +646,17 @@ html[data-theme="light"] .bubble.user {
       rgba(255, 255, 255, 0.58) 0%,
       rgba(255, 255, 255, 0.22) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, rgba(37, 99, 235, 0.14)) 75%, transparent);
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(37, 99, 235, 0.14)) 75%,
+      transparent
+    );
   color: color-mix(in srgb, #0f172a 78%, var(--tone, #2563eb));
-  border-color: color-mix(in srgb, var(--tone, #2563eb) 22%, rgba(255, 255, 255, 0.72));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #2563eb) 22%,
+    rgba(255, 255, 255, 0.72)
+  );
   box-shadow:
     var(--glass-rim),
     0 1px 0 rgba(255, 255, 255, 0.9) inset,
@@ -486,9 +670,17 @@ html[data-theme="dark"] .bubble.user {
       rgba(255, 255, 255, 0.12) 0%,
       rgba(255, 255, 255, 0.03) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%, transparent);
+    color-mix(
+      in srgb,
+      var(--tone-soft, rgba(96, 165, 250, 0.16)) 70%,
+      transparent
+    );
   color: color-mix(in srgb, var(--ink) 90%, #fff);
-  border-color: color-mix(in srgb, var(--tone, #60a5fa) 28%, rgba(255, 255, 255, 0.12));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, #60a5fa) 28%,
+    rgba(255, 255, 255, 0.12)
+  );
   box-shadow:
     var(--glass-rim),
     0 1px 0 rgba(255, 255, 255, 0.1) inset,
@@ -528,12 +720,18 @@ html[data-theme="dark"] .bubble.user {
       color-mix(in srgb, #fff 18%, transparent) 0%,
       color-mix(in srgb, #fff 4%, transparent) 100%
     ),
-    color-mix(in srgb, var(--tone-soft, transparent) 28%, var(--assist-fill));
-  border-color: color-mix(in srgb, var(--tone, var(--accent)) 10%, var(--glass-edge));
+    color-mix(in srgb, var(--tone-soft, transparent) 8%, var(--assist-fill));
+  border-color: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 10%,
+    var(--glass-edge)
+  );
   border-bottom-left-radius: 8px;
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
+  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.3));
   color: var(--ink);
 }
 
@@ -584,14 +782,17 @@ html[data-theme="dark"] .bubble.user {
     opacity: 1;
     transform: scale(1.08);
     background: color-mix(in srgb, var(--tone, #60a5fa) 70%, #fff);
-    box-shadow: 0 0 6px color-mix(in srgb, var(--tone, #60a5fa) 35%, transparent);
+    box-shadow: 0 0 6px
+      color-mix(in srgb, var(--tone, #60a5fa) 35%, transparent);
   }
 }
 
 .msg-stream-loader.is-leaving {
   opacity: 0;
   transform: scale(0.92);
-  transition: opacity 140ms ease-out, transform 140ms ease-out;
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {

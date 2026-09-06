@@ -80,19 +80,6 @@ pub struct AgentRuntimeDescriptorV2 {
     pub reasoning_effort: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LegacyRuntimeDescriptorUnavailable;
-
-impl std::fmt::Display for LegacyRuntimeDescriptorUnavailable {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(
-            "this Agent Thread predates resumable runtime descriptors; create a new Agent Thread to continue safely",
-        )
-    }
-}
-
-impl std::error::Error for LegacyRuntimeDescriptorUnavailable {}
-
 /// V2 运行器发出的事件，驱动状态投影和等待方唤醒。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -121,28 +108,19 @@ pub struct AgentTreeSnapshotV2 {
     pub root_thread_id: String,
     pub threads: Vec<AgentThreadV2>,
     pub activity_sequence: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_service_tier: Option<String>,
 }
 
-/// 桌面控制面专用的完整 Session 时间线行（保留全部结构化字段）。
+/// 桌面控制面专用的原生 Responses 时间线项。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentThreadMessageV2 {
     pub id: i64,
     pub session_id: String,
-    pub role: String,
-    pub content: Option<String>,
-    pub compressed_content: Option<String>,
-    pub tool_call_id: Option<String>,
-    pub tool_calls: Option<serde_json::Value>,
-    pub tool_name: Option<String>,
+    pub item: agent_protocol::ResponseItem,
     pub timestamp: f64,
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
-    pub reasoning: Option<String>,
-    pub reasoning_content: Option<String>,
-    pub reasoning_details: Option<serde_json::Value>,
-    pub codex_reasoning_items: Option<serde_json::Value>,
-    pub codex_message_items: Option<serde_json::Value>,
-    pub media_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -177,8 +155,11 @@ pub struct SpawnRuntimeV2Request {
     pub sandbox_mode: Option<String>,
     pub mcp_servers: BTreeMap<String, toml::Value>,
     pub skills_config: Vec<crate::SkillConfigEntry>,
-    pub chat_targets: Vec<types::ChatTarget>,
+    pub model_targets: Vec<types::ModelTarget>,
+    pub model_spec: Option<types::ModelSpec>,
+    pub root_service_tier: Option<String>,
     pub project_root: Option<PathBuf>,
+    pub workspace_roots: Vec<PathBuf>,
     pub hook_runtime: Option<Arc<hooks::HookRuntime>>,
     pub hook_bus: Option<Arc<hooks::PluginHookBus>>,
     pub interrupt_message: bool,
@@ -409,8 +390,10 @@ mod tests {
             root_thread_id: thread.root_thread_id.clone(),
             threads: vec![thread.clone()],
             activity_sequence: 7,
+            root_service_tier: Some("priority".into()),
         };
         assert_eq!(snapshot.activity_sequence, 7);
+        assert_eq!(snapshot.root_service_tier.as_deref(), Some("priority"));
         assert_eq!(
             SpawnAgentV2Result {
                 thread: thread.clone()

@@ -1,16 +1,11 @@
 /** 技能包文件只读预览：CodeMirror 高亮、MD 预览/源码、复制。 */
 import { useCallback, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { Eye, FileCode2, FolderOpen, Tags } from "lucide-react";
 import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Eye,
-  FileCode2,
-  FolderOpen,
-  Tags,
-} from "lucide-react";
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+} from "lucide";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useTheme } from "../../hooks/app/useTheme";
 import {
@@ -22,6 +17,7 @@ import {
   type SkillFrontmatter,
 } from "../../lib/skills/skillFrontmatter";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { CopyMorphIcon, MorphToggleIcon } from "../icons/MorphIcon";
 
 const MD_MODE_KEY = "astro.skills.mdPreviewMode";
 export const SKILL_PREVIEW_MAX_BYTES = 512 * 1024;
@@ -63,8 +59,7 @@ function SkillFrontmatterCard({
   const [extrasOpen, setExtrasOpen] = useState(false);
 
   const showName =
-    Boolean(meta.name?.trim()) &&
-    normText(meta.name) !== normText(knownName);
+    Boolean(meta.name?.trim()) && normText(meta.name) !== normText(knownName);
   const desc = meta.description?.trim() ?? "";
   const showDesc =
     Boolean(desc) && normText(desc) !== normText(knownDescription);
@@ -74,7 +69,10 @@ function SkillFrontmatterCard({
   if (!showName && !showDesc && !showExtras) return null;
 
   return (
-    <section className="skills-frontmatter" aria-label={t("skills.frontmatterTitle")}>
+    <section
+      className="skills-frontmatter"
+      aria-label={t("skills.frontmatterTitle")}
+    >
       <header className="skills-frontmatter-head">
         <Tags size={13} strokeWidth={2.3} aria-hidden />
         <span>{t("skills.frontmatterTitle")}</span>
@@ -104,11 +102,14 @@ function SkillFrontmatterCard({
                     className="skills-frontmatter-toggle"
                     onClick={() => setDescOpen((v) => !v)}
                   >
-                    {descOpen ? (
-                      <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
-                    ) : (
-                      <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
-                    )}
+                    <MorphToggleIcon
+                      active={descOpen}
+                      activeIcon={ChevronUpData}
+                      inactiveIcon={ChevronDownData}
+                      size={13}
+                      strokeWidth={2.3}
+                      aria-hidden
+                    />
                     {descOpen
                       ? t("skills.frontmatterCollapse")
                       : t("skills.frontmatterExpand")}
@@ -127,11 +128,14 @@ function SkillFrontmatterCard({
             onClick={() => setExtrasOpen((v) => !v)}
             aria-expanded={extrasOpen}
           >
-            {extrasOpen ? (
-              <ChevronUp size={13} strokeWidth={2.3} aria-hidden />
-            ) : (
-              <ChevronDown size={13} strokeWidth={2.3} aria-hidden />
-            )}
+            <MorphToggleIcon
+              active={extrasOpen}
+              activeIcon={ChevronUpData}
+              inactiveIcon={ChevronDownData}
+              size={13}
+              strokeWidth={2.3}
+              aria-hidden
+            />
             {t("skills.frontmatterMore")}
             <span className="skills-frontmatter-extra-count">
               {meta.extras.length}
@@ -190,7 +194,8 @@ export function SkillFileViewer({
   const [copied, setCopied] = useState(false);
   const tooLarge = size > SKILL_PREVIEW_MAX_BYTES;
   const isMd = isMarkdownPath(filename);
-  const showPreview = isMd && mdMode === "preview" && !tooLarge && content != null;
+  const showPreview =
+    isMd && mdMode === "preview" && !tooLarge && content != null;
 
   const split = useMemo(
     () => (content != null ? splitSkillFrontmatter(content) : null),
@@ -223,9 +228,7 @@ export function SkillFileViewer({
   }, [content]);
 
   if (loading) {
-    return (
-      <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
-    );
+    return <p className="skills-preview-empty">{t("skills.previewLoading")}</p>;
   }
 
   if (tooLarge) {
@@ -246,9 +249,7 @@ export function SkillFileViewer({
   }
 
   if (content == null) {
-    return (
-      <p className="skills-preview-empty">{t("skills.previewLoading")}</p>
-    );
+    return <p className="skills-preview-empty">{t("skills.previewLoading")}</p>;
   }
 
   return (
@@ -309,11 +310,7 @@ export function SkillFileViewer({
             title={copied ? t("skills.copied") : t("skills.copyContent")}
             aria-label={copied ? t("skills.copied") : t("skills.copyContent")}
           >
-            {copied ? (
-              <Check size={14} strokeWidth={2.4} aria-hidden />
-            ) : (
-              <Copy size={14} strokeWidth={2.2} aria-hidden />
-            )}
+            <CopyMorphIcon copied={copied} size={14} aria-hidden />
             <span>{copied ? t("skills.copied") : t("skills.copyContent")}</span>
           </button>
         </div>

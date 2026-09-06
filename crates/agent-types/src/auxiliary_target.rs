@@ -4,7 +4,7 @@
 //! `common` 位于依赖图底层（无 `memory` 依赖），供 `agent` / `backend` / `proto` 边界共用。
 //! `AuxiliaryTargetChain` 随 `ChatRequest` 透传给后端，仅在内存中持有，不落盘（含 API key）。
 
-use crate::ChatTarget;
+use crate::ModelTarget;
 use serde::{Deserialize, Serialize};
 
 /// 辅助任务类型：标题生成 / 压缩 / 智能审批 / 入梦 / 回合后自我改进 review / 工作流 AI 辅助。
@@ -60,7 +60,7 @@ impl AuxiliaryTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuxiliaryTargetChain {
     pub task: AuxiliaryTask,
-    pub targets: Vec<ChatTarget>,
+    pub targets: Vec<ModelTarget>,
 }
 
 #[cfg(test)]

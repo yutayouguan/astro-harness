@@ -9,14 +9,18 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  sealOpenReasoning,
-} from "../../lib/chat/chatTimeline";
+import { sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
+import {
+  buildElicitationContent,
+  elicitationRequestId,
+  resolveElicitationAction,
+} from "../../lib/chat/elicitation";
 import {
   type ChatInteractionMode,
   type ChatWorkMode,
   type ModeSwitchRequest,
+  shouldAutoApproveModeSwitch,
 } from "../../lib/chat/chatMode";
 import {
   MAX_QUEUED_FOLLOWUPS,
@@ -27,27 +31,30 @@ import {
   buildParallelTasksSummaryMarkdown,
   countRunningParallel,
 } from "../../lib/chat/parallelTasks";
-import { templateForLocale } from "../../lib/agent/agentCreateTemplate";
 import {
   clearChatSession,
   isChatCleared,
   isWelcomeOnly,
   loadChatSession,
   loadContextUsageForSession,
-  persistAfterEditTruncate,
   saveChatSession,
   saveContextUsageForSession,
+  saveEphemeralSessionMeta,
 } from "../../lib/chat/chatSessionStore";
-import { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
-import { MSG_DISSOLVE_MS } from "../../components/chat/MsgDissolveOverlay";
+import {
+  projectResponseItemsToEntries,
+  settleRestoredActivities,
+} from "../../lib/chat/projectResponseItemsToEntries";
+import { findLastUserEntryIndex } from "../../lib/chat/turnEditing";
+import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import type {
   ArtifactDto,
   ChatAttachment,
   ChatAttachmentKind,
   ChatEmptyMode,
-  ChatHistoryDto,
-  ChatMessage,
-  MessageTokenUsage,
+  ResponseItemHistoryDto,
+  ConversationEntry,
+  TurnTokenUsage,
   PendingInterrupt,
   ProviderDto,
 } from "../../types";
@@ -58,6 +65,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { ChatRightTab } from "../../components/chat/ChatRightPanel";
 import { useChatStreamBuffers } from "./useChatStreamBuffers";
 import { useGeneratingPreview } from "./useGeneratingPreview";
+import { useBrowserPreview } from "./useBrowserPreview";
 import { useParallelTasks } from "./useParallelTasks";
 import { useSend, type SendOpts } from "./useSend";
 import { useConfirm } from "../ui/DialogContext";
@@ -65,14 +73,14 @@ import { useConfirm } from "../ui/DialogContext";
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
 type StatusPhase = "ready" | "connecting" | "generating" | "error";
-type NavId = "chat" | "loop" | "files" | "skills" | "settings";
+type NavId = "chat" | "cron" | "loop" | "skills" | "settings";
 
 const MAX_ATTACHMENTS = 8;
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
-export { mapHistoryMessages } from "../../lib/chat/mapHistoryMessages";
+export { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
 
-function countChatBubbles(msgs: ChatMessage[]): number {
+function countChatBubbles(msgs: ConversationEntry[]): number {
   return msgs.filter(
     (m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"),
   ).length;
@@ -83,121 +91,180 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) return "image";
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext))
+    return "image";
   if (["mp4", "webm", "mov", "mkv", "avi"].includes(ext)) return "video";
   if (["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext)) return "audio";
   return "file";
 }
 
-function calcTokensPerSec(completionTokens: number, durationMs: number): number | undefined {
+function calcTokensPerSec(
+  completionTokens: number,
+  durationMs: number,
+): number | undefined {
   if (completionTokens <= 0 || durationMs <= 0) return undefined;
   const sec = Math.max(0.1, durationMs / 1000);
   return Math.round((completionTokens / sec) * 10) / 10;
 }
 
 export interface UseChatSessionDeps {
+  activeProjectId: string;
   activeProvider: ProviderDto | undefined;
   providers: ProviderDto[];
   chatMode: ChatInteractionMode;
   onChatModeChange: (mode: ChatWorkMode) => void;
   chatDisplayPrefsRef: RefObject<ChatDisplayPrefs>;
-  locale: string;
   t: TFn;
   showTransientToast: ShowToastFn;
-  nav: NavId;
-  setNav: Dispatch<SetStateAction<NavId>>;
+  nav?: NavId;
+  setNav?: Dispatch<SetStateAction<NavId>>;
+  /** 是否把当前 UI 会话快照写入 localStorage。 */
+  persistClientState?: boolean;
+  /** 独立聊天表面可直接绑定已创建的 backend session。 */
+  initialSessionId?: string | null;
+  initialParentSessionId?: string | null;
+  initialExcludedTurnCount?: number;
+  initialEphemeral?: boolean;
 }
 
 export function useChatSession({
+  activeProjectId,
   activeProvider,
   providers,
   chatMode,
   onChatModeChange,
   chatDisplayPrefsRef,
-  locale,
   t,
   showTransientToast,
-  nav,
-  setNav,
+  nav = "chat",
+  setNav = () => {},
+  persistClientState = true,
+  initialSessionId = null,
+  initialParentSessionId = null,
+  initialExcludedTurnCount = 0,
+  initialEphemeral = false,
 }: UseChatSessionDeps) {
+  const [initialStored] = useState(() => {
+    const stored = persistClientState ? loadChatSession() : null;
+    if (!stored) return null;
+    return {
+      ...stored,
+      messages: settleRestoredActivities(stored.messages),
+    };
+  });
   // ── Core state ────────────────────────────────────────────────────────────
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const stored = loadChatSession();
-    if (stored?.messages?.length) return stored.messages;
+  const [messages, setMessages] = useState<ConversationEntry[]>(() => {
+    if (initialStored?.messages?.length) return initialStored.messages;
     return [];
   });
   const [emptyMode, setEmptyMode] = useState<ChatEmptyMode>(() => {
-    const stored = loadChatSession();
-    return stored && !isWelcomeOnly(stored.messages) ? null : "chat";
+    if (initialSessionId) return null;
+    return initialStored && !isWelcomeOnly(initialStored.messages)
+      ? null
+      : "chat";
   });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [queuedFollowUps, setQueuedFollowUps] = useState<QueuedFollowUp[]>([]);
   const [queueKick, setQueueKick] = useState(0);
-  const [modeSwitchPrompt, setModeSwitchPrompt] = useState<ModeSwitchRequest | null>(null);
+  const [modeSwitchPrompt, setModeSwitchPrompt] =
+    useState<ModeSwitchRequest | null>(null);
   const modeSwitchArmedRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [turnInFlight, setTurnInFlight] = useState(false);
+  const [completionCelebrationId, setCompletionCelebrationId] = useState(0);
   const turnInFlightRef = useRef(false);
+  const sendStartLockRef = useRef(false);
   const lastStreamActivityAtRef = useRef(0);
   const sessionWorktreeRef = useRef<{
     sessionId: string;
+    id: string;
     path: string;
-    repoRoot: string;
-    branch: string;
+    branch?: string | null;
+    headSha: string;
   } | null>(null);
   const steeringQueueIdsRef = useRef(new Set<string>());
   const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
-  const [tokenUsage, setTokenUsage] = useState<MessageTokenUsage | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TurnTokenUsage | null>(null);
   const [contextUsage, setContextUsage] = useState<ContextUsageSnapshot | null>(
-    () => loadChatSession()?.contextUsage ?? null,
+    () => initialStored?.contextUsage ?? null,
   );
   const [sessionId, setSessionId] = useState<string | null>(
-    () => loadChatSession()?.sessionId ?? null,
+    () => initialSessionId ?? initialStored?.sessionId ?? null,
   );
-  const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<PendingInterrupt[]>(
-    () => loadChatSession()?.pendingInterrupts ?? [],
+  const [sideParentSessionId, setSideParentSessionId] = useState<string | null>(
+    () => initialParentSessionId ?? initialStored?.parentSessionId ?? null,
   );
+  const [sideExcludedTurnCount, setSideExcludedTurnCount] = useState(
+    () => initialExcludedTurnCount || initialStored?.excludedTurnCount || 0,
+  );
+  const [sessionEphemeral, setSessionEphemeral] = useState(
+    () => initialEphemeral || initialStored?.ephemeral || false,
+  );
+  const [sessionPendingInterrupts, setSessionPendingInterrupts] = useState<
+    PendingInterrupt[]
+  >(() => initialStored?.pendingInterrupts ?? []);
   const [sessionReadOnly, setSessionReadOnly] = useState(false);
   const [sessionEndReason, setSessionEndReason] = useState<string | null>(null);
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(null);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [isCompacting, setIsCompacting] = useState(false);
-  const [dissolvingIds, setDissolvingIds] = useState<string[]>([]);
   const [status, setStatus] = useState<"ready" | "busy" | "error">("ready");
   const [statusPhase, setStatusPhase] = useState<StatusPhase>("ready");
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [memoryPendingCount, setMemoryPendingCount] = useState(0);
   const [chatRightOpen, setChatRightOpen] = useState(() => {
+    if (!persistClientState) return false;
     try {
       return localStorage.getItem("astro.chatRightOpen") === "1";
     } catch {
       return false;
     }
   });
-  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("sessions");
+  const [chatRightTab, setChatRightTab] = useState<ChatRightTab>("summary");
   const confirm = useConfirm();
+
+  useEffect(() => {
+    if (
+      !persistClientState ||
+      !sessionEphemeral ||
+      !sessionId ||
+      isWelcomeOnly(messages)
+    )
+      return;
+    saveEphemeralSessionMeta(
+      sessionId,
+      sideParentSessionId,
+      sideExcludedTurnCount,
+    );
+  }, [
+    messages,
+    sessionEphemeral,
+    sessionId,
+    sideParentSessionId,
+    sideExcludedTurnCount,
+    persistClientState,
+  ]);
 
   // ── 生成中文件实时预览 ──────────────────────────────────────────────────────
   const { preview: generatingPreview, api: generatingPreviewApi } =
-    useGeneratingPreview({
-      onActivate: () => {
-        setChatRightTab("preview");
-        setChatRightOpen(true);
-      },
-    });
+    useGeneratingPreview({});
+  const {
+    preview: browserPreview,
+    api: browserPreviewApi,
+    control: controlBrowser,
+    applyResult: applyBrowserResult,
+    dismiss: dismissBrowserPreview,
+  } = useBrowserPreview(sessionId);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const unlistenRef = useRef<(() => void) | null>(null);
   const restoringRef = useRef(false);
   const pendingKeepChatBubblesRef = useRef<number | null>(null);
-  const dissolvingIdsRef = useRef<string[]>([]);
-  dissolvingIdsRef.current = dissolvingIds;
   const compactingRef = useRef(false);
   const lastRecommendCompactToastAtRef = useRef(0);
   const memoryToastDedupeRef = useRef<{ key: string; at: number } | null>(null);
-  const dissolveTimerRef = useRef<number | null>(null);
 
   // ── Stream buffer layer ───────────────────────────────────────────────────
   const {
@@ -220,6 +287,10 @@ export function useChatSession({
     streamRafRef,
   } = useChatStreamBuffers(setMessages);
 
+  const celebrateTaskCompletion = useCallback(() => {
+    setCompletionCelebrationId((current) => current + 1);
+  }, []);
+
   const {
     parallelTasks,
     startParallelTask,
@@ -234,6 +305,7 @@ export function useChatSession({
     setAttachments,
     showTransientToast,
     t,
+    onTaskSucceeded: celebrateTaskCompletion,
   });
 
   // ── Send ──────────────────────────────────────────────────────────────────
@@ -263,6 +335,7 @@ export function useChatSession({
   );
 
   const { send: sendImmediate } = useSend({
+    projectId: activeProjectId,
     input,
     attachments,
     streaming,
@@ -272,7 +345,6 @@ export function useChatSession({
     activeProvider,
     providers,
     sessionId,
-    messages,
     emptyMode,
     sessionPendingInterrupts,
     chatMode,
@@ -286,6 +358,7 @@ export function useChatSession({
     flushToolDeltas,
     settleMessageUsage,
     generatingPreviewApi,
+    browserPreviewApi,
     streamGenRef,
     currentRunIdRef,
     activeAssistantIdRef,
@@ -299,8 +372,6 @@ export function useChatSession({
     unlistenRef,
     compactingRef,
     pendingKeepChatBubblesRef,
-    dissolvingIdsRef,
-    dissolveTimerRef,
     lastRecommendCompactToastAtRef,
     setMessages,
     setSessionId,
@@ -316,15 +387,16 @@ export function useChatSession({
     setAttachments,
     setSessionPendingInterrupts,
     setCurrentTurnId,
-    setDissolvingIds,
     showTransientToast,
     turnInFlightRef,
+    sendStartLockRef,
     setTurnInFlight,
     lastStreamActivityAtRef,
-    sessionWorktreeRef,
     onModeSwitchDetected,
     onModeSwitchPrompt,
     onUserInputCommitted,
+    onTurnSucceeded: celebrateTaskCompletion,
+    persistContextUsage: persistClientState,
   });
 
   const prevChatModeRef = useRef(chatMode);
@@ -337,9 +409,7 @@ export function useChatSession({
       const wt = sessionWorktreeRef.current;
       if (wt) {
         void invoke("cleanup_task_worktree", {
-          path: wt.path,
-          repoRoot: wt.repoRoot,
-          branch: wt.branch,
+          worktreeId: wt.id,
         }).catch(() => {});
         sessionWorktreeRef.current = null;
       }
@@ -377,11 +447,10 @@ export function useChatSession({
       return;
     }
     const inject =
-      `[Mode switch declined]\n` +
-      `The user declined switching to "${req.to}". ` +
-      `Requested reason was: ${req.reason}\n` +
-      `Stay in the current interaction mode and continue. ` +
-      `Do not call switch_mode again for the same reason unless the user explicitly asks.`;
+      `[Plan review: continue planning]\n` +
+      `The user is not authorizing execution yet. ` +
+      `Stay in Plan mode and revise or clarify the plan. ` +
+      `Do not call switch_mode again until the plan has materially changed or the user explicitly asks.`;
     showTransientToast(t("chat.modeSwitch.declined"), { tone: "warning" });
     void (async () => {
       await sendImmediateRef.current({ text: inject });
@@ -392,7 +461,9 @@ export function useChatSession({
   const writeParallelSummary = useCallback(() => {
     if (parallelTasks.length === 0) return;
     if (countRunningParallel(parallelTasks) > 0) {
-      showTransientToast(t("chat.task.summaryStillRunning"), { tone: "warning" });
+      showTransientToast(t("chat.task.summaryStillRunning"), {
+        tone: "warning",
+      });
       return;
     }
     const replyByAssistantId = new Map<string, string>();
@@ -432,8 +503,7 @@ export function useChatSession({
     modeSwitchArmedRef.current = false;
     onChatModeChangeRef.current(req.to);
     if (req.to === "agent" && req.summary) {
-      const inject =
-        `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
+      const inject = `[Authorized mode switch: Plan → Agent]\n\nConfirmed plan:\n${req.summary}`;
       await sendImmediateRef.current({
         text: inject,
         interactionMode: "agent",
@@ -451,10 +521,22 @@ export function useChatSession({
     setQueueKick((k) => k + 1);
   }, []);
 
+  useEffect(() => {
+    if (!shouldAutoApproveModeSwitch(modeSwitchPrompt)) return;
+    // 进入只读 Plan 是收窄权限，自动接受；返回 Agent 始终留给用户显式审阅。
+    void approveModeSwitch();
+  }, [approveModeSwitch, modeSwitchPrompt]);
+
   /** 当前任务忙时入队；空闲时立即发送。 */
   const send = useCallback(
     async (opts?: SendOpts) => {
-      if (streaming || turnInFlightRef.current || sessionPendingInterrupts.length > 0) {
+      // 同一次点击尚在解析 Skill/MCP 时，忽略再次提交；真正进入 turn 后才允许入队。
+      if (sendStartLockRef.current) return;
+      if (
+        streaming ||
+        turnInFlightRef.current ||
+        sessionPendingInterrupts.length > 0
+      ) {
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
         if (!text && pending.length === 0) return;
@@ -486,9 +568,12 @@ export function useChatSession({
           ];
         });
         if (overflow) {
-          showTransientToast(t("chat.queue.full", { max: String(MAX_QUEUED_FOLLOWUPS) }), {
-            tone: "warning",
-          });
+          showTransientToast(
+            t("chat.queue.full", { max: String(MAX_QUEUED_FOLLOWUPS) }),
+            {
+              tone: "warning",
+            },
+          );
           return;
         }
         if (opts?.text == null) setInput("");
@@ -562,24 +647,30 @@ export function useChatSession({
     t,
   ]);
 
-  const dropQueuedFollowUp = useCallback((id: string, revokePreview: boolean) => {
-    if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
-    setQueuedFollowUps((prev) => {
-      const hit = prev.find((q) => q.id === id);
-      if (hit && revokePreview) {
-        for (const a of hit.attachments) {
-          if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+  const dropQueuedFollowUp = useCallback(
+    (id: string, revokePreview: boolean) => {
+      if (queueFailedIdRef.current === id) queueFailedIdRef.current = null;
+      setQueuedFollowUps((prev) => {
+        const hit = prev.find((q) => q.id === id);
+        if (hit && revokePreview) {
+          for (const a of hit.attachments) {
+            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          }
         }
-      }
-      return prev.filter((q) => q.id !== id);
-    });
-    setQueueKick((k) => k + 1);
-  }, []);
+        return prev.filter((q) => q.id !== id);
+      });
+      setQueueKick((k) => k + 1);
+    },
+    [],
+  );
 
-  const removeQueuedFollowUp = useCallback((id: string) => {
-    if (steeringQueueIdsRef.current.has(id)) return;
-    dropQueuedFollowUp(id, true);
-  }, [dropQueuedFollowUp]);
+  const removeQueuedFollowUp = useCallback(
+    (id: string) => {
+      if (steeringQueueIdsRef.current.has(id)) return;
+      dropQueuedFollowUp(id, true);
+    },
+    [dropQueuedFollowUp],
+  );
 
   const updateQueuedFollowUpText = useCallback((id: string, text: string) => {
     if (steeringQueueIdsRef.current.has(id)) return;
@@ -607,65 +698,90 @@ export function useChatSession({
     setQueueKick((k) => k + 1);
   }, []);
 
-  const steerQueuedFollowUp = useCallback(async (id: string) => {
-    const item = queuedFollowUps.find((queued) => queued.id === id);
-    if (
-      !item ||
-      !sessionId ||
-      !currentTurnId ||
-      !turnInFlightRef.current ||
-      steeringQueueIdsRef.current.has(id)
-    ) return false;
-    steeringQueueIdsRef.current.add(id);
-    try {
-      const accepted = await invoke<boolean>("steer_chat", {
-        sessionId,
-        expectedTurnId: currentTurnId,
-        clientMessageId: id,
-        content: item.text,
-        attachments: item.attachments.map((a) => ({
-          name: a.name,
-          mime: a.mime,
-          kind: a.kind,
-          size: a.size,
-          dataBase64: a.dataBase64 ?? null,
-          localPath: a.localPath ?? null,
-        })),
-      });
-      if (!accepted) {
+  const steerQueuedFollowUp = useCallback(
+    async (id: string) => {
+      const item = queuedFollowUps.find((queued) => queued.id === id);
+      if (
+        !item ||
+        !sessionId ||
+        !currentTurnId ||
+        !turnInFlightRef.current ||
+        steeringQueueIdsRef.current.has(id)
+      )
+        return false;
+      steeringQueueIdsRef.current.add(id);
+      try {
+        const accepted = await invoke<boolean>("steer_chat", {
+          sessionId,
+          expectedTurnId: currentTurnId,
+          clientMessageId: id,
+          content: item.text,
+          attachments: item.attachments.map((a) => ({
+            name: a.name,
+            mime: a.mime,
+            kind: a.kind,
+            size: a.size,
+            dataBase64: a.dataBase64 ?? null,
+            localPath: a.localPath ?? null,
+          })),
+        });
+        if (!accepted) {
+          steeringQueueIdsRef.current.delete(id);
+          showTransientToast(t("chat.queue.steerUnavailable"), {
+            tone: "warning",
+          });
+          return false;
+        }
+        setQueuedFollowUps((prev) =>
+          prev.map((queued) =>
+            queued.id === id ? { ...queued, delivery: "steering" } : queued,
+          ),
+        );
+        return true;
+      } catch (error) {
         steeringQueueIdsRef.current.delete(id);
-        showTransientToast(t("chat.queue.steerUnavailable"), { tone: "warning" });
+        showTransientToast(
+          t("chat.queue.steerFailed", { error: String(error) }),
+          {
+            tone: "error",
+          },
+        );
         return false;
       }
-      setQueuedFollowUps((prev) =>
-        prev.map((queued) =>
-          queued.id === id ? { ...queued, delivery: "steering" } : queued,
-        ),
-      );
-      return true;
-    } catch (error) {
-      steeringQueueIdsRef.current.delete(id);
-      showTransientToast(t("chat.queue.steerFailed", { error: String(error) }), {
-        tone: "error",
-      });
-      return false;
-    }
-  }, [currentTurnId, queuedFollowUps, sessionId, showTransientToast, t, turnInFlightRef]);
+    },
+    [
+      currentTurnId,
+      queuedFollowUps,
+      sessionId,
+      showTransientToast,
+      t,
+      turnInFlightRef,
+    ],
+  );
 
-  const openQueuedFollowUpInNewTask = useCallback(async (id: string) => {
-    const item = queuedFollowUps.find((queued) => queued.id === id);
-    if (!item) return false;
-    const started = await startParallelTask({
-      text: item.text,
-      attachments: item.attachments,
-      clearComposer: false,
-    });
-    if (!started) return false;
-    // 附件预览 URL 已转移给独立任务气泡，不能在这里 revoke。
-    dropQueuedFollowUp(id, false);
-    showTransientToast(t("chat.queue.openedInNewTask"), { tone: "success" });
-    return true;
-  }, [dropQueuedFollowUp, queuedFollowUps, showTransientToast, startParallelTask, t]);
+  const openQueuedFollowUpInNewTask = useCallback(
+    async (id: string) => {
+      const item = queuedFollowUps.find((queued) => queued.id === id);
+      if (!item) return false;
+      const started = await startParallelTask({
+        text: item.text,
+        attachments: item.attachments,
+        clearComposer: false,
+      });
+      if (!started) return false;
+      // 附件预览 URL 已转移给独立任务气泡，不能在这里 revoke。
+      dropQueuedFollowUp(id, false);
+      showTransientToast(t("chat.queue.openedInNewTask"), { tone: "success" });
+      return true;
+    },
+    [
+      dropQueuedFollowUp,
+      queuedFollowUps,
+      showTransientToast,
+      startParallelTask,
+      t,
+    ],
+  );
 
   const closeQueuedFollowUps = useCallback(() => {
     if (queuedFollowUps.length === 0) return true;
@@ -674,13 +790,19 @@ export function useChatSession({
       return false;
     }
     if (input.trim() || attachments.length > 0) {
-      showTransientToast(t("chat.queue.closeNeedsEmptyComposer"), { tone: "warning" });
+      showTransientToast(t("chat.queue.closeNeedsEmptyComposer"), {
+        tone: "warning",
+      });
       return false;
     }
-    const restoredAttachments = queuedFollowUps.flatMap((item) => item.attachments);
+    const restoredAttachments = queuedFollowUps.flatMap(
+      (item) => item.attachments,
+    );
     if (restoredAttachments.length > MAX_ATTACHMENTS) {
       showTransientToast(
-        t("chat.queue.closeTooManyAttachments", { max: String(MAX_ATTACHMENTS) }),
+        t("chat.queue.closeTooManyAttachments", {
+          max: String(MAX_ATTACHMENTS),
+        }),
         { tone: "warning" },
       );
       return false;
@@ -700,27 +822,43 @@ export function useChatSession({
 
   // ── Persist session ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (restoringRef.current || streaming) return;
-    saveChatSession(sessionId, messages, sessionPendingInterrupts, contextUsage);
+    if (!persistClientState || restoringRef.current || streaming) return;
+    saveChatSession(
+      sessionId,
+      messages,
+      sessionPendingInterrupts,
+      contextUsage,
+    );
     if (sessionId && contextUsage) {
       saveContextUsageForSession(sessionId, contextUsage);
     }
-  }, [messages, sessionId, streaming, sessionPendingInterrupts, contextUsage]);
+  }, [
+    messages,
+    sessionId,
+    streaming,
+    sessionPendingInterrupts,
+    contextUsage,
+    persistClientState,
+  ]);
 
   useEffect(() => {
+    if (!persistClientState) return;
     try {
       localStorage.setItem("astro.chatRightOpen", chatRightOpen ? "1" : "0");
     } catch {
       // ignore quota / private mode
     }
-  }, [chatRightOpen]);
+  }, [chatRightOpen, persistClientState]);
 
   // ── Memory pending count init ─────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     void (async () => {
       try {
-        const rows = await invoke<{ id: string }[]>("list_pending_memory_writes");
+        const rows = await invoke<{ id: string }[]>(
+          "list_pending_memory_writes",
+        );
         setMemoryPendingCount(rows?.length ?? 0);
       } catch {
         setMemoryPendingCount(0);
@@ -730,7 +868,8 @@ export function useChatSession({
 
   // ── Skills seeded toast ───────────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     void listen<{ installed: string[]; failed: string[] }>(
       "default-skills-seeded",
@@ -743,14 +882,19 @@ export function useChatSession({
         );
       },
     )
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [t, showTransientToast]);
 
   // ── memory-updated event ──────────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     void listen<{ op?: string; content?: string; new_memories?: number }>(
       "memory-updated",
@@ -763,14 +907,19 @@ export function useChatSession({
         showTransientToast(msg);
       },
     )
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+    };
   }, [t, showTransientToast, chatDisplayPrefsRef]);
 
   // ── session_event: badge + memory refresh ────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let unlisten: (() => void) | undefined;
     type SessionEventPayload = {
       sessionId?: string | null;
@@ -815,19 +964,14 @@ export function useChatSession({
         }
       }
     })
-      .then((fn) => { unlisten = fn; })
+      .then((fn) => {
+        unlisten = fn;
+      })
       .catch(() => {});
-    return () => { unlisten?.(); };
-  }, [sessionId, showTransientToast, t]);
-
-  // ── Cleanup dissolve timer ────────────────────────────────────────────────
-  useEffect(() => {
     return () => {
-      if (dissolveTimerRef.current != null) {
-        window.clearTimeout(dissolveTimerRef.current);
-      }
+      unlisten?.();
     };
-  }, []);
+  }, [sessionId, showTransientToast, t]);
 
   // ── Cleanup event listener on unmount ────────────────────────────────────
   useEffect(() => {
@@ -845,7 +989,7 @@ export function useChatSession({
   const applyRestoredHistory = useCallback(
     (
       sid: string | null,
-      restored: ChatMessage[],
+      restored: ConversationEntry[],
       pendingInterrupts: PendingInterrupt[] = [],
       endReason?: string | null,
     ) => {
@@ -854,7 +998,8 @@ export function useChatSession({
       currentRunIdRef.current = null;
       setCurrentTurnId(null);
       setSessionId(sid);
-      setMessages(restored);
+      const settled = settleRestoredActivities(restored);
+      setMessages(settled);
       setSessionPendingInterrupts(pendingInterrupts);
       setSessionReadOnly(!!endReason);
       setSessionEndReason(endReason ?? null);
@@ -862,24 +1007,26 @@ export function useChatSession({
       // 按会话恢复占用快照，避免显示上一会话数字
       const usage = loadContextUsageForSession(sid);
       setContextUsage(usage);
-      saveChatSession(sid, restored, pendingInterrupts, usage);
+      if (persistClientState) {
+        saveChatSession(sid, settled, pendingInterrupts, usage);
+      }
       queueMicrotask(() => {
         restoringRef.current = false;
       });
       return true;
     },
-    [currentRunIdRef],
+    [currentRunIdRef, persistClientState],
   );
 
   const restoreChatHistory = useCallback(async () => {
     if (streaming || restoringRef.current) return;
     if (!isWelcomeOnly(messages)) return;
-    if (pendingKeepChatBubblesRef.current != null || dissolvingIdsRef.current.length > 0) {
+    if (pendingKeepChatBubblesRef.current != null) {
       return;
     }
-    if (isChatCleared()) return;
+    if (persistClientState && isChatCleared()) return;
 
-    const stored = loadChatSession();
+    const stored = persistClientState ? loadChatSession() : null;
     if (stored && !isWelcomeOnly(stored.messages)) {
       applyRestoredHistory(
         stored.sessionId,
@@ -887,42 +1034,97 @@ export function useChatSession({
         stored.pendingInterrupts ?? [],
       );
       if (stored.sessionId) {
-        void invoke<ChatHistoryDto>("get_chat_history", {
+        void invoke<ResponseItemHistoryDto>("get_chat_history", {
           sessionId: stored.sessionId,
           limit: 1,
         })
           .then((h) => {
+            setSessionEphemeral(!!h.ephemeral);
+            setSideParentSessionId(
+              h.ephemeral ? (h.parentSessionId ?? null) : null,
+            );
+            setSideExcludedTurnCount(
+              h.ephemeral ? (h.excludedTurnCount ?? 0) : 0,
+            );
             if (h.endReason) {
               setSessionReadOnly(true);
               setSessionEndReason(h.endReason);
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            if (!stored.ephemeral) return;
+            if (persistClientState) clearChatSession();
+            setMessages([]);
+            setSessionId(null);
+            setSessionEphemeral(false);
+            setSideParentSessionId(null);
+            setSideExcludedTurnCount(0);
+            setEmptyMode("chat");
+          });
       }
       return;
     }
 
     try {
-      const history = await invoke<ChatHistoryDto>("get_chat_history", {
+      const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
         sessionId: sessionId ?? stored?.sessionId ?? null,
         limit: 200,
       });
-      if (!history.messages?.length) return;
-      const restored = mapHistoryMessages(history.messages);
+      setSessionEphemeral(!!history.ephemeral);
+      setSideParentSessionId(
+        history.ephemeral ? (history.parentSessionId ?? null) : null,
+      );
+      setSideExcludedTurnCount(
+        history.ephemeral ? (history.excludedTurnCount ?? 0) : 0,
+      );
+      if (history.ephemeral && history.sessionId && persistClientState) {
+        saveEphemeralSessionMeta(
+          history.sessionId,
+          history.parentSessionId,
+          history.excludedTurnCount ?? 0,
+        );
+      }
+      if (!history.items?.length) return;
+      const restored = projectResponseItemsToEntries(history.items);
       if (restored.length === 0) return;
       applyRestoredHistory(history.sessionId, restored, [], history.endReason);
     } catch {
       // keep welcome page if backend unavailable
     }
-  }, [applyRestoredHistory, messages, sessionId, streaming]);
+  }, [
+    applyRestoredHistory,
+    messages,
+    sessionId,
+    streaming,
+    persistClientState,
+  ]);
+
+  const discardCurrentSide = useCallback(
+    async (nextSessionId?: string | null) => {
+      if (!sessionEphemeral || !sessionId || nextSessionId === sessionId)
+        return;
+      try {
+        await invoke("discard_side_session", { sessionId });
+      } catch (error) {
+        console.warn("discard_side_session failed", error);
+      }
+      setSessionEphemeral(false);
+      setSideParentSessionId(null);
+      setSideExcludedTurnCount(0);
+    },
+    [sessionEphemeral, sessionId],
+  );
 
   const clearLocalChatSurface = useCallback(() => {
     unlistenRef.current?.();
     unlistenRef.current = null;
     clearStreamBuffers();
-    clearChatSession();
+    if (persistClientState) clearChatSession();
     pendingKeepChatBubblesRef.current = null;
     setSessionId(null);
+    setSessionEphemeral(false);
+    setSideParentSessionId(null);
+    setSideExcludedTurnCount(0);
     setAttachments((prev) => {
       for (const a of prev) {
         if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -962,13 +1164,17 @@ export function useChatSession({
     const wt = sessionWorktreeRef.current;
     if (wt) {
       void invoke("cleanup_task_worktree", {
-        path: wt.path,
-        repoRoot: wt.repoRoot,
-        branch: wt.branch,
+        worktreeId: wt.id,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
-  }, [activeAssistantIdRef, clearStreamBuffers, currentRunIdRef, setNav]);
+  }, [
+    activeAssistantIdRef,
+    clearStreamBuffers,
+    currentRunIdRef,
+    persistClientState,
+    setNav,
+  ]);
 
   /** 永久删除当前会话前：先取消流并丢弃本地监听，避免 ghost token。 */
   const prepareDeleteCurrentSession = useCallback(async () => {
@@ -1005,15 +1211,21 @@ export function useChatSession({
       return;
     }
     if (streaming) {
-      showTransientToast(t("chat.compactBlockedStreaming"), { tone: "warning" });
+      showTransientToast(t("chat.compactBlockedStreaming"), {
+        tone: "warning",
+      });
       return;
     }
     if (sessionPendingInterrupts.length > 0) {
-      showTransientToast(t("chat.compactBlockedInterrupt"), { tone: "warning" });
+      showTransientToast(t("chat.compactBlockedInterrupt"), {
+        tone: "warning",
+      });
       return;
     }
     if (!sessionId) {
-      showTransientToast(t("chat.compactFailed", { error: "no session" }), { tone: "error" });
+      showTransientToast(t("chat.compactFailed", { error: "no session" }), {
+        tone: "error",
+      });
       return;
     }
 
@@ -1021,7 +1233,11 @@ export function useChatSession({
     setIsCompacting(true);
     let splitNewId: string | null = null;
     try {
-      const res = await invoke<{ newSessionId: string; summaryPreview: string; degraded: boolean }>(
+      const res = await invoke<{
+        newSessionId: string;
+        summaryPreview: string;
+        degraded: boolean;
+      }>(
         "compact_chat_session",
         // keepTailBubbles 缺省时由后端读 compression.keep_tail_bubbles
         { sessionId, keepTailBubbles: null, focus: null },
@@ -1041,17 +1257,21 @@ export function useChatSession({
       setSessionEndReason(null);
       setSessionId(res.newSessionId);
       setEmptyMode(null);
-      saveChatSession(res.newSessionId, [], []);
+      if (persistClientState) saveChatSession(res.newSessionId, [], []);
 
       try {
-        const history = await invoke<ChatHistoryDto>("get_chat_history", {
-          sessionId: res.newSessionId,
-          limit: 200,
-        });
-        const restored = mapHistoryMessages(history.messages ?? []);
+        const history = await invoke<ResponseItemHistoryDto>(
+          "get_chat_history",
+          {
+            sessionId: res.newSessionId,
+            limit: 200,
+          },
+        );
+        const restored = projectResponseItemsToEntries(history.items ?? []);
         if (!applyRestoredHistory(res.newSessionId, restored, [], null)) {
           setMessages(restored);
-          saveChatSession(res.newSessionId, restored, []);
+          if (persistClientState)
+            saveChatSession(res.newSessionId, restored, []);
         }
         showTransientToast(
           res.degraded ? t("chat.compactDegraded") : t("chat.compactDone"),
@@ -1060,7 +1280,10 @@ export function useChatSession({
       } catch (histErr) {
         showTransientToast(
           t("chat.compactHistoryFailed", {
-            error: histErr instanceof Error ? histErr.message : String(histErr ?? "error"),
+            error:
+              histErr instanceof Error
+                ? histErr.message
+                : String(histErr ?? "error"),
           }),
           { tone: "warning" },
         );
@@ -1237,33 +1460,6 @@ export function useChatSession({
   ]);
 
   // ── Message operations ────────────────────────────────────────────────────
-  const regenerateMessage = useCallback(
-    (assistantId: string) => {
-      if (streaming) return;
-      const idx = messages.findIndex((m) => m.id === assistantId);
-      if (idx < 0 || messages[idx]?.role !== "assistant") return;
-      let userIdx = -1;
-      for (let i = idx - 1; i >= 0; i -= 1) {
-        if (messages[i].role === "user") {
-          userIdx = i;
-          break;
-        }
-      }
-      if (userIdx < 0) return;
-      const userMsg = messages[userIdx];
-      // 截断到 user 消息之前，让后端正常追加（避免重复）
-      pendingKeepChatBubblesRef.current = countChatBubbles(messages.slice(0, userIdx));
-      void send({
-        text: userMsg.content,
-        attachments: userMsg.attachments ?? [],
-        truncateTo: userIdx,
-        skipUserAppend: false,
-        reuseUserId: userMsg.id,
-      });
-    },
-    [messages, streaming, send],
-  );
-
   const undoLastExchange = useCallback(() => {
     if (streaming) return;
     setMessages((prev) => {
@@ -1288,151 +1484,30 @@ export function useChatSession({
     });
   }, [streaming, showTransientToast, t]);
 
-  const retryLastAssistant = useCallback(() => {
-    if (streaming) return;
-    let lastAssistantId: string | null = null;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "assistant") {
-        lastAssistantId = messages[i].id;
-        break;
-      }
-    }
-    if (!lastAssistantId) {
-      showTransientToast(t("chat.slashRetryEmpty"));
-      return;
-    }
-    regenerateMessage(lastAssistantId);
-  }, [messages, streaming, regenerateMessage, showTransientToast, t]);
-
   const editUserMessage = useCallback(
-    (messageId: string) => {
-      if (streaming || dissolvingIds.length > 0) return;
-      const idx = messages.findIndex((m) => m.id === messageId);
-      if (idx < 0 || messages[idx]?.role !== "user") return;
+    async (messageId: string, content: string): Promise<boolean> => {
+      if (streaming || turnInFlight) return false;
+      const idx = findLastUserEntryIndex(messages);
+      if (idx < 0 || messages[idx]?.id !== messageId) return false;
       const userMsg = messages[idx];
-      const victimIds = messages.slice(idx).map((m) => m.id);
-      const kept = messages.slice(0, idx);
-      const bubbleStart = countChatBubbles(kept);
-      const bubbleEnd = countChatBubbles(messages);
-      pendingKeepChatBubblesRef.current = bubbleStart;
-
-      const beginCut = () => {
-        persistAfterEditTruncate(sessionId, kept);
-        setInput(userMsg.content);
-        setAttachments((userMsg.attachments ?? []).map((a) => ({ ...a })));
-        setSessionPendingInterrupts([]);
-
-        const reduced =
-          typeof window !== "undefined" &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-        const finishCut = () => {
-          setMessages((prev) => {
-            const cut = prev.findIndex((m) => m.id === messageId);
-            return cut < 0 ? prev : prev.slice(0, cut);
-          });
-          setDissolvingIds([]);
-          dissolveTimerRef.current = null;
-          if (bubbleStart === 0) {
-            queueMicrotask(() => setEmptyMode("chat"));
-          }
-        };
-
-        if (reduced) {
-          finishCut();
-        } else {
-          setDissolvingIds(victimIds);
-          if (dissolveTimerRef.current != null) {
-            window.clearTimeout(dissolveTimerRef.current);
-          }
-          dissolveTimerRef.current = window.setTimeout(finishCut, MSG_DISSOLVE_MS);
-        }
-
-        queueMicrotask(() => {
-          const el = document.querySelector<HTMLTextAreaElement>(".composer-shell textarea");
-          el?.focus();
-          if (el) {
-            const len = el.value.length;
-            el.setSelectionRange(len, len);
-          }
-        });
-      };
-
-      if (
-        sessionId &&
-        bubbleStart < bubbleEnd &&
-        typeof window !== "undefined" &&
-        "__TAURI_INTERNALS__" in window
-      ) {
-        void invoke("remove_chat_bubbles", {
-          sessionId,
-          start: bubbleStart,
-          end: bubbleEnd,
-        })
-          .then(beginCut)
-          .catch((e) => {
-            pendingKeepChatBubblesRef.current = null;
-            showTransientToast(
-              t("chat.deleteFailed", {
-                error: e instanceof Error ? e.message : String(e ?? "error"),
-              }),
-            );
-          });
-        return;
-      }
-      beginCut();
-    },
-    [messages, streaming, dissolvingIds.length, sessionId, showTransientToast, t],
-  );
-
-  const deleteMessage = useCallback(
-    (messageId: string) => {
-      if (streaming) return;
-      const idx = messages.findIndex((m) => m.id === messageId);
-      if (idx < 0) return;
-      let end = idx + 1;
-      if (messages[idx].role === "user") {
-        while (end < messages.length && messages[end].role === "assistant") end += 1;
-      }
+      const nextText = content.trim();
+      if (!nextText || nextText === userMsg.content.trim()) return false;
       const bubbleStart = countChatBubbles(messages.slice(0, idx));
-      const bubbleEnd = countChatBubbles(messages.slice(0, end));
-      const next = [...messages.slice(0, idx), ...messages.slice(end)];
-
-      const applyLocal = () => {
-        setMessages(next);
-        if (next.length === 0 || next.every((m) => m.id === "welcome")) {
-          clearChatSession();
-          queueMicrotask(() => setEmptyMode("chat"));
-        } else {
-          saveChatSession(sessionId, next, []);
-        }
-        setSessionPendingInterrupts([]);
-      };
-
-      if (
-        sessionId &&
-        bubbleStart < bubbleEnd &&
-        typeof window !== "undefined" &&
-        "__TAURI_INTERNALS__" in window
-      ) {
-        void invoke("remove_chat_bubbles", {
-          sessionId,
-          start: bubbleStart,
-          end: bubbleEnd,
-        })
-          .then(applyLocal)
-          .catch((e) => {
-            showTransientToast(
-              t("chat.deleteFailed", {
-                error: e instanceof Error ? e.message : String(e ?? "error"),
-              }),
-            );
-          });
-        return;
-      }
-      applyLocal();
+      pendingKeepChatBubblesRef.current = bubbleStart;
+      setSessionPendingInterrupts([]);
+      const accepted = await sendImmediate({
+        text: nextText,
+        attachments: (userMsg.attachments ?? []).map((attachment) => ({
+          ...attachment,
+        })),
+        truncateTo: idx,
+        skipUserAppend: false,
+        reuseUserId: userMsg.id,
+      });
+      if (!accepted) pendingKeepChatBubblesRef.current = null;
+      return accepted;
     },
-    [messages, sessionId, streaming, showTransientToast, t],
+    [messages, sendImmediate, streaming, turnInFlight],
   );
 
   const branchMessage = useCallback(
@@ -1477,15 +1552,29 @@ export function useChatSession({
       setSessionReadOnly(false);
       setSessionEndReason(null);
       setEmptyMode(null);
-      saveChatSession(newId, keep, []);
+      if (persistClientState) saveChatSession(newId, keep, []);
+      dispatchSessionsChanged();
       showTransientToast(t("chat.branchDone"), { tone: "success" });
     },
-    [messages, streaming, sessionId, clearStreamBuffers, showTransientToast, t, currentRunIdRef],
+    [
+      messages,
+      streaming,
+      sessionId,
+      clearStreamBuffers,
+      persistClientState,
+      showTransientToast,
+      t,
+      currentRunIdRef,
+    ],
   );
 
   // ── HITL UI action ────────────────────────────────────────────────────────
   const onUiAction = useCallback(
-    async (messageId: string, name: string, context: Record<string, unknown>) => {
+    async (
+      messageId: string,
+      name: string,
+      context: Record<string, unknown>,
+    ) => {
       const parallelTask = parallelTasks.find(
         (t) =>
           t.assistantMessageId === messageId &&
@@ -1497,24 +1586,31 @@ export function useChatSession({
         : sessionPendingInterrupts;
       if (!activeProvider || interrupts.length === 0) return;
 
-      const isLocationHitl = interrupts.some((p) => p.reason === "location_required");
+      const isLocationHitl = interrupts.some(
+        (p) => p.reason === "location_required",
+      );
 
       let payload: Record<string, unknown>;
       if (name === "share_location") {
-        if (typeof navigator === "undefined" || !navigator.geolocation?.getCurrentPosition) {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.geolocation?.getCurrentPosition
+        ) {
           showTransientToast(t("chat.location.geoUnavailable"), {
             tone: "error",
           });
           return;
         }
         try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 15_000,
-              maximumAge: 60_000,
-            });
-          });
+          const pos = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 15_000,
+                maximumAge: 60_000,
+              });
+            },
+          );
           payload = {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
@@ -1528,14 +1624,18 @@ export function useChatSession({
         const cityRaw = context.city;
         const city = typeof cityRaw === "string" ? cityRaw.trim() : "";
         if (!city) {
-          showTransientToast(t("chat.location.cityRequired"), { tone: "warning" });
+          showTransientToast(t("chat.location.cityRequired"), {
+            tone: "warning",
+          });
           return;
         }
         payload = { city };
       } else if (name === "approve") {
         payload = { approved: true };
       } else if (name === "approve_always") {
-        payload = { approved: true, always: true };
+        payload = { approved: true, always: true, scope: "exact" };
+      } else if (name === "approve_type") {
+        payload = { approved: true, always: true, scope: "type" };
       } else if (name === "allow_once") {
         payload = { scope: "allow_once" };
       } else if (name === "allow_session") {
@@ -1554,14 +1654,26 @@ export function useChatSession({
       } else if (name === "choose") {
         const answers = context.answers;
         if (answers && typeof answers === "object" && !Array.isArray(answers)) {
-          const value =
-            typeof context.value === "string" && context.value.trim()
-              ? context.value.trim()
-              : Object.values(answers as Record<string, unknown>)
-                  .filter((v) => typeof v === "string" && v.trim())
-                  .join("；");
-          if (!value) return;
-          payload = { answers, value };
+          const confirmAnswer = (answers as Record<string, string>).confirm;
+          if (typeof confirmAnswer === "string") {
+            const lower = confirmAnswer.toLowerCase();
+            if (lower.includes("approve") && lower.includes("always")) {
+              payload = { approved: true, always: true };
+            } else if (lower.includes("approve")) {
+              payload = { approved: true };
+            } else {
+              payload = { approved: false };
+            }
+          } else {
+            const value =
+              typeof context.value === "string" && context.value.trim()
+                ? context.value.trim()
+                : Object.values(answers as Record<string, unknown>)
+                    .filter((v) => typeof v === "string" && v.trim())
+                    .join("；");
+            if (!value) return;
+            payload = { answers, value };
+          }
         } else {
           const value = context.value;
           if (typeof value !== "string" || !value.trim()) return;
@@ -1571,8 +1683,63 @@ export function useChatSession({
         payload = { ...context };
       }
 
+      const elicitation = interrupts.find(
+        (item) => item.reason === "elicitation",
+      );
+      if (elicitation) {
+        if (parallelTask) {
+          await resumeParallelHitl(messageId, payload, name);
+          return;
+        }
+        const metadataPayload = elicitation.metadata?.payload;
+        const metadata =
+          metadataPayload &&
+          typeof metadataPayload === "object" &&
+          !Array.isArray(metadataPayload)
+            ? (metadataPayload as Record<string, unknown>)
+            : undefined;
+        const serverName =
+          typeof metadata?.server_name === "string" ? metadata.server_name : "";
+        const targetSessionId = sessionId;
+        if (!targetSessionId || !serverName) {
+          showTransientToast("MCP elicitation routing metadata is missing", {
+            tone: "error",
+          });
+          return;
+        }
+        try {
+          const action = resolveElicitationAction(name);
+          await invoke("resolve_elicitation", {
+            sessionId: targetSessionId,
+            serverName,
+            requestId: elicitationRequestId(elicitation),
+            action,
+            contentJson:
+              action !== "accept"
+                ? null
+                : JSON.stringify(buildElicitationContent(elicitation, payload)),
+            metaJson: null,
+          });
+          const remaining = sessionPendingInterrupts.filter(
+            (interrupt) => interrupt.id !== elicitation.id,
+          );
+          setSessionPendingInterrupts(remaining);
+          if (remaining.length === 0) {
+            setStreaming(true);
+            setStatus("busy");
+            setStatusPhase("generating");
+          }
+        } catch (error) {
+          showTransientToast(
+            error instanceof Error ? error.message : String(error),
+            { tone: "error" },
+          );
+        }
+        return;
+      }
+
       if (parallelTask) {
-        await resumeParallelHitl(messageId, payload);
+        await resumeParallelHitl(messageId, payload, name);
         return;
       }
 
@@ -1588,7 +1755,10 @@ export function useChatSession({
           if (m.id !== messageId) return m;
           return {
             ...m,
-            uiSurfaces: m.uiSurfaces?.map((s) => ({ ...s, status: "resolved" as const })),
+            uiSurfaces: m.uiSurfaces?.map((s) => ({
+              ...s,
+              status: "resolved" as const,
+            })),
           };
         }),
       );
@@ -1605,7 +1775,9 @@ export function useChatSession({
         await invoke("interrupt_resume", { sessionId, resumeJson });
       } catch (e) {
         setStreaming(false);
-        showTransientToast(e instanceof Error ? e.message : String(e ?? "HITL resume failed"));
+        showTransientToast(
+          e instanceof Error ? e.message : String(e ?? "HITL resume failed"),
+        );
       }
     },
     [
@@ -1626,13 +1798,19 @@ export function useChatSession({
   // ── Reset / New session ───────────────────────────────────────────────────
   const resetChatSurface = useCallback(() => {
     const sid = sessionId;
-    if (sid && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    if (sessionEphemeral && sid) {
+      void discardCurrentSide(null);
+    } else if (
+      sid &&
+      typeof window !== "undefined" &&
+      "__TAURI_INTERNALS__" in window
+    ) {
       void invoke("chat_control", { sessionId: sid, action: "new_chat" }).catch(
         (e) => console.warn("chat_control new_chat failed", e),
       );
     }
     clearLocalChatSurface();
-  }, [sessionId, clearLocalChatSurface]);
+  }, [sessionId, sessionEphemeral, discardCurrentSide, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(async () => {
     if (!streaming && !turnInFlight) return true;
@@ -1648,25 +1826,6 @@ export function useChatSession({
     setInput("");
     setEmptyMode("chat");
   }, [confirmIfStreaming, resetChatSurface]);
-
-  const startNewAgent = useCallback(async () => {
-    if (!(await confirmIfStreaming())) return;
-    resetChatSurface();
-    setEmptyMode("agent");
-    setInput(templateForLocale(locale));
-    setChatRightOpen(false);
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      void invoke("clear_pending_agent_icon", { kind: null }).catch(() => {});
-    }
-  }, [confirmIfStreaming, resetChatSurface, locale]);
-
-  const skipAgentCreate = useCallback(() => {
-    setEmptyMode("chat");
-    setInput("");
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      void invoke("clear_pending_agent_icon", { kind: null }).catch(() => {});
-    }
-  }, []);
 
   const resetSchedulingSurface = useCallback(() => {
     setQueuedFollowUps((prev) => {
@@ -1690,9 +1849,7 @@ export function useChatSession({
     const wt = sessionWorktreeRef.current;
     if (wt) {
       void invoke("cleanup_task_worktree", {
-        path: wt.path,
-        repoRoot: wt.repoRoot,
-        branch: wt.branch,
+        worktreeId: wt.id,
       }).catch(() => {});
       sessionWorktreeRef.current = null;
     }
@@ -1702,25 +1859,42 @@ export function useChatSession({
   const openSessionFromFilespace = useCallback(
     async (targetSessionId: string, messageId?: string | null) => {
       try {
+        await discardCurrentSide(targetSessionId);
         resetSchedulingSurface();
-        const hist = await invoke<ChatHistoryDto>("get_chat_history", {
+        const hist = await invoke<ResponseItemHistoryDto>("get_chat_history", {
           sessionId: targetSessionId,
           limit: 200,
         });
-        const restored = mapHistoryMessages(hist.messages ?? []);
+        const restored = projectResponseItemsToEntries(hist.items ?? []);
         const endReason = hist.endReason ?? null;
+        const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {
-          applyRestoredHistory(hist.sessionId ?? targetSessionId, restored, [], endReason);
+          applyRestoredHistory(resolvedSessionId, restored, [], endReason);
         } else {
           currentRunIdRef.current = null;
           setCurrentTurnId(null);
-          setSessionId(hist.sessionId ?? targetSessionId);
+          setSessionId(resolvedSessionId);
           setSessionReadOnly(!!endReason);
           setSessionEndReason(endReason);
-          const usage = loadContextUsageForSession(hist.sessionId ?? targetSessionId);
+          const usage = loadContextUsageForSession(resolvedSessionId);
           setContextUsage(usage);
         }
-        const canFocus = !!messageId && restored.some((m) => m.id === messageId);
+        setSessionEphemeral(!!hist.ephemeral);
+        setSideParentSessionId(
+          hist.ephemeral ? (hist.parentSessionId ?? null) : null,
+        );
+        setSideExcludedTurnCount(
+          hist.ephemeral ? (hist.excludedTurnCount ?? 0) : 0,
+        );
+        if (hist.ephemeral && persistClientState) {
+          saveEphemeralSessionMeta(
+            resolvedSessionId,
+            hist.parentSessionId,
+            hist.excludedTurnCount ?? 0,
+          );
+        }
+        const canFocus =
+          !!messageId && restored.some((m) => m.id === messageId);
         setFocusMessageId(canFocus ? messageId! : null);
         setEmptyMode(null);
         setNav("chat");
@@ -1730,7 +1904,14 @@ export function useChatSession({
         setStatusDetail(String(e));
       }
     },
-    [applyRestoredHistory, currentRunIdRef, setNav, resetSchedulingSurface],
+    [
+      applyRestoredHistory,
+      currentRunIdRef,
+      setNav,
+      resetSchedulingSurface,
+      discardCurrentSide,
+      persistClientState,
+    ],
   );
 
   // ── Attach artifacts ──────────────────────────────────────────────────────
@@ -1742,20 +1923,28 @@ export function useChatSession({
 
       for (const f of usable) {
         try {
-          const dto = await invoke<{ name: string; mime: string; size: number; base64: string }>(
-            "read_file_base64",
-            { path: f.path },
-          );
+          const dto = await invoke<{
+            name: string;
+            mime: string;
+            size: number;
+            base64: string;
+          }>("read_file_base64", { path: f.path });
           const kind = kindFromMime(dto.mime, dto.name);
           const shouldInline =
             (kind === "image" && dto.size <= MAX_INLINE_BYTES) ||
             (kind === "file" &&
               dto.size <= 256 * 1024 &&
               (dto.mime.startsWith("text/") ||
-                /\.(txt|md|json|csv|xml|yaml|yml|toml|rs|ts|tsx|js|py|html|css)$/i.test(dto.name)));
+                /\.(txt|md|json|csv|xml|yaml|yml|toml|rs|ts|tsx|js|py|html|css)$/i.test(
+                  dto.name,
+                )));
           let previewUrl: string | undefined;
           if (kind === "image" || kind === "video") {
-            try { previewUrl = convertFileSrc(f.path); } catch { previewUrl = undefined; }
+            try {
+              previewUrl = convertFileSrc(f.path);
+            } catch {
+              previewUrl = undefined;
+            }
           }
           converted.push({
             id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1844,13 +2033,16 @@ export function useChatSession({
     tokenUsage,
     contextUsage,
     sessionId,
+    sessionEphemeral,
+    sideParentSessionId,
+    sideExcludedTurnCount,
     sessionPendingInterrupts,
     sessionReadOnly,
     sessionEndReason,
     currentTurnId,
+    completionCelebrationId,
     focusMessageId,
     isCompacting,
-    dissolvingIds,
     status,
     statusPhase,
     statusDetail,
@@ -1858,6 +2050,9 @@ export function useChatSession({
     chatRightOpen,
     chatRightTab,
     generatingPreview,
+    browserPreview,
+    controlBrowser,
+    applyBrowserResult,
     // setters needed by App
     setInput,
     setAttachments,
@@ -1866,6 +2061,7 @@ export function useChatSession({
     setChatRightTab,
     setFocusMessageId,
     setStatusDetail,
+    dismissBrowserPreview,
     // callbacks
     send,
     approveModeSwitch,
@@ -1882,18 +2078,13 @@ export function useChatSession({
     pauseStream,
     resumeStream,
     stopStream,
-    regenerateMessage,
     undoLastExchange,
-    retryLastAssistant,
     editUserMessage,
-    deleteMessage,
     branchMessage,
     runCompactSession,
     onUiAction,
     resetChatSurface,
     startNewChat,
-    startNewAgent,
-    skipAgentCreate,
     openSessionFromFilespace,
     attachArtifactsToChat,
     applyRestoredHistory,

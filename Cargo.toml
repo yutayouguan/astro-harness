@@ -1,8 +1,10 @@
 [workspace]
 members = [
     "crates/agent-types",
+    "crates/agent-db",
     "crates/agent-config",
     "crates/agent-protocol",
+    "crates/agent-realtime",
     "crates/agent-rollout",
     "crates/agent-home",
     "crates/agent-skills",
@@ -16,13 +18,14 @@ members = [
     "crates/agent-memory",
     "crates/agent-network-proxy",
     "crates/agent-sandbox",
-    "crates/agent-delegate",
     "crates/agent-subagents",
     "crates/agent-evolution",
     "crates/agent-cron",
     "crates/agent-workflow",
     "crates/agent-a2ui",
     "crates/agent-tools",
+    "crates/agent-extensions",
+    "crates/agent-delegate",
     "crates/agent-core",
     "crates/agent-server",
     "apps/desktop/src-tauri",
@@ -40,10 +43,15 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+quick-xml = "0.41"
 anyhow = "1"
 thiserror = "1"
 async-trait = "0.1"
 tracing = "0.1"
 schemars = "0.8"
 globset = "0.4"
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "macos-system-configuration"], default-features = false }
+base64 = "0.22"
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+url = "2"
+reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls", "macos-system-configuration"], default-features = false }
+rquickjs = { version = "0.12.2", features = ["futures"] }

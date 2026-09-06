@@ -31,7 +31,6 @@ use evolution::{
 };
 use home::default_memory_dir;
 use memory::DecisionKind;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -118,24 +117,35 @@ fn active_ui_provider() -> Result<UiProvider, String> {
     let state = providers_commands::get_providers_state()?;
     let id = state
         .active_provider_id
-        .or_else(|| state.providers.first().map(|p| p.id.clone()))
-        .ok_or_else(|| "请先在「模型提供商」中配置并启用至少一个提供商".to_string())?;
+        .filter(|id| {
+            state
+                .providers
+                .iter()
+                .any(|p| p.id == *id && p.enabled && p.supports_responses_api)
+        })
+        .or_else(|| {
+            state
+                .providers
+                .iter()
+                .find(|p| p.enabled && p.supports_responses_api)
+                .map(|p| p.id.clone())
+        })
+        .ok_or_else(|| "请先配置并启用支持 Responses API 的提供商".to_string())?;
     providers_commands::find_provider(&id)
 }
 
-fn active_primary_target() -> Result<types::ChatTarget, String> {
+fn active_primary_target() -> Result<types::ModelTarget, String> {
     let ui = active_ui_provider()?;
     if ui.model.trim().is_empty() {
         return Err("激活提供商未配置模型".into());
     }
     let (_has, _src, _env, key) = resolve_api_key(&ui);
-    Ok(types::ChatTarget {
+    Ok(types::ModelTarget {
         provider_id: ui.id,
         backend_id: ui.kind.backend_id().to_string(),
         model: ui.model,
         api_key: key.unwrap_or_default(),
         base_url: ui.endpoint,
-        api_mode: ui.api_mode,
     })
 }
 
@@ -161,12 +171,8 @@ async fn complete_chat(
         previous_interaction_id: None,
         api_mode: String::new(),
     };
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
     let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+        providers::dispatch::agent_responses_prompt(&target.backend_id, system, user, &config)
             .await
             .map_err(|e| format!("进化调用模型失败: {e}"))?;
     let mut out = String::new();
@@ -207,7 +213,10 @@ async fn reflect_over_targets(
 }
 
 /// 为近期决策关联的会话构建精简 transcript（最多 3 个会话，各 ~1500 字符）。
-fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(String, String)> {
+async fn build_transcripts(
+    base: &Path,
+    decisions: &[memory::DecisionEntry],
+) -> Vec<(String, String)> {
     let mut session_ids: Vec<String> = Vec::new();
     for d in decisions {
         if let Some(sid) = d.session_id.as_deref().filter(|s| !s.is_empty()) {
@@ -222,24 +231,25 @@ fn build_transcripts(base: &Path, decisions: &[memory::DecisionEntry]) -> Vec<(S
     if session_ids.is_empty() {
         return Vec::new();
     }
-    let store = match session::SessionStore::open_sessions_dir(&base.join("sessions")) {
+    let store = match session::SessionStore::open_sessions_dir(&home::data_dir(base)).await {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
     let mut out = Vec::new();
     for sid in session_ids {
-        let Ok(msgs) = store.get_messages(&sid) else {
+        let Ok(msgs) = store.get_response_items(&sid).await else {
             continue;
         };
         let start = msgs.len().saturating_sub(10);
         let mut text = String::new();
         for m in &msgs[start..] {
-            let content = m.content.as_deref().unwrap_or("").trim();
+            let content = m.text();
+            let content = content.trim();
             if content.is_empty() {
                 continue;
             }
             let clipped: String = content.chars().take(300).collect();
-            text.push_str(&format!("{}: {}\n", m.role, clipped));
+            text.push_str(&format!("{}: {}\n", m.role().unwrap_or("unknown"), clipped));
             if text.len() > 1500 {
                 text.push_str("…(截断)\n");
                 break;
@@ -273,19 +283,21 @@ fn truncate_task(text: &str, max_chars: usize) -> String {
     }
 }
 
-fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
-    let msgs = store.get_messages(session_id).ok()?;
+async fn session_user_task(store: &session::SessionStore, session_id: &str) -> Option<String> {
+    let msgs = store.get_response_items(session_id).await.ok()?;
     for m in msgs {
-        if m.role != "user" {
+        if m.role() != Some("user") {
             continue;
         }
-        let content = m.content.as_deref()?.trim();
+        let content = m.text();
+        let content = content.trim();
         if !content.is_empty() {
             return Some(truncate_task(content, 500));
         }
     }
     store
         .get_session(session_id)
+        .await
         .ok()
         .flatten()
         .and_then(|s| s.title)
@@ -321,7 +333,7 @@ async fn run_evolution_core(
 
     let decisions = memory::list_recent_decisions(&base, 20).unwrap_or_default();
     let enabled_skills = skills::list_enabled_for_prompt();
-    let transcripts = build_transcripts(&base, &decisions);
+    let transcripts = build_transcripts(&base, &decisions).await;
     let input = ReflectionInput {
         decisions,
         enabled_skills,
@@ -887,7 +899,7 @@ pub async fn run_evolution_search(
     let curator_report = load_curator_last(&base);
     // [P3] 准备 known_skill_ids（用于信号提取）
     let known_skill_ids: Vec<String> = enabled_skills.iter().map(|(n, _)| n.clone()).collect();
-    let transcripts = build_transcripts(&base, &decisions);
+    let transcripts = build_transcripts(&base, &decisions).await;
     let seed_user = build_reflection_user_prompt(&ReflectionInput {
         decisions: decisions.clone(), // [P3] 保留 decisions 所有权用于后续 detect_opportunities
         enabled_skills: enabled_skills.clone(),
@@ -1783,7 +1795,7 @@ pub struct EvalImportCandidateDto {
     pub fail_count: usize,
 }
 
-fn collect_eval_import_candidates(
+async fn collect_eval_import_candidates(
     base: &Path,
     limit: usize,
 ) -> Result<Vec<EvalImportCandidateDto>, String> {
@@ -1795,7 +1807,8 @@ fn collect_eval_import_candidates(
         .filter_map(|e| e.source_session.clone())
         .collect();
 
-    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+    let store = session::SessionStore::open_sessions_dir(&home::data_dir(base))
+        .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
 
     let mut by_session: HashMap<String, Vec<String>> = HashMap::new();
@@ -1826,7 +1839,7 @@ fn collect_eval_import_candidates(
     for (session_id, mut expectations) in by_session {
         expectations.sort();
         expectations.dedup();
-        let Some(task) = session_user_task(&store, &session_id) else {
+        let Some(task) = session_user_task(&store, &session_id).await else {
             continue;
         };
         let fail_count = expectations.len();
@@ -1854,7 +1867,7 @@ pub async fn list_eval_import_candidates(
     limit: Option<u32>,
 ) -> Result<Vec<EvalImportCandidateDto>, String> {
     let base = default_memory_dir();
-    collect_eval_import_candidates(&base, limit.unwrap_or(12) as usize)
+    collect_eval_import_candidates(&base, limit.unwrap_or(12) as usize).await
 }
 
 /// 从指定会话导入一条失败评测例。
@@ -1876,9 +1889,11 @@ pub async fn import_eval_from_session(
         return Err("该会话已导入评测集".into());
     }
 
-    let store = session::SessionStore::open_sessions_dir(&base.join("sessions"))
+    let store = session::SessionStore::open_sessions_dir(&home::data_dir(&base))
+        .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
     let task = session_user_task(&store, &session_id)
+        .await
         .ok_or_else(|| "无法从会话提取任务文本".to_string())?;
 
     let decisions = memory::list_recent_decisions(&base, 200)
@@ -2321,7 +2336,8 @@ pub async fn approve_evolution_proposal_to_branch(id: String) -> Result<String, 
         .find(|c| c.id == id)
         .ok_or_else(|| format!("提案不存在: {id}"))?;
 
-    let skills_dir = skills::install::agent_skills_dir(None).map_err(|e| e.to_string())?;
+    let skills_dir =
+        skills::install::agent_workspace_skills_dir(None).map_err(|e| e.to_string())?;
     let repo = git_root(&skills_dir)
         .ok_or_else(|| "技能目录不在 git 仓库中，无法开分支（可用普通「批准写入」）".to_string())?;
 

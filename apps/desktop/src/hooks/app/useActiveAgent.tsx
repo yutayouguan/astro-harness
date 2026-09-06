@@ -11,10 +11,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAgentsChanged } from "../../lib/agent/agentsChanged";
-import {
-  normalizeAgentId,
-  type AgentInfo,
-} from "../../types/agent";
+import { normalizeAgentId, type AgentInfo } from "../../types/agent";
 
 type AppConfigSlice = {
   active_agent_id: string;
@@ -98,32 +95,35 @@ export function ActiveAgentProvider({ children }: { children: ReactNode }) {
     })();
   });
 
-  const setActiveAgent = useCallback(async (agentId: string) => {
-    const next = normalizeAgentId(agentId);
-    if (next === activeAgentId && agents.some((a) => a.id === next)) {
-      return next;
-    }
-    const prevId = activeAgentId;
-    const prevAgents = agents;
-    const prevDir = workspaceDir;
-    setActiveAgentId(next);
-    if (!isTauri()) return next;
+  const setActiveAgent = useCallback(
+    async (agentId: string) => {
+      const next = normalizeAgentId(agentId);
+      if (next === activeAgentId && agents.some((a) => a.id === next)) {
+        return next;
+      }
+      const prevId = activeAgentId;
+      const prevAgents = agents;
+      const prevDir = workspaceDir;
+      setActiveAgentId(next);
+      if (!isTauri()) return next;
 
-    switchingRef.current = true;
-    try {
-      const cfg = await invoke<AppConfigSlice>("set_active_agent", {
-        agentId: next,
-      });
-      return applyConfig(cfg, setAgents, setActiveAgentId, setWorkspaceDir);
-    } catch (e) {
-      setActiveAgentId(prevId);
-      setAgents(prevAgents);
-      setWorkspaceDir(prevDir);
-      throw e;
-    } finally {
-      switchingRef.current = false;
-    }
-  }, [activeAgentId, agents, workspaceDir]);
+      switchingRef.current = true;
+      try {
+        const cfg = await invoke<AppConfigSlice>("set_active_agent", {
+          agentId: next,
+        });
+        return applyConfig(cfg, setAgents, setActiveAgentId, setWorkspaceDir);
+      } catch (e) {
+        setActiveAgentId(prevId);
+        setAgents(prevAgents);
+        setWorkspaceDir(prevDir);
+        throw e;
+      } finally {
+        switchingRef.current = false;
+      }
+    },
+    [activeAgentId, agents, workspaceDir],
+  );
 
   const value = useMemo(
     () => ({
@@ -134,14 +134,7 @@ export function ActiveAgentProvider({ children }: { children: ReactNode }) {
       refreshAgents,
       setActiveAgent,
     }),
-    [
-      agents,
-      activeAgentId,
-      workspaceDir,
-      ready,
-      refreshAgents,
-      setActiveAgent,
-    ],
+    [agents, activeAgentId, workspaceDir, ready, refreshAgents, setActiveAgent],
   );
 
   return (

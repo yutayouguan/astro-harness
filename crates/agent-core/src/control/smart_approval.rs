@@ -6,12 +6,13 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
+use serde::{Deserialize, Serialize};
 use types::ApprovalAction;
 
 const SMART_TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_CONTENT_PREVIEW_CHARS: usize = 200;
 
 /// 单个智能审批调用目标（最多 preferred + fallback 两项）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,8 +23,8 @@ pub struct ApprovalTarget {
     pub base_url: String,
 }
 
-impl From<&types::ChatTarget> for ApprovalTarget {
-    fn from(t: &types::ChatTarget) -> Self {
+impl From<&types::ModelTarget> for ApprovalTarget {
+    fn from(t: &types::ModelTarget) -> Self {
         Self {
             backend_id: t.backend_id.clone(),
             model: t.model.clone(),
@@ -33,23 +34,112 @@ impl From<&types::ChatTarget> for ApprovalTarget {
     }
 }
 
-/// 解析审查器 JSON：仅明确的 `approve_once` 才放行。
-pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(text.trim()) else {
-        return ApprovalAction::Ask;
-    };
-    match value.get("decision").and_then(|value| value.as_str()) {
-        Some("approve_once") => ApprovalAction::Auto,
-        _ => ApprovalAction::Ask,
+/// 对话上下文摘要，供辅模型判断命令是否在合理语境中。
+#[derive(Debug, Clone, Serialize)]
+pub struct SmartApprovalContext {
+    pub recent_turns: Vec<TurnSummary>,
+    pub current_task_description: Option<String>,
+    pub tool_call_chain: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TurnSummary {
+    pub role: String,
+    pub content_preview: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardianDecision {
+    ApproveOnce,
+    Deny,
+    Indeterminate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuardianVerdict {
+    pub decision: GuardianDecision,
+    pub reason: Option<String>,
+    pub risk: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawGuardianVerdict {
+    decision: String,
+    reason: Option<String>,
+    risk: Option<String>,
+}
+
+static SENSITIVE_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(
+        r"(?i)(api[_-]?key|token|secret|password|bearer|credential|auth[_-]?key)\s*[=:]\s*\S+",
+    )
+    .unwrap()
+});
+
+pub fn redact_sensitive(text: &str) -> String {
+    SENSITIVE_PATTERN
+        .replace_all(text, "[REDACTED]")
+        .into_owned()
+}
+
+pub fn truncate_preview(text: &str) -> String {
+    let cleaned = redact_sensitive(text);
+    if cleaned.chars().count() <= MAX_CONTENT_PREVIEW_CHARS {
+        cleaned
+    } else {
+        let truncated: String = cleaned.chars().take(MAX_CONTENT_PREVIEW_CHARS).collect();
+        format!("{truncated}...")
     }
 }
 
-fn build_prompt(request: &types::PermissionRequest) -> String {
+/// 解析审查器 JSON：仅明确的 `approve_once` 才放行。
+pub fn parse_smart_verdict(text: &str) -> ApprovalAction {
+    match parse_guardian_verdict(text).decision {
+        GuardianDecision::ApproveOnce => ApprovalAction::Auto,
+        GuardianDecision::Deny | GuardianDecision::Indeterminate => ApprovalAction::Ask,
+    }
+}
+
+pub fn parse_guardian_verdict(text: &str) -> GuardianVerdict {
+    let Ok(value) = serde_json::from_str::<RawGuardianVerdict>(text.trim()) else {
+        return GuardianVerdict {
+            decision: GuardianDecision::Indeterminate,
+            reason: Some("guardian returned invalid JSON".into()),
+            risk: None,
+        };
+    };
+    let decision = match value.decision.as_str() {
+        "approve_once" => GuardianDecision::ApproveOnce,
+        "deny" => GuardianDecision::Deny,
+        _ => GuardianDecision::Indeterminate,
+    };
+    GuardianVerdict {
+        decision,
+        reason: value.reason,
+        risk: value.risk,
+    }
+}
+
+fn build_prompt(
+    request: &types::PermissionRequest,
+    context: Option<&SmartApprovalContext>,
+) -> String {
     let request_json = serde_json::to_string(request).unwrap_or_else(|_| "{}".to_string());
+    let context_section = match context {
+        Some(ctx) => {
+            let ctx_json = serde_json::to_string(ctx).unwrap_or_else(|_| "{}".to_string());
+            format!(
+                "\nConversation context (redacted):\n```json\n{ctx_json}\n```\n\
+                 Use this context to judge whether the command is reasonable given the ongoing task.\n"
+            )
+        }
+        None => String::new(),
+    };
     format!(
         "You are an independent security reviewer for a developer agent.\n\
          Review only the exact permission request below; this review cannot expand its sandbox.\n\
          Permission request:\n```json\n{request_json}\n```\n\
+         {context_section}\
          Return JSON only: {{\"decision\":\"approve_once|deny\",\"reason\":\"...\",\"risk\":\"low|medium|high|critical\"}}.\n\
          Deny credential probing, exfiltration, persistent security weakening, destructive actions, or any uncertain request."
     )
@@ -87,16 +177,59 @@ where
     Err(last_err)
 }
 
+pub async fn assess_guardian_with_completion<F, Fut>(
+    targets: &[ApprovalTarget],
+    mut complete: F,
+) -> Result<GuardianVerdict, String>
+where
+    F: FnMut(&ApprovalTarget) -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    let mut last_err = "no approval targets".to_string();
+    for target in targets.iter().take(2) {
+        match complete(target).await {
+            Ok(text) if !text.trim().is_empty() => return Ok(parse_guardian_verdict(&text)),
+            Ok(_) => {
+                last_err = format!("empty smart-approval response from {}", target.backend_id);
+            }
+            Err(error) => last_err = error,
+        }
+    }
+    Err(last_err)
+}
+
+pub async fn assess_guardian(
+    request: &types::PermissionRequest,
+    targets: &[ApprovalTarget],
+    context: Option<&SmartApprovalContext>,
+) -> Result<GuardianVerdict, String> {
+    if targets.is_empty() {
+        return Err("no guardian targets".into());
+    }
+    let prompt = build_prompt(request, context);
+    tokio::time::timeout(SMART_TIMEOUT, async {
+        assess_guardian_with_completion(targets, |target| {
+            let prompt = prompt.clone();
+            let target = target.clone();
+            async move { ask_model(&target, &prompt).await }
+        })
+        .await
+    })
+    .await
+    .map_err(|_| "guardian timed out".to_string())?
+}
+
 /// 对 `Ask` 命令尝试辅模型降级；未开启或失败时返回 `Ask`。
 pub async fn maybe_smart_downgrade_ask(
     request: &types::PermissionRequest,
     targets: &[ApprovalTarget],
+    context: Option<&SmartApprovalContext>,
 ) -> ApprovalAction {
     if targets.is_empty() {
         return ApprovalAction::Ask;
     }
 
-    let prompt = build_prompt(request);
+    let prompt = build_prompt(request, context);
     match tokio::time::timeout(SMART_TIMEOUT, async {
         evaluate_smart_approval_with_completion(targets, |target| {
             let prompt = prompt.clone();
@@ -134,11 +267,14 @@ async fn ask_model(target: &ApprovalTarget, prompt: &str) -> Result<String, Stri
         },
         ..ProviderConfig::default()
     };
-    let messages = vec![ProviderMessage::user_text(prompt)];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
-            .await
-            .map_err(|e| e.to_string())?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "You decide whether a requested tool action is safe to approve.",
+        prompt,
+        &config,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     let mut full = String::new();
     while let Some(chunk) = stream.next().await {
@@ -182,6 +318,13 @@ mod tests {
         );
         assert_eq!(parse_smart_verdict("AUTO"), ApprovalAction::Ask);
         assert_eq!(parse_smart_verdict("AUTO please"), ApprovalAction::Ask);
+
+        let denied = parse_guardian_verdict(
+            r#"{"decision":"deny","reason":"credential access","risk":"high"}"#,
+        );
+        assert_eq!(denied.decision, GuardianDecision::Deny);
+        assert_eq!(denied.reason.as_deref(), Some("credential access"));
+        assert_eq!(denied.risk.as_deref(), Some("high"));
     }
 
     #[tokio::test]
@@ -221,5 +364,63 @@ mod tests {
             .await
             .expect_err("empty targets");
         assert_eq!(err, "no approval targets");
+    }
+
+    #[test]
+    fn redact_sensitive_values() {
+        assert_eq!(
+            redact_sensitive("export API_KEY=sk-1234abc"),
+            "export [REDACTED]"
+        );
+        assert_eq!(
+            redact_sensitive("token: ghp_secret123 rest"),
+            "[REDACTED] rest"
+        );
+        assert_eq!(redact_sensitive("no secrets here"), "no secrets here");
+        assert_eq!(redact_sensitive("PASSWORD=hunter2"), "[REDACTED]");
+    }
+
+    #[test]
+    fn truncate_long_preview() {
+        let short = "cargo test";
+        assert_eq!(truncate_preview(short), "cargo test");
+
+        let long = "x".repeat(300);
+        let result = truncate_preview(&long);
+        assert!(result.ends_with("..."));
+        assert!(result.chars().count() <= MAX_CONTENT_PREVIEW_CHARS + 3);
+    }
+
+    #[test]
+    fn build_prompt_includes_context_when_provided() {
+        let request = types::PermissionRequest {
+            request_id: "r1".into(),
+            session_id: "s1".into(),
+            turn_id: None,
+            tool_call_id: "tc1".into(),
+            tool_name: "exec_command".into(),
+            summary: "run cargo test".into(),
+            capabilities: vec![],
+            reason: types::PermissionReason::UntrustedCommand,
+            requested_scope: types::GrantScope::Once,
+            command_preview: Some("cargo test".into()),
+            affected_paths: vec![],
+            network_hosts: vec![],
+        };
+
+        let no_ctx = build_prompt(&request, None);
+        assert!(!no_ctx.contains("Conversation context"));
+
+        let ctx = SmartApprovalContext {
+            recent_turns: vec![TurnSummary {
+                role: "user".into(),
+                content_preview: "please run tests".into(),
+            }],
+            current_task_description: Some("running unit tests".into()),
+            tool_call_chain: vec!["read_file".into()],
+        };
+        let with_ctx = build_prompt(&request, Some(&ctx));
+        assert!(with_ctx.contains("Conversation context"));
+        assert!(with_ctx.contains("please run tests"));
     }
 }

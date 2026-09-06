@@ -1,5 +1,7 @@
 # Astro 统一配置系统详细设计
 
+> **Harness 定位（2026-09-04）**：配置是 Harness 的输入，不是可在 step 中任意变化的全局变量。Thread 设置、model context、interaction mode、tool gates、MCP、Extension 和 project trust 需在 turn/step 边界捕获快照。Astro 配置仅从 `~/.astro` 和可信项目 `.astro` 加载，不读取 `.codex` 作为运行配置。
+
 > 状态：已实现。Astro 对齐 Codex 的分层、项目发现、信任门控、来源追踪和请求快照语义，
 > 但使用 Astro 自有路径 `.astro/config.toml`，不会读取 `.codex`。
 
@@ -97,7 +99,40 @@ Desktop 配置编辑器只读写 `~/.astro/config.toml`。运行时再叠加可�
 只标识连接 Hub 和运行状态，不选择另一份配置文件。自定义角色的 MCP 覆盖来自角色 TOML。
 发现缓存只回写全局层已显式定义的 server，不会把系统或项目 server 摊平到用户层。
 
-## 6. Profile 与临时覆盖
+## 6. Runtime 权限与受管网络
+
+Agent runtime 的权限选择保存在对应 Agent 目录的 `config.yaml`，使用三个正交维度：
+
+```yaml
+approval_policy: on-request       # on-request | never
+approvals_reviewer: auto_review   # user | auto_review
+permissions:
+  default_profile: project-net
+  profiles:
+    project-net:
+      extends: ":workspace"
+      network:
+        enabled: true
+        domains:
+          api.example.com: allow
+        header_injections:
+          - host: api.example.com
+            methods: [POST]
+            path_prefixes: [/console/v1]
+            headers:
+              x-managed-source: managed-value
+network_proxy:
+  enabled: true
+```
+
+- `approvals_reviewer = user` 不调用 SmartApproval；`auto_review` 只允许明确
+  `approve_once` 自动放行。
+- Full Access 跳过普通审查，但不能绕过 hardline deny、结构化用户输入或取消状态。
+- profile/reviewer 在 active turn 切换后，后续 attempt 立即读取新值。
+- `header_injections` 是 managed requirement；Debug 只显示 header 名，不显示值。当前
+  HTTP CONNECT 代理看不到 TLS method/path，因此只携带规则，不执行 HTTPS 注入。
+
+## 7. Profile 与临时覆盖
 
 profile 必须由调用方显式选择，只允许字母、数字、`-`、`_`，对应
 `~/.astro/<profile>.config.toml`。缺失 profile 直接失败。旧 `[profiles.*]` 与新独立
@@ -106,7 +141,7 @@ profile 文件同名时直接报冲突，不进行双轨合并。
 session/request overrides 是内存层，不落盘；request 高于 session。它们同样进入来源追踪
 和有效版本计算。
 
-## 7. 与 Codex 的关系
+## 8. 与 Codex 的关系
 
 Codex 官方路径是 `~/.codex/config.toml` 与可信项目 `.codex/config.toml`。Astro 采用相同
 的关键语义，但选择 `.astro` 命名空间，避免两个产品互相执行对方的脚本、MCP 或项目配置。

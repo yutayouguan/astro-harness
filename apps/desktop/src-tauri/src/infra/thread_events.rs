@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
 use agent_protocol::TurnItem;
@@ -20,8 +20,37 @@ use crate::commands::chat::{
 
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
 const SESSION_EVENT: &str = "session_event";
+const SESSION_STATUS_CHANGED_EVENT: &str = "session_status_changed";
+const REALTIME_CONVERSATION_EVENT: &str = "realtime_conversation_event";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const PROVISIONAL_EVENT_BUFFER_CAPACITY: usize = 128;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionStatusChangedDto {
+    pub session_id: String,
+    /// `idle` | `active` | `systemError`
+    pub status: String,
+    /// Active-only flags: `waitingOnApproval` | `waitingOnUserInput`.
+    pub active_flags: Vec<String>,
+    pub error: Option<String>,
+    pub ts_ms: i64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RealtimeConversationEventDto {
+    session_id: String,
+    kind: String,
+    payload: serde_json::Value,
+}
+
+fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>
+{
+    static REGISTRY: OnceLock<std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>> =
+        OnceLock::new();
+    REGISTRY.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,6 +140,26 @@ where
     let _ = app.emit(SESSION_EVENT, event);
 }
 
+pub(crate) fn emit_session_status(
+    app: &AppHandle,
+    session_id: impl Into<String>,
+    status: &str,
+    active_flags: Vec<String>,
+    error: Option<String>,
+) {
+    let changed = SessionStatusChangedDto {
+        session_id: session_id.into(),
+        status: status.into(),
+        active_flags,
+        error,
+        ts_ms: now_ts_ms(),
+    };
+    if let Ok(mut statuses) = session_status_registry().lock() {
+        statuses.insert(changed.session_id.clone(), changed.clone());
+    }
+    let _ = app.emit(SESSION_STATUS_CHANGED_EVENT, changed);
+}
+
 #[derive(Default)]
 struct ActiveState {
     threads: HashSet<String>,
@@ -125,6 +174,7 @@ struct ActiveState {
     provisional_delivery_pending: HashSet<(String, u64)>,
     delivered_agent_text: HashMap<String, HashMap<String, String>>,
     delivered_reasoning: HashMap<String, HashMap<String, String>>,
+    delivered_async_messages: HashMap<String, HashSet<String>>,
     pending_terminal_errors: HashMap<String, HashMap<String, String>>,
     delivered_extensions: HashMap<(String, String), String>,
     next_activation: u64,
@@ -807,6 +857,13 @@ impl ThreadEventsBridge {
                     .entry(turn_id.into())
                     .or_default()
                     .push_str(content),
+                ChatStreamEvent::AsyncMessage { id, .. } => {
+                    state
+                        .delivered_async_messages
+                        .entry(thread_id.into())
+                        .or_default()
+                        .insert(id.clone());
+                }
                 ChatStreamEvent::Error { message } => {
                     state
                         .pending_terminal_errors
@@ -865,6 +922,24 @@ impl ThreadEventsBridge {
                     } else {
                         *delivered = content.clone();
                         recovered.push(ChatStreamEvent::ReasoningReconcile { content });
+                    }
+                }
+                ChatStreamEvent::AsyncMessage {
+                    id,
+                    content,
+                    questions,
+                } => {
+                    if state
+                        .delivered_async_messages
+                        .entry(thread_id.into())
+                        .or_default()
+                        .insert(id.clone())
+                    {
+                        recovered.push(ChatStreamEvent::AsyncMessage {
+                            id,
+                            content,
+                            questions,
+                        });
                     }
                 }
                 other => recovered.push(other),
@@ -1119,6 +1194,7 @@ impl ThreadEventsBridge {
         state.completed_background_turns.remove(thread_id);
         state.delivered_agent_text.remove(thread_id);
         state.delivered_reasoning.remove(thread_id);
+        state.delivered_async_messages.remove(thread_id);
         state.pending_terminal_errors.remove(thread_id);
     }
 
@@ -1632,6 +1708,21 @@ async fn subscribe_connection(
                     continue;
                 }
                 let reconciled = reconcile_snapshot(&snapshot);
+                if reconciled.keep_active && reconciled.active_turn_id.is_some() {
+                    emit_session_status(app, &thread_id, "active", Vec::new(), None);
+                } else if let Some(turn_id) = reconciled.terminal_turn_id.as_deref() {
+                    let terminal_turn = snapshot.turns.iter().find(|turn| turn.id == turn_id);
+                    let failed = terminal_turn.is_some_and(|turn| turn.status == "failed");
+                    emit_session_status(
+                        app,
+                        &thread_id,
+                        if failed { "systemError" } else { "idle" },
+                        Vec::new(),
+                        terminal_turn
+                            .and_then(|turn| turn.error.as_ref())
+                            .map(|error| error.message.clone()),
+                    );
+                }
                 if let Some(turn_id) = reconciled.active_turn_id.as_deref() {
                     bridge.bind_observed_turn(&thread_id, turn_id).await;
                 }
@@ -1703,6 +1794,21 @@ async fn process_live_event(
 ) {
     let thread_id = event.thread_id.clone();
     let turn_id = event.turn_id.clone();
+    if let Some(proto::thread_event::Payload::Realtime(realtime)) = event.payload.as_ref() {
+        let payload = serde_json::from_str(&realtime.payload_json).unwrap_or_else(
+            |error| serde_json::json!({ "serialization_error": error.to_string() }),
+        );
+        let _ = app.emit(
+            REALTIME_CONVERSATION_EVENT,
+            RealtimeConversationEventDto {
+                session_id: thread_id,
+                kind: realtime.kind.clone(),
+                payload,
+            },
+        );
+        return;
+    }
+    emit_status_for_thread_event(app, &thread_id, event.payload.as_ref());
     let is_extension = matches!(
         event.payload.as_ref(),
         Some(proto::thread_event::Payload::Extension(_))
@@ -1750,6 +1856,54 @@ async fn process_live_event(
         Vec::new()
     };
     emit_chat_events(app, &thread_id, events);
+}
+
+fn emit_status_for_thread_event(
+    app: &AppHandle,
+    thread_id: &str,
+    payload: Option<&proto::thread_event::Payload>,
+) {
+    use proto::thread_event::Payload;
+
+    match payload {
+        Some(Payload::TurnStarted(_)) => {
+            emit_session_status(app, thread_id, "active", Vec::new(), None);
+        }
+        Some(Payload::ControlRequest(control))
+            if matches!(
+                control.kind.as_str(),
+                "exec_approval"
+                    | "apply_patch_approval"
+                    | "request_permissions"
+                    | "request_user_input"
+                    | "elicitation"
+            ) =>
+        {
+            let flag = if control.kind == "request_user_input" || control.kind == "elicitation" {
+                "waitingOnUserInput"
+            } else {
+                "waitingOnApproval"
+            };
+            emit_session_status(app, thread_id, "active", vec![flag.into()], None);
+        }
+        Some(Payload::TurnComplete(complete)) => {
+            emit_session_status(
+                app,
+                thread_id,
+                if complete.has_error {
+                    "systemError"
+                } else {
+                    "idle"
+                },
+                Vec::new(),
+                complete.error.as_ref().map(|error| error.message.clone()),
+            );
+        }
+        Some(Payload::TurnAborted(_)) => {
+            emit_session_status(app, thread_id, "idle", Vec::new(), None);
+        }
+        _ => {}
+    }
 }
 
 enum ReconnectDelivery {
@@ -1816,18 +1970,38 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         Some(Payload::ReasoningDelta(delta)) => {
             vec![ChatStreamEvent::Reasoning { content: delta.delta }]
         }
-        Some(Payload::PlanDelta(delta)) => vec![activity(delta.item_id, "plan_delta", delta.delta)],
-        Some(Payload::ExecOutputDelta(delta)) => {
-            vec![activity(delta.item_id, "exec_output_delta", delta.delta)]
-        }
-        Some(Payload::PatchDelta(delta)) => {
-            vec![activity(delta.item_id, "patch_delta", delta.delta)]
-        }
+        Some(Payload::PlanDelta(delta))
+        | Some(Payload::ExecOutputDelta(delta))
+        | Some(Payload::PatchDelta(delta)) => map_output_delta(delta),
         Some(Payload::ControlRequest(control)) => map_control_request(turn_id, control),
         Some(Payload::TokenCount(tokens)) => vec![ChatStreamEvent::Usage {
-            prompt_tokens: tokens.input_tokens.min(u32::MAX.into()) as u32,
+            prompt_tokens: (if tokens.input_tokens_include_cache {
+                tokens.input_tokens
+            } else {
+                tokens
+                    .input_tokens
+                    .saturating_add(tokens.cache_read_tokens)
+                    .saturating_add(tokens.cache_write_tokens)
+            })
+            .min(u32::MAX.into()) as u32,
+            uncached_input_tokens: (if tokens.input_tokens_include_cache {
+                tokens.uncached_input_tokens
+            } else {
+                tokens.input_tokens
+            })
+            .min(u32::MAX.into()) as u32,
             completion_tokens: tokens.output_tokens.min(u32::MAX.into()) as u32,
             total_tokens: tokens.total_tokens.min(u32::MAX.into()) as u32,
+            cache_read_tokens: tokens.cache_read_tokens.min(u32::MAX.into()) as u32,
+            cache_write_tokens: tokens.cache_write_tokens.min(u32::MAX.into()) as u32,
+            reasoning_tokens: tokens.reasoning_tokens.min(u32::MAX.into()) as u32,
+            request_count: tokens.request_count.min(u32::MAX.into()) as u32,
+            provider_total_tokens: tokens
+                .provider_total_tokens_reported
+                .then_some(tokens.provider_total_tokens.min(u32::MAX.into()) as u32),
+            cache_read_reported: tokens.cache_read_reported,
+            cache_write_reported: tokens.cache_write_reported,
+            reasoning_reported: tokens.reasoning_reported,
         }],
         Some(Payload::Error(error)) => vec![ChatStreamEvent::Error {
             message: error.message,
@@ -1860,6 +2034,7 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
             serde_json::json!([{"id":"","reason":aborted.reason,"message":"","tool_call_id":"","response_schema_json":"","expires_at":"","metadata_json":""}]).to_string(),
         ),
         Some(Payload::Extension(extension)) => map_extension_to_chat(extension),
+        Some(Payload::Realtime(_)) => Vec::new(),
         Some(Payload::ShutdownComplete(_)) => vec![activity(
             turn_id,
             "shutdown_complete",
@@ -1886,6 +2061,13 @@ fn terminal_events(
     ]
 }
 
+fn map_output_delta(delta: proto::ThreadDelta) -> Vec<ChatStreamEvent> {
+    vec![ChatStreamEvent::ToolOutputDelta {
+        id: delta.item_id,
+        delta: delta.delta,
+    }]
+}
+
 fn activity(
     message_id: impl Into<String>,
     activity_type: &str,
@@ -1905,6 +2087,9 @@ fn map_control_request(
 ) -> Vec<ChatStreamEvent> {
     let payload = serde_json::from_str::<serde_json::Value>(&control.payload_json)
         .unwrap_or(serde_json::Value::Null);
+    let elicitation = (control.kind == "elicitation")
+        .then(|| payload.get("request"))
+        .flatten();
     if control.kind == "dynamic_tool_call" {
         return vec![ChatStreamEvent::ToolCallDelta {
             index: payload
@@ -1948,9 +2133,9 @@ fn map_control_request(
         interrupts_json: serde_json::json!([{
             "id": control.request_id,
             "reason": payload.get("reason").and_then(serde_json::Value::as_str).unwrap_or(&control.kind),
-            "message": payload.get("message").and_then(serde_json::Value::as_str).unwrap_or_default(),
+            "message": elicitation.and_then(|request| request.get("message")).and_then(serde_json::Value::as_str).or_else(|| payload.get("message").and_then(serde_json::Value::as_str)).unwrap_or_default(),
             "tool_call_id": control.item_id,
-            "response_schema_json": payload.get("response_schema").cloned().unwrap_or_default().to_string(),
+            "response_schema_json": elicitation.and_then(|request| request.get("requestedSchema")).cloned().or_else(|| payload.get("response_schema").cloned()).unwrap_or_default().to_string(),
             "expires_at": payload.get("expires_at").and_then(serde_json::Value::as_str).unwrap_or_default(),
             "metadata_json": serde_json::json!({"kind":control.kind,"operations":payload.get("operations").cloned().unwrap_or_default(),"payload":payload}).to_string(),
         }])
@@ -1983,12 +2168,39 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
                     other => other.to_string(),
                 })
                 .unwrap_or_default(),
-            phase: if started { "started" } else { "completed" }.into(),
+            phase: if started {
+                "started"
+            } else {
+                match tool.status {
+                    agent_protocol::ToolStatus::InProgress => "started",
+                    agent_protocol::ToolStatus::Completed => "completed",
+                    agent_protocol::ToolStatus::Failed => "failed",
+                    agent_protocol::ToolStatus::Declined => "declined",
+                    agent_protocol::ToolStatus::Interrupted => "interrupted",
+                }
+            }
+            .into(),
+            batch_id: tool.batch_id,
+            execution_mode: tool.execution_mode.map(|mode| match mode {
+                agent_protocol::ToolExecutionMode::Serial => "serial".into(),
+                agent_protocol::ToolExecutionMode::Parallel => "parallel".into(),
+            }),
             media: tool.media.into_iter().map(media_asset_dto).collect(),
+            file_changes: tool.file_changes,
         }],
-        Ok(TurnItem::AgentMessage(text)) if started => {
+        Ok(TurnItem::AgentMessage(message))
+            if !started
+                && message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+        {
+            vec![ChatStreamEvent::AsyncMessage {
+                id: message.id,
+                content: message.content,
+                questions: message.questions,
+            }]
+        }
+        Ok(TurnItem::AgentMessage(message)) if started && message.delivery.is_none() => {
             vec![ChatStreamEvent::Token {
-                content: text.content,
+                content: message.content,
             }]
         }
         Ok(TurnItem::Reasoning(text)) if started => {
@@ -1997,9 +2209,25 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             }]
         }
         Ok(TurnItem::AgentMessage(_)) | Ok(TurnItem::Reasoning(_)) => Vec::new(),
-        Ok(TurnItem::HookPrompt(text)) => vec![ChatStreamEvent::Hook {
+        Ok(TurnItem::Plan(text)) => vec![ChatStreamEvent::ToolCall {
+            id: text.id,
+            name: "plan".into(),
+            arguments_json: String::new(),
+            result: text.content,
+            phase: if started { "started" } else { "completed" }.into(),
+            batch_id: None,
+            execution_mode: None,
+            media: Vec::new(),
+            file_changes: Vec::new(),
+        }],
+        Ok(TurnItem::HookPrompt(prompt)) => vec![ChatStreamEvent::Hook {
             name: "hook_prompt".into(),
-            detail: text.content,
+            detail: prompt
+                .fragments
+                .into_iter()
+                .map(|fragment| fragment.text)
+                .collect::<Vec<_>>()
+                .join("\n\n"),
             outcome: if started { "started" } else { "completed" }.into(),
         }],
         Ok(TurnItem::Extension(extension)) if extension.namespace == "astro.memory" => {
@@ -2096,9 +2324,21 @@ fn memory_update_from_payload(payload: MemoryExtensionPayload) -> ChatStreamEven
 
 fn context_usage_event(payload: &str) -> ChatStreamEvent {
     let value = serde_json::from_str::<serde_json::Value>(payload).unwrap_or_default();
+    let total_tokens = json_u32(&value, "total_tokens");
     ChatStreamEvent::ContextUsage {
         context_window: json_u32(&value, "context_window"),
-        total_tokens: json_u32(&value, "total_tokens"),
+        total_tokens,
+        estimated_total_tokens: value
+            .get("estimated_total_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .map(|number| number.min(u64::from(u32::MAX)) as u32)
+            .unwrap_or(total_tokens),
+        source: value
+            .get("source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("local_estimate")
+            .to_string(),
+        latest_usage: value.get("latest_usage").cloned(),
         segments: value
             .get("segments")
             .and_then(serde_json::Value::as_array)
@@ -2352,6 +2592,16 @@ fn snapshot_turn_recovery_events(turn: &proto::ThreadTurn) -> Vec<ChatStreamEven
     let mut item_reasoning = Vec::new();
     for item in &turn.items {
         match serde_json::from_str(&item.payload_json) {
+            Ok(TurnItem::AgentMessage(message))
+                if message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+            {
+                events.push(ChatStreamEvent::AsyncMessage {
+                    id: message.id,
+                    content: message.content,
+                    questions: message.questions,
+                });
+                continue;
+            }
             Ok(TurnItem::AgentMessage(message)) => {
                 item_agent_messages.push(message.content);
                 continue;
@@ -2438,6 +2688,10 @@ async fn recover_snapshot_extensions(
 struct ThreadSnapshotDto<'a> {
     thread_id: &'a str,
     status: &'a str,
+    provider_id: Option<&'a str>,
+    backend_id: Option<&'a str>,
+    model: Option<&'a str>,
+    reasoning_effort: Option<&'a str>,
     turns: Vec<ThreadTurnDto<'a>>,
     active_turn: Option<ThreadTurnDto<'a>>,
     has_active_turn: bool,
@@ -2497,6 +2751,10 @@ fn snapshot_dto(snapshot: &proto::ThreadSnapshot) -> ThreadSnapshotDto<'_> {
     ThreadSnapshotDto {
         thread_id: &snapshot.thread_id,
         status: &snapshot.status,
+        provider_id: snapshot.provider_id.as_deref(),
+        backend_id: snapshot.backend_id.as_deref(),
+        model: snapshot.model.as_deref(),
+        reasoning_effort: snapshot.reasoning_effort.as_deref(),
         turns: snapshot.turns.iter().map(turn_dto).collect(),
         active_turn: snapshot.active_turn.as_ref().map(turn_dto),
         has_active_turn: snapshot.has_active_turn,
@@ -2538,15 +2796,119 @@ mod tests {
         map_thread_event(terminal_event("session-1", turn_id))
     }
 
+    #[test]
+    fn token_count_projection_preserves_cache_reasoning_and_reporting_state() {
+        let projected = map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(proto::thread_event::Payload::TokenCount(
+                proto::ThreadTokenCount {
+                    input_tokens: 100,
+                    output_tokens: 25,
+                    total_tokens: 125,
+                    uncached_input_tokens: 60,
+                    cache_read_tokens: 40,
+                    cache_write_tokens: 0,
+                    reasoning_tokens: 20,
+                    request_count: 1,
+                    provider_total_tokens: 125,
+                    provider_total_tokens_reported: true,
+                    cache_read_reported: true,
+                    cache_write_reported: false,
+                    reasoning_reported: true,
+                    input_tokens_include_cache: true,
+                },
+            )),
+        });
+
+        assert!(matches!(
+            projected.as_slice(),
+            [ChatStreamEvent::Usage {
+                prompt_tokens: 100,
+                uncached_input_tokens: 60,
+                completion_tokens: 25,
+                total_tokens: 125,
+                cache_read_tokens: 40,
+                reasoning_tokens: 20,
+                provider_total_tokens: Some(125),
+                cache_read_reported: true,
+                reasoning_reported: true,
+                ..
+            }]
+        ));
+
+        let legacy = map_thread_event(proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-legacy".into(),
+            payload: Some(proto::thread_event::Payload::TokenCount(
+                proto::ThreadTokenCount {
+                    input_tokens: 60,
+                    output_tokens: 25,
+                    total_tokens: 125,
+                    cache_read_tokens: 40,
+                    ..Default::default()
+                },
+            )),
+        });
+        assert!(matches!(
+            legacy.as_slice(),
+            [ChatStreamEvent::Usage {
+                prompt_tokens: 100,
+                uncached_input_tokens: 60,
+                ..
+            }]
+        ));
+    }
+
+    #[test]
+    fn context_usage_projection_preserves_actual_source_and_breakdown() {
+        let projected = context_usage_event(
+            r#"{"context_window":128000,"total_tokens":125,"estimated_total_tokens":120,"source":"provider_reported","latest_usage":{"input_tokens":100,"output_tokens":25,"total_tokens":125},"segments":[],"updated_at":7}"#,
+        );
+
+        assert!(matches!(
+            projected,
+            ChatStreamEvent::ContextUsage {
+                total_tokens: 125,
+                estimated_total_tokens: 120,
+                ref source,
+                latest_usage: Some(_),
+                ..
+            } if source == "provider_reported"
+        ));
+    }
+
     fn agent_message_item(id: &str, content: &str) -> proto::ThreadItem {
         proto::ThreadItem {
             id: id.into(),
             item_type: "agent_message".into(),
             status: "completed".into(),
             payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                agent_protocol::TextItem {
+                agent_protocol::AgentMessageItem {
                     id: id.into(),
                     content: content.into(),
+                    delivery: None,
+                    questions: None,
+                },
+            ))
+            .unwrap(),
+        }
+    }
+
+    fn async_message_item(id: &str, content: &str) -> proto::ThreadItem {
+        proto::ThreadItem {
+            id: id.into(),
+            item_type: "agent_message".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::AgentMessage(
+                agent_protocol::AgentMessageItem {
+                    id: id.into(),
+                    content: content.into(),
+                    delivery: Some(agent_protocol::AgentMessageDelivery::Async),
+                    questions: Some(vec![agent_protocol::AsyncUserInputQuestion {
+                        title: "Choose a target".into(),
+                        options: Some(vec!["A".into(), "B".into()]),
+                    }]),
                 },
             ))
             .unwrap(),
@@ -2577,6 +2939,150 @@ mod tests {
             .unwrap_or_default()
     }
 
+    fn delta_event(payload: proto::thread_event::Payload) -> proto::ThreadEvent {
+        proto::ThreadEvent {
+            thread_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            payload: Some(payload),
+        }
+    }
+
+    #[test]
+    fn streaming_deltas_feed_the_tool_card_instead_of_a_surface() {
+        // 通用 activity 会被前端当成 a2ui surface，渲染成标题为事件名的空卡片。
+        let cases = [
+            proto::thread_event::Payload::ExecOutputDelta(proto::ThreadDelta {
+                item_id: "call-1".into(),
+                delta: "/tmp\n".into(),
+            }),
+            proto::thread_event::Payload::PlanDelta(proto::ThreadDelta {
+                item_id: "plan-1".into(),
+                delta: "1. inspect\n".into(),
+            }),
+            proto::thread_event::Payload::PatchDelta(proto::ThreadDelta {
+                item_id: "patch-1".into(),
+                delta: "--- a/foo\n+++ b/foo\n".into(),
+            }),
+        ];
+        let expected = [
+            ("call-1", "/tmp\n"),
+            ("plan-1", "1. inspect\n"),
+            ("patch-1", "--- a/foo\n+++ b/foo\n"),
+        ];
+        for (payload, (want_id, want_delta)) in cases.into_iter().zip(expected) {
+            let mapped = map_thread_event(delta_event(payload));
+            assert!(
+                matches!(
+                    mapped.as_slice(),
+                    [ChatStreamEvent::ToolOutputDelta { id, delta }]
+                        if id == want_id && delta == want_delta
+                ),
+                "{mapped:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn plan_item_opens_a_tool_card() {
+        let item = proto::ThreadItem {
+            id: "plan-1".into(),
+            item_type: "plan".into(),
+            status: "in_progress".into(),
+            payload_json: serde_json::to_string(&TurnItem::Plan(agent_protocol::TextItem {
+                id: "plan-1".into(),
+                content: "1. inspect\n".into(),
+            }))
+            .unwrap(),
+        };
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, true).as_slice(),
+            [ChatStreamEvent::ToolCall {
+                id,
+                name,
+                result,
+                phase,
+                ..
+            }] if id == "plan-1"
+                && name == "plan"
+                && result == "1. inspect\n"
+                && phase == "started"
+        ));
+    }
+
+    #[test]
+    fn hook_prompt_item_projects_attributed_feedback_text() {
+        let item = proto::ThreadItem {
+            id: "msg-1".into(),
+            item_type: "hook_prompt".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::HookPrompt(
+                agent_protocol::HookPromptItem::from_fragments(
+                    Some("msg-1"),
+                    vec![
+                        agent_protocol::HookPromptFragment::from_single_hook(
+                            "retry one",
+                            "hook-run-1",
+                        ),
+                        agent_protocol::HookPromptFragment::from_single_hook(
+                            "retry two",
+                            "hook-run-2",
+                        ),
+                    ],
+                ),
+            ))
+            .unwrap(),
+        };
+
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::Hook { name, detail, outcome }]
+                if name == "hook_prompt"
+                    && detail == "retry one\n\nretry two"
+                    && outcome == "completed"
+        ));
+    }
+
+    #[test]
+    fn tool_item_maps_batch_mode_and_terminal_statuses() {
+        for (status, expected_phase) in [
+            (agent_protocol::ToolStatus::Failed, "failed"),
+            (agent_protocol::ToolStatus::Declined, "declined"),
+            (agent_protocol::ToolStatus::Interrupted, "interrupted"),
+        ] {
+            let item = proto::ThreadItem {
+                id: "call-1".into(),
+                item_type: "dynamic_tool_call".into(),
+                status: expected_phase.into(),
+                payload_json: serde_json::to_string(&TurnItem::DynamicToolCall(
+                    agent_protocol::ToolItem {
+                        id: "call-1".into(),
+                        name: "read_file".into(),
+                        arguments: serde_json::json!({"path":"README.md"}),
+                        output: Some(serde_json::json!(expected_phase)),
+                        media: Vec::new(),
+                        file_changes: Vec::new(),
+                        status,
+                        batch_id: Some("batch-1".into()),
+                        execution_mode: Some(agent_protocol::ToolExecutionMode::Parallel),
+                    },
+                ))
+                .unwrap(),
+            };
+
+            assert!(matches!(
+                map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+                [ChatStreamEvent::ToolCall {
+                    phase,
+                    batch_id,
+                    execution_mode,
+                    ..
+                }] if phase == expected_phase
+                    && batch_id.as_deref() == Some("batch-1")
+                    && execution_mode.as_deref() == Some("parallel")
+            ));
+        }
+    }
+
     #[test]
     fn terminal_thread_event_maps_to_run_finished_then_done() {
         let mapped = map_thread_event(terminal_event("session-1", "turn-1"));
@@ -2587,6 +3093,45 @@ mod tests {
                 ChatStreamEvent::Done
             ] if outcome_type == "success"
         ));
+    }
+
+    #[test]
+    fn async_agent_message_maps_only_when_completed() {
+        let item = async_message_item("call-1:async-message", "Still working");
+
+        assert!(map_item_event(
+            proto::ThreadItemEvent {
+                item: Some(item.clone())
+            },
+            true,
+        )
+        .is_empty());
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::AsyncMessage { id, content, questions }]
+                if id == "call-1:async-message" && content == "Still working"
+                    && questions.as_ref().is_some_and(|questions| questions.len() == 1)
+        ));
+    }
+
+    #[tokio::test]
+    async fn snapshot_recovery_deduplicates_async_agent_messages_by_item_id() {
+        let bridge = ThreadEventsBridge::new();
+        let event = ChatStreamEvent::AsyncMessage {
+            id: "call-1:async-message".into(),
+            content: "Still working".into(),
+            questions: None,
+        };
+
+        let first = bridge
+            .recover_snapshot_projection("session-1", "turn-1", vec![event.clone()])
+            .await;
+        let replay = bridge
+            .recover_snapshot_projection("session-1", "turn-1", vec![event])
+            .await;
+
+        assert_eq!(first.len(), 1);
+        assert!(replay.is_empty());
     }
 
     #[tokio::test]
@@ -2902,6 +3447,10 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -2953,6 +3502,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -2962,9 +3515,11 @@ mod tests {
                         item_type: "agent_message".into(),
                         status: "completed".into(),
                         payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                            agent_protocol::TextItem {
+                            agent_protocol::AgentMessageItem {
                                 id: "message-1".into(),
                                 content: "almost ".into(),
+                                delivery: None,
+                                questions: None,
                             },
                         ))
                         .unwrap(),
@@ -2974,9 +3529,11 @@ mod tests {
                         item_type: "agent_message".into(),
                         status: "completed".into(),
                         payload_json: serde_json::to_string(&TurnItem::AgentMessage(
-                            agent_protocol::TextItem {
+                            agent_protocol::AgentMessageItem {
                                 id: "message-2".into(),
                                 content: "done".into(),
+                                delivery: None,
+                                questions: None,
                             },
                         ))
                         .unwrap(),
@@ -3007,6 +3564,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -3029,6 +3590,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -3072,6 +3637,10 @@ mod tests {
         let snapshots = vec![proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: None,
             has_active_turn: false,
@@ -3247,6 +3816,10 @@ mod tests {
         let mut snapshot = proto::ThreadSnapshot {
             thread_id: "session-offline".into(),
             status: "idle".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-offline".into(),
                 status: "completed".into(),
@@ -4329,8 +4902,17 @@ mod tests {
             },
             ChatStreamEvent::Usage {
                 prompt_tokens: 1,
+                uncached_input_tokens: 1,
                 completion_tokens: 2,
                 total_tokens: 3,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                reasoning_tokens: 0,
+                request_count: 1,
+                provider_total_tokens: Some(3),
+                cache_read_reported: true,
+                cache_write_reported: false,
+                reasoning_reported: true,
             },
             ChatStreamEvent::Error {
                 message: "buffered error".into(),
@@ -5076,12 +5658,14 @@ mod tests {
         let activation = source
             .find("let activation = bridge.activate(sid2.clone()).await;")
             .expect("start_chat activation marker");
-        let spawn = source
-            .find("tauri::async_runtime::spawn(async move {")
-            .expect("start_chat spawn marker");
-        let wait_ready = source
-            .find(".wait_ready_for(THREAD_EVENTS_READY_TIMEOUT)")
-            .expect("start_chat readiness marker");
+        let spawn = activation
+            + source[activation..]
+                .find("tauri::async_runtime::spawn(async move {")
+                .expect("start_chat spawn marker");
+        let wait_ready = spawn
+            + source[spawn..]
+                .find(".wait_ready_for(THREAD_EVENTS_READY_TIMEOUT)")
+                .expect("start_chat readiness marker");
         assert!(activation < spawn && spawn < wait_ready);
     }
 
@@ -5217,6 +5801,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "completed".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "completed".into(),
@@ -5264,6 +5852,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "running".into(),
+            provider_id: None,
+            backend_id: None,
+            model: None,
+            reasoning_effort: None,
             turns: vec![],
             active_turn: Some(proto::ThreadTurn {
                 id: "turn-1".into(),
@@ -5472,6 +6064,10 @@ mod tests {
         let snapshot = proto::ThreadSnapshot {
             thread_id: "session-1".into(),
             status: "errored".into(),
+            provider_id: Some("provider-profile".into()),
+            backend_id: Some("openai".into()),
+            model: Some("gpt-5.6".into()),
+            reasoning_effort: Some("high".into()),
             turns: vec![proto::ThreadTurn {
                 id: "turn-1".into(),
                 status: "failed".into(),
@@ -5495,6 +6091,10 @@ mod tests {
         let value = serde_json::to_value(snapshot_dto(&snapshot)).unwrap();
         assert_eq!(value["turns"][0]["items"][0]["id"], "tool-1");
         assert_eq!(value["turns"][0]["error"]["errorType"], "provider");
+        assert_eq!(value["model"], "gpt-5.6");
+        assert_eq!(value["reasoningEffort"], "high");
+        assert_eq!(value["providerId"], "provider-profile");
+        assert_eq!(value["backendId"], "openai");
     }
 
     #[test]

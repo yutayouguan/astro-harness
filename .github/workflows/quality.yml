@@ -64,7 +64,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
@@ -79,6 +79,22 @@ jobs:
         working-directory: apps/desktop
         run: npm test
 
+      - name: Lint CSS
+        working-directory: apps/desktop
+        run: npm run lint:css
+
       - name: Build frontend
         working-directory: apps/desktop
         run: npm run build
+
+      - name: Build Storybook
+        working-directory: apps/desktop
+        run: npm run build-storybook
+
+      - name: Install Playwright Chromium
+        working-directory: apps/desktop
+        run: npx playwright install --with-deps chromium
+
+      - name: Test visual baseline
+        working-directory: apps/desktop
+        run: npm run test:visual

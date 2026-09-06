@@ -1,7 +1,7 @@
 //! Skills 工具：list / view(load) / curate / manage（create、update、patch、delete）。
 //!
 //! 加载逻辑委托 [`skills::load_skill_by_name`]；列表用 [`skills::list_enabled_for_prompt`]；
-//! manage 写入当前 Agent 的 `workspace/skills/`（[`skills::install::agent_skills_dir`]）。
+//! manage 写入当前 Agent 的 `workspace/skills/`（[`skills::install::agent_workspace_skills_dir`]）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,30 +13,30 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `skills` tool.
+/// `skills` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct SkillsArgs {
-    /// Action: `load` / `view` (default), `list`, `curate`, `manage`.
+    /// 操作：`load` / `view`（默认）、`list`、`curate`、`manage`。
     #[serde(default)]
     pub action: Option<String>,
-    /// Skill name / id. Required for `load`/`view`/`manage`; optional for `list`/`curate`.
+    /// Skill 名称 / id。`load`/`view`/`manage` 必填；`list`/`curate` 可选。
     #[serde(default)]
     pub skill_id: Option<String>,
-    /// `manage` sub-action: `create` | `update` | `patch` | `delete`.
+    /// `manage` 子操作：`create` | `update` | `patch` | `delete`。
     #[serde(default)]
     pub manage_action: Option<String>,
-    /// `manage` create/update: SKILL.md body (may include YAML frontmatter).
+    /// `manage` create/update：SKILL.md 正文（可包含 YAML frontmatter）。
     #[serde(default)]
     pub content: Option<String>,
-    /// `manage` create: description for frontmatter (optional if content already has frontmatter).
+    /// `manage` create：frontmatter 的 description（若 content 已含 frontmatter 则可选）。
     #[serde(default)]
     pub description: Option<String>,
-    /// `manage` patch: text to replace (must appear uniquely in SKILL.md).
+    /// `manage` patch：要替换的文本（须在 SKILL.md 中唯一出现）。
     #[serde(default)]
     pub old_string: Option<String>,
     #[serde(default)]
     pub new_string: Option<String>,
-    /// Optional structured input appended under a "Call input" section for `load`/`view`.
+    /// 可选的结构化输入，附加在 `load`/`view` 的"调用输入"区段下。
     #[serde(default)]
     pub input: Option<serde_json::Value>,
 }
@@ -244,7 +244,7 @@ fn manage_skill(
 ) -> anyhow::Result<String> {
     validate_skill_id(skill_id)?;
     let op = manage_action.trim().to_lowercase();
-    let skills_dir = skills::install::agent_skills_dir(None)?;
+    let skills_dir = skills::install::agent_workspace_skills_dir(None)?;
     let dest = skills_dir.join(skill_id);
 
     match op.as_str() {
@@ -452,7 +452,7 @@ mod tests {
         )
         .unwrap();
         assert!(create.contains("已创建"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         let md = skills_dir.join("demo-tool-skill/SKILL.md");
         assert!(md.is_file());
 
@@ -495,7 +495,7 @@ mod tests {
         )
         .unwrap();
         assert!(out.contains("1 处替换"));
-        let skills_dir = skills::install::agent_skills_dir(None).unwrap();
+        let skills_dir = skills::install::agent_workspace_skills_dir(None).unwrap();
         let body = fs::read_to_string(skills_dir.join("patch-demo/SKILL.md")).unwrap();
         assert!(body.contains("step ONE"));
         assert!(!body.contains("step one"));

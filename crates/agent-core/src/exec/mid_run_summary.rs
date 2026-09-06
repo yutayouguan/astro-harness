@@ -4,14 +4,13 @@
 //! 生成结构化交接摘要，注入 [`AgentLoop`] 供后续 Provider 历史折叠。
 
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::{info, warn};
 
-use crate::compression::{estimate_messages_tokens, ToolCompressionManager};
+use crate::compression::{estimate_response_items_tokens, ToolCompressionManager};
 use crate::runtime::AgentLoop;
-use types::message::{Message, Role};
+use agent_protocol::ResponseItem;
 
 pub const MID_RUN_SUMMARY_MARK: &str = "[astro:mid-run-summary]";
 /// Hard 阶段占比默认；运行时优先读 `compression.mid_run_summary_ratio`。
@@ -39,43 +38,44 @@ pub async fn should_attempt(agent: &AgentLoop) -> bool {
 
 /// 折叠 Provider 历史：头 + 摘要 + 尾（不改 DB 原文）。
 pub fn collapse_history_with_handoff(
-    messages: &[Message],
+    items: &[ResponseItem],
     handoff: &str,
     protect_first: usize,
     protect_last: usize,
-) -> Vec<Message> {
-    let n = messages.len();
+) -> Vec<ResponseItem> {
+    let n = items.len();
     let first = protect_first.min(n);
     let last = protect_last.min(n.saturating_sub(first));
     if n <= first + last {
-        return messages.to_vec();
+        return items.to_vec();
     }
     let mut out = Vec::with_capacity(first + 1 + last);
-    out.extend_from_slice(&messages[..first]);
-    out.push(Message::user(&format!(
+    out.extend_from_slice(&items[..first]);
+    out.push(ResponseItem::user_text(format!(
         "{MID_RUN_SUMMARY_MARK}\n{}",
         handoff.trim()
     )));
-    out.extend_from_slice(&messages[n - last..]);
+    out.extend_from_slice(&items[n - last..]);
     out
 }
 
-fn build_transcript(messages: &[Message], protect_first: usize, protect_last: usize) -> String {
-    let n = messages.len();
+fn build_transcript(items: &[ResponseItem], protect_first: usize, protect_last: usize) -> String {
+    let n = items.len();
     let first = protect_first.min(n);
     let last = protect_last.min(n.saturating_sub(first));
     if n <= first + last {
         return String::new();
     }
     let mut parts = Vec::new();
-    for m in &messages[first..n - last] {
-        let role = match m.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
-            Role::Tool => "tool",
-        };
-        let body = m.provider_view_text();
+    for item in &items[first..n - last] {
+        let role = item.role().unwrap_or_else(|| {
+            if item.is_tool_output() {
+                "tool"
+            } else {
+                "assistant"
+            }
+        });
+        let body = item.provider_view_text();
         let clipped: String = body.chars().take(2_000).collect();
         if clipped.trim().is_empty() {
             continue;
@@ -95,7 +95,10 @@ fn summary_prompt(transcript: &str) -> String {
     )
 }
 
-async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyhow::Result<String> {
+async fn complete_summary_response(
+    target: &types::ModelTarget,
+    prompt: &str,
+) -> anyhow::Result<String> {
     let config = ProviderConfig {
         api_key: target.api_key.clone(),
         base_url: if target.base_url.trim().is_empty() {
@@ -111,12 +114,13 @@ async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyh
         additional_params: serde_json::Value::Null,
         ..ProviderConfig::default()
     };
-    let messages = vec![
-        ProviderMessage::system("You write compact structured handoff notes for coding agents."),
-        ProviderMessage::user_text(prompt),
-    ];
-    let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config).await?;
+    let mut stream = providers::dispatch::agent_responses_prompt(
+        &target.backend_id,
+        "You write compact structured handoff notes for coding agents.",
+        prompt,
+        &config,
+    )
+    .await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
@@ -129,6 +133,40 @@ async fn complete_summary_chat(target: &types::ChatTarget, prompt: &str) -> anyh
         anyhow::bail!("empty mid-run summary");
     }
     Ok(trimmed)
+}
+
+async fn complete_with_targets(
+    targets: &[types::ModelTarget],
+    prompt: &str,
+) -> anyhow::Result<String> {
+    let mut last_error = None;
+    for target in targets.iter().take(2) {
+        match complete_summary_response(target, prompt).await {
+            Ok(text) => return Ok(text),
+            Err(error) => {
+                warn!(
+                    backend = %target.backend_id,
+                    model = %target.model,
+                    %error,
+                    "compaction summary target failed"
+                );
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no compaction targets")))
+}
+
+/// Generate a durable full-session handoff used by the explicit `Compact` task.
+pub(crate) async fn generate_manual_summary(agent: &AgentLoop) -> anyhow::Result<String> {
+    let history = agent.clone_history().await;
+    let transcript = build_transcript(&history, 0, 0);
+    anyhow::ensure!(
+        !transcript.trim().is_empty(),
+        "conversation history is empty"
+    );
+    let targets = agent.auxiliary_targets(types::AuxiliaryTask::Compaction);
+    complete_with_targets(&targets, &summary_prompt(&transcript)).await
 }
 
 /// 尝试 mid-run 摘要；成功则写入 AgentLoop handoff，返回 true。
@@ -153,37 +191,19 @@ pub async fn maybe_apply_mid_run_summary(agent: &AgentLoop) -> anyhow::Result<bo
     }
 
     let prompt = summary_prompt(&transcript);
-    let mut last_err = None;
-    let mut summary = None;
-    for target in targets.iter().take(2) {
-        match complete_summary_chat(target, &prompt).await {
-            Ok(text) => {
-                summary = Some(text);
-                break;
-            }
-            Err(e) => {
-                warn!(
-                    backend = %target.backend_id,
-                    model = %target.model,
-                    error = %e,
-                    "mid-run summary target failed"
-                );
-                last_err = Some(e);
-            }
+    let text = match complete_with_targets(&targets, &prompt).await {
+        Ok(text) => text,
+        Err(error) => {
+            agent.mark_mid_run_summary_skipped().await;
+            return Err(error);
         }
-    }
-    let Some(text) = summary else {
-        agent.mark_mid_run_summary_skipped().await;
-        if let Some(e) = last_err {
-            return Err(e);
-        }
-        return Ok(false);
     };
 
-    let before = estimate_messages_tokens(&history);
+    let before = estimate_response_items_tokens(&history);
     agent.set_mid_run_handoff(text.clone()).await;
+    agent.rebase_prompt_context_after_compaction(&text).await;
     let collapsed = collapse_history_with_handoff(&history, &text, protect_first, protect_last);
-    let after = estimate_messages_tokens(&collapsed);
+    let after = estimate_response_items_tokens(&collapsed);
     info!(
         session = %agent.session_id(),
         before_tokens = before,
@@ -199,7 +219,9 @@ mod tests {
 
     #[test]
     fn collapse_keeps_head_and_tail() {
-        let msgs: Vec<_> = (0..10).map(|i| Message::user(&format!("m{i}"))).collect();
+        let msgs: Vec<_> = (0..10)
+            .map(|i| ResponseItem::user_text(format!("m{i}")))
+            .collect();
         let out = collapse_history_with_handoff(&msgs, "HANDOFF", 2, 3);
         assert_eq!(out.len(), 2 + 1 + 3);
         assert_eq!(out[0].content_str(), "m0");
@@ -211,17 +233,30 @@ mod tests {
 
     #[test]
     fn collapse_noop_when_short() {
-        let msgs = vec![Message::user("a"), Message::user("b")];
+        let msgs = vec![ResponseItem::user_text("a"), ResponseItem::user_text("b")];
         let out = collapse_history_with_handoff(&msgs, "x", 4, 20);
         assert_eq!(out.len(), 2);
     }
 
     #[test]
     fn transcript_uses_user_content_but_tool_compressed_view() {
-        let mut user = Message::user("follow the real instruction");
-        user.compressed_content = Some("agent-mailbox-through:42".into());
-        let mut tool = Message::tool("very long original tool result");
-        tool.compressed_content = Some("short tool stub".into());
+        let mut user = ResponseItem::user_text("follow the real instruction");
+        *user.metadata_mut().unwrap() = Some(serde_json::json!({
+            "astro_memory_marker": "agent-mailbox-through:42"
+        }));
+        let mut tool = ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: None,
+            name: Some("test".into()),
+            namespace: None,
+            output: agent_protocol::FunctionCallOutputPayload::from_text(
+                "very long original tool result".into(),
+            ),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        *tool.metadata_mut().unwrap() = Some(serde_json::json!({
+            "astro_compressed_output": "short tool stub"
+        }));
 
         let transcript = build_transcript(&[user, tool], 0, 0);
 

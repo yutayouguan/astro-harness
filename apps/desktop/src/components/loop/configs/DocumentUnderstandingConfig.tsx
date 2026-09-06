@@ -1,4 +1,10 @@
-import { TextField, SelectField, FilePathField, AiAssistField, cfgStr } from "./ConfigField";
+import {
+  TextField,
+  SelectField,
+  FilePathField,
+  AiAssistField,
+  cfgStr,
+} from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
@@ -24,7 +30,13 @@ const INPUT_TYPE_OPTIONS = [
   { value: "url", label: "网页 URL" },
 ];
 
-export default function DocumentUnderstandingConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function DocumentUnderstandingConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   const inputType = cfgStr(config, "input_type", "image");
   return (

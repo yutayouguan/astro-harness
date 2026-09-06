@@ -5,8 +5,15 @@
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-const PASSTHROUGH =
-  /^(https?:|data:|blob:|asset:|tauri:|ipc:)/i;
+const PASSTHROUGH = /^(https?:|data:|blob:|asset:|tauri:|ipc:)/i;
+
+/** 文档/工具描述中常见的占位符，不应被当成工作区文件请求。 */
+const BARE_PATH_PLACEHOLDER =
+  /^(?:path|file_path|image_path|media_path|src|url)$/i;
+
+function isBarePathPlaceholder(src: string): boolean {
+  return BARE_PATH_PLACEHOLDER.test(src.trim());
+}
 
 /**
  * Markdown / 浏览器常把中文文件名编成 `%E4%BA%91…`。
@@ -76,6 +83,7 @@ export function absolutizeMediaPath(
   const raw = decodeMediaPathEncoding(src.trim());
   if (!raw) return null;
   if (PASSTHROUGH.test(raw)) return null;
+  if (isBarePathPlaceholder(raw)) return null;
 
   if (looksLikeLocalPath(raw)) {
     return stripFileUrl(raw);
@@ -116,6 +124,7 @@ export function resolveMediaSrc(
   const raw = src.trim();
   if (!raw) return null;
   if (PASSTHROUGH.test(raw)) return raw;
+  if (isBarePathPlaceholder(raw)) return null;
 
   const abs = absolutizeMediaPath(raw, baseDir);
   if (abs) {

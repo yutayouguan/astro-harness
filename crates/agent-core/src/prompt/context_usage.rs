@@ -1,8 +1,8 @@
 //! 上下文占用分层估算（ceil(chars/4)），与账单 Usage 无关。
 //! 分段含可选 `items` 明细（单工具 / 单 skill 等）。
 
+use agent_protocol::ResponseItem;
 use serde::{Deserialize, Serialize};
-use types::message::{Message, Role};
 
 pub const DEFAULT_CONTEXT_WINDOW: u32 = 128_000;
 
@@ -75,19 +75,25 @@ pub type NamedChars = (String, String, usize);
 
 pub struct ContextUsageInput<'a> {
     pub system_chars: usize,
+    pub developer_chars: usize,
+    pub user_context_chars: usize,
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
     pub mcp_instruction_chars: usize,
     /// SOUL / guidance 等系统提示子项
     pub system_items: &'a [NamedChars],
+    /// 交互模式等 developer message 子项
+    pub developer_items: &'a [NamedChars],
+    /// AGENTS / Hook / timestamp 等 contextual user message 子项
+    pub user_context_items: &'a [NamedChars],
     /// MEMORY / USER / daily 等子项
     pub memory_items: &'a [NamedChars],
     /// 技能索引条目：(skill_id, 展示名, 该行字符数)
     pub skill_items: &'a [NamedChars],
     pub mcp_instruction_items: &'a [NamedChars],
     pub tools: &'a [serde_json::Value],
-    pub messages: &'a [Message],
+    pub messages: &'a [ResponseItem],
     pub context_window: u32,
     pub updated_at_ms: i64,
     pub recommend_compact: bool,
@@ -103,11 +109,15 @@ pub fn estimate_tokens(chars: usize) -> u32 {
 #[derive(Debug, Clone, Default)]
 pub struct LayerBreakdown {
     pub system_chars: usize,
+    pub developer_chars: usize,
+    pub user_context_chars: usize,
     pub memory_chars: usize,
     pub skills_chars: usize,
     pub recall_chars: usize,
     pub mcp_instruction_chars: usize,
     pub system_items: Vec<NamedChars>,
+    pub developer_items: Vec<NamedChars>,
+    pub user_context_items: Vec<NamedChars>,
     pub memory_items: Vec<NamedChars>,
     pub skill_items: Vec<NamedChars>,
     pub mcp_instruction_items: Vec<NamedChars>,
@@ -198,10 +208,10 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
 
     let mut call_names: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
-    for m in input.messages {
-        if let Some(calls) = &m.tool_calls {
-            for c in calls {
-                call_names.insert(c.id.clone(), c.name.clone());
+    for item in input.messages {
+        if let Some(call_id) = item.call_id() {
+            if let Some(name) = item.qualified_tool_name() {
+                call_names.insert(call_id.to_string(), name);
             }
         }
     }
@@ -223,49 +233,44 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         e.1 += 1;
     };
 
-    for m in input.messages {
-        let text = m.content_str();
-        match m.role {
-            Role::Tool => {
-                let name = m
-                    .tool_call_id
-                    .as_ref()
-                    .and_then(|id| call_names.get(id))
-                    .map(String::as_str)
-                    .unwrap_or("");
-                if is_subagent_tool_name(name) {
-                    subagent_chars += text.len();
-                    subagent_n += 1;
-                    *subagent_by_name.entry(name.to_string()).or_default() += text.len();
-                } else {
-                    conversation_chars += text.len();
-                    msg_n += 1;
-                    bump_role(&mut role_chars, "tool", text.len());
-                }
-            }
-            Role::System => {
+    for item in input.messages {
+        let text = item.provider_view_text();
+        let qualified_tool_name = item.qualified_tool_name();
+        let tool_name = qualified_tool_name.as_deref().or_else(|| {
+            item.call_id()
+                .and_then(|id| call_names.get(id).map(String::as_str))
+        });
+        if tool_name.is_some_and(is_subagent_tool_name) {
+            let name = tool_name.expect("checked above");
+            subagent_chars += text.len();
+            subagent_n += 1;
+            *subagent_by_name.entry(name.to_string()).or_default() += text.len();
+            continue;
+        }
+        if item.is_tool_output() {
+            conversation_chars += text.len();
+            msg_n += 1;
+            bump_role(&mut role_chars, "tool", text.len());
+            continue;
+        }
+        match item.role() {
+            Some("system" | "developer") => {
                 conversation_chars += text.len();
                 msg_n += 1;
                 bump_role(&mut role_chars, "system", text.len());
             }
-            Role::User => {
+            Some("user") => {
                 conversation_chars += text.len();
                 msg_n += 1;
                 bump_role(&mut role_chars, "user", text.len());
             }
-            Role::Assistant => {
-                let mut chars = text.len();
-                if let Some(calls) = &m.tool_calls {
-                    for c in calls {
-                        if !is_subagent_tool_name(&c.name) {
-                            chars += c.name.len() + c.arguments.to_string().len();
-                        }
-                    }
-                }
+            Some("assistant") | None => {
+                let chars = text.len();
                 conversation_chars += chars;
                 msg_n += 1;
                 bump_role(&mut role_chars, "assistant", chars);
             }
+            Some(_) => {}
         }
     }
 
@@ -312,6 +317,8 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
     };
 
     let system_items = items_from_named(input.system_items);
+    let developer_items = items_from_named(input.developer_items);
+    let user_context_items = items_from_named(input.user_context_items);
     let memory_items = items_from_named(input.memory_items);
     let skill_items = items_from_named(input.skill_items);
 
@@ -322,6 +329,20 @@ pub fn build_snapshot(input: ContextUsageInput<'_>) -> ContextUsageSnapshot {
         input.system_chars,
         (!system_items.is_empty()).then_some(system_items.len() as u32),
         system_items,
+    );
+    push_seg(
+        &mut segments,
+        "developer",
+        input.developer_chars,
+        (!developer_items.is_empty()).then_some(developer_items.len() as u32),
+        developer_items,
+    );
+    push_seg(
+        &mut segments,
+        "user_context",
+        input.user_context_chars,
+        (!user_context_items.is_empty()).then_some(user_context_items.len() as u32),
+        user_context_items,
     );
     push_seg(
         &mut segments,
@@ -422,8 +443,6 @@ mod tests {
             assert!(!AGENT_DEF_TOOLS.contains(&legacy));
         }
     }
-    use types::message::{Message, ToolCall};
-
     #[test]
     fn estimate_tokens_ceil_div_4() {
         assert_eq!(estimate_tokens(0), 0);
@@ -435,7 +454,7 @@ mod tests {
     #[test]
     fn mcp_prefix_goes_to_mcp_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
-            {"type":"function","function":{"name":"file_ops","parameters":{}}},
+            {"type":"function","function":{"name":"exec_command","parameters":{}}},
             {"type":"function","function":{"name":"mcp__fs__read","parameters":{"a":1}}}
         ])
         .as_array()
@@ -443,11 +462,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 40,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -464,7 +487,7 @@ mod tests {
         assert!(mcp_seg.tokens > 0);
         assert_eq!(mcp_seg.meta.as_ref().and_then(|m| m.count), Some(1));
         assert_eq!(tools_seg.items.len(), 1);
-        assert_eq!(tools_seg.items[0].id, "file_ops");
+        assert_eq!(tools_seg.items[0].id, "exec_command");
         assert_eq!(mcp_seg.items[0].id, "mcp__fs__read");
     }
 
@@ -477,11 +500,15 @@ mod tests {
         )];
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 40,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &instructions,
@@ -508,11 +535,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -532,7 +563,7 @@ mod tests {
     #[test]
     fn agent_def_tools_go_to_agents_segment() {
         let tools: Vec<serde_json::Value> = serde_json::json!([
-            {"type":"function","function":{"name":"file_ops","parameters":{}}},
+            {"type":"function","function":{"name":"exec_command","parameters":{}}},
             {"type":"function","function":{"name":"spawn_agent","parameters":{"task_name":"x","message":"work"}}},
             {"type":"function","function":{"name":"wait_agent","parameters":{}}}
         ])
@@ -541,11 +572,15 @@ mod tests {
         .clone();
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -575,11 +610,15 @@ mod tests {
         ];
         let snap = build_snapshot(ContextUsageInput {
             system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
             memory_chars: 48,
             skills_chars: 100,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &memory,
             skill_items: &skills,
             mcp_instruction_items: &[],
@@ -599,24 +638,67 @@ mod tests {
     }
 
     #[test]
-    fn agent_thread_tool_result_counts_as_subagent() {
-        let assistant = Message::assistant_with_tools(
-            "",
-            vec![ToolCall {
-                id: "c1".into(),
-                name: "spawn_agent".into(),
-                arguments: serde_json::json!({}),
-                signature: None,
-            }],
-        );
-        let tool = Message::tool_with_id("c1", &"x".repeat(40));
+    fn role_bearing_prompt_context_has_distinct_segments() {
+        let developer = vec![("mode".into(), "交互模式引导".into(), 20usize)];
+        let user_context = vec![("agents".into(), "AGENTS.md".into(), 40usize)];
         let snap = build_snapshot(ContextUsageInput {
-            system_chars: 0,
+            system_chars: 80,
+            developer_chars: 20,
+            user_context_chars: 40,
             memory_chars: 0,
             skills_chars: 0,
             recall_chars: 0,
             mcp_instruction_chars: 0,
             system_items: &[],
+            developer_items: &developer,
+            user_context_items: &user_context,
+            memory_items: &[],
+            skill_items: &[],
+            mcp_instruction_items: &[],
+            tools: &[],
+            messages: &[],
+            context_window: 128_000,
+            updated_at_ms: 1,
+            recommend_compact: false,
+            recommend_compact_ratio: 0.85,
+        });
+
+        assert_eq!(snap.segment("system").unwrap().tokens, 20);
+        assert_eq!(snap.segment("developer").unwrap().tokens, 5);
+        assert_eq!(snap.segment("user_context").unwrap().tokens, 10);
+        assert_eq!(snap.total_tokens, 35);
+    }
+
+    #[test]
+    fn agent_thread_tool_result_counts_as_subagent() {
+        let assistant = ResponseItem::FunctionCall {
+            id: None,
+            name: "spawn_agent".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            encrypted_function_args: None,
+            call_id: "c1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        let tool = ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: Some("c1".into()),
+            name: Some("spawn_agent".into()),
+            namespace: None,
+            output: agent_protocol::FunctionCallOutputPayload::from_text("x".repeat(40)),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        let snap = build_snapshot(ContextUsageInput {
+            system_chars: 0,
+            developer_chars: 0,
+            user_context_chars: 0,
+            memory_chars: 0,
+            skills_chars: 0,
+            recall_chars: 0,
+            mcp_instruction_chars: 0,
+            system_items: &[],
+            developer_items: &[],
+            user_context_items: &[],
             memory_items: &[],
             skill_items: &[],
             mcp_instruction_items: &[],
@@ -627,7 +709,7 @@ mod tests {
             recommend_compact: false,
             recommend_compact_ratio: 0.85,
         });
-        assert_eq!(snap.segment("subagent").map(|s| s.tokens), Some(10));
+        assert_eq!(snap.segment("subagent").map(|s| s.tokens), Some(14));
         assert_eq!(
             snap.segment("conversation").map(|s| s.tokens).unwrap_or(0),
             0

@@ -2,13 +2,12 @@
 //!
 //! 职责：
 //! - 将任务定义持久化到 `~/.astro/cron/jobs.json`
-//! - 解析 `every:` / 五段 cron / `once:` 调度表达式并计算下次运行时间
+//! - 解析 `every:` / `custom:` / 五段 cron 调度表达式并计算下次运行时间
 //! - `claim_due` / `tick` 扫描到期任务并推进 `next_run_at`
 //! - 为 Agent 工具与 Extractor 提供自然语言 → 结构化任务的入口
 //!
 //! 不变量：
 //! - 任务 id 为 UUID，持久化前会校验 schedule 可解析
-//! - `once:` 任务触发后自动禁用且清空 `next_run_at`
 //! - `jobs.json` 通过临时文件原子写入，避免半写损坏
 
 mod dispatch;
@@ -26,7 +25,7 @@ pub use tick::tick_default;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Datelike, Local, Timelike};
+    use chrono::{Datelike, Local, Timelike};
     use tempfile::TempDir;
 
     #[test]
@@ -108,6 +107,154 @@ mod tests {
     }
 
     #[test]
+    fn custom_calendar_schedules_cover_all_supported_frequencies() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+
+        let hourly = compute_next_run("custom:hourly;every=1;minute=30", after).unwrap();
+        assert_eq!((hourly.hour(), hourly.minute()), (10, 30));
+
+        let daily = compute_next_run("custom:daily;every=1;time=08:20", after).unwrap();
+        assert_eq!((daily.day(), daily.hour(), daily.minute()), (12, 8, 20));
+
+        let weekly = compute_next_run("custom:weekly;every=1;wd=1,3;time=08:00", after).unwrap();
+        assert_eq!(weekly.weekday().num_days_from_sunday(), 1);
+        assert_eq!((weekly.hour(), weekly.minute()), (8, 0));
+
+        let monthly = compute_next_run("custom:monthly;every=1;day=15;time=09:30", after).unwrap();
+        assert_eq!((monthly.month(), monthly.day()), (7, 15));
+        assert_eq!((monthly.hour(), monthly.minute()), (9, 30));
+
+        let yearly =
+            compute_next_run("custom:yearly;every=1;month=1;day=1;time=08:00", after).unwrap();
+        assert_eq!((yearly.year(), yearly.month(), yearly.day()), (2027, 1, 1));
+        assert_eq!((yearly.hour(), yearly.minute()), (8, 0));
+    }
+
+    #[test]
+    fn custom_calendar_schedule_uses_persisted_start_as_interval_phase() {
+        use chrono::TimeZone;
+        let created = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+
+        let first = compute_next_run(
+            "custom:yearly;every=3;month=12;day=31;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first.year(), first.month(), first.day()), (2026, 12, 31));
+
+        let next = compute_next_run(
+            "custom:yearly;every=3;month=12;day=31;time=08:00;start=2026-07-11T10:10",
+            first,
+        )
+        .unwrap();
+        assert_eq!((next.year(), next.month(), next.day()), (2029, 12, 31));
+
+        let first_daily = compute_next_run(
+            "custom:daily;every=3;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first_daily.month(), first_daily.day()), (7, 12));
+        let next_daily = compute_next_run(
+            "custom:daily;every=3;time=08:00;start=2026-07-11T10:10",
+            first_daily,
+        )
+        .unwrap();
+        assert_eq!((next_daily.month(), next_daily.day()), (7, 15));
+    }
+
+    #[test]
+    fn custom_yearly_leap_day_anchors_to_first_valid_occurrence() {
+        use chrono::TimeZone;
+        let created = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        let first = compute_next_run(
+            "custom:yearly;every=4;month=2;day=29;time=08:00;start=2026-07-11T10:10",
+            created,
+        )
+        .unwrap();
+        assert_eq!((first.year(), first.month(), first.day()), (2028, 2, 29));
+
+        let next = compute_next_run(
+            "custom:yearly;every=4;month=2;day=29;time=08:00;start=2026-07-11T10:10",
+            first,
+        )
+        .unwrap();
+        assert_eq!((next.year(), next.month(), next.day()), (2032, 2, 29));
+    }
+
+    #[test]
+    fn custom_calendar_schedule_rejects_invalid_fields() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        assert!(
+            compute_next_run("custom:yearly;every=1;month=13;day=1;time=08:00", after).is_err()
+        );
+        assert!(compute_next_run("custom:weekly;every=0;wd=1;time=08:00", after).is_err());
+        assert!(compute_next_run("custom:daily;every=1", after).is_err());
+        assert!(compute_next_run("custom:hourly;every=1;time=08:00", after).is_err());
+        assert!(compute_next_run("custom:daily;every=1;every=2;time=08:00", after).is_err());
+        assert!(compute_next_run(
+            "custom:daily;every=1;time=08:00;start=2026-99-99T10:10",
+            after,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn interval_schedule_rejects_overflow_without_panicking() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 10, 0).unwrap();
+        assert!(compute_next_run("every:9223372036854775807d", after).is_err());
+    }
+
+    #[test]
+    fn store_persists_a_start_anchor_for_new_custom_schedules() {
+        let dir = TempDir::new().unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let job = store
+            .add("custom:daily;every=2;time=08:00", "锚点测试")
+            .unwrap();
+        assert!(job.schedule.contains(";start="));
+        assert!(compute_next_run(&job.schedule, Local::now()).is_ok());
+    }
+
+    #[test]
+    fn load_migrates_custom_schedule_without_start_from_created_at() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("jobs.json");
+        std::fs::write(
+            &path,
+            r#"{
+              "jobs": [{
+                "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "schedule": "custom:daily;every=2;time=08:00",
+                "task": "迁移锚点",
+                "title": "迁移锚点",
+                "agent_id": "default",
+                "enabled": true,
+                "created_at": "2026-07-11T10:10:00+08:00",
+                "show_in_chat": false
+              }]
+            }"#,
+        )
+        .unwrap();
+
+        let store = CronStore::open(dir.path()).unwrap();
+        let jobs = store.list().unwrap();
+        assert!(jobs[0].schedule.contains(";start="));
+        let persisted = std::fs::read_to_string(path).unwrap();
+        assert!(persisted.contains(";start="));
+    }
+
+    #[test]
+    fn one_time_schedule_is_rejected() {
+        use chrono::TimeZone;
+        let after = Local.with_ymd_and_hms(2026, 7, 11, 4, 0, 0).unwrap();
+        assert!(compute_next_run("once:2026-07-11T04:22:00+08:00", after).is_err());
+    }
+
+    #[test]
     fn remove_by_prefix() {
         let dir = TempDir::new().unwrap();
         let store = CronStore::open(dir.path()).unwrap();
@@ -139,61 +286,6 @@ mod tests {
         assert_eq!(jobs[0].agent_id, "default");
         assert!(jobs[0].provider_id.is_none());
         assert!(jobs[0].model.is_none());
-    }
-
-    #[test]
-    fn once_schedule_next_run_is_that_instant() {
-        use chrono::TimeZone;
-        let after = Local.with_ymd_and_hms(2026, 7, 11, 4, 0, 0).unwrap();
-        let next = compute_next_run("once:2026-07-11T04:22:00+08:00", after).unwrap();
-        let expected = DateTime::parse_from_rfc3339("2026-07-11T04:22:00+08:00")
-            .unwrap()
-            .with_timezone(&Local);
-        assert_eq!(next, expected);
-    }
-
-    #[test]
-    fn tick_disables_once_job() {
-        let dir = TempDir::new().unwrap();
-        let store = CronStore::open(dir.path()).unwrap();
-        let job = store
-            .add("once:2000-01-01T00:00:00+00:00", "一次性任务")
-            .unwrap();
-        assert!(job.enabled);
-        let fired = store.tick().unwrap();
-        assert_eq!(fired.len(), 1);
-        let jobs = store.list().unwrap();
-        assert!(!jobs[0].enabled);
-        assert!(jobs[0].next_run_at.is_none());
-        assert!(jobs[0].last_run_at.is_some());
-    }
-
-    #[test]
-    fn set_enabled_rejects_expired_once_job() {
-        let dir = TempDir::new().unwrap();
-        let store = CronStore::open(dir.path()).unwrap();
-        let job = store
-            .add("once:2000-01-01T00:00:00+00:00", "已过期单次")
-            .unwrap();
-        let fired = store.tick().unwrap();
-        assert_eq!(fired.len(), 1);
-        assert!(!store.list().unwrap()[0].enabled);
-
-        let err = store.set_enabled(&job.id, true).unwrap_err();
-        assert!(
-            err.to_string().contains("无法启用已过期的单次任务"),
-            "unexpected error: {err}"
-        );
-        assert!(!store.list().unwrap()[0].enabled);
-    }
-
-    #[test]
-    fn once_in_the_past_errors_or_returns_past_for_tick() {
-        use chrono::TimeZone;
-        let after = Local.with_ymd_and_hms(2026, 7, 12, 0, 0, 0).unwrap();
-        // 约定：once 时间已过则 compute_next_run 仍返回该时刻（让 tick 能判定 due）
-        let next = compute_next_run("once:2026-07-11T04:22:00+08:00", after).unwrap();
-        assert!(next < after);
     }
 
     #[test]

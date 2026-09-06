@@ -13,6 +13,8 @@ use types::ToolCallDelta;
 /// 单次模型流式片段，对齐 Rig `StreamedAssistantContent` 并扩展 Reasoning 通道。
 #[derive(Debug, Clone)]
 pub enum StreamedAssistantContent {
+    /// Canonical completed Responses item. This is persisted verbatim.
+    ResponseItemDone(agent_protocol::ResponseItem),
     /// 可见 assistant 文本 token。
     Text(String),
     /// 推理/思考过程 token（部分 Provider 专用）。
@@ -33,18 +35,22 @@ impl StreamedAssistantContent {
     /// 从新 `StreamChunk` 转换。
     pub fn from_stream_chunk(chunk: StreamChunk) -> Option<Self> {
         match chunk {
+            StreamChunk::ResponseItemDone(item) => Some(Self::ResponseItemDone(item)),
             StreamChunk::Text(t) => Some(Self::Text(t)),
             StreamChunk::Thinking(t) => Some(Self::Reasoning(t)),
             StreamChunk::ThoughtSignature(s) => Some(Self::ThoughtSignature(s)),
-            StreamChunk::ToolCallStart { index, id, name } => {
-                Some(Self::ToolCallDelta(ToolCallDelta {
-                    index,
-                    id: Some(id),
-                    name: Some(name),
-                    arguments: None,
-                    signature: None,
-                }))
-            }
+            StreamChunk::ToolCallStart {
+                index,
+                id,
+                name,
+                signature,
+            } => Some(Self::ToolCallDelta(ToolCallDelta {
+                index,
+                id: Some(id),
+                name: Some(name),
+                arguments: None,
+                signature,
+            })),
             StreamChunk::ToolCallDelta { index, arguments } => {
                 Some(Self::ToolCallDelta(ToolCallDelta {
                     index,
@@ -54,14 +60,7 @@ impl StreamedAssistantContent {
                     signature: None,
                 }))
             }
-            StreamChunk::Usage(u) => Some(Self::FinalUsage(Usage {
-                input_tokens: u.input_tokens,
-                output_tokens: u.output_tokens,
-                cache_read_tokens: u.cache_read_tokens,
-                cache_write_tokens: u.cache_write_tokens,
-                reasoning_tokens: u.reasoning_tokens,
-                request_count: u.request_count,
-            })),
+            StreamChunk::Usage(u) => Some(Self::FinalUsage(u)),
             StreamChunk::Citation(v) => Some(Self::Citations(vec![v])),
             StreamChunk::InteractionId(id) => Some(Self::InteractionId(id)),
             StreamChunk::Done { .. } | StreamChunk::Error(_) => None,
@@ -89,4 +88,29 @@ pub(crate) fn map_new_provider_stream(
             Err(err) => Some(Err(err)),
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_tool_start_preserves_provider_signature() {
+        let item = StreamedAssistantContent::from_stream_chunk(StreamChunk::ToolCallStart {
+            index: 1,
+            id: "fc_1".into(),
+            name: "exec_command".into(),
+            signature: Some("sig_abc".into()),
+        });
+        assert!(matches!(
+            item,
+            Some(StreamedAssistantContent::ToolCallDelta(ToolCallDelta {
+                index: 1,
+                id: Some(id),
+                name: Some(name),
+                signature: Some(signature),
+                ..
+            })) if id == "fc_1" && name == "exec_command" && signature == "sig_abc"
+        ));
+    }
 }

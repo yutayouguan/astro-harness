@@ -32,27 +32,39 @@ interface AiResult {
   edges: AiGenEdge[];
 }
 
-interface ChatMessage {
+interface ConversationEntry {
   role: "user" | "assistant" | "error";
   content: string;
   result?: AiResult;
 }
 
 interface Props {
-  currentNodes: { id: string; node_type: string; label: string; config: Record<string, unknown> }[];
+  currentNodes: {
+    id: string;
+    node_type: string;
+    label: string;
+    config: Record<string, unknown>;
+  }[];
   onApply: (nodes: AiGenNode[], edges: AiGenEdge[]) => void;
   onClose: () => void;
 }
 
-export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export default function LoopAiAssistant({
+  currentNodes,
+  onApply,
+  onClose,
+}: Props) {
+  const [messages, setMessages] = useState<ConversationEntry[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(
+      () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
+      50,
+    );
   }, []);
 
   const handleSend = async () => {
@@ -79,10 +91,7 @@ export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Prop
         },
       ]);
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "error", content: String(e) },
-      ]);
+      setMessages((prev) => [...prev, { role: "error", content: String(e) }]);
     } finally {
       setLoading(false);
       scrollToBottom();
@@ -106,7 +115,11 @@ export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Prop
       <div className="loop-ai-header">
         <Sparkles size={16} />
         <span>AI 助手</span>
-        <button className="loop-icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}>
+        <button
+          className="loop-icon-btn"
+          onClick={onClose}
+          style={{ marginLeft: "auto" }}
+        >
           <X size={14} />
         </button>
       </div>
@@ -163,7 +176,9 @@ export default function LoopAiAssistant({ currentNodes, onApply, onClose }: Prop
                     </div>
                     <div className="loop-ai-result-nodes">
                       {msg.result.nodes.map((n) => {
-                        const meta = NODE_REGISTRY.find((m) => m.type === n.node_type);
+                        const meta = NODE_REGISTRY.find(
+                          (m) => m.type === n.node_type,
+                        );
                         return (
                           <span key={n.id} className="loop-ai-result-node-tag">
                             {meta?.label ?? n.node_type}

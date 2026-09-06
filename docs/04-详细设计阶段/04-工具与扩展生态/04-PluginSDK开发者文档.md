@@ -1,5 +1,7 @@
 # Plugin SDK 开发者文档
 
+> **Harness 边界（2026-08-29）**：Plugin 通过注册工具、Skill 或 Hook 扩展 Harness，但不拥有 Session/turn loop、不能伪造 `StepContext` 可见性，也不能绕过 approval/sandbox/rollout。未有当前 Host API 实现的 WASM/市场示例应视为目标设计。
+
 > 版本：v1.0 | 日期：2026-08-12 | 状态：草稿
 > 面向对象：第三方插件开发者
 > 前置文档：[04-WASM插件沙箱API设计.md](../_v0.3规划/04-WASM插件沙箱API设计.md)、[06-Agent市场详细设计.md](../_v0.3规划/06-Agent市场详细设计.md)、[08-Hooks系统详细设计.md](../01-核心引擎层/08-Hooks系统详细设计.md)、[01-Skills系统详细设计.md](01-Skills系统详细设计.md)

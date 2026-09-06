@@ -4,7 +4,9 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::compat::{OpenAICompatible, OpenAICompletionModel, ThinkingFormat};
+use crate::compat::{
+    OpenAICompatible, OpenAICompletionModel, OpenAIResponsesCompatible, ThinkingFormat,
+};
 use crate::traits::{
     Capabilities, Capable, EmbeddingModel, FromClient, ImageGenModel, ModelBase, Nothing,
     ProviderClient, ProviderExt, TTSModel,
@@ -35,11 +37,17 @@ impl ProviderExt for OpenAI {
 
 impl OpenAICompatible for OpenAI {
     const STREAM_USAGE: bool = true;
-    const SUPPORTS_RESPONSES: bool = true;
-    const RESPONSES_STORE_FALSE: bool = true;
-    const RESPONSES_PARALLEL_TOOLS: bool = true;
-    const RESPONSES_REASONING_SUMMARY: bool = true;
+    const SUPPORTS_DEVELOPER_ROLE: bool = true;
     const THINKING_FORMAT: ThinkingFormat = ThinkingFormat::ReasoningEffort;
+    const EFFORT_MAP: &'static [(&'static str, &'static str)] =
+        &[("max", "high"), ("xhigh", "high")];
+}
+
+impl OpenAIResponsesCompatible for OpenAI {
+    const STORE_FALSE: bool = true;
+    const PARALLEL_TOOLS: bool = true;
+    const REASONING_SUMMARY: bool = true;
+    const SUPPORTS_PERSISTENT_REASONING: bool = true;
     const EFFORT_MAP: &'static [(&'static str, &'static str)] =
         &[("max", "high"), ("xhigh", "high")];
 }
@@ -98,10 +106,16 @@ impl ImageGenModel for OpenAIImageModel {
     async fn generate(
         &self,
         prompt: &str,
-        _config: &ImageGenConfig,
+        config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
         let cfg = self.0.to_provider_config();
-        crate::openai::image_http::openai_generate_image(self.0.http(), prompt, &cfg).await
+        crate::openai::image_http::openai_generate_image_with_config(
+            self.0.http(),
+            prompt,
+            &cfg,
+            config,
+        )
+        .await
     }
 }
 

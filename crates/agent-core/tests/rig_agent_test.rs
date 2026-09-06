@@ -6,14 +6,14 @@ use agent::builder::AgentBuilder;
 use agent::prompt::context::{DynamicContext, StaticContext};
 use agent::prompt::prompt_builder::PromptBuilder;
 use agent::runtime::{AgentConfig, AgentLoop, MaxDepthError};
+use agent_protocol::ResponseItem;
 use home::AgentRuntimeConfig;
 use tempfile::TempDir;
-use types::message::Message;
 
-#[test]
-fn session_fire_hook_uses_shared_runtime_and_common_payload() {
+#[tokio::test]
+async fn session_fire_hook_preserves_shared_transports_and_common_payload() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let runtime = Arc::new(hooks::HookRuntime::new());
     let captured = Arc::new(std::sync::Mutex::new(None));
     let capture = Arc::clone(&captured);
@@ -44,13 +44,14 @@ fn session_fire_hook_uses_shared_runtime_and_common_payload() {
     assert_eq!(payload.permission_mode.as_deref(), Some("workspace-write"));
     assert_eq!(payload.hook_event_name, hooks::USER_PROMPT_SUBMIT);
     assert_eq!(payload.prompt.as_deref(), Some("hello"));
-    assert!(Arc::ptr_eq(&agent.hook_runtime(), &runtime));
+    assert!(Arc::ptr_eq(&agent.hook_runtime().plugin, &runtime.plugin));
+    assert!(Arc::ptr_eq(&agent.hook_runtime().gateway, &runtime.gateway));
 }
 
-#[test]
-fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
+#[tokio::test]
+async fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let runtime = Arc::new(hooks::HookRuntime::new());
     let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
     let capture = Arc::clone(&captured);
@@ -63,32 +64,29 @@ fn session_hook_payload_preserves_explicit_values_and_falls_back_to_defaults() {
     agent.set_hook_runtime(runtime);
     agent.set_project_root(None);
     agent.set_permission_profile(Some("workspace-write".into()));
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: String::new(),
         model: "model-only".into(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
 
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: "backend-only".into(),
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
-    agent.set_chat_targets(vec![types::ChatTarget {
+    agent.set_model_targets(vec![types::ModelTarget {
         provider_id: String::new(),
         backend_id: String::new(),
         model: String::new(),
         api_key: String::new(),
         base_url: String::new(),
-        api_mode: String::new(),
     }]);
     agent.fire_hook(hooks::USER_PROMPT_SUBMIT, hooks::HookInput::default());
     agent.fire_hook(
@@ -125,7 +123,7 @@ fn test_config(dir: &TempDir) -> AgentConfig {
 #[tokio::test]
 async fn test_agent_loop_creates_task_id() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let task_id = agent.new_task_id();
     assert!(!task_id.is_empty());
     assert_eq!(task_id.len(), 36);
@@ -136,7 +134,7 @@ async fn test_turn_budget_enforcement() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.max_turns = 2;
-    let agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).await.unwrap();
     assert!(!agent.is_budget_exhausted().await);
     agent.increment_turn().await;
     agent.increment_turn().await;
@@ -148,7 +146,7 @@ async fn test_multi_turn_max_depth() {
     let dir = TempDir::new().unwrap();
     let mut config = test_config(&dir);
     config.multi_turn = 2;
-    let agent = AgentLoop::new(config).unwrap();
+    let agent = AgentLoop::new(config).await.unwrap();
     agent.begin_user_turn().await;
     agent.increment_tool_round().await.unwrap();
     agent.increment_tool_round().await.unwrap();
@@ -160,12 +158,15 @@ async fn test_multi_turn_max_depth() {
 async fn test_message_alternation_validation() {
     use agent::runtime::validate_message_order;
     let messages = vec![
-        Message::system("You are an assistant"),
-        Message::user("Hello"),
-        Message::assistant("Hi there!"),
+        ResponseItem::developer_text("You are an assistant"),
+        ResponseItem::user_text("Hello"),
+        ResponseItem::assistant_text("Hi there!"),
     ];
     assert!(validate_message_order(&messages));
-    let invalid = vec![Message::user("First"), Message::user("Second")];
+    let invalid = vec![
+        ResponseItem::user_text("First"),
+        ResponseItem::user_text("Second"),
+    ];
     assert!(!validate_message_order(&invalid));
 }
 
@@ -221,6 +222,7 @@ async fn test_agent_builder_from_runtime_config() {
         ))
         .dynamic_context(4)
         .build()
+        .await
         .unwrap();
 
     assert_eq!(spec.temperature, 0.3);
@@ -234,7 +236,7 @@ async fn test_agent_builder_from_runtime_config() {
 #[tokio::test]
 async fn session_start_fires_once_before_each_user_prompt() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let events = Arc::new(std::sync::Mutex::new(Vec::new()));
     let session_events = Arc::clone(&events);
     agent
@@ -279,7 +281,7 @@ async fn session_start_fires_once_before_each_user_prompt() {
 #[tokio::test]
 async fn user_prompt_submit_block_prevents_persistence() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
         hooks::HookOutcome::Block("policy".into())
     });
@@ -296,7 +298,7 @@ async fn user_prompt_submit_block_prevents_persistence() {
 #[tokio::test]
 async fn user_prompt_submit_context_enters_initial_system_prompt() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     agent.hook_bus().register(hooks::USER_PROMPT_SUBMIT, |_| {
         hooks::HookOutcome::InjectContext("PROMPT_HOOK_CONTEXT".into())
     });
@@ -312,7 +314,7 @@ async fn user_prompt_submit_context_enters_initial_system_prompt() {
 #[tokio::test]
 async fn session_start_block_prevents_prompt_and_persistence() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let prompt_hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     agent.hook_bus().register(hooks::SESSION_START, |_| {
         hooks::HookOutcome::Block("session policy".into())
@@ -338,7 +340,7 @@ async fn session_start_block_prevents_prompt_and_persistence() {
 #[tokio::test]
 async fn session_and_prompt_contexts_enter_initial_system_prompt_in_order() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     agent.hook_bus().register(hooks::SESSION_START, |_| {
         hooks::HookOutcome::InjectContext("SESSION_HOOK_CONTEXT".into())
     });
@@ -360,7 +362,7 @@ async fn session_and_prompt_contexts_enter_initial_system_prompt_in_order() {
 #[tokio::test]
 async fn prompt_skip_is_not_treated_as_block() {
     let dir = TempDir::new().unwrap();
-    let (agent, _) = AgentBuilder::new(dir.path()).build().unwrap();
+    let (agent, _) = AgentBuilder::new(dir.path()).build().await.unwrap();
     let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let hook_hits = Arc::clone(&hits);
     agent
@@ -380,7 +382,7 @@ async fn prompt_skip_is_not_treated_as_block() {
 #[tokio::test]
 async fn pre_tool_call_block_via_hook_bus() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let bus = agent.hook_bus();
     let captured: Arc<std::sync::Mutex<Option<(String, serde_json::Value)>>> =
         Arc::new(std::sync::Mutex::new(None));
@@ -408,7 +410,7 @@ async fn pre_tool_call_block_via_hook_bus() {
 #[tokio::test]
 async fn pre_llm_call_inject_context_via_hook_bus() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let bus = agent.hook_bus();
     bus.register(hooks::PRE_LLM_CALL, |_| {
         hooks::HookOutcome::InjectContext("tz=Asia/Shanghai".into())
@@ -424,7 +426,7 @@ async fn pre_llm_call_inject_context_via_hook_bus() {
 #[tokio::test]
 async fn transform_tool_result_replaces_before_post_tool_call() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let bus = agent.hook_bus();
     bus.register(hooks::TRANSFORM_TOOL_RESULT, |_| {
         hooks::HookOutcome::ReplaceText("REDACTED".into())
@@ -444,9 +446,9 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
         hooks::HookOutcome::Continue
     });
 
-    let args = serde_json::json!({"path": "x.txt", "operation": "write", "content": "hello"});
+    let args = serde_json::json!({"command": "echo hello"});
     let out = agent
-        .handle_tool_call_async("file_ops", &args)
+        .handle_tool_call_async("exec_command", &args)
         .await
         .unwrap();
 
@@ -461,25 +463,12 @@ async fn transform_tool_result_replaces_before_post_tool_call() {
 #[tokio::test]
 async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     assert!(!agent.turn_wrote_disk().await);
 
-    // 只读操作不应置位
+    // exec_command 工具调用应置位（保守视为总是写盘）
     let _ = agent
-        .handle_tool_call_async(
-            "file_ops",
-            &serde_json::json!({"path": ".", "operation": "list"}),
-        )
-        .await
-        .unwrap();
-    assert!(!agent.turn_wrote_disk().await);
-
-    // 写操作应置位
-    let _ = agent
-        .handle_tool_call_async(
-            "file_ops",
-            &serde_json::json!({"path": "a.txt", "operation": "write", "content": "hi"}),
-        )
+        .handle_tool_call_async("exec_command", &serde_json::json!({"command": "echo hi"}))
         .await
         .unwrap();
     assert!(agent.turn_wrote_disk().await);
@@ -488,9 +477,9 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
     agent.begin_user_turn().await;
     assert!(!agent.turn_wrote_disk().await);
 
-    // terminal 工具调用也应置位
+    // exec_command 工具调用也应置位
     let _ = agent
-        .handle_tool_call_async("terminal", &serde_json::json!({"command": "true"}))
+        .handle_tool_call_async("exec_command", &serde_json::json!({"command": "true"}))
         .await
         .unwrap();
     assert!(agent.turn_wrote_disk().await);
@@ -499,7 +488,7 @@ async fn turn_wrote_disk_tracks_writes_and_resets_on_new_turn() {
 #[tokio::test]
 async fn test_agent_loop_memory_injection() {
     let dir = TempDir::new().unwrap();
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
 
     let wrote = agent
         .handle_tool_call_async(
@@ -514,7 +503,7 @@ async fn test_agent_loop_memory_injection() {
         .unwrap();
     assert!(wrote.text().contains("已写盘（live）") || wrote.text().contains("已存在"));
 
-    let agent = AgentLoop::new(test_config(&dir)).unwrap();
+    let agent = AgentLoop::new(test_config(&dir)).await.unwrap();
     let result = agent.start_or_steer_turn("你好", "task-1").await.unwrap();
     match result {
         agent::TurnResult::Continue { system_prompt, .. } => {

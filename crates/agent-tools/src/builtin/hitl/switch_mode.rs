@@ -1,4 +1,4 @@
-//! `switch_mode`：请求切换 Agent ↔ Plan（流结束后由前端授权条确认）。
+//! `switch_mode`：请求切换 Agent ↔ Plan（进入 Plan 自动，恢复 Agent 需用户审阅）。
 //!
 //! 与 `ask_user`（同回合 HITL park）不同：本工具产出 `astro_mode_switch`，不走 HitlGate。
 
@@ -28,11 +28,11 @@ impl ModeSwitchTarget {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ModeSwitchArgs {
-    /// Target mode: only `plan` or `agent`.
+    /// 目标模式：仅 `plan` 或 `agent`。
     to: ModeSwitchTarget,
-    /// Why the switch is needed (shown on the authorize bar).
+    /// 切换原因（审阅计划时展示）。
     reason: String,
-    /// Required when `to=agent`: plan summary injected into the next turn after approval.
+    /// `to=agent` 时必填：审批通过后注入下一回合的计划摘要。
     #[serde(default)]
     summary: Option<String>,
 }
@@ -44,7 +44,7 @@ pub fn register(registry: &mut crate::registry::ToolRegistry) {
         description: "Request switching chat interaction mode between Agent and Plan only \
 (not ask). Use for Agent→Plan when a complex task needs a written plan first, \
 or Plan→Agent when the plan is ready to execute. \
-User confirms via a post-stream countdown authorize bar — do not assume the switch until approved. \
+Agent→Plan is accepted automatically because it narrows capabilities. Plan→Agent waits for explicit user review; never assume approval. \
 Always set `reason`; when `to=\"agent\"`, `summary` is required (confirmed plan text). \
 Do not use ask_user(confirm) for mode changes; do not use this tool for clarifying questions or location."
             .to_string(),
@@ -95,13 +95,14 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
 
-    fn with_ctx(f: impl FnOnce(&ToolContext<'_>)) {
+    async fn with_ctx(f: impl FnOnce(&ToolContext<'_>)) {
         let dir = TempDir::new().unwrap();
         let workspace = dir.path().join("ws");
         std::fs::create_dir_all(&workspace).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions =
-            session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+            .await
+            .unwrap();
         let memory = std::sync::RwLock::new(memory);
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
@@ -111,11 +112,13 @@ mod tests {
             memory_dir: dir.path().to_path_buf(),
             workspace_dir: workspace,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: &targets,
             session_id: "t".into(),
             turn_id: None,
             credentials: &creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -123,47 +126,50 @@ mod tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         };
         f(&ctx);
     }
 
-    #[test]
-    fn agent_requires_summary() {
+    #[tokio::test]
+    async fn agent_requires_summary() {
         with_ctx(|ctx| {
             let err = dispatch(ctx, &json!({ "to": "agent", "reason": "ready" }))
                 .unwrap_err()
                 .to_string();
             assert!(err.contains("summary"), "{err}");
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn plan_ok_without_summary() {
+    #[tokio::test]
+    async fn plan_ok_without_summary() {
         with_ctx(|ctx| {
             let raw = dispatch(ctx, &json!({ "to": "plan", "reason": "need a plan" })).unwrap();
             let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
             assert_eq!(v["to"], "plan");
             assert!(v["summary"].is_null());
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn rejects_ask_target() {
+    #[tokio::test]
+    async fn rejects_ask_target() {
         with_ctx(|ctx| {
             let err = dispatch(ctx, &json!({ "to": "ask", "reason": "x" })).unwrap_err();
             assert!(
                 err.to_string().contains("参数无效"),
                 "expected deserialize error, got {err}"
             );
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn agent_with_summary_ok() {
+    #[tokio::test]
+    async fn agent_with_summary_ok() {
         with_ctx(|ctx| {
             let raw = dispatch(
                 ctx,
@@ -177,6 +183,7 @@ mod tests {
             let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
             assert_eq!(v["to"], "agent");
             assert_eq!(v["summary"], "1. do A\n2. do B");
-        });
+        })
+        .await;
     }
 }

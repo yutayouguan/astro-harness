@@ -13,8 +13,8 @@
 
 **不变量（全链路）**
 
-- `messages.content` / DB `content`：**永远保留全文**（UI、FTS、审计）——也称 **会话原文 / DB 视图**
-- `messages.compressed_content` + `provider_history()`：仅 **Provider 视图**（发给上游 API 的消息；可 spill / prune / LLM 摘要 / head-tail / mid-run 折叠）
+- `response_items.item_json`：**永远保留原生 item**（UI、FTS、审计与恢复）
+- item metadata 中的 `astro_compressed_output` + `provider_response_history()`：仅 **Provider 视图**（可 spill / prune / LLM 摘要 / head-tail / mid-run 折叠）
 - mid-run handoff：只折叠 Provider 视图，不改 DB、不拆 session
 - 丢细节可恢复：spill 文件 + `session_search` + `file_ops read`
 
@@ -24,17 +24,17 @@
 
 | 说法 | 是否推荐 | 说明 |
 |------|----------|------|
-| **Provider 视图** | ✅ 正式名 | 对齐 `provider_history()`、`to_provider_messages`、代码里的 *provider-facing* |
+| **Provider 视图** | ✅ 正式名 | 对齐 `provider_response_history()` 和代码里的 *provider-facing* |
 | 发给模型的消息 / 发给模型的视图 | ✅ 可作口语解释 | 对外说明「模型实际读到什么」时可用；文档里宜写成「Provider 视图（发给模型的消息）」 |
 | model 视图 | ❌ 勿作正式名 | 易与「模型内部表示」「会话级摘要」混淆；仓库也未把它当术语 |
 
 对照关系：
 
 ```text
-用户在 UI 看到的 / FTS 搜到的     = 会话原文（content / DB）
+用户在 UI 看到的 / FTS 搜到的     = ResponseItem 原生内容 / 可重建索引
 真正 POST 给 OpenAI/Gemini/… 的 = Provider 视图
-  ├─ 单条 tool：compressed_content（spill / prune / LLM 摘要 / head-tail）
-  └─ 整段历史：provider_history()（可含 mid-run handoff 折叠）
+  ├─ 单条 tool：astro_compressed_output（spill / prune / LLM 摘要 / head-tail）
+  └─ 整段历史：provider_response_history()（可含 mid-run handoff 折叠）
 ```
 
 一句话：**对内写 Provider 视图；需要解释时补一句「即发给模型的消息」。**
@@ -47,8 +47,8 @@
 
 ```text
 记录 tool 结果
-  ├─ ≥16 KiB → 落盘 spill + 改写 compressed_content（Cursor 式）
-  └─ 写入 session DB（全文）
+  ├─ ≥16 KiB → 落盘 spill + 写入 item metadata 压缩视图（Cursor 式）
+  └─ 原生 ResponseItem 写入 session DB
 
 每轮工具结束后
   ├─ maintain_tool_context
@@ -67,7 +67,7 @@
 每轮 LLM 请求前（Gateway 85%）
   ├─ 占用 ≥85% → 再跑 maintain_tool_context
   ├─ 尝试 mid-run（若本轮尚未做）
-  ├─ 用 provider_history() 作为 Provider 视图（发给上游 API）
+  ├─ 用 provider_response_history() 作为 Provider 视图（发给上游 API）
   └─ 发出 ContextUsage（含 recommend_compact）
 ```
 
@@ -79,7 +79,7 @@
 | Medium | ≥ 60% | 1100 + 500 | 同上 |
 | Hard | ≥ 80% | 600 + 200 | 保护区外全部 tool |
 
-窗口来源：`ChatRequest.context_window`（Tauri `model_meta`）→ `AgentLoop::set_context_window`；缺省 128k。
+窗口来源：Tauri `model_meta` → `AgentLoop::set_context_window`；缺省 128k。
 
 条数兜底：未压缩 tool ≥ **12** 时也会进入维护（用 Soft 级参数）。
 
@@ -157,10 +157,12 @@ Provider 视图中的 Recovery 提示已写入 spill/prune 模板。
 | mid-run 摘要 | `crates/agent-core/src/exec/mid_run_summary.rs` |
 | 多轮挂钩 | `crates/agent-core/src/streaming/multi_turn.rs`（Gateway 前 + 工具后） |
 | Spill | `common/src/tool_spill.rs` |
-| Provider 视图 | `provider_history()` / `compressed_content` 优先 |
+| Provider 视图 | `provider_response_history()` / `astro_compressed_output` 优先 |
 | 会话压实 | `session/.../compact_and_split`，`apps/desktop/.../compaction_commands.rs` |
 | 辅模型压实 | `AuxiliaryTask::Compaction` → `compact_chat_session` / mid-run |
 | 前端提示 | `ContextUsage.recommendCompact` → toast（60s 冷却） |
+| 占用真值 | 最近 Provider total → 分项重算 → 本地字符估算 |
+| 分层解释 | 始终保留 sampling 前 system/tools/MCP/memory/conversation 估算 |
 
 ---
 
@@ -224,7 +226,7 @@ UI：占用查看仍在聊天右栏 Context Explorer；辅模型页的 `auxiliar
 1. **长工具链桌面 Agent**：依赖窗口比例 + spill，勿把条数阈值调太低。
 2. **仍频繁触顶**：用户主动 `/compact`；关注 `recommendCompact` toast（仅建议，前端不会自动拆 session）。上下文条/详情只展示后端 `context_usage` 与真实 `context_window`，不按 128K 估算。
 3. **调试**：`RUST_LOG=agent=debug` 查看 `tool context maintenance` / `tool LLM compress` / `gateway pre-maintain` / `mid-run summary` / `thrashing` 日志。
-4. **跨厂商**：`context_window` 由 Tauri 从 models 缓存 / LiteLLM 注入；未知模型 agent 侧缺省 128k，前端未知则显示「—」而非假百分比。
+4. **跨厂商**：`context_window` 由 Tauri 从 models 缓存 / LiteLLM 注入；未知模型 agent 侧缺省 128k，前端未知则显示「—」而非假百分比。占用来源显式区分 `provider_reported`、`provider_recomputed` 和 `local_estimate`。
 5. **辅模型**：配置 `AuxiliaryTask::Compaction` 目标；未配置时自动退回 head/tail，不影响主对话。
 
 ---
@@ -233,5 +235,6 @@ UI：占用查看仍在聊天右栏 Context Explorer；辅模型页的 `auxiliar
 
 - [x] Hard 阶段自动调用辅模型做 **mid-run 中间轮次摘要**（仍不拆 session）
 - [x] `ContextUsage` 事件增加 `recommendCompact` 供前端 toast
+- [x] Provider actual + local segments 混合快照，支持 cache/reasoning 明细与 rollout 回放
 - [x] Gateway 85% 预压安全网（进 LLM 前 `maintain_tool_context`）
 - [x] Agno 式 **逐条 LLM 摘要 tool**（失败回退 head/tail）

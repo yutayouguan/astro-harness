@@ -4,7 +4,10 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Codex 对齐的工具名——支持普通名和命名空间。
+/// Responses API 顶层 function/custom 工具所属的默认命名空间。
+pub const DEFAULT_FUNCTION_NAMESPACE: &str = "functions";
+
+/// 工具名——支持普通名和命名空间。
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ToolName {
     Plain(String),
@@ -12,14 +15,28 @@ pub enum ToolName {
 }
 
 impl ToolName {
+    pub fn new(namespace: Option<&str>, name: impl Into<String>) -> Self {
+        match namespace
+            .filter(|namespace| !namespace.is_empty() && *namespace != DEFAULT_FUNCTION_NAMESPACE)
+        {
+            Some(namespace) => Self::namespaced(namespace, name),
+            None => Self::plain(name),
+        }
+    }
+
     pub fn plain(name: impl Into<String>) -> Self {
         Self::Plain(name.into())
     }
 
     pub fn namespaced(namespace: impl Into<String>, name: impl Into<String>) -> Self {
-        Self::Namespaced {
-            namespace: namespace.into(),
-            name: name.into(),
+        let namespace = namespace.into();
+        if namespace.is_empty() || namespace == DEFAULT_FUNCTION_NAMESPACE {
+            Self::Plain(name.into())
+        } else {
+            Self::Namespaced {
+                namespace,
+                name: name.into(),
+            }
         }
     }
 
@@ -30,13 +47,16 @@ impl ToolName {
         }
     }
 
-    pub fn parse(wire: &str) -> Self {
-        match wire.split_once('.') {
-            Some((ns, name)) if !ns.is_empty() && !name.is_empty() => Self::Namespaced {
-                namespace: ns.to_string(),
-                name: name.to_string(),
-            },
-            _ => Self::Plain(wire.to_string()),
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Plain(name) | Self::Namespaced { name, .. } => name,
+        }
+    }
+
+    pub fn namespace(&self) -> Option<&str> {
+        match self {
+            Self::Plain(_) => None,
+            Self::Namespaced { namespace, .. } => Some(namespace),
         }
     }
 }
@@ -47,7 +67,7 @@ impl fmt::Display for ToolName {
     }
 }
 
-/// Codex 对齐的工具规格分类。
+/// 工具规格分类。
 #[derive(Debug, Clone)]
 pub enum ToolSpec {
     /// 标准 JSON function 工具（绝大多数）。
@@ -77,7 +97,7 @@ impl Default for ToolSpec {
     }
 }
 
-/// Codex 对齐的工具执行审批需求声明。
+/// 工具执行审批需求声明。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ExecApprovalRequirement {
     /// 不需要审批（只读工具、纯计算等）。
@@ -89,44 +109,64 @@ pub enum ExecApprovalRequirement {
     Forbidden,
 }
 
-/// Tool-level preference for process sandbox selection, aligned with Codex.
+/// 工具级别的进程沙箱选择偏好。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SandboxablePreference {
-    /// Let the orchestrator select a sandbox from the active permission profile.
+    /// 让编排器根据当前权限配置自动选择沙箱。
     Auto,
-    /// Require a platform sandbox even when the ambient profile is unrestricted.
+    /// 即使环境权限配置不受限，也强制要求平台沙箱。
     Require,
-    /// This tool does not launch a process through the command sandbox.
+    /// 此工具不通过命令沙箱启动进程。
     #[default]
     Forbid,
 }
 
-/// Tool visibility level for LLM context injection (aligned with Codex ToolExposure).
+/// 工具在 LLM 上下文注入中的可见性级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolExposure {
-    /// Always injected into LLM tools parameter.
+    /// 始终注入 LLM 的 tools 参数。
     #[default]
     Direct,
-    /// Not injected; discoverable via tool_search, callable once discovered.
+    /// 不注入；可通过 tool_search 发现，发现后可调用。
     Deferred,
-    /// Completely hidden from LLM and tool_search. Internal use only.
+    /// 对 LLM 和 tool_search 完全隐藏，仅供内部使用。
     Hidden,
+    /// 延迟加载，但仅对模型可见，不对用户展示。
+    DeferredModelOnly,
+    /// 直接注入，但仅对模型可见，不对用户展示。
+    DirectModelOnly,
 }
 
 impl ToolExposure {
     pub fn is_direct(&self) -> bool {
-        *self == Self::Direct
+        matches!(self, Self::Direct | Self::DirectModelOnly)
     }
     pub fn is_deferred(&self) -> bool {
-        *self == Self::Deferred
+        matches!(self, Self::Deferred | Self::DeferredModelOnly)
     }
     pub fn is_hidden(&self) -> bool {
-        *self == Self::Hidden
+        matches!(self, Self::Hidden)
+    }
+
+    pub fn is_model_only(&self) -> bool {
+        matches!(self, Self::DirectModelOnly | Self::DeferredModelOnly)
     }
 }
 
-/// MCP 工具审批模式，对齐 Codex `approval_mode` 配置。
+/// Format descriptor for freeform (non-JSON) tools like apply_patch.
+/// The model outputs raw text matching the grammar instead of JSON arguments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FreeformToolFormat {
+    /// Format type, e.g. "grammar".
+    pub r#type: String,
+    /// Grammar syntax, e.g. "lark".
+    pub syntax: String,
+    /// Grammar definition string.
+    pub definition: String,
+}
+
+/// MCP 工具审批模式。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum McpToolApprovalMode {
@@ -230,31 +270,60 @@ impl McpToolApproval {
 }
 
 /// 单个可注册工具的完整元数据条目。
+#[derive(Clone)]
 pub struct ToolEntry {
     pub name: String,
+    /// 可选的模型可见子工具名；内部注册键仍使用 `name`。
+    pub model_name: Option<String>,
     pub toolset: String,
     pub description: String,
     pub schema: serde_json::Value,
-    pub check_fn: Option<Box<dyn Fn() -> bool + Send + Sync>>,
+    pub check_fn: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
     pub icon: &'static str,
     pub needs_confirmation: bool,
     pub stop_after_tool_call: bool,
     pub exclusive_access: bool,
     pub sandbox_preference: SandboxablePreference,
     pub mcp_approval: Option<McpToolApproval>,
+    /// MCP 工具的显式输出 token 预算；其他工具默认为 `None`。
+    pub output_token_limit: Option<usize>,
     pub approval_requirement: ExecApprovalRequirement,
     /// Tool visibility level: Direct (default), Deferred (discoverable via tool_search),
     /// or Hidden (internal only). Replaces the former `deferred: bool` flag.
     pub exposure: ToolExposure,
+    /// Provider 不支持 tool_search 时，是否允许将 Deferred 工具降级为 eager。
+    pub allow_eager_fallback: bool,
     /// Tool namespace for grouping (e.g., "shell", "media", "system", "mcp").
     /// Default empty string means the default namespace.
     pub namespace: String,
+    /// Optional freeform format descriptor for non-JSON tools (e.g. apply_patch grammar).
+    pub freeform_format: Option<FreeformToolFormat>,
 }
 
 impl ToolEntry {
+    /// 返回 Responses API 中的原生工具身份。
+    pub fn tool_name(&self) -> ToolName {
+        if let Some(model_name) = self.model_name.as_deref().filter(|name| !name.is_empty()) {
+            return ToolName::new(
+                (!self.namespace.is_empty()).then_some(self.namespace.as_str()),
+                model_name,
+            );
+        }
+        if self.namespace.is_empty() {
+            return ToolName::plain(self.name.clone());
+        }
+        let child_name = self
+            .name
+            .strip_prefix(&format!("{}__", self.namespace))
+            .or_else(|| self.name.strip_prefix(&format!("{}_", self.namespace)))
+            .unwrap_or(&self.name);
+        ToolName::namespaced(self.namespace.clone(), child_name)
+    }
+
     pub fn lifecycle_defaults() -> Self {
         Self {
             name: String::new(),
+            model_name: None,
             toolset: String::new(),
             description: String::new(),
             schema: serde_json::json!({ "type": "object", "properties": {} }),
@@ -265,9 +334,12 @@ impl ToolEntry {
             exclusive_access: false,
             sandbox_preference: SandboxablePreference::Forbid,
             mcp_approval: None,
+            output_token_limit: None,
             approval_requirement: ExecApprovalRequirement::Skip,
             exposure: ToolExposure::Direct,
+            allow_eager_fallback: true,
             namespace: String::new(),
+            freeform_format: None,
         }
     }
 
@@ -310,24 +382,16 @@ mod tests {
 
     #[test]
     fn tool_name_plain_roundtrips() {
-        let name = ToolName::plain("terminal");
-        assert_eq!(name.wire_name(), "terminal");
-        assert_eq!(ToolName::parse("terminal"), name);
+        let name = ToolName::plain("exec_command");
+        assert_eq!(name.wire_name(), "exec_command");
+        assert_eq!(ToolName::new(Some("functions"), "exec_command"), name);
     }
 
     #[test]
     fn tool_name_namespaced_roundtrips() {
         let name = ToolName::namespaced("clock", "curr_time");
         assert_eq!(name.wire_name(), "clock.curr_time");
-        assert_eq!(ToolName::parse("clock.curr_time"), name);
         assert_eq!(format!("{name}"), "clock.curr_time");
-    }
-
-    #[test]
-    fn tool_name_parse_edge_cases() {
-        assert_eq!(ToolName::parse(""), ToolName::Plain(String::new()));
-        assert_eq!(ToolName::parse(".name"), ToolName::Plain(".name".into()));
-        assert_eq!(ToolName::parse("ns."), ToolName::Plain("ns.".into()));
     }
 
     #[test]
@@ -347,6 +411,21 @@ mod tests {
     fn tool_entry_defaults_include_skip_approval() {
         let entry = ToolEntry::lifecycle_defaults();
         assert_eq!(entry.approval_requirement, ExecApprovalRequirement::Skip);
+        assert!(entry.allow_eager_fallback);
+    }
+
+    #[test]
+    fn tool_entry_can_separate_model_and_registered_names() {
+        let entry = ToolEntry {
+            name: "workflow__stable-id".into(),
+            model_name: Some("weekly_report".into()),
+            namespace: "workflow".into(),
+            ..ToolEntry::lifecycle_defaults()
+        };
+        assert_eq!(
+            entry.tool_name(),
+            ToolName::namespaced("workflow", "weekly_report")
+        );
     }
 
     fn approval(mode: McpToolApprovalMode, annotations: McpToolAnnotations) -> McpToolApproval {

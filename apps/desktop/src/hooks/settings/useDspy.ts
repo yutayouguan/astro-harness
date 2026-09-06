@@ -58,24 +58,30 @@ export function useDspy(active = true): UseDspy {
   }, [reload]);
 
   const run = useCallback(
-    async (skillId: string, mock = false): Promise<EvolutionRunReport | null> => {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const report = await invoke<EvolutionRunReport>("run_evolution_dspy", { skillId, mock });
-      setMessage(
-        report.proposals.length > 0
-          ? `已生成 ${report.proposals.length} 条待审提案`
-          : "运行完成，未产出提案",
-      );
-      return report;
-    } catch (err) {
-      setError(errorMessage(err));
-      return null;
-    } finally {
-      setBusy(false);
-    }
+    async (
+      skillId: string,
+      mock = false,
+    ): Promise<EvolutionRunReport | null> => {
+      setBusy(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const report = await invoke<EvolutionRunReport>("run_evolution_dspy", {
+          skillId,
+          mock,
+        });
+        setMessage(
+          report.proposals.length > 0
+            ? `已生成 ${report.proposals.length} 条待审提案`
+            : "运行完成，未产出提案",
+        );
+        return report;
+      } catch (err) {
+        setError(errorMessage(err));
+        return null;
+      } finally {
+        setBusy(false);
+      }
     },
     [],
   );

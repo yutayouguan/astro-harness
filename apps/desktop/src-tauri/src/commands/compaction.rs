@@ -4,13 +4,12 @@ use futures::StreamExt;
 use serde::Serialize;
 use uuid::Uuid;
 
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
-use session::StoredMessage;
+use session::StoredResponseItem;
 
 use crate::meta::auxiliary_resolver::{
-    primary_chat_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
+    primary_model_target_for_session, resolve_auxiliary_targets, AuxiliaryTargets, ResolvedTarget,
 };
 
 const SUMMARY_PREFIX: &str = "[CONTEXT COMPACTION]";
@@ -20,10 +19,12 @@ fn keep_tail_default() -> usize {
     memory::load_compression_config(&home::default_memory_dir()).keep_tail_bubbles
 }
 
-fn open_sessions() -> Result<session::SessionStore, String> {
+async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&root.join("sessions")).map_err(|e| e.to_string())
+    session::SessionStore::open_sessions_dir(&home::data_dir(&root))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn fire_manual_pre_compact(
@@ -75,19 +76,20 @@ pub struct CompactChatResultDto {
 }
 
 /// 无模型时的启发式摘要（最近若干条 user/assistant 截断拼接）。
-fn heuristic_summary(messages: &[StoredMessage], max_chars: usize) -> String {
+fn heuristic_summary(messages: &[StoredResponseItem], max_chars: usize) -> String {
     let mut parts = Vec::new();
     for m in messages.iter().rev() {
-        if m.role != "user" && m.role != "assistant" {
+        if !matches!(m.role(), Some("user" | "assistant")) {
             continue;
         }
-        let text = m.content.as_deref().unwrap_or("").trim();
+        let text = m.text();
+        let text = text.trim();
         if text.is_empty() {
             continue;
         }
         parts.push(format!(
             "{}: {}",
-            m.role,
+            m.role().unwrap_or("unknown"),
             text.chars().take(400).collect::<String>()
         ));
         if parts.len() >= 8 {
@@ -135,12 +137,8 @@ async fn summarize_with_target(
 Cover: goals, constraints, done, in-progress, key paths/decisions, next steps. \
 Reply in the same language as the transcript. No preamble.";
     let user = format!("Transcript:\n\n{transcript}");
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
     let mut stream =
-        providers::dispatch::chat_stream(&target.backend_id, messages, vec![], &config)
+        providers::dispatch::agent_responses_prompt(&target.backend_id, system, user, &config)
             .await
             .map_err(|e| format!("压实调用模型失败: {e}"))?;
     let mut out = String::new();
@@ -179,7 +177,7 @@ async fn summarize_with_targets(
 
 /// 用辅助模型路由生成压实交接摘要（primary 取自会话账单/模型）。
 async fn summarize_with_llm(session_id: &str, transcript: &str) -> Result<String, String> {
-    let primary = primary_chat_target_for_session(session_id)?;
+    let primary = primary_model_target_for_session(session_id).await?;
     let targets = resolve_auxiliary_targets(memory::AuxiliaryKind::Compaction, &primary)?;
     summarize_with_targets(targets, transcript).await
 }
@@ -202,21 +200,25 @@ pub async fn compact_chat_session(
     let live_session = agent::exec::dispatch::active_root_session_for_hooks(&memory_dir, sid)
         .map_err(|error| error.to_string())?;
 
-    // SessionStore（rusqlite）非 Send：先读出元数据/消息并 drop，再 await LLM。
+    // 先读出元数据/消息并 drop store，再 await LLM。
     let (messages, expected_last_message_id, transcript) = {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         let meta = store
             .get_session(sid)
+            .await
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "会话不存在".to_string())?;
         if meta.ended_at.is_some() {
             return Err("会话已结束，无法压实".into());
         }
 
-        let messages = store.get_messages(sid).map_err(|e| e.to_string())?;
+        let messages = store
+            .get_response_items(sid)
+            .await
+            .map_err(|e| e.to_string())?;
         let bubble_count = messages
             .iter()
-            .filter(|m| m.role == "user" || m.role == "assistant")
+            .filter(|m| matches!(m.role(), Some("user" | "assistant")))
             .count();
         if bubble_count < 2 {
             return Err("消息过少，无需压实".into());
@@ -224,17 +226,12 @@ pub async fn compact_chat_session(
 
         let transcript: String = messages
             .iter()
-            .filter(|m| m.role == "user" || m.role == "assistant")
+            .filter(|m| matches!(m.role(), Some("user" | "assistant")))
             .map(|m| {
                 format!(
                     "{}: {}",
-                    m.role,
-                    m.content
-                        .as_deref()
-                        .unwrap_or("")
-                        .chars()
-                        .take(2000)
-                        .collect::<String>()
+                    m.role().unwrap_or("unknown"),
+                    m.text().chars().take(2000).collect::<String>()
                 )
             })
             .collect::<Vec<_>>()
@@ -256,9 +253,10 @@ pub async fn compact_chat_session(
 
     let new_id = Uuid::new_v4().to_string();
     {
-        let store = open_sessions()?;
+        let store = open_sessions().await?;
         store
             .compact_and_split_if_unchanged(sid, &new_id, &summary, keep, expected_last_message_id)
+            .await
             .map_err(|e| e.to_string())?;
     }
 
@@ -292,7 +290,7 @@ mod tests {
             tts_model: String::new(),
             vision_model: String::new(),
             music_model: String::new(),
-            api_mode: String::new(),
+            embedding_model: String::new(),
         }
     }
 
@@ -334,11 +332,12 @@ mod tests {
         assert!(next_compaction_target(&targets, Some(0)).is_none());
     }
 
-    #[test]
-    fn manual_compaction_fires_canonical_boundaries() {
+    #[tokio::test]
+    async fn manual_compaction_fires_canonical_boundaries() {
         let dir = tempfile::tempdir().unwrap();
-        let session =
-            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        let session = agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf()))
+            .await
+            .unwrap();
         let observed = Arc::new(Mutex::new(Vec::new()));
         for event in [hooks::PRE_COMPACT, hooks::POST_COMPACT] {
             let captured = Arc::clone(&observed);
@@ -363,11 +362,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn manual_pre_compact_can_stop_before_side_effects() {
+    #[tokio::test]
+    async fn manual_pre_compact_can_stop_before_side_effects() {
         let dir = tempfile::tempdir().unwrap();
-        let session =
-            agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf())).unwrap();
+        let session = agent::Session::new(agent::Config::with_defaults(dir.path().to_path_buf()))
+            .await
+            .unwrap();
         session.hook_bus().register(hooks::PRE_COMPACT, |payload| {
             assert_eq!(payload.trigger.as_deref(), Some("manual"));
             hooks::HookOutcome::Block("keep current transcript".into())

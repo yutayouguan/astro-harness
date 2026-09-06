@@ -22,27 +22,27 @@ use crate::schema::schema_for_args;
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MusicGenArgs {
-    /// Music description (genre/instruments/BPM/mood/structure). Theme only if no lyrics body.
+    /// 音乐描述（流派/乐器/BPM/情绪/结构）。无歌词正文时仅作主题。
     pub prompt: String,
-    /// Short title for the filename; default "Music".
+    /// 文件名短标题；默认 "Music"。
     #[serde(default)]
     pub title: Option<String>,
-    /// Optional lyrics. If already written, pass them here (else Lyria invents). Prefer `[Verse]`/`[Chorus]` tags.
+    /// 可选歌词。已有歌词时传入此处（否则 Lyria 自动创作）。建议使用 `[Verse]`/`[Chorus]` 标签。
     #[serde(default)]
     pub lyrics: Option<String>,
-    /// `clip` (default, ~30s) or `pro` (full song).
+    /// `clip`（默认，约 30s）或 `pro`（完整歌曲）。
     #[serde(default)]
     pub model: Option<String>,
-    /// Reference image workspace paths (max 10).
+    /// 参考图片工作区路径（最多 10 张）。
     #[serde(default)]
     pub reference_images: Option<Vec<String>>,
-    /// `mp3` (default) or `wav` (pro only).
+    /// `mp3`（默认）或 `wav`（仅 pro）。
     #[serde(default)]
     pub format: Option<String>,
-    /// Cover reference audio URL (MiniMax music-cover model).
+    /// 翻唱参考音频 URL（MiniMax 翻唱模型）。
     #[serde(default)]
     pub cover_audio_url: Option<String>,
-    /// Auto-generate lyrics from prompt (MiniMax lyrics_optimizer).
+    /// 由提示词自动生成歌词（MiniMax lyrics_optimizer）。
     #[serde(default)]
     pub auto_lyrics: Option<bool>,
 }
@@ -114,6 +114,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "music_gen".to_string(),
         toolset: "music_gen".to_string(),
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
         description: "Generate music via Google Lyria 3. model=clip (short) or pro (full song). Pass lyrics if already written or Lyria invents its own. Google only. Writes generated/audio/.".to_string(),
         schema: schema_for_args::<MusicGenArgs>(),
         check_fn: None,

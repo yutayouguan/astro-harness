@@ -1,0 +1,637 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Editor (画布页)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.loop-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* 编辑器是全窗工作台，移除功能页外层预留的四周留白。 */
+.page-body--bare:has(.loop-editor) {
+  --page-body-inline-padding: 0px;
+  padding: 0;
+}
+
+.loop-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 52px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  background: var(--glass-fill-soft);
+  box-shadow: var(--glass-rim);
+  backdrop-filter: var(--backdrop-glass);
+  -webkit-backdrop-filter: var(--backdrop-glass);
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+/* 工具栏按钮统一高度 + hover */
+.loop-editor-toolbar .loop-icon-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.loop-editor-toolbar .loop-icon-btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.loop-editor-toolbar .loop-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.loop-editor-toolbar .loop-btn--secondary:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 20%, var(--border));
+}
+.loop-editor-toolbar .loop-btn--primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 2px 8px
+    color-mix(in srgb, var(--tone, #ec4899) 30%, transparent);
+}
+
+/* 编辑器工具栏图标选择按钮 */
+.loop-editor-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-secondary);
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.loop-editor-icon-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
+  color: var(--ink);
+}
+
+.loop-editor-name-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* 只读态：纯文本按钮 */
+.loop-editor-name-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  max-width: 280px;
+  transition: background 0.12s;
+}
+.loop-editor-name-display:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.loop-editor-name-display > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loop-editor-name-edit {
+  color: var(--ink-tertiary);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+}
+.loop-editor-name-display:hover .loop-editor-name-edit {
+  opacity: 1;
+}
+
+/* 编辑态：input */
+.loop-editor-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg0, #fff);
+  border: 1px solid var(--tone, #6366f1);
+  border-radius: 6px;
+  padding: 4px 10px;
+  outline: none;
+  width: 240px;
+  max-width: 280px;
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 12%, transparent);
+}
+
+.loop-editor-desc {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 2px 4px;
+  min-width: 120px;
+  max-width: 240px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.loop-editor-desc:focus {
+  border-bottom-color: var(--tone, #6366f1);
+  color: var(--ink);
+}
+.loop-editor-desc::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.loop-editor-toolbar-lead,
+.loop-editor-toolbar-tools,
+.loop-editor-toolbar-actions,
+.loop-editor-tool-group {
+  display: flex;
+  align-items: center;
+}
+.loop-editor-toolbar-lead {
+  gap: 6px;
+  min-width: 220px;
+  flex: 1 1 360px;
+  overflow: hidden;
+}
+.loop-editor-toolbar-tools {
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.loop-editor-tool-group {
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--glass-panel) 60%, transparent);
+}
+.loop-editor-toolbar-actions {
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.loop-editor-save-state {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
+}
+.loop-editor-save-state.is-dirty {
+  color: var(--tone, #6366f1);
+}
+.loop-editor-more {
+  position: relative;
+  flex-shrink: 0;
+}
+.loop-editor-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  min-width: 166px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+  background: var(--glass-panel);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+}
+.loop-editor-more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.loop-editor-more-menu button:hover {
+  background: var(--glass-hover);
+  color: var(--ink);
+}
+.loop-edge-type-select {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+.loop-edge-type-select:focus {
+  border-color: var(--tone, #6366f1);
+}
+
+.loop-editor-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.loop-editor-body {
+  --loop-inspector-width: 360px;
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* 大面积画布不叠加重度模糊，只保留轻薄染色，避免整屏发灰。 */
+  background: color-mix(in srgb, var(--glass-panel) 18%, transparent);
+  overflow: hidden;
+}
+
+/* ── Collapse toggle buttons (展开/收起按钮) ──────────────────── */
+
+.loop-collapse-toggle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 32px;
+  border: 1px solid var(--border);
+  background: var(--bg0, #fff);
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  z-index: 25;
+  padding: 0;
+  overflow: visible;
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+.loop-collapse-toggle:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, var(--bg0, #fff));
+}
+
+.loop-collapse-toggle--left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 0 6px 6px 0;
+  border-left: none;
+}
+
+.loop-collapse-toggle--palette-close {
+  position: absolute;
+  left: 208px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 0 6px 6px 0;
+  border-left: none;
+}
+
+.loop-collapse-toggle--right {
+  right: var(--loop-inspector-width);
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 6px 0 0 6px;
+  border-right: none;
+}
+
+/* ── Node palette (左侧) ──────────────────────────────────────── */
+
+.loop-node-palette {
+  width: 208px;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--glass-panel) 82%, transparent);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+    saturate(var(--glass-saturate, 1.18));
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 0 0 10px;
+}
+
+.loop-palette-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 11px 12px 9px;
+  background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)));
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.loop-palette-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  padding: 0 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.loop-palette-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg0, #fff) 72%, transparent);
+  color: var(--ink-tertiary);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.loop-palette-search-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--tone, #6366f1) 70%, var(--border));
+  background: color-mix(in srgb, var(--bg0, #fff) 84%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--tone, #6366f1) 10%, transparent);
+}
+.loop-palette-search {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--ink);
+  outline: none;
+}
+.loop-palette-search::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.loop-palette-group {
+  margin-bottom: 4px;
+}
+
+.loop-palette-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.loop-palette-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.loop-palette-group-header:hover {
+  background: var(--glass-hover);
+}
+
+.loop-palette-cat-icon {
+  color: var(--ink-tertiary);
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.loop-palette-group.is-open > .loop-palette-group-header {
+  color: var(--tone, #6366f1);
+}
+.loop-palette-group.is-open
+  > .loop-palette-group-header
+  .loop-palette-cat-icon {
+  color: var(--tone, #6366f1);
+}
+
+.loop-palette-items {
+  padding: 2px 7px 3px 24px;
+}
+
+.loop-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: grab;
+  user-select: none;
+  transition: background 0.12s ease;
+}
+.loop-palette-item:hover {
+  background: var(--glass-hover);
+}
+.loop-palette-item:active {
+  cursor: grabbing;
+}
+
+.loop-palette-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.loop-palette-item-plus {
+  margin-left: auto;
+  opacity: 0.34;
+  transition: opacity 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+.loop-palette-item:hover .loop-palette-item-plus {
+  opacity: 0.7;
+}
+.loop-palette-item-plus:hover {
+  background: var(--glass-hover);
+  opacity: 1 !important;
+}
+
+.loop-palette-empty {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+
+/* ── Drag ghost ───────────────────────────────────────────────── */
+
+.loop-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--glass-panel);
+  border: 1.5px solid var(--tone, #ec4899);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  opacity: 0.9;
+}
+
+/* ── Connection-drop node picker ──────────────────────────────── */
+
+.loop-node-picker {
+  width: 240px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--glass-panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  animation: loop-picker-in 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes loop-picker-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.loop-node-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.loop-node-picker-search-icon {
+  color: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+
+.loop-node-picker-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+}
+.loop-node-picker-search-input::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.loop-node-picker-body {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.loop-node-picker-group {
+  margin-bottom: 4px;
+}
+
+.loop-node-picker-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.loop-node-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.loop-node-picker-item:hover {
+  background: color-mix(in srgb, var(--tone, #ec4899) 10%, transparent);
+}
+
+.loop-node-picker-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  flex-shrink: 0;
+}

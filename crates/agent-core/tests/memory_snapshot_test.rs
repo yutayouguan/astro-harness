@@ -10,6 +10,7 @@ async fn snapshot_frozen_within_session() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "freeze-session".into(),
     )
+    .await
     .unwrap();
 
     let marker = "唯一冻结条目-aurora-xyz-991";

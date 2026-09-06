@@ -4,7 +4,7 @@ mod common;
 
 use std::sync::Arc;
 
-use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
+use agent::streaming::{run_multi_turn_events_with_responses_fn, ResponsesOverride};
 use agent::{AgentStatus, Config, Event, EventMsg, Op, Session};
 use agent_protocol::{
     TurnInput, TurnInputMode, TurnInputRequest, TurnInputSubmission, TurnStartedEvent,
@@ -28,7 +28,25 @@ async fn collect_next_terminal(thread: &agent::AstroThread) -> Vec<Event> {
     }
 }
 
-fn provider_error_chat() -> ChatOverride {
+async fn collect_next_terminal_from_receiver(
+    receiver: &mut tokio::sync::mpsc::Receiver<anyhow::Result<Event>>,
+) -> Vec<Event> {
+    let mut events = Vec::new();
+    loop {
+        let event = receiver
+            .recv()
+            .await
+            .expect("turn event channel closed before terminal event")
+            .expect("turn event stream returned an error");
+        let terminal = event.msg.is_terminal();
+        events.push(event);
+        if terminal {
+            return events;
+        }
+    }
+}
+
+fn provider_error_responses() -> ResponsesOverride {
     Arc::new(|_messages, _tools, _config| {
         Box::pin(async { Err(anyhow::anyhow!("provider failed")) })
     })
@@ -117,11 +135,11 @@ async fn rollout_shutdown_error_is_live_and_precedes_shutdown_complete() {
 
 #[tokio::test]
 async fn provider_error_emits_one_error_and_complete_with_error() {
-    let (_dir, session, thread, _recorder, _path) = new_thread().await;
-    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(8);
-    let run = tokio::spawn(run_multi_turn_events_with_chat_fn(
+    let (_dir, session, _thread, _recorder, _path) = new_thread().await;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
+    let run = tokio::spawn(run_multi_turn_events_with_responses_fn(
         Arc::clone(&session),
-        provider_error_chat(),
+        provider_error_responses(),
         ProviderConfig::default(),
         "system".into(),
         PauseControl::new(),
@@ -129,7 +147,7 @@ async fn provider_error_emits_one_error_and_complete_with_error() {
         event_tx,
     ));
 
-    let events = collect_next_terminal(&thread).await;
+    let events = collect_next_terminal_from_receiver(&mut event_rx).await;
     run.await.unwrap();
     assert_eq!(
         events
@@ -146,10 +164,10 @@ async fn provider_error_emits_one_error_and_complete_with_error() {
 
 #[tokio::test]
 async fn pause_control_cancel_emits_only_turn_aborted() {
-    let (_dir, session, thread, _recorder, _path) = new_thread().await;
+    let (_dir, session, _thread, _recorder, _path) = new_thread().await;
     let pause = PauseControl::new();
     let entered = Arc::new(Notify::new());
-    let chat: ChatOverride = {
+    let chat: ResponsesOverride = {
         let entered = Arc::clone(&entered);
         Arc::new(move |_messages, _tools, _config| {
             let entered = Arc::clone(&entered);
@@ -159,8 +177,8 @@ async fn pause_control_cancel_emits_only_turn_aborted() {
             })
         })
     };
-    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(8);
-    let run = tokio::spawn(run_multi_turn_events_with_chat_fn(
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
+    let run = tokio::spawn(run_multi_turn_events_with_responses_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -172,7 +190,7 @@ async fn pause_control_cancel_emits_only_turn_aborted() {
     entered.notified().await;
     pause.cancel();
 
-    let events = collect_next_terminal(&thread).await;
+    let events = collect_next_terminal_from_receiver(&mut event_rx).await;
     run.await.unwrap();
     assert!(matches!(
         events.last().unwrap().msg,
@@ -195,7 +213,11 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
     let rollout = RolloutRecorder::open(dir.path().join("prepare-failure.jsonl"))
         .await
         .unwrap();
-    let session = Arc::new(Session::with_session_id(config, "prepare-failure".into()).unwrap());
+    let session = Arc::new(
+        Session::with_session_id(config, "prepare-failure".into())
+            .await
+            .unwrap(),
+    );
     let thread = agent::AstroThread::spawn(session, rollout).unwrap();
     let (_submission_id, submitted) = thread
         .submit_turn(
@@ -205,6 +227,8 @@ async fn prepare_failure_emits_one_error_and_complete_with_error() {
                     image_data_urls: Vec::new(),
                     client_message_id: None,
                 }],
+                rollback_keep_chat_bubbles: None,
+                thread_settings: Default::default(),
             },
             TurnInputMode::StartIfIdle,
         )
@@ -251,6 +275,8 @@ async fn prepare_hook_cancellation_emits_only_turn_aborted() {
                     image_data_urls: Vec::new(),
                     client_message_id: None,
                 }],
+                rollback_keep_chat_bubbles: None,
+                thread_settings: Default::default(),
             },
             TurnInputMode::StartIfIdle,
         )

@@ -1,4 +1,4 @@
-//! Codex-compatible policy core for the managed subprocess network proxy.
+//! Policy core for the managed subprocess network proxy.
 //!
 //! The crate owns the managed-network enforcement boundary and a loopback-only
 //! HTTP/1 CONNECT listener. Plain HTTP forwarding and SOCKS are not implemented.

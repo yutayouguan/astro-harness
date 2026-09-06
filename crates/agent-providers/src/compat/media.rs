@@ -53,10 +53,16 @@ impl ImageGenModel for CompatImageGenModel {
     async fn generate(
         &self,
         prompt: &str,
-        _config: &ImageGenConfig,
+        config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
         let cfg = self.0.to_provider_config();
-        crate::openai::image_http::openai_generate_image(self.0.http(), prompt, &cfg).await
+        crate::openai::image_http::openai_generate_image_with_config(
+            self.0.http(),
+            prompt,
+            &cfg,
+            config,
+        )
+        .await
     }
 }
 

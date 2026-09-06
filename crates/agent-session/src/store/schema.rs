@@ -1,15 +1,30 @@
-//! Schema 版本、DDL、增量迁移与 FTS 自愈。
+//! SessionStore 当前 schema 与初始化。
 
+use agent_db::sqlx;
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 17;
+pub const SCHEMA_VERSION: i32 = 22;
 
-const SCHEMA_V11_DDL: &str = r#"
+const SCHEMA_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    icon TEXT
+);
+
+CREATE TABLE IF NOT EXISTS project_roots (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    PRIMARY KEY (project_id, path)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -42,6 +57,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived_at REAL,
     pinned_at REAL,
     api_call_count INTEGER DEFAULT 0,
+    project_root TEXT,
+    project_id TEXT REFERENCES projects(id),
+    branch_kind TEXT,
+    branch_parent_message_id INTEGER,
+    branch_parent_turn_index INTEGER,
+    branch_inherited_turn_count INTEGER,
+    branch_created_at REAL,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -51,359 +73,180 @@ CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_title_unique
     ON sessions(title) WHERE title IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE IF NOT EXISTS response_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES sessions(id),
-    role TEXT NOT NULL,
-    content TEXT,
-    compressed_content TEXT,
-    media_json TEXT,
-    tool_call_id TEXT,
-    tool_calls TEXT,
+    item_json TEXT NOT NULL,
+    role TEXT,
+    search_text TEXT NOT NULL DEFAULT '',
     tool_name TEXT,
     timestamp REAL NOT NULL,
     token_count INTEGER,
-    finish_reason TEXT,
-    reasoning TEXT,
-    reasoning_content TEXT,
-    reasoning_details TEXT,
-    codex_reasoning_items TEXT,
-    codex_message_items TEXT
+    finish_reason TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_response_items_session
+    ON response_items(session_id, timestamp, id);
 "#;
 
-const MESSAGES_FTS_V11_DDL: &str = r#"
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-    content,
+const RESPONSE_ITEMS_FTS_DDL: &str = r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS response_items_fts USING fts5(
+    search_text,
     tool_name,
-    tool_calls,
+    item_json,
     tokenize = 'unicode61'
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts_trigram USING fts5(
-    content,
+CREATE VIRTUAL TABLE IF NOT EXISTS response_items_fts_trigram USING fts5(
+    search_text,
     tool_name,
-    tool_calls,
+    item_json,
     tokenize = 'trigram'
 );
 
-CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
-    INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-    INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+CREATE TRIGGER IF NOT EXISTS response_items_fts_insert AFTER INSERT ON response_items BEGIN
+    INSERT INTO response_items_fts(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
+    INSERT INTO response_items_fts_trigram(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
 END;
 
 -- SQLite 3.43+ 上 contentful FTS5 的 INSERT … VALUES('delete', …) 会报 SQL logic error；
 -- 改用普通 DELETE（与 direct DELETE FROM fts 行为一致）。
-CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
-    DELETE FROM messages_fts WHERE rowid = old.id;
-    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
+CREATE TRIGGER IF NOT EXISTS response_items_fts_delete AFTER DELETE ON response_items BEGIN
+    DELETE FROM response_items_fts WHERE rowid = old.id;
+    DELETE FROM response_items_fts_trigram WHERE rowid = old.id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
-    DELETE FROM messages_fts WHERE rowid = old.id;
-    INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-    DELETE FROM messages_fts_trigram WHERE rowid = old.id;
-    INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+CREATE TRIGGER IF NOT EXISTS response_items_fts_update AFTER UPDATE ON response_items BEGIN
+    DELETE FROM response_items_fts WHERE rowid = old.id;
+    INSERT INTO response_items_fts(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
+    DELETE FROM response_items_fts_trigram WHERE rowid = old.id;
+    INSERT INTO response_items_fts_trigram(rowid, search_text, tool_name, item_json)
+        VALUES (new.id, new.search_text, new.tool_name, new.item_json);
 END;
 "#;
 
 impl SessionStore {
-    /// 空库建表并 stamp；旧库由 [`SessionStore::open`] 调用增量迁移。
-    ///
-    /// 即便 `schema_version` 已到目标，仍幂等补齐缺列：合并分支可能先 stamp
-    /// 了 v14（如 `archived_at`）却未加 `compressed_content`。
-    pub(crate) fn migrate_schema(&self) -> Result<()> {
-        let current = self.read_schema_version_or_zero()?;
-        let tx = self.conn.unchecked_transaction()?;
-        if current < SCHEMA_VERSION && !self.table_exists("messages")? {
-            self.conn.execute_batch(SCHEMA_V11_DDL)?;
-            self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
+    /// 初始化当前 schema。已有数据库必须精确匹配当前版本。
+    pub(crate) async fn initialize_schema(&self) -> Result<()> {
+        let current = self.read_schema_version_or_zero().await?;
+        if current == SCHEMA_VERSION {
+            return self.validate_current_schema().await;
+        }
+        if current != 0 || self.has_user_tables().await? {
+            self.rebuild_schema().await?;
+            return self.validate_current_schema().await;
         }
 
-        // 必须先补齐列，再执行引用这些列的数据清洗；版本已到也要自愈半迁移库。
-        if self.table_exists("messages")? {
-            self.ensure_messages_compressed_content_column()?;
-            self.ensure_messages_media_json_column()?;
-        }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "archived_at")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN archived_at REAL", [])?;
-        }
-        if self.table_exists("sessions")? && !self.column_exists("sessions", "pinned_at")? {
-            self.conn
-                .execute("ALTER TABLE sessions ADD COLUMN pinned_at REAL", [])?;
-        }
+        let mut tx = self.pool.begin().await?;
+        sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM schema_version")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
+            .bind(SCHEMA_VERSION)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        self.validate_current_schema().await
+    }
 
-        if current < SCHEMA_VERSION {
-            // v16→v17：删除历史用户消息末尾的 `chatModeHint`（`---\n[Mode: …]`），
-            // 模式说明已迁入 system prompt，旧后缀会造成混杂信号。
-            if (1..17).contains(&current) && self.table_exists("messages")? {
-                self.strip_legacy_chat_mode_hints()
-                    .context("strip legacy chatModeHint from user messages")?;
-            }
-            // 所有 DDL 与数据清洗成功后才提交目标版本，避免留下错误 stamp。
-            self.stamp_schema_version()?;
-        }
-        tx.commit()?;
+    async fn has_user_tables(&self) -> Result<bool> {
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
+    }
+
+    async fn validate_current_schema(&self) -> Result<()> {
+        sqlx::query(
+            "SELECT id, project_id, branch_kind, branch_parent_message_id,
+                    branch_parent_turn_index, branch_inherited_turn_count, branch_created_at
+             FROM sessions LIMIT 0",
+        )
+        .execute(&self.pool)
+        .await
+        .context("session database schema marker is current but sessions table is incomplete")?;
+        sqlx::query(
+            "SELECT id, item_json, role, search_text, tool_name
+             FROM response_items LIMIT 0",
+        )
+        .execute(&self.pool)
+        .await
+        .context(
+            "session database schema marker is current but response_items table is incomplete",
+        )?;
+        sqlx::query("SELECT rowid FROM response_items_fts LIMIT 0")
+            .execute(&self.pool)
+            .await
+            .context("session database schema marker is current but FTS tables are incomplete")?;
+        sqlx::query("SELECT rowid FROM response_items_fts_trigram LIMIT 0")
+            .execute(&self.pool)
+            .await
+            .context("session database schema marker is current but FTS tables are incomplete")?;
         Ok(())
     }
 
-    /// 剥离用户消息末尾遗留的 `\n\n---\n[Mode: …]`（旧 `chatModeHint`）。
-    ///
-    /// UPDATE 会触发 FTS 同步；仅改写带该后缀的 user 行。
-    pub(crate) fn strip_legacy_chat_mode_hints(&self) -> Result<()> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, content, compressed_content FROM messages
-             WHERE role = 'user'
-               AND (
-                 content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
-                 OR compressed_content LIKE '%' || char(10) || char(10) || '---' || char(10) || '[Mode: %'
-               )",
-        )?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        let mut updated = 0usize;
-        for (id, content, compressed) in rows {
-            let new_content = content
-                .as_deref()
-                .and_then(strip_legacy_chat_mode_hint)
-                .or_else(|| content.clone());
-            let new_compressed = compressed
-                .as_deref()
-                .and_then(strip_legacy_chat_mode_hint)
-                .or_else(|| compressed.clone());
-            if new_content == content && new_compressed == compressed {
-                continue;
-            }
-            self.conn.execute(
-                "UPDATE messages SET content = ?1, compressed_content = ?2 WHERE id = ?3",
-                params![new_content, new_compressed, id],
-            )?;
-            updated += 1;
-        }
-        if updated > 0 {
-            tracing::info!(
-                updated,
-                "stripped legacy chatModeHint suffixes from user messages"
-            );
-        }
-        Ok(())
-    }
-
-    pub(crate) fn ensure_messages_compressed_content_column(&self) -> Result<()> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'compressed_content'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            self.conn.execute(
-                "ALTER TABLE messages ADD COLUMN compressed_content TEXT",
-                [],
-            )?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn ensure_messages_media_json_column(&self) -> Result<()> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('messages') WHERE name = 'media_json'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            self.conn
-                .execute("ALTER TABLE messages ADD COLUMN media_json TEXT", [])?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn stamp_schema_version(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM schema_version", [])?;
-        self.conn.execute(
-            "INSERT INTO schema_version (version) VALUES (?1)",
-            params![SCHEMA_VERSION],
-        )?;
-        Ok(())
-    }
-
-    pub(crate) fn table_exists(&self, name: &str) -> Result<bool> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
-            params![name],
-            |row| row.get(0),
-        )?;
-        Ok(exists)
-    }
-
-    pub(crate) fn column_exists(&self, table: &str, column: &str) -> Result<bool> {
-        let sql = format!("PRAGMA table_info({table})");
-        let mut stmt = self.conn.prepare(&sql)?;
-        let names = stmt
-            .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(names.iter().any(|name| name == column))
-    }
-
-    pub(crate) fn drop_messages_fts_objects(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "DROP TRIGGER IF EXISTS sync_messages_to_fts;
-             DROP TRIGGER IF EXISTS sync_messages_fts_update;
-             DROP TRIGGER IF EXISTS sync_messages_fts_delete;
-             DROP TRIGGER IF EXISTS messages_fts_insert;
+    async fn rebuild_schema(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("PRAGMA foreign_keys=OFF")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::raw_sql(
+            "DROP TRIGGER IF EXISTS messages_fts_insert;
              DROP TRIGGER IF EXISTS messages_fts_delete;
              DROP TRIGGER IF EXISTS messages_fts_update;
+             DROP TRIGGER IF EXISTS response_items_fts_insert;
+             DROP TRIGGER IF EXISTS response_items_fts_delete;
+             DROP TRIGGER IF EXISTS response_items_fts_update;
              DROP TABLE IF EXISTS messages_fts;
-             DROP TABLE IF EXISTS messages_fts_trigram;",
-        )?;
+             DROP TABLE IF EXISTS messages_fts_trigram;
+             DROP TABLE IF EXISTS response_items_fts;
+             DROP TABLE IF EXISTS response_items_fts_trigram;
+             DROP TABLE IF EXISTS messages;
+             DROP TABLE IF EXISTS response_items;
+             DROP TABLE IF EXISTS project_roots;
+             DROP TABLE IF EXISTS sessions;
+             DROP TABLE IF EXISTS projects;
+             DROP TABLE IF EXISTS schema_version;",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO schema_version (version) VALUES (?1)")
+            .bind(SCHEMA_VERSION)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("PRAGMA foreign_keys=ON")
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 
-    pub(crate) fn rebuild_messages_fts_v11(&self) -> Result<()> {
-        self.drop_messages_fts_objects()?;
-        self.conn.execute_batch(MESSAGES_FTS_V11_DDL)?;
-        self.conn.execute_batch(
-            "INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-             SELECT id, content, tool_name, tool_calls FROM messages;
-             INSERT INTO messages_fts_trigram(rowid, content, tool_name, tool_calls)
-             SELECT id, content, tool_name, tool_calls FROM messages;",
-        )?;
-        Ok(())
-    }
-
-    /// 为仅存在于 `messages` 的 `session_id` 补齐 `sessions` 行（幂等）。
-    pub(crate) fn backfill_sessions_from_messages(&self) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO sessions (id, source, started_at, message_count, tool_call_count)
-             SELECT
-                 m.session_id,
-                 'tauri',
-                 MIN(m.timestamp),
-                 COUNT(*),
-                 COALESCE(SUM(CASE WHEN m.role = 'tool' THEN 1 ELSE 0 END), 0)
-             FROM messages m
-             WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = m.session_id)
-             GROUP BY m.session_id",
-            [],
-        )?;
-        Ok(())
-    }
-
-    /// 检测并重建失效的 `messages_fts` 触发器（坏触发器 / 错误 delete 语法）。
-    pub(crate) fn repair_messages_fts_if_needed(&self) -> Result<()> {
-        if !self.needs_messages_fts_repair()? {
-            return Ok(());
-        }
-        self.rebuild_messages_fts_v11()
-            .context("repair messages_fts triggers")?;
-        Ok(())
-    }
-
-    pub(crate) fn needs_messages_fts_repair(&self) -> Result<bool> {
-        let broken: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master
-             WHERE type = 'trigger'
-               AND name IN (
-                 'sync_messages_to_fts',
-                 'sync_messages_fts_update',
-                 'sync_messages_fts_delete'
-               )",
-            [],
-            |row| row.get(0),
-        )?;
-        if broken > 0 {
-            return Ok(true);
-        }
-
-        let delete_sql: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT sql FROM sqlite_master
-                 WHERE type = 'trigger' AND name = 'messages_fts_delete'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        Ok(delete_sql
-            .as_deref()
-            .is_some_and(|sql| sql.contains("'delete'")))
-    }
-
-    pub(crate) fn read_schema_version_or_zero(&self) -> Result<i32> {
-        let exists: bool = self.conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-            [],
-            |row| row.get(0),
-        )?;
-        if !exists {
+    pub(crate) async fn read_schema_version_or_zero(&self) -> Result<i32> {
+        let (exists,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        if exists == 0 {
             return Ok(0);
         }
-        let version: Option<i32> = self
-            .conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        Ok(version.unwrap_or(0))
-    }
-}
-
-/// 去掉用户消息末尾旧版 `chatModeHint`（`\n\n---\n[Mode: Agent|Plan|Ask|MultiTask]…`）。
-///
-/// 无匹配时返回 `None`（调用方保留原文）。不触碰同形态的 Agent 创建提示等其它 `---` 段。
-pub(crate) fn strip_legacy_chat_mode_hint(content: &str) -> Option<String> {
-    const MARKER: &str = "\n\n---\n[Mode: ";
-    let idx = content.rfind(MARKER)?;
-    let rest = &content[idx + MARKER.len()..];
-    let mode_ok = rest.starts_with("Agent]")
-        || rest.starts_with("Plan]")
-        || rest.starts_with("Ask]")
-        || rest.starts_with("MultiTask]");
-    if !mode_ok {
-        return None;
-    }
-    Some(content[..idx].to_string())
-}
-
-#[cfg(test)]
-mod strip_hint_tests {
-    use super::strip_legacy_chat_mode_hint;
-
-    #[test]
-    fn strips_agent_plan_ask_multitask_suffix() {
-        for mode in ["Agent", "Plan", "Ask", "MultiTask"] {
-            let raw = format!("hello world\n\n---\n[Mode: {mode}] tools enabled blah");
-            assert_eq!(
-                strip_legacy_chat_mode_hint(&raw).as_deref(),
-                Some("hello world"),
-                "mode={mode}"
-            );
-        }
-    }
-
-    #[test]
-    fn leaves_unrelated_separator_alone() {
-        let raw = "body\n\n---\n创建 Agent 提示（非 Mode）";
-        assert_eq!(strip_legacy_chat_mode_hint(raw), None);
-    }
-
-    #[test]
-    fn leaves_clean_user_text_alone() {
-        assert_eq!(strip_legacy_chat_mode_hint("just a question"), None);
+        let version: Option<(i32,)> = sqlx::query_as("SELECT version FROM schema_version LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(version.map(|(v,)| v).unwrap_or(0))
     }
 }

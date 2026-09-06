@@ -88,12 +88,12 @@ test("classifyModelTier maps flash/pro/lite", () => {
   assert.equal(classifyModelTier("o3-mini"), "reasoning");
 });
 
-test("classifyTask routes vision and short ask", () => {
+test("classifyTask routes vision and short questions in Agent mode", () => {
   assert.equal(
     classifyTask({
       text: "hi",
       hasImages: true,
-      chatMode: "ask",
+      chatMode: "agent",
       maxMode: false,
     }),
     "vision",
@@ -102,7 +102,7 @@ test("classifyTask routes vision and short ask", () => {
     classifyTask({
       text: "你好",
       hasImages: false,
-      chatMode: "ask",
+      chatMode: "agent",
       maxMode: false,
     }),
     "simple",
@@ -111,7 +111,7 @@ test("classifyTask routes vision and short ask", () => {
     classifyTask({
       text: "请分析架构取舍",
       hasImages: false,
-      chatMode: "ask",
+      chatMode: "agent",
       maxMode: false,
     }),
     "reasoning",
@@ -122,7 +122,7 @@ test("selectAutoModel prefers lite/flash for simple", () => {
   const pick = selectAutoModel({
     text: "你好",
     hasImages: false,
-    chatMode: "ask",
+    chatMode: "agent",
     maxMode: false,
     candidates,
     preferProviderId: "g1",
@@ -151,7 +151,7 @@ test("selectAutoModel vision keeps vision-capable flash/pro", () => {
   const pick = selectAutoModel({
     text: "看看这张图",
     hasImages: true,
-    chatMode: "ask",
+    chatMode: "agent",
     maxMode: false,
     candidates,
   });

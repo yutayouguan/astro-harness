@@ -10,7 +10,11 @@ type Props = LucideProps & {
 };
 
 /** 将后端 emoji 字段（Lucide 图标名）渲染为对应图标 */
-export default function LucideByName({ name, fallback: Fallback, ...props }: Props) {
+export default function LucideByName({
+  name,
+  fallback: Fallback,
+  ...props
+}: Props) {
   const Icon = resolveLucideIconById(name ?? undefined);
   if (Icon) {
     return <Icon aria-hidden {...props} />;

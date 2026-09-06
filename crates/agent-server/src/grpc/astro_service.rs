@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock, Weak};
@@ -16,10 +16,17 @@ use home::AgentRuntimeConfig;
 use memory::MemoryManager;
 use proto::astro_service_server::AstroService;
 use proto::{
-    ChatControlAction, ChatControlRequest, Empty, FileListRequest, FileListResponse, ImageEvent,
-    ImageRequest, McpReconnectRequest, McpServerList, McpServerListRequest, MemoryQuery,
-    MemoryResult, SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList,
-    SkillRequest, SteerChatRequest, SteerChatResponse,
+    ApproveGuardianDeniedActionRequest, ChatControlAction, ChatControlRequest, Empty,
+    FileListRequest, FileListResponse, ImageEvent, ImageRequest, McpReconnectRequest,
+    McpServerList, McpServerListRequest, MemoryQuery, MemoryResult,
+    RealtimeConversationAudioRequest, RealtimeConversationRequest,
+    RealtimeConversationSpeechRequest, RealtimeConversationStartRequest,
+    RealtimeConversationTextRequest, RealtimeOperationResponse, RealtimeVoicesResponse,
+    ResolveElicitationRequest, RunUserShellCommandRequest, RunUserShellCommandResponse,
+    SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
+    SteerChatRequest, SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
+    TerminalReadRequest, TerminalReadResponse, TerminalResizeRequest, TerminalSessionResponse,
+    TerminalWriteRequest, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };
 use providers::PauseControl;
 use providers::ProviderConfig;
@@ -36,25 +43,31 @@ use crate::{
     ThreadState, ThreadStateManager, WORKSPACE_EVENT_THREAD_ID,
 };
 
-fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
+async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
+    session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir))
+        .await
         .map_err(|e| e.to_string())
 }
 
 fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
     use agent_protocol::EventMsg;
     match msg {
+        EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationSdp(_)
+        | EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationClosed(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_) => None,
         EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
         EventMsg::UserInputCommitted(event) => Some(event.turn_id.clone()),
         EventMsg::ItemStarted(event)
         | EventMsg::ItemCompleted(event)
         | EventMsg::McpToolCallBegin(event)
         | EventMsg::McpToolCallEnd(event)
-        | EventMsg::HookStarted(event)
-        | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
         | EventMsg::ContextCompacted(event) => Some(event.turn_id.clone()),
+        EventMsg::HookStarted(event) => event.turn_id.clone(),
+        EventMsg::HookCompleted(event) => event.turn_id.clone(),
         EventMsg::AgentMessageContentDelta(event)
         | EventMsg::PlanDelta(event)
         | EventMsg::ReasoningContentDelta(event)
@@ -67,6 +80,7 @@ fn event_turn_id(msg: &agent_protocol::EventMsg) -> Option<String> {
         | EventMsg::ElicitationRequest(event)
         | EventMsg::DynamicToolCallRequest(event)
         | EventMsg::DynamicToolCallResponse(event) => Some(event.turn_id.clone()),
+        EventMsg::GuardianAssessment(event) => Some(event.turn_id.clone()),
         EventMsg::ContextUsage(event) => Some(event.turn_id.clone()),
         EventMsg::TokenCount(event) => event.turn_id.clone(),
         EventMsg::TurnComplete(event) => Some(event.turn_id.clone()),
@@ -96,26 +110,71 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
     }
 }
 
+fn require_realtime_session_id(session_id: &str) -> Result<&str, Status> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        Err(Status::invalid_argument("session_id is required"))
+    } else {
+        Ok(session_id)
+    }
+}
+
+fn nonempty(value: String) -> Option<String> {
+    (!value.trim().is_empty()).then_some(value)
+}
+
+fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessionResponse {
+    TerminalSessionResponse {
+        id: info.id,
+        scope: info.scope,
+        cwd: info.cwd,
+        running: info.running,
+        exit_code: info.exit_code,
+        base_cursor: info.base_cursor,
+        end_cursor: info.end_cursor,
+    }
+}
+
+async fn submit_realtime_op(
+    service: &AstroServiceImpl,
+    session_id: &str,
+    op: agent_protocol::Op,
+) -> Result<Response<RealtimeOperationResponse>, Status> {
+    let managed = service
+        .threads
+        .get(session_id)
+        .await
+        .ok_or_else(|| Status::failed_precondition("realtime conversation is not loaded"))?;
+    let submission_id = managed
+        .runtime
+        .submit(op)
+        .await
+        .map_err(|error| Status::internal(error.to_string()))?;
+    Ok(Response::new(RealtimeOperationResponse { submission_id }))
+}
+
 /// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 Session。
 ///
 /// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
 fn parse_auxiliary_targets(
     items: Vec<proto::AuxiliaryModelTarget>,
-) -> HashMap<types::AuxiliaryTask, Vec<types::ChatTarget>> {
-    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ChatTarget)>> = HashMap::new();
+) -> HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>> {
+    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ModelTarget)>> = HashMap::new();
     for item in items {
         let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
             continue;
         };
+        if !providers::dispatch::supports_agent_responses(&item.backend_id) {
+            continue;
+        }
         grouped.entry(task).or_default().push((
             item.order,
-            types::ChatTarget {
+            types::ModelTarget {
                 provider_id: item.provider_id,
                 backend_id: item.backend_id,
                 model: item.model,
                 api_key: item.api_key,
                 base_url: item.base_url,
-                api_mode: String::new(),
             },
         ));
     }
@@ -653,14 +712,14 @@ pub struct AstroServiceImpl {
     pause_controls: Arc<StdRwLock<HashMap<String, PauseRegistration>>>,
     /// session_id → generation 操作锁（Weak 以免 release 后无限增长）。
     generation_operations: GenerationOperations,
-    /// In-flight release ownership, weakly retained so completed unique ids are reclaimed.
+    /// 进行中的 release 所有权，弱引用持有以便已完成的唯一 id 被回收。
     release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
     pub(crate) hitl_registry: HitlRegistry,
     /// 记忆根目录。
     memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
-    hook_runtime: Arc<::hooks::HookRuntime>,
+    pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
     /// root thread → 当前 V2 AgentControl generation。
     agent_thread_watchers: Arc<Mutex<HashMap<String, Weak<subagents::AgentControl>>>>,
 }
@@ -697,6 +756,30 @@ impl AstroServiceImpl {
             memory_dir,
             hook_runtime,
             agent_thread_watchers: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub(crate) fn hook_runtime_for_project(&self, project_root: &str) -> Arc<::hooks::HookRuntime> {
+        let requested_root = project_root.trim();
+        if requested_root.is_empty() {
+            return Arc::clone(&self.hook_runtime);
+        }
+        let project_root = match Path::new(requested_root).canonicalize() {
+            Ok(project_root) => project_root,
+            Err(error) => {
+                tracing::warn!(%error, project_root = requested_root, "cannot resolve project hook root");
+                return Arc::clone(&self.hook_runtime);
+            }
+        };
+        match self
+            .hook_runtime
+            .with_project_commands(&self.memory_dir, &project_root)
+        {
+            Ok(runtime) => Arc::new(runtime),
+            Err(error) => {
+                tracing::warn!(%error, project_root = %project_root.display(), "failed to discover project command hooks");
+                Arc::clone(&self.hook_runtime)
+            }
         }
     }
 
@@ -764,7 +847,7 @@ impl AstroServiceImpl {
             .map_err(|_| Status::unavailable("thread extension was not materialized"))
     }
 
-    /// Production background-review emitter; public for durable integration coverage.
+    /// 生产环境 background-review 发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_background_review_extension(
         &self,
@@ -809,7 +892,7 @@ impl AstroServiceImpl {
         .await
     }
 
-    /// Production session-title emitter; public for durable integration coverage.
+    /// 生产环境会话标题发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_session_metadata_extension(
         &self,
@@ -872,7 +955,7 @@ impl AstroServiceImpl {
         }
     }
 
-    /// Production workspace pending emitter; public for durable integration coverage.
+    /// 生产环境 workspace pending 发射器；公开以供持久化集成测试覆盖。
     #[doc(hidden)]
     pub async fn emit_pending_extension(
         &self,
@@ -1022,23 +1105,53 @@ impl AstroServiceImpl {
             return Ok(managed);
         }
 
-        let session = self.get_session(thread_id).await?;
         let rollout_root = self.memory_dir.join("sessions").join("rollouts");
         let rollout_path = agent_rollout::find_rollout(&rollout_root, thread_id)
             .map_err(|error| Status::internal(error.to_string()))?
             .unwrap_or_else(|| {
                 agent_rollout::new_rollout_path(&rollout_root, thread_id, chrono::Utc::now())
             });
-        let existing_items = if rollout_path.exists() {
+        let has_existing_rollout = rollout_path.exists();
+        let existing_items = if has_existing_rollout {
             agent_rollout::read_rollout(&rollout_path)
                 .await
                 .map_err(|error| Status::internal(error.to_string()))?
         } else {
             Vec::new()
         };
+        let has_native_history = existing_items
+            .iter()
+            .any(|item| matches!(item, agent_rollout::RolloutItem::ResponseItem(_)));
+        if has_native_history {
+            let projection = open_sessions(&self.memory_dir)
+                .await
+                .map_err(Status::internal)?;
+            session::store::rebuild_response_items_from_rollout(
+                &projection,
+                thread_id,
+                &existing_items,
+            )
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        }
+        let session = self.get_session(thread_id).await?;
+        session.restore_prompt_context_from_rollout(&existing_items);
+        session.restore_token_usage_from_rollout(&existing_items);
         let rollout = agent_rollout::RolloutRecorder::open(rollout_path)
             .await
             .map_err(|error| Status::internal(error.to_string()))?;
+        if !has_native_history {
+            let legacy_history = session
+                .clone_response_history()
+                .await
+                .into_iter()
+                .map(agent_rollout::RolloutItem::ResponseItem)
+                .collect();
+            rollout
+                .record(legacy_history)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
+        }
         let runtime = agent::AstroThread::spawn(Arc::clone(&session), rollout)
             .map_err(|error| Status::failed_precondition(error.to_string()))?;
 
@@ -1103,7 +1216,7 @@ impl AstroServiceImpl {
         candidate.set_side_effect_supervisor(supervisor).await;
         let agent_id = home::active_agent_id(&self.memory_dir);
         match agent::exec::agent_control_directory::AgentControlDirectory::global()
-            .get_at(thread_id, &self.memory_dir.join("subagents-v2.db"))
+            .get_at(thread_id, &home::subagents_db_path(&self.memory_dir))
         {
             Some(control) => {
                 self.attach_agent_thread_watcher(
@@ -1120,16 +1233,93 @@ impl AstroServiceImpl {
         Ok(candidate)
     }
 
+    #[cfg(test)]
     pub(crate) async fn configure_thread_from_chat(
         &self,
         thread: &agent::AstroThread,
         req: &proto::ChatRequest,
     ) -> Result<(), Status> {
+        let hook_runtime = self.hook_runtime_for_project(&req.project_root);
+        let settings = self
+            .prepare_thread_settings_from_chat_with_hooks(thread, req, hook_runtime)
+            .await?;
+        thread
+            .session()
+            .apply_thread_settings(settings)
+            .map_err(Status::invalid_argument)?;
+        Ok(())
+    }
+
+    pub(crate) async fn prepare_thread_settings_from_chat_with_hooks(
+        &self,
+        thread: &agent::AstroThread,
+        req: &proto::ChatRequest,
+        hook_runtime: Arc<::hooks::HookRuntime>,
+    ) -> Result<agent_protocol::ThreadSettingsOverrides, Status> {
+        // Validate the complete request before mutating the reusable session. Invalid legacy
+        // modes or malformed provider parameters must not partially reconfigure a live thread.
+        let interaction_mode =
+            types::InteractionMode::parse(&req.interaction_mode).ok_or_else(|| {
+                Status::invalid_argument(format!(
+                    "unsupported interaction_mode: {}",
+                    req.interaction_mode.trim().to_ascii_lowercase()
+                ))
+            })?;
+        if let Some(temperature) = req.temperature {
+            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
+                return Err(Status::invalid_argument(
+                    "temperature must be between 0 and 2",
+                ));
+            }
+        }
+        let mut additional_params = if req.additional_params_json.trim().is_empty() {
+            None
+        } else {
+            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
+                .map_err(|error| {
+                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
+                })?;
+            if !params.is_object() {
+                return Err(Status::invalid_argument(
+                    "additional_params_json must be an object",
+                ));
+            }
+            Some(params)
+        };
+
         let provider = if req.provider.trim().is_empty() {
-            "ollama"
+            "openai"
         } else {
             req.provider.trim()
         };
+        if !providers::dispatch::supports_agent_responses(provider) {
+            return Err(Status::invalid_argument(format!(
+                "provider `{provider}` does not support the Responses API"
+            )));
+        }
+        let persistent_instructions = req.persistent_instructions.trim();
+        if req.reasoning_effort.trim() == "persistent" {
+            if provider != "openai" {
+                return Err(Status::invalid_argument(format!(
+                    "provider `{provider}` does not support persistent reasoning"
+                )));
+            }
+            if persistent_instructions.is_empty() {
+                return Err(Status::invalid_argument(
+                    "persistent reasoning requires persistent_instructions",
+                ));
+            }
+        }
+        if provider == "openai" && !persistent_instructions.is_empty() {
+            additional_params
+                .get_or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .expect("validated additional params object")
+                .insert(
+                    "astro_persistent_instructions".into(),
+                    persistent_instructions.into(),
+                );
+        }
         let model = if req.model.trim().is_empty() {
             providers::dispatch::default_model(provider).to_string()
         } else {
@@ -1141,25 +1331,41 @@ impl AstroServiceImpl {
             req.api_key.trim().to_string()
         };
         let base_url = req.base_url.trim().to_string();
-        let mut targets = vec![types::ChatTarget {
+        let model_tool_mode = if req.tool_mode.trim().is_empty() {
+            None
+        } else {
+            Some(types::ToolMode::parse(&req.tool_mode).ok_or_else(|| {
+                Status::invalid_argument(format!("unsupported tool_mode: {}", req.tool_mode))
+            })?)
+        };
+        let model_profile = if req.model_profile_json.trim().is_empty() {
+            types::ModelProfile::default()
+        } else {
+            serde_json::from_str(&req.model_profile_json).map_err(|error| {
+                Status::invalid_argument(format!("invalid model_profile_json: {error}"))
+            })?
+        };
+        let mut targets = vec![types::ModelTarget {
             provider_id: String::new(),
             backend_id: provider.into(),
             model: model.clone(),
             api_key: api_key.clone(),
             base_url: base_url.clone(),
-            api_mode: String::new(),
         }];
-        targets.extend(req.chat_fallbacks.iter().map(|fallback| types::ChatTarget {
-            provider_id: fallback.provider_id.clone(),
-            backend_id: fallback.provider.clone(),
-            model: fallback.model.clone(),
-            api_key: fallback.api_key.clone(),
-            base_url: fallback.base_url.clone(),
-            api_mode: String::new(),
+        targets.extend(req.chat_fallbacks.iter().filter_map(|fallback| {
+            providers::dispatch::supports_agent_responses(&fallback.provider).then(|| {
+                types::ModelTarget {
+                    provider_id: fallback.provider_id.clone(),
+                    backend_id: fallback.provider.clone(),
+                    model: fallback.model.clone(),
+                    api_key: fallback.api_key.clone(),
+                    base_url: fallback.base_url.clone(),
+                }
+            })
         }));
         let session = thread.session();
-        session.set_hook_runtime(Arc::clone(&self.hook_runtime));
-        let (_, hitl_gate) = session.ensure_thread_controls();
+        session.set_hook_runtime(hook_runtime);
+        let (_, hitl_gate, _) = session.ensure_thread_controls();
         if !self
             .hitl_registry
             .get(session.session_id())
@@ -1170,70 +1376,62 @@ impl AstroServiceImpl {
                 replaced.cancel_all().await;
             }
         }
-        session.set_chat_credentials(provider, &model, &api_key, &base_url);
-        session.set_thread_provider_options(agent::runtime::ThreadProviderOptions {
-            thinking_enabled: req.thinking_enabled,
-            reasoning_effort: if req.reasoning_effort.trim().is_empty() {
+        Ok(agent_protocol::ThreadSettingsOverrides {
+            model_targets: Some(targets),
+            model_spec: Some(types::ModelSpec {
+                provider_id: provider.into(),
+                model_id: model,
+                temperature: req.temperature,
+                max_tokens: (req.max_output_tokens > 0).then_some(req.max_output_tokens),
+                tool_mode: model_tool_mode,
+                profile: model_profile,
+            }),
+            auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
+            image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {
+                provider: &req.image_gen_provider,
+                model: &req.image_gen_model,
+                api_key: &req.image_gen_api_key,
+                base_url: &req.image_gen_base_url,
+                fb_provider: &req.image_gen_fallback_provider,
+                fb_model: &req.image_gen_fallback_model,
+                fb_api_key: &req.image_gen_fallback_api_key,
+                fb_base_url: &req.image_gen_fallback_base_url,
+                video_model: &req.image_gen_video_model,
+                music_model: &req.image_gen_music_model,
+                tts_model: &req.image_gen_tts_model,
+                fb_video_model: &req.image_gen_fallback_video_model,
+                fb_music_model: &req.image_gen_fallback_music_model,
+                fb_tts_model: &req.image_gen_fallback_tts_model,
+                vision_model: &req.image_gen_vision_model,
+                fb_vision_model: &req.image_gen_fallback_vision_model,
+            })),
+            context_window: (req.context_window > 0).then_some(req.context_window),
+            interaction_mode: Some(interaction_mode),
+            project_root: Some(
+                (!req.project_root.trim().is_empty())
+                    .then(|| PathBuf::from(req.project_root.trim())),
+            ),
+            workspace_roots: Some(
+                req.workspace_roots
+                    .iter()
+                    .map(|root| PathBuf::from(root.trim()))
+                    .filter(|root| !root.as_os_str().is_empty())
+                    .collect(),
+            ),
+            temperature: req.temperature,
+            additional_params,
+            thinking_enabled: Some(req.thinking_enabled),
+            reasoning_effort: Some(if req.reasoning_effort.trim().is_empty() {
                 "high".into()
             } else {
                 req.reasoning_effort.trim().into()
-            },
-            max_tokens: if req.max_output_tokens > 0 {
+            }),
+            max_tokens: Some(if req.max_output_tokens > 0 {
                 req.max_output_tokens
             } else {
                 8192
-            },
-        });
-        session.set_chat_targets(targets);
-        session.set_auxiliary_targets(parse_auxiliary_targets(req.auxiliary_targets.clone()));
-        session.set_image_gen_targets(tools::image_gen_targets_from_parts(tools::ImageGenParts {
-            provider: &req.image_gen_provider,
-            model: &req.image_gen_model,
-            api_key: &req.image_gen_api_key,
-            base_url: &req.image_gen_base_url,
-            fb_provider: &req.image_gen_fallback_provider,
-            fb_model: &req.image_gen_fallback_model,
-            fb_api_key: &req.image_gen_fallback_api_key,
-            fb_base_url: &req.image_gen_fallback_base_url,
-            video_model: &req.image_gen_video_model,
-            music_model: &req.image_gen_music_model,
-            tts_model: &req.image_gen_tts_model,
-            fb_video_model: &req.image_gen_fallback_video_model,
-            fb_music_model: &req.image_gen_fallback_music_model,
-            fb_tts_model: &req.image_gen_fallback_tts_model,
-            vision_model: &req.image_gen_vision_model,
-            fb_vision_model: &req.image_gen_fallback_vision_model,
-        }));
-        if req.context_window > 0 {
-            session.set_context_window(req.context_window);
-        }
-        session
-            .set_interaction_mode(types::InteractionMode::parse(&req.interaction_mode))
-            .await;
-        session.set_project_root(
-            (!req.project_root.trim().is_empty()).then(|| PathBuf::from(req.project_root.trim())),
-        );
-        if let Some(temperature) = req.temperature {
-            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
-                return Err(Status::invalid_argument(
-                    "temperature must be between 0 and 2",
-                ));
-            }
-            session.set_temperature(temperature);
-        }
-        if !req.additional_params_json.trim().is_empty() {
-            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
-                .map_err(|error| {
-                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
-                })?;
-            if !params.is_object() {
-                return Err(Status::invalid_argument(
-                    "additional_params_json must be an object",
-                ));
-            }
-            session.set_additional_params(params);
-        }
-        Ok(())
+            }),
+        })
     }
 
     fn spawn_idle_unload(&self, thread_id: String, managed: Arc<ManagedThread>) {
@@ -1379,8 +1577,8 @@ impl AstroServiceImpl {
         let root_agent_id = root_agent_id.to_string();
         let watcher_registry = Arc::clone(&self.agent_thread_watchers);
         tokio::spawn(async move {
-            // Start at zero so activity racing between control creation and
-            // watcher scheduling is replayed from the ActivityBus buffer.
+            // 从零开始，以便 control 创建与 watcher 调度之间竞争的 activity
+            // 从 ActivityBus 缓冲区重放。
             let mut cursor = subagents::ActivityCursor(0);
             loop {
                 let Some(control) = weak_control.upgrade() else {
@@ -1391,10 +1589,9 @@ impl AstroServiceImpl {
                 drop(control);
                 let observation = observation.await;
 
-                // Keep the generation registry locked through publication.
-                // A replacement watcher cannot install its reset marker until
-                // every old-generation observation has either published first
-                // or observed that it no longer owns this root entry.
+                // 在发布期间保持 generation 注册表锁定。
+                // 替代 watcher 无法安装其 reset 标记，直到每个旧 generation
+                // 的观察要么已先行发布，要么已观察到自己不再持有此根条目。
                 let watchers = watcher_registry.lock().await;
                 let owns_entry = watchers
                     .get(&root_thread_id)
@@ -1488,6 +1685,7 @@ impl AstroServiceImpl {
         }
         let (agent, _) = builder
             .build_with_session_id(session_id.to_string())
+            .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let handle = Arc::new(agent);
         handle.set_hook_runtime(Arc::clone(&self.hook_runtime));
@@ -2063,6 +2261,272 @@ impl AstroService for AstroServiceImpl {
         super::thread_service::submit_turn(self, request).await
     }
 
+    async fn realtime_conversation_start(
+        &self,
+        request: Request<RealtimeConversationStartRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        let session_id = require_realtime_session_id(&req.session_id)?;
+        if req.api_key.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime api_key is required"));
+        }
+        let model = if req.model.trim().is_empty() {
+            agent_protocol::DEFAULT_REALTIME_MODEL.to_string()
+        } else {
+            req.model.trim().to_string()
+        };
+        let output_modality = match req.output_modality.as_str() {
+            "" | "audio" => agent_protocol::RealtimeOutputModality::Audio,
+            "text" => agent_protocol::RealtimeOutputModality::Text,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime output_modality {value}"
+                )))
+            }
+        };
+        let turn_detection = match req.turn_detection.as_str() {
+            "" | "server_vad" => agent_protocol::RealtimeTurnDetection::ServerVad,
+            "semantic_vad" => agent_protocol::RealtimeTurnDetection::SemanticVad,
+            "disabled" => agent_protocol::RealtimeTurnDetection::Disabled,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime turn_detection {value}"
+                )))
+            }
+        };
+        let noise_reduction = match req.noise_reduction.as_str() {
+            "" => None,
+            "near_field" => Some(agent_protocol::RealtimeNoiseReduction::NearField),
+            "far_field" => Some(agent_protocol::RealtimeNoiseReduction::FarField),
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime noise_reduction {value}"
+                )))
+            }
+        };
+        let version = match req.version.as_str() {
+            "" | "v2" => agent_protocol::RealtimeConversationVersion::V2,
+            "v3" => agent_protocol::RealtimeConversationVersion::V3,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime version {value}"
+                )))
+            }
+        };
+        let transport = match req.transport.as_str() {
+            "" | "websocket" => agent_protocol::ConversationStartTransport::Websocket,
+            "webrtc" if !req.sdp.trim().is_empty() => {
+                agent_protocol::ConversationStartTransport::Webrtc {
+                    sdp: req.sdp.clone(),
+                }
+            }
+            "webrtc" => return Err(Status::invalid_argument("WebRTC requires an SDP offer")),
+            "existing_call" if !req.call_id.trim().is_empty() => {
+                agent_protocol::ConversationStartTransport::ExistingCall {
+                    call_id: req.call_id.clone(),
+                }
+            }
+            "existing_call" => {
+                return Err(Status::invalid_argument("existing_call requires a call id"))
+            }
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime transport {value}"
+                )))
+            }
+        };
+        let handoff_mode = match req.handoff_mode.as_str() {
+            "" | "thinking" => agent_protocol::CodexResponseHandoffMode::Thinking,
+            "commentary" => agent_protocol::CodexResponseHandoffMode::Commentary,
+            "bem_tags" => agent_protocol::CodexResponseHandoffMode::BemTags,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime handoff mode {value}"
+                )))
+            }
+        };
+        let handoff_channel_prefixes = if req.handoff_channel_prefixes_json.trim().is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::from_str(&req.handoff_channel_prefixes_json).map_err(|error| {
+                    Status::invalid_argument(format!(
+                        "invalid realtime handoff channel prefixes: {error}"
+                    ))
+                })?,
+            )
+        };
+        let include_startup_context = req.include_startup_context.unwrap_or(!matches!(
+            &transport,
+            agent_protocol::ConversationStartTransport::ExistingCall { .. }
+        ));
+        let managed = self.get_or_create_thread(session_id).await?;
+        let subscription = self
+            .connections
+            .current_generation_key(req.connection_id.trim())
+            .await
+            .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
+        super::thread_service::resume(&managed, subscription, false).await?;
+        let target = types::ModelTarget {
+            provider_id: req.provider.clone(),
+            backend_id: req.provider,
+            model: model.clone(),
+            api_key: req.api_key,
+            base_url: req.base_url,
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
+        let submission_id = managed
+            .runtime
+            .submit(agent_protocol::Op::RealtimeConversationStart {
+                params: agent_protocol::ConversationStartParams {
+                    model: Some(model),
+                    output_modality,
+                    voice: nonempty(req.voice),
+                    instructions: nonempty(req.instructions),
+                    include_startup_context,
+                    initial_items: Vec::new(),
+                    turn_detection,
+                    noise_reduction,
+                    transport,
+                    version,
+                    client_managed_handoffs: req.client_managed_handoffs,
+                    codex_response_handoff_mode: handoff_mode,
+                    codex_response_handoff_channel_prefixes: handoff_channel_prefixes,
+                    flush_transcript_tail_on_session_end: req.flush_transcript_tail_on_session_end,
+                    ..agent_protocol::ConversationStartParams::default()
+                },
+                target,
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        result
+            .await
+            .map_err(|_| Status::internal("realtime start reply channel closed"))?
+            .map_err(Status::failed_precondition)?;
+        Ok(Response::new(RealtimeOperationResponse { submission_id }))
+    }
+
+    async fn realtime_conversation_audio(
+        &self,
+        request: Request<RealtimeConversationAudioRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        let format = match req.format.as_str() {
+            "" | "pcm16" => agent_protocol::RealtimeAudioFormat::Pcm16,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime audio format {value}"
+                )))
+            }
+        };
+        let frame = agent_protocol::RealtimeAudioFrame {
+            data: req.data,
+            sample_rate: if req.sample_rate == 0 {
+                agent_protocol::DEFAULT_REALTIME_SAMPLE_RATE
+            } else {
+                req.sample_rate
+            },
+            num_channels: if req.num_channels == 0 {
+                1
+            } else {
+                u16::try_from(req.num_channels)
+                    .map_err(|_| Status::invalid_argument("num_channels exceeds u16"))?
+            },
+            format,
+        };
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationAudio(
+                agent_protocol::ConversationAudioParams { frame },
+            ),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_text(
+        &self,
+        request: Request<RealtimeConversationTextRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        if req.text.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime text is required"));
+        }
+        let role = match req.role.as_str() {
+            "" | "user" => agent_protocol::ConversationTextRole::User,
+            "developer" => agent_protocol::ConversationTextRole::Developer,
+            "assistant" => agent_protocol::ConversationTextRole::Assistant,
+            value => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported realtime text role {value}"
+                )))
+            }
+        };
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationText(agent_protocol::ConversationTextParams {
+                text: req.text,
+                role,
+            }),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_speech(
+        &self,
+        request: Request<RealtimeConversationSpeechRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        if req.text.trim().is_empty() {
+            return Err(Status::invalid_argument("realtime speech text is required"));
+        }
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationSpeech(
+                agent_protocol::ConversationSpeechParams { text: req.text },
+            ),
+        )
+        .await
+    }
+
+    async fn realtime_conversation_close(
+        &self,
+        request: Request<RealtimeConversationRequest>,
+    ) -> Result<Response<RealtimeOperationResponse>, Status> {
+        let req = request.into_inner();
+        submit_realtime_op(
+            self,
+            require_realtime_session_id(&req.session_id)?,
+            agent_protocol::Op::RealtimeConversationClose,
+        )
+        .await
+    }
+
+    async fn realtime_conversation_list_voices(
+        &self,
+        request: Request<RealtimeConversationRequest>,
+    ) -> Result<Response<RealtimeVoicesResponse>, Status> {
+        let req = request.into_inner();
+        let session_id = require_realtime_session_id(&req.session_id)?;
+        let voices = agent_protocol::RealtimeVoicesList::builtin(
+            agent_protocol::RealtimeConversationVersion::V2,
+        );
+        if let Some(managed) = self.threads.get(session_id).await {
+            managed
+                .runtime
+                .submit(agent_protocol::Op::RealtimeConversationListVoices)
+                .await
+                .map_err(|error| Status::internal(error.to_string()))?;
+        }
+        Ok(Response::new(RealtimeVoicesResponse {
+            voices: voices.voices,
+            default_voice: voices.default_voice,
+        }))
+    }
+
     async fn resume_thread(
         &self,
         request: Request<proto::ResumeThreadRequest>,
@@ -2129,7 +2593,7 @@ impl AstroService for AstroServiceImpl {
 
         if matches!(action, ChatControlAction::ChatControlCancel) {
             if let Some(managed) = self.threads.get(&req.session_id).await {
-                let (_, gate) = managed.runtime.session().ensure_thread_controls();
+                let (_, gate, _) = managed.runtime.session().ensure_thread_controls();
                 gate.cancel_all().await;
                 managed
                     .runtime
@@ -2152,7 +2616,7 @@ impl AstroService for AstroServiceImpl {
         }
 
         if let Some(managed) = self.threads.get(&req.session_id).await {
-            let (pause, _) = managed.runtime.session().ensure_thread_controls();
+            let (pause, _, _) = managed.runtime.session().ensure_thread_controls();
             match action {
                 ChatControlAction::ChatControlPause => pause.pause(),
                 ChatControlAction::ChatControlResume
@@ -2240,6 +2704,8 @@ impl AstroService for AstroServiceImpl {
                         client_message_id: (!req.client_message_id.trim().is_empty())
                             .then(|| req.client_message_id.trim().to_string()),
                     }],
+                    rollback_keep_chat_bubbles: None,
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::Steer { expected_turn_id },
             )
@@ -2310,6 +2776,373 @@ impl AstroService for AstroServiceImpl {
         Ok(Response::new(Empty {}))
     }
 
+    async fn resolve_elicitation(
+        &self,
+        request: Request<ResolveElicitationRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        let action = match req.action.as_str() {
+            "accept" => agent_protocol::ElicitationAction::Accept,
+            "decline" => agent_protocol::ElicitationAction::Decline,
+            "cancel" => agent_protocol::ElicitationAction::Cancel,
+            _ => {
+                return Err(Status::invalid_argument(
+                    "action must be accept, decline, or cancel",
+                ))
+            }
+        };
+        let parse_optional_json = |raw: String| -> Result<Option<serde_json::Value>, Status> {
+            if raw.trim().is_empty() {
+                Ok(None)
+            } else {
+                serde_json::from_str(&raw)
+                    .map(Some)
+                    .map_err(|error| Status::invalid_argument(error.to_string()))
+            }
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::ResolveElicitation {
+                server_name: req.server_name,
+                request_id: req.request_id,
+                response: agent_protocol::ElicitationResponse {
+                    action,
+                    content: parse_optional_json(req.content_json)?,
+                    meta: parse_optional_json(req.meta_json)?,
+                },
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        if !result
+            .await
+            .map_err(|_| Status::internal("elicitation reply channel closed"))?
+        {
+            return Err(Status::failed_precondition(
+                "MCP elicitation is not pending or already resolved",
+            ));
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn update_turn_settings(
+        &self,
+        request: Request<UpdateTurnSettingsRequest>,
+    ) -> Result<Response<UpdateTurnSettingsResponse>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        if req.reasoning_effort.as_deref() == Some("persistent") {
+            let session = managed.runtime.session();
+            let is_openai = session
+                .model_targets()
+                .first()
+                .is_some_and(|target| target.backend_id == "openai");
+            let has_instructions = session
+                .additional_params()
+                .get("astro_persistent_instructions")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| !value.trim().is_empty());
+            if !is_openai || !has_instructions {
+                return Err(Status::invalid_argument(
+                    "persistent reasoning is unavailable for the active model",
+                ));
+            }
+        }
+        let optional = |value: Option<String>| {
+            value.map(|value| (!value.trim().is_empty()).then(|| value.trim().to_string()))
+        };
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::TurnSettings {
+                turn_id: req.turn_id,
+                update: agent_protocol::TurnSettingsUpdate {
+                    model: req.model.map(|value| value.trim().to_string()),
+                    reasoning_effort: optional(req.reasoning_effort),
+                    reasoning_summary: optional(req.reasoning_summary),
+                    service_tier: optional(req.service_tier),
+                },
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        let outcome = result
+            .await
+            .map_err(|_| Status::internal("turn settings reply channel closed"))?;
+        let (status, message) = match outcome {
+            agent_protocol::TurnSettingsOutcome::Applied => ("applied", String::new()),
+            agent_protocol::TurnSettingsOutcome::TargetUnavailable { message } => {
+                ("target_unavailable", message)
+            }
+            agent_protocol::TurnSettingsOutcome::Rejected { message } => ("rejected", message),
+        };
+        Ok(Response::new(UpdateTurnSettingsResponse {
+            status: status.into(),
+            message,
+        }))
+    }
+
+    async fn reconcile_extensions(
+        &self,
+        request: Request<proto::ReconcileExtensionsRequest>,
+    ) -> Result<Response<proto::ReconcileExtensionsResponse>, Status> {
+        let req = request.into_inner();
+        if req.session_id.trim().is_empty() {
+            return Err(Status::invalid_argument("session_id is required"));
+        }
+        let managed = self.get_or_create_thread(req.session_id.trim()).await?;
+        let report = managed
+            .runtime
+            .session()
+            .reconcile_extensions()
+            .await
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        let changed_extensions = report
+            .changed_extensions
+            .into_iter()
+            .map(|change| proto::ExtensionReconcileChange {
+                extension_id: change.extension_id,
+                kind: match change.kind {
+                    agent::extensions::ExtensionChangeKind::Added => "added",
+                    agent::extensions::ExtensionChangeKind::Updated => "updated",
+                    agent::extensions::ExtensionChangeKind::Removed => "removed",
+                }
+                .into(),
+            })
+            .collect();
+        Ok(Response::new(proto::ReconcileExtensionsResponse {
+            previous_version: report.previous_version,
+            next_version: report.next_version,
+            changed_extensions,
+            refresh_mcp: report.refresh_mcp,
+            refresh_skills: report.refresh_skills,
+            refresh_hooks: report.refresh_hooks,
+            refresh_toolsets: report.refresh_toolsets,
+        }))
+    }
+
+    async fn approve_guardian_denied_action(
+        &self,
+        request: Request<ApproveGuardianDeniedActionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let managed = self
+            .threads
+            .get(&req.session_id)
+            .await
+            .ok_or_else(|| Status::not_found("session runtime is not loaded"))?;
+        let (reply, result) = tokio::sync::oneshot::channel();
+        managed
+            .runtime
+            .submit(agent_protocol::Op::ApproveGuardianDeniedAction {
+                assessment_id: req.assessment_id,
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        if !result
+            .await
+            .map_err(|_| Status::internal("guardian approval reply channel closed"))?
+        {
+            return Err(Status::failed_precondition(
+                "Guardian assessment is not denied or already consumed",
+            ));
+        }
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn run_user_shell_command(
+        &self,
+        request: Request<RunUserShellCommandRequest>,
+    ) -> Result<Response<RunUserShellCommandResponse>, Status> {
+        let req = request.into_inner();
+        let managed = self.get_or_create_thread(&req.session_id).await?;
+        let (reply, result) = tokio::sync::oneshot::channel();
+        let submission_id = managed
+            .runtime
+            .submit(agent_protocol::Op::RunUserShellCommand {
+                command: req.command,
+                cwd: (!req.cwd.trim().is_empty()).then(|| PathBuf::from(req.cwd)),
+                reply,
+            })
+            .await
+            .map_err(|error| Status::internal(error.to_string()))?;
+        let launch = result
+            .await
+            .map_err(|_| Status::internal("user shell reply channel closed"))?
+            .map_err(Status::invalid_argument)?;
+        Ok(Response::new(RunUserShellCommandResponse {
+            submission_id,
+            turn_id: launch.turn_id,
+            item_id: launch.item_id,
+            attached_to_active_turn: launch.attached_to_active_turn,
+        }))
+    }
+
+    async fn open_terminal(
+        &self,
+        request: Request<TerminalOpenRequest>,
+    ) -> Result<Response<TerminalSessionResponse>, Status> {
+        let req = request.into_inner();
+        let scope = PathBuf::from(req.scope.trim());
+        if req.scope.trim().is_empty() {
+            return Err(Status::invalid_argument("terminal scope is required"));
+        }
+        let cwd = if req.cwd.trim().is_empty() {
+            scope.clone()
+        } else {
+            PathBuf::from(req.cwd.trim())
+        };
+        let policy = match req.execution_mode.trim() {
+            "" | "project" => tools::context::build_command_sandbox_policy_with_roots(
+                &self.memory_dir,
+                &scope,
+                std::slice::from_ref(&scope),
+                None,
+                false,
+                None,
+            )
+            .map_err(|error| Status::failed_precondition(error.to_string()))?,
+            "system" => sandbox::SandboxPolicy::new(
+                types::SandboxMode::DangerFullAccess,
+                &scope,
+                std::iter::empty(),
+                true,
+            )
+            .map_err(|error| Status::failed_precondition(error.to_string()))?,
+            mode => {
+                return Err(Status::invalid_argument(format!(
+                    "unsupported terminal execution mode: {mode}"
+                )))
+            }
+        };
+        // PTY allocation and process startup are synchronous OS operations. Running them on a
+        // Tokio worker can stall the whole embedded gRPC service, which makes a second tab (and
+        // even its subsequent restart request) fail with `Cancelled: Timeout expired`.
+        let info = tokio::task::spawn_blocking(move || {
+            let manager = tools::shared_terminal_sessions();
+            if req.client_token.trim().is_empty() {
+                manager.ensure_shell_with_options(
+                    &scope,
+                    &cwd,
+                    &policy,
+                    req.cols.min(u16::MAX.into()) as u16,
+                    req.rows.min(u16::MAX.into()) as u16,
+                    req.replace_mode_mismatch,
+                )
+            } else {
+                manager.open_desktop_shell(
+                    &scope,
+                    &cwd,
+                    &policy,
+                    &req.client_token,
+                    req.agent_default,
+                    tools::TerminalDimensions {
+                        cols: req.cols.min(u16::MAX.into()) as u16,
+                        rows: req.rows.min(u16::MAX.into()) as u16,
+                    },
+                )
+            }
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal startup task failed: {error}")))?
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        Ok(Response::new(terminal_session_response(info)))
+    }
+
+    async fn read_terminal(
+        &self,
+        request: Request<TerminalReadRequest>,
+    ) -> Result<Response<TerminalReadResponse>, Status> {
+        let req = request.into_inner();
+        let result = tools::shared_terminal_sessions()
+            .read(
+                req.id,
+                req.cursor,
+                req.max_bytes.max(1) as usize,
+                req.wait_ms.into(),
+            )
+            .await
+            .map_err(|error| Status::not_found(error.to_string()))?;
+        Ok(Response::new(TerminalReadResponse {
+            id: result.id,
+            data: result.data,
+            next_cursor: result.next_cursor,
+            dropped: result.dropped,
+            running: result.running,
+            exit_code: result.exit_code,
+        }))
+    }
+
+    async fn write_terminal(
+        &self,
+        request: Request<TerminalWriteRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        if req.data.len() > 64 * 1024 {
+            return Err(Status::invalid_argument("terminal write exceeds 64 KiB"));
+        }
+        tokio::task::spawn_blocking(move || {
+            tools::shared_terminal_sessions().write(req.id, &req.data)
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal write task failed: {error}")))?
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn resize_terminal(
+        &self,
+        request: Request<TerminalResizeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        tokio::task::spawn_blocking(move || {
+            tools::shared_terminal_sessions().resize(
+                req.id,
+                req.cols.min(u16::MAX.into()) as u16,
+                req.rows.min(u16::MAX.into()) as u16,
+            )
+        })
+        .await
+        .map_err(|error| Status::internal(format!("terminal resize task failed: {error}")))?
+        .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn kill_terminal(
+        &self,
+        request: Request<TerminalIdRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let id = request.into_inner().id;
+        tokio::task::spawn_blocking(move || tools::shared_terminal_sessions().kill(id))
+            .await
+            .map_err(|error| Status::internal(format!("terminal kill task failed: {error}")))?
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn close_terminal(
+        &self,
+        request: Request<TerminalIdRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let id = request.into_inner().id;
+        tokio::task::spawn_blocking(move || tools::shared_terminal_sessions().close(id))
+            .await
+            .map_err(|error| Status::internal(format!("terminal close task failed: {error}")))?
+            .map_err(|error| Status::failed_precondition(error.to_string()))?;
+        Ok(Response::new(Empty {}))
+    }
+
     /// 文生图流：先推送 progress，再推送 `image_data` 或 error。
     ///
     /// 默认 provider 为 `google`；模型空则用供应商默认图片模型；api_key 空则读环境变量。
@@ -2327,6 +3160,12 @@ impl AstroService for AstroServiceImpl {
         let model = req.model;
         let api_key = req.api_key;
         let base_url = req.base_url;
+        let image_options = providers::types::ImageGenConfig {
+            width: (req.width > 0).then_some(req.width as u32),
+            height: (req.height > 0).then_some(req.height as u32),
+            n: if req.count > 0 { req.count as u32 } else { 1 },
+            ..providers::types::ImageGenConfig::default()
+        };
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ImageEvent, Status>>(8);
 
@@ -2376,7 +3215,14 @@ impl AstroService for AstroServiceImpl {
                 ..ProviderConfig::default()
             };
 
-            match providers::dispatch::generate_image(&provider_name, &prompt, &config).await {
+            match providers::dispatch::generate_image_with_options(
+                &provider_name,
+                &prompt,
+                &config,
+                &image_options,
+            )
+            .await
+            {
                 Ok(images) => {
                     for img in images {
                         let _ = tx
@@ -2600,11 +3446,13 @@ impl AstroService for AstroServiceImpl {
         let memory = MemoryManager::new(self.memory_dir.clone())
             .map_err(|e| Status::internal(e.to_string()))?;
         let (memory_content, user_content) = memory.prompt_content();
-        let sessions =
-            open_sessions(&self.memory_dir).map_err(|e| Status::internal(e.to_string()))?;
+        let sessions = open_sessions(&self.memory_dir)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
 
         let sessions = sessions
             .search_messages(&query.query, None, None, query.limit.max(1) as i64)
+            .await
             .map_err(|e| Status::internal(e.to_string()))?
             .into_iter()
             .map(|hit| {
@@ -2638,127 +3486,6 @@ impl AstroService for AstroServiceImpl {
 
         Ok(Response::new(FileListResponse { entries }))
     }
-
-    async fn count_tokens(
-        &self,
-        request: Request<proto::CountTokensRequest>,
-    ) -> Result<Response<proto::CountTokensResponse>, Status> {
-        let req = request.into_inner();
-        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
-        if api_key.is_empty() {
-            return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
-        }
-        let config = providers::ProviderConfig {
-            api_key,
-            model: if req.model.is_empty() {
-                "claude-opus-4-8".into()
-            } else {
-                req.model
-            },
-            ..providers::ProviderConfig::default()
-        };
-        let client = reqwest::Client::new();
-        let count =
-            providers::anthropic::token_count::anthropic_count_tokens(&client, &[], &[], &config)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(proto::CountTokensResponse {
-            input_tokens: count,
-        }))
-    }
-
-    async fn create_batch(
-        &self,
-        request: Request<proto::BatchCreateRequest>,
-    ) -> Result<Response<proto::BatchResponse>, Status> {
-        let req = request.into_inner();
-        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
-        if api_key.is_empty() {
-            return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
-        }
-        let requests: Vec<serde_json::Value> = serde_json::from_str(&req.requests_json)
-            .map_err(|e| Status::invalid_argument(format!("requests_json: {e}")))?;
-        let config = providers::ProviderConfig {
-            api_key,
-            ..providers::ProviderConfig::default()
-        };
-        let client = reqwest::Client::new();
-        let result =
-            providers::anthropic::batch::anthropic_create_batch(&client, &requests, &config)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(proto::BatchResponse {
-            response_json: result.to_string(),
-        }))
-    }
-
-    async fn get_batch(
-        &self,
-        request: Request<proto::BatchStatusRequest>,
-    ) -> Result<Response<proto::BatchResponse>, Status> {
-        let req = request.into_inner();
-        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
-        if api_key.is_empty() {
-            return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
-        }
-        let config = providers::ProviderConfig {
-            api_key,
-            ..providers::ProviderConfig::default()
-        };
-        let client = reqwest::Client::new();
-        let result =
-            providers::anthropic::batch::anthropic_get_batch(&client, &req.batch_id, &config)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(proto::BatchResponse {
-            response_json: result.to_string(),
-        }))
-    }
-
-    async fn list_batches(
-        &self,
-        request: Request<proto::BatchListRequest>,
-    ) -> Result<Response<proto::BatchResponse>, Status> {
-        let _req = request.into_inner();
-        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
-        if api_key.is_empty() {
-            return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
-        }
-        let config = providers::ProviderConfig {
-            api_key,
-            ..providers::ProviderConfig::default()
-        };
-        let client = reqwest::Client::new();
-        let result = providers::anthropic::batch::anthropic_list_batches(&client, &config)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(proto::BatchResponse {
-            response_json: result.to_string(),
-        }))
-    }
-
-    async fn get_batch_results(
-        &self,
-        request: Request<proto::BatchStatusRequest>,
-    ) -> Result<Response<proto::BatchResultsResponse>, Status> {
-        let req = request.into_inner();
-        let api_key = providers::read_env_api_key("claude").unwrap_or_default();
-        if api_key.is_empty() {
-            return Err(Status::failed_precondition("缺少 ANTHROPIC_API_KEY"));
-        }
-        let config = providers::ProviderConfig {
-            api_key,
-            ..providers::ProviderConfig::default()
-        };
-        let client = reqwest::Client::new();
-        let result =
-            providers::anthropic::batch::anthropic_batch_results(&client, &req.batch_id, &config)
-                .await
-                .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(proto::BatchResultsResponse {
-            results_jsonl: result,
-        }))
-    }
 }
 
 #[cfg(test)]
@@ -2770,7 +3497,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
 
-    use agent::streaming::{run_multi_turn_events_with_chat_fn, ChatOverride};
+    use agent::streaming::{run_multi_turn_events_with_responses_fn, ResponsesOverride};
     use providers::CompletionStream;
     use tempfile::TempDir;
 
@@ -2831,18 +3558,23 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let control = subagents::AgentControl::open(
             "projection-root".into(),
-            subagents::AgentGraphStore::open(dir.path().join("graph.db")).unwrap(),
+            subagents::AgentGraphStore::open(dir.path().join("graph.db"))
+                .await
+                .unwrap(),
             subagents::Limits {
                 max_threads: 8,
                 max_depth: 4,
                 max_running: 4,
             },
         )
+        .await
         .unwrap();
         control
             .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .await
             .unwrap()
             .commit()
+            .await
             .unwrap();
         let observation = control
             .next_activity_after(
@@ -2869,20 +3601,24 @@ mod tests {
         let control = Arc::new(
             subagents::AgentControl::open(
                 root.into(),
-                subagents::AgentGraphStore::open(dir.path().join("agent-graph.db")).unwrap(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-graph.db"))
+                    .await
+                    .unwrap(),
                 subagents::Limits {
                     max_threads: 8,
                     max_depth: 4,
                     max_running: 4,
                 },
             )
+            .await
             .unwrap(),
         );
         let spawn = control
             .reserve_spawn(&subagents::AgentPath::root(), "child")
+            .await
             .unwrap();
         let child_thread_id = spawn.thread_id().to_string();
-        spawn.commit().unwrap();
+        spawn.commit().await.unwrap();
 
         service
             .attach_agent_thread_watcher(
@@ -2895,6 +3631,7 @@ mod tests {
         control.notify_main_steer();
         control
             .record_runner_event(&child_thread_id, subagents::RunnerEvent::RuntimeTerminated)
+            .await
             .unwrap();
 
         let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
@@ -2955,13 +3692,16 @@ mod tests {
         let control = Arc::new(
             subagents::AgentControl::open(
                 root.into(),
-                subagents::AgentGraphStore::open(dir.path().join("agent-gap-graph.db")).unwrap(),
+                subagents::AgentGraphStore::open(dir.path().join("agent-gap-graph.db"))
+                    .await
+                    .unwrap(),
                 subagents::Limits {
                     max_threads: 8,
                     max_depth: 4,
                     max_running: 4,
                 },
             )
+            .await
             .unwrap(),
         );
         for _ in 0..1_025 {
@@ -2995,8 +3735,10 @@ mod tests {
             .clone();
         control
             .reserve_spawn(&subagents::AgentPath::root(), "after_gap")
+            .await
             .unwrap()
             .commit()
+            .await
             .unwrap();
 
         let extensions = wait_for_agent_thread_extensions(&managed, dir.path(), root, |items| {
@@ -3138,11 +3880,11 @@ mod tests {
         tokio::task::JoinHandle<()>,
         tokio::sync::mpsc::Receiver<anyhow::Result<agent_protocol::Event>>,
     ) {
-        let chat: ChatOverride = Arc::new(|_, _, _| {
+        let chat: ResponsesOverride = Arc::new(|_, _, _| {
             Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
         });
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let handle = tokio::spawn(run_multi_turn_events_with_chat_fn(
+        let handle = tokio::spawn(run_multi_turn_events_with_responses_fn(
             session,
             chat,
             ProviderConfig {
@@ -3304,7 +4046,7 @@ mod tests {
                         move |session| async move {
                             second_setup_started.store(true, Ordering::SeqCst);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Agent)
                                 .await;
                             session.set_temperature(1.4);
                         },
@@ -3327,7 +4069,7 @@ mod tests {
         let first = first.await.unwrap();
         let second = second.await.unwrap();
         assert_eq!(first, (tools::InteractionMode::Plan, 0.2));
-        assert_eq!(second, (tools::InteractionMode::Ask, 1.4));
+        assert_eq!(second, (tools::InteractionMode::Agent, 1.4));
     }
 
     #[tokio::test]
@@ -3359,7 +4101,7 @@ mod tests {
                         move |session| async move {
                             session.set_temperature(0.2);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Plan)
                                 .await;
                             setup_applied.notify_one();
                         },
@@ -3452,7 +4194,7 @@ mod tests {
                         move |session| async move {
                             session.set_temperature(0.2);
                             session
-                                .set_interaction_mode(tools::InteractionMode::Ask)
+                                .set_interaction_mode(tools::InteractionMode::Plan)
                                 .await;
                         },
                         move || async move { spawn_pending_turn(launch_session).await },
@@ -3474,7 +4216,7 @@ mod tests {
         assert_eq!(session.temperature(), 0.2);
         assert_eq!(
             session.interaction_mode().await,
-            tools::InteractionMode::Ask
+            tools::InteractionMode::Plan
         );
         assert!(!session.cancel_signal().is_cancelled());
 
@@ -4641,18 +5383,23 @@ mod tests {
         first.runtime.wait_terminated().await;
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn idle_thread_unloads_only_after_thirty_minutes() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
         let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        service
+            .get_session("idle-thread")
+            .await
+            .expect("prewarm idle session");
+        tokio::time::pause();
         let managed = service
             .get_or_create_thread("idle-thread")
             .await
             .expect("create idle thread");
         let old_runtime = Arc::clone(&managed.runtime);
         drop(managed);
-        tokio::task::yield_now().await;
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(29 * 60)).await;
         tokio::task::yield_now().await;
@@ -4664,6 +5411,7 @@ mod tests {
         }
         assert!(!service.threads.contains("idle-thread").await);
         assert!(service.thread_states.get("idle-thread").await.is_none());
+        tokio::time::resume();
         let replacement = service
             .get_or_create_thread("idle-thread")
             .await
@@ -4678,7 +5426,7 @@ mod tests {
         replacement.runtime.wait_terminated().await;
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn acquired_managed_handle_prevents_idle_unload_until_released() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4687,7 +5435,8 @@ mod tests {
             .get_or_create_thread("leased-idle-thread")
             .await
             .expect("create idle thread");
-        tokio::task::yield_now().await;
+        tokio::time::pause();
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4703,6 +5452,7 @@ mod tests {
 
         drop(current);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
             tokio::task::yield_now().await;
@@ -4710,7 +5460,7 @@ mod tests {
         assert!(!service.threads.contains("leased-idle-thread").await);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn failed_terminal_unsubscribed_thread_unloads_after_thirty_minutes() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4719,6 +5469,7 @@ mod tests {
             .get_or_create_thread("failed-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-failed".into())
@@ -4769,6 +5520,7 @@ mod tests {
         assert_eq!(managed.activity_rx.borrow().status, "errored");
         assert!(!managed.activity_rx.borrow().has_subscribers);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4779,7 +5531,7 @@ mod tests {
         assert!(service.thread_states.get("failed-thread").await.is_none());
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn never_returning_background_phase_releases_sink_then_allows_idle_unload() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -4788,6 +5540,7 @@ mod tests {
             .get_or_create_thread("stuck-background-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-stuck".into())
@@ -4825,6 +5578,7 @@ mod tests {
         unsubscribe_rx.await.unwrap();
         assert!(managed.activity_rx.borrow().has_subscribers);
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         // Simulate a provider future that never resolves. The background lease must retain
         // the sink through the work timeout plus marker window, then expire independently
@@ -4840,6 +5594,7 @@ mod tests {
             .expect("thread remains during idle window");
         assert!(!current.activity_rx.borrow().has_subscribers);
         drop(current);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
@@ -4906,7 +5661,7 @@ mod tests {
         assert_eq!(finalized.load(Ordering::SeqCst), 3);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn released_generation_background_finalizer_cannot_resurrect_thread_or_session() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -5092,7 +5847,7 @@ mod tests {
         assert_eq!(count_rx.await.expect("waiter count"), 0);
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn completed_snapshot_can_resubscribe_then_unload_after_explicit_unsubscribe() {
         let dir = TempDir::new().unwrap();
         memory::ensure_workspace(dir.path()).unwrap();
@@ -5101,6 +5856,7 @@ mod tests {
             .get_or_create_thread("completed-thread")
             .await
             .expect("create thread");
+        tokio::time::pause();
         let (_receiver, _cancel, generation) = service
             .connections
             .register("connection-completed".into())
@@ -5166,11 +5922,31 @@ mod tests {
             .unwrap();
         unsubscribe_rx.await.unwrap();
         drop(managed);
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         tokio::time::advance(std::time::Duration::from_secs(30 * 60)).await;
         for _ in 0..8 {
             tokio::task::yield_now().await;
         }
         assert!(!service.threads.contains("completed-thread").await);
+    }
+
+    #[tokio::test]
+    async fn reconcile_extensions_rejects_an_empty_session_id_without_side_effects() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+
+        let error = AstroService::reconcile_extensions(
+            &service,
+            Request::new(proto::ReconcileExtensionsRequest {
+                session_id: "  ".into(),
+            }),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert!(!service.threads.contains("").await);
     }
 }

@@ -1,11 +1,12 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 
+use providers::types::ImageGenConfig;
 use providers::ProviderConfig;
 
 use crate::engine::executor::{NodeExecutor, NodeResult};
 use crate::engine::variables::VariableContext;
-use crate::model::WorkflowNode;
+use crate::model::{NodeType, WorkflowNode};
 
 /// 从节点 config 中解析字符串数组字段（支持 JSON 数组或逗号分隔字符串）。
 fn parse_string_array(config: &serde_json::Value, key: &str, ctx: &VariableContext) -> Vec<String> {
@@ -33,7 +34,11 @@ fn parse_string_array(config: &serde_json::Value, key: &str, ctx: &VariableConte
     }
 }
 
-async fn asr_transcribe(node: &WorkflowNode, audio_path: &str) -> Result<String> {
+async fn asr_transcribe(
+    node: &WorkflowNode,
+    ctx: &VariableContext,
+    audio_path: &str,
+) -> Result<String> {
     let audio_bytes = std::fs::read(audio_path)
         .map_err(|e| anyhow::anyhow!("读取音频文件失败 {}: {}", audio_path, e))?;
     let filename = std::path::Path::new(audio_path)
@@ -41,7 +46,7 @@ async fn asr_transcribe(node: &WorkflowNode, audio_path: &str) -> Result<String>
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "audio.wav".to_string());
 
-    let (provider_id, config) = build_media_config(node)?;
+    let (provider_id, config) = build_media_config(node, ctx)?;
     let asr_model = providers::profile::resolve(&provider_id)
         .map(|p| p.default_asr_model)
         .unwrap_or("");
@@ -65,7 +70,10 @@ async fn asr_transcribe(node: &WorkflowNode, audio_path: &str) -> Result<String>
     Ok(text)
 }
 
-fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
+fn build_media_config(
+    node: &WorkflowNode,
+    ctx: &VariableContext,
+) -> Result<(String, ProviderConfig)> {
     let provider_id = node
         .config
         .get("provider_id")
@@ -76,6 +84,22 @@ fn build_media_config(node: &WorkflowNode) -> Result<(String, ProviderConfig)> {
         .get("model")
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    if let Some(runtime) = ctx.provider_config(provider_id) {
+        let mut config = runtime.config.clone();
+        let default_media_model = match node.node_type {
+            NodeType::ImageGeneration | NodeType::ImageEdit => runtime.image_model.clone(),
+            NodeType::VideoGeneration => runtime.video_model.clone(),
+            NodeType::MusicGeneration => runtime.music_model.clone(),
+            NodeType::TextToSpeech | NodeType::VoiceClone => runtime.tts_model.clone(),
+            _ => config.model.clone(),
+        };
+        config.model = if model.trim().is_empty() {
+            default_media_model
+        } else {
+            model.to_string()
+        };
+        return Ok((runtime.backend_id.clone(), config));
+    }
     let auth = providers::AuthKind::for_provider(provider_id);
     let api_key = if auth == providers::AuthKind::None {
         String::new()
@@ -119,8 +143,53 @@ impl NodeExecutor for ImageGenExec {
             bail!("图片生成节点的提示词(prompt_template)为空");
         }
 
-        let (provider_id, config) = build_media_config(node)?;
-        let images = providers::dispatch::generate_image(&provider_id, &prompt, &config).await?;
+        let mode = node
+            .config
+            .get("mode")
+            .and_then(|value| value.as_str())
+            .unwrap_or("text_to_image");
+        let has_source_image = node
+            .config
+            .get("source_image")
+            .and_then(|value| value.as_str())
+            .is_some_and(|value| !value.trim().is_empty());
+        let has_reference_images =
+            !parse_string_array(&node.config, "reference_images", ctx).is_empty();
+        if mode != "text_to_image" || has_source_image || has_reference_images {
+            bail!("工作流图片节点当前仅支持文生图，不会静默忽略参考图或图生图参数");
+        }
+        let (width, height) = parse_image_size(
+            node.config
+                .get("size")
+                .and_then(|value| value.as_str())
+                .unwrap_or("1024x1024"),
+        )?;
+        let count = node
+            .config
+            .get("num_images")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(1);
+        let count = u32::try_from(count).map_err(|_| anyhow::anyhow!("生成张数超出范围"))?;
+        let options = ImageGenConfig {
+            width: Some(width),
+            height: Some(height),
+            n: count,
+            output_format: node
+                .config
+                .get("output_format")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+            ..ImageGenConfig::default()
+        };
+
+        let (provider_id, config) = build_media_config(node, ctx)?;
+        let images = providers::dispatch::generate_image_with_options(
+            &provider_id,
+            &prompt,
+            &config,
+            &options,
+        )
+        .await?;
         if images.is_empty() {
             bail!("图片生成未返回结果");
         }
@@ -132,6 +201,8 @@ impl NodeExecutor for ImageGenExec {
         for (i, img) in images.iter().enumerate() {
             let ext = if img.mime_type.contains("png") {
                 "png"
+            } else if img.mime_type.contains("webp") {
+                "webp"
             } else {
                 "jpg"
             };
@@ -154,6 +225,70 @@ impl NodeExecutor for ImageGenExec {
     }
 }
 
+fn parse_image_size(size: &str) -> Result<(u32, u32)> {
+    let (width, height) = size
+        .split_once('x')
+        .ok_or_else(|| anyhow::anyhow!("图片尺寸格式无效: {size}"))?;
+    let width = width
+        .parse::<u32>()
+        .map_err(|_| anyhow::anyhow!("图片宽度无效: {width}"))?;
+    let height = height
+        .parse::<u32>()
+        .map_err(|_| anyhow::anyhow!("图片高度无效: {height}"))?;
+    if width == 0 || height == 0 {
+        bail!("图片尺寸必须大于 0");
+    }
+    Ok((width, height))
+}
+
+#[cfg(test)]
+mod image_tests {
+    use std::collections::HashMap;
+
+    use super::{build_media_config, parse_image_size};
+    use crate::engine::variables::{RuntimeProviderConfig, VariableContext};
+    use crate::model::{NodeType, Position, WorkflowNode};
+
+    #[test]
+    fn image_size_requires_two_positive_dimensions() {
+        assert_eq!(parse_image_size("1536x1024").unwrap(), (1536, 1024));
+        assert!(parse_image_size("1024").is_err());
+        assert!(parse_image_size("0x1024").is_err());
+        assert!(parse_image_size("wide x tall").is_err());
+    }
+
+    #[test]
+    fn runtime_provider_uses_image_model_instead_of_chat_model() {
+        let ctx = VariableContext::default().with_provider_configs(HashMap::from([(
+            "azure-record".into(),
+            RuntimeProviderConfig {
+                backend_id: "azure".into(),
+                config: providers::ProviderConfig {
+                    api_key: "secret".into(),
+                    model: "gpt-5.6-sol".into(),
+                    ..providers::ProviderConfig::default()
+                },
+                image_model: "gpt-image-2".into(),
+                video_model: String::new(),
+                tts_model: String::new(),
+                music_model: String::new(),
+            },
+        )]));
+        let node = WorkflowNode {
+            id: "image".into(),
+            node_type: NodeType::ImageGeneration,
+            label: "Image".into(),
+            position: Position { x: 0.0, y: 0.0 },
+            config: serde_json::json!({"provider_id": "azure-record"}),
+            disabled: false,
+        };
+
+        let (backend, config) = build_media_config(&node, &ctx).expect("provider config");
+        assert_eq!(backend, "azure");
+        assert_eq!(config.model, "gpt-image-2");
+    }
+}
+
 // ── Video Generation ────────────────────────────────────────────────
 
 pub struct VideoGenExec;
@@ -171,7 +306,7 @@ impl NodeExecutor for VideoGenExec {
             bail!("视频生成节点的提示词为空");
         }
 
-        let (provider_id, config) = build_media_config(node)?;
+        let (provider_id, config) = build_media_config(node, ctx)?;
 
         // 从节点 config 读取所有视频生成参数
         let first_frame = node
@@ -270,7 +405,7 @@ impl NodeExecutor for MusicGenExec {
             bail!("音乐生成节点的提示词为空");
         }
 
-        let (provider_id, config) = build_media_config(node)?;
+        let (provider_id, config) = build_media_config(node, ctx)?;
         let result = providers::dispatch::generate_music(&provider_id, &prompt, &config).await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
@@ -314,7 +449,7 @@ impl NodeExecutor for TtsExec {
             bail!("TTS 节点的文本为空");
         }
 
-        let (provider_id, config) = build_media_config(node)?;
+        let (provider_id, config) = build_media_config(node, ctx)?;
         let result = providers::dispatch::text_to_speech(&provider_id, &text, &config).await?;
 
         let artifacts_dir = home::default_memory_dir().join("artifacts");
@@ -357,7 +492,7 @@ impl NodeExecutor for SubtitleGenExec {
         if resolved.trim().is_empty() {
             bail!("字幕生成节点的音频源为空");
         }
-        let text = asr_transcribe(node, &resolved).await?;
+        let text = asr_transcribe(node, ctx, &resolved).await?;
         Ok(NodeResult::Success(serde_json::json!({
             "text": text,
             "source": resolved,
@@ -395,7 +530,7 @@ impl NodeExecutor for VoiceCloneExec {
             bail!("声音克隆节点的参考音频和说话人 ID 均为空，至少提供一个");
         }
 
-        let (provider_id, config) = build_media_config(node)?;
+        let (provider_id, config) = build_media_config(node, ctx)?;
         if provider_id != "minimax" {
             bail!("声音克隆目前仅支持 MiniMax 供应商，当前: {}", provider_id);
         }
@@ -504,7 +639,7 @@ impl NodeExecutor for SpeechToTextExec {
             bail!("语音识别节点的输入路径为空");
         }
 
-        let text = asr_transcribe(node, &input).await?;
+        let text = asr_transcribe(node, ctx, &input).await?;
 
         Ok(NodeResult::Success(serde_json::json!({
             "text": text,
@@ -594,7 +729,7 @@ impl NodeExecutor for TranslationExec {
             },
             target,
         );
-        let (pid, config) = build_media_config(node)?;
+        let (pid, config) = build_media_config(node, ctx)?;
         let ai_nodes = crate::nodes::ai::one_shot_llm(&pid, &config, &system, &text).await?;
 
         Ok(NodeResult::Success(serde_json::json!({

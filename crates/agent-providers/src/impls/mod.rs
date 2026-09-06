@@ -10,7 +10,8 @@
 ///                stream_usage: false, caps: chat_media);
 /// ```
 ///
-/// `auth` 默认 bearer；`caps` 可选 `chat_only`（仅 Chat）或 `chat_media`（含 Embedding/ImageGen/TTS）。
+/// `auth` 默认 bearer；`caps` 可选 `chat_only`、`chat_embedding` 或
+/// `chat_media`（含 Embedding/ImageGen/TTS）。
 macro_rules! openai_compat {
     // bearer auth（默认）
     ($name:ident, $id:literal, $url:literal, stream_usage: $su:literal, caps: $caps:ident) => {
@@ -37,6 +38,8 @@ macro_rules! openai_compat {
             const STREAM_USAGE: bool = $su;
         }
 
+        impl crate::compat::OpenAIResponsesCompatible for $name {}
+
         openai_compat!(@caps $name, $caps);
     };
     // ── auth 分支 ──
@@ -47,6 +50,16 @@ macro_rules! openai_compat {
         impl crate::traits::Capabilities for $name {
             type Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Self>>;
             type Embedding = crate::traits::Nothing;
+            type ImageGen = crate::traits::Nothing;
+            type VideoGen = crate::traits::Nothing;
+            type TTS = crate::traits::Nothing;
+            type MusicGen = crate::traits::Nothing;
+        }
+    };
+    (@caps $name:ident, chat_embedding) => {
+        impl crate::traits::Capabilities for $name {
+            type Chat = crate::traits::Capable<crate::compat::OpenAICompletionModel<Self>>;
+            type Embedding = crate::traits::Capable<crate::compat::media::CompatEmbeddingModel>;
             type ImageGen = crate::traits::Nothing;
             type VideoGen = crate::traits::Nothing;
             type TTS = crate::traits::Nothing;
@@ -78,7 +91,6 @@ pub mod moonshot;
 pub mod nvidia;
 pub mod ollama;
 pub mod openai;
-pub mod openai_responses;
 pub mod openrouter;
 pub mod volcengine;
 pub mod zhipu;

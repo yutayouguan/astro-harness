@@ -1,6 +1,9 @@
 import { Bot } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
-import { resolveLucideIconById, applyPaintToSvg } from "../../lib/agent/lucideAgentIcons";
+import {
+  resolveLucideIconById,
+  applyPaintToSvg,
+} from "../../lib/agent/lucideAgentIcons";
 import type { LoopIconData } from "./loopTypes";
 
 interface Props {

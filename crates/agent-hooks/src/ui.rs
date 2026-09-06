@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::names::{
-    AGENT_END, PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE, POST_LLM_CALL,
-    POST_TOOL_USE, PRE_API_REQUEST, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL, PRE_TOOL_USE,
-    SESSION_FINALIZE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START, SUBAGENT_STOP,
-    TRANSFORM_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
+    AGENT_END, INTERRUPT, PERMISSION_REQUEST, POST_API_REQUEST, POST_APPROVAL_RESPONSE,
+    POST_LLM_CALL, POST_TOOL_USE, PRE_API_REQUEST, PRE_GATEWAY_DISPATCH, PRE_LLM_CALL,
+    PRE_TOOL_USE, SESSION_RESET, SESSION_START, STOP, SUBAGENT_START, SUBAGENT_STOP,
+    TRANSFORM_FINAL_LLM_OUTPUT, TRANSFORM_TERMINAL_OUTPUT, TRANSFORM_TOOL_RESULT,
 };
 use crate::outcome::{HookOutcome, HookPayload};
 use crate::plugin::PluginHookBus;
@@ -29,17 +29,17 @@ const UI_HOOK_NAMES: &[&str] = &[
     POST_TOOL_USE,
     POST_LLM_CALL,
     AGENT_END,
-    SESSION_FINALIZE,
     SESSION_RESET,
     SUBAGENT_STOP,
     PRE_GATEWAY_DISPATCH,
     STOP,
+    INTERRUPT,
     SUBAGENT_START,
     PERMISSION_REQUEST,
     POST_APPROVAL_RESPONSE,
     TRANSFORM_TOOL_RESULT,
     TRANSFORM_TERMINAL_OUTPUT,
-    TRANSFORM_LLM_OUTPUT,
+    TRANSFORM_FINAL_LLM_OUTPUT,
 ];
 
 fn detail_from_payload(payload: &HookPayload) -> String {
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn detail_uses_canonical_input_fields() {
         let tool = HookPayload {
-            tool_name: Some("terminal".into()),
+            tool_name: Some("exec_command".into()),
             tool_input: Some(json!({"command": "pwd"})),
             ..Default::default()
         };
@@ -247,7 +247,10 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(detail_from_payload(&tool), "terminal {\"command\":\"pwd\"}");
+        assert_eq!(
+            detail_from_payload(&tool),
+            "exec_command {\"command\":\"pwd\"}"
+        );
         assert_eq!(detail_from_payload(&prompt), "canonical prompt");
         assert_eq!(detail_from_payload(&assistant), "canonical response");
     }

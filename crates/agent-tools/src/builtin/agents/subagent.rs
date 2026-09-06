@@ -1,4 +1,4 @@
-//! Codex V2 Agent Thread 六个模型工具的注册与分发。
+//! V2 Agent Thread 六个模型工具的注册与分发。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
 /// V2 子 Agent 工具名常量集（spawn/list/send/followup/wait/interrupt）。
-pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
+pub const V2_AGENT_TOOL_NAMES: [&str; 6] = [
     "spawn_agent",
     "list_agents",
     "send_message",
@@ -72,7 +72,7 @@ pub fn register(registry: &mut ToolRegistry) {
     let entries = [
         (
             "spawn_agent",
-            "Spawn an independent Codex V2 agent task under the current agent path.",
+            "Spawn an independent V2 agent task under the current agent path.",
             schema_for_args::<SpawnAgentArgs>(),
             "bot",
         ),
@@ -233,8 +233,8 @@ fn model_visible_status(status: &subagents::AgentStatusV2) -> serde_json::Value 
 }
 
 fn model_visible_spawn_output(result: &subagents::SpawnAgentV2Result) -> anyhow::Result<String> {
-    // Codex V2 defaults `hide_spawn_agent_metadata` to true. Astro exposes the
-    // same default contract and keeps internal thread/session ids off-model.
+    // V2 默认 `hide_spawn_agent_metadata` 为 true。Astro 遵循相同的默认契约，
+    // 不向模型暴露内部 thread/session id。
     Ok(serde_json::to_string(&serde_json::json!({
         "task_name": result.thread.canonical_path.as_str()
     }))?)
@@ -292,14 +292,22 @@ fn parent_runtime_material(ctx: &ToolContext<'_>) -> ParentRuntimeMaterial {
                 ctx.credentials.provider, ctx.credentials.model
             ))
         };
+    let model_spec = parent_model.as_ref().map(|_| {
+        let mut spec = types::ModelSpec::new(&ctx.credentials.provider, &ctx.credentials.model);
+        spec.tool_mode = ctx.credentials.tool_mode;
+        spec
+    });
     ParentRuntimeMaterial {
         memory_dir: ctx.memory_dir.clone(),
         parent_agent_id: ctx.agent_id(),
         parent_model,
+        root_service_tier: ctx.service_tier.clone(),
         parent_sandbox_mode: current_sandbox_mode(ctx),
         inherited_skill_config: ctx.skill_config_overrides.to_vec(),
-        chat_targets: ctx.chat_targets.to_vec(),
+        model_targets: ctx.model_targets.to_vec(),
+        model_spec,
         project_root: ctx.project_root.clone(),
+        workspace_roots: ctx.workspace_roots.clone(),
         hook_runtime: ctx.hook_runtime.clone(),
         hook_bus: ctx.hook_bus.clone(),
     }
@@ -378,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn model_visible_outputs_match_default_codex_v2_shapes() {
+    fn model_visible_outputs_match_default_v2_shapes() {
         let spawned = subagents::SpawnAgentV2Result {
             thread: thread(subagents::AgentStatusV2::Running),
         };

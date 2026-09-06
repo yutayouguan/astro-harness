@@ -153,9 +153,7 @@ export async function copyMedia(
         const bytes = base64ToBytes(dto.base64);
         const mime = dto.mime.startsWith("image/") ? dto.mime : "image/png";
         const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
-        await navigator.clipboard.write([
-          new ClipboardItem({ [mime]: blob }),
-        ]);
+        await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
         return "image";
       } catch {
         // fall through
@@ -164,7 +162,11 @@ export async function copyMedia(
   }
 
   // 远程图片：尽量写入像素，便于粘贴
-  if (kind === "image" && /^https?:/i.test(path.trim()) && typeof ClipboardItem !== "undefined") {
+  if (
+    kind === "image" &&
+    /^https?:/i.test(path.trim()) &&
+    typeof ClipboardItem !== "undefined"
+  ) {
     try {
       const res = await fetch(path.trim());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -180,8 +182,6 @@ export async function copyMedia(
     }
   }
 
-  await navigator.clipboard.writeText(
-    local ?? path.trim(),
-  );
+  await navigator.clipboard.writeText(local ?? path.trim());
   return "text";
 }

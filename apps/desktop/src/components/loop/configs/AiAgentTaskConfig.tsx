@@ -1,10 +1,15 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, X, Variable } from "lucide-react";
+import { Plus, X, Variable } from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronRight as ChevronRightData,
+} from "lucide";
 import { AiAssistField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
 import ReasoningLevelSelect from "./ReasoningLevelSelect";
 import type { UpstreamOutput } from "./upstreamOutputs";
 import { varRef } from "./upstreamOutputs";
+import { MorphToggleIcon } from "../../icons/MorphIcon";
 
 interface UpstreamFieldEntry {
   name: string;
@@ -19,7 +24,9 @@ interface ConfigProps {
   aiModel?: string;
 }
 
-function getUpstreamFields(config: Record<string, unknown>): UpstreamFieldEntry[] {
+function getUpstreamFields(
+  config: Record<string, unknown>,
+): UpstreamFieldEntry[] {
   const raw = config.upstream_fields;
   if (Array.isArray(raw)) {
     return raw.filter(
@@ -30,7 +37,13 @@ function getUpstreamFields(config: Record<string, unknown>): UpstreamFieldEntry[
   return [];
 }
 
-export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, aiProviderId, aiModel }: ConfigProps) {
+export default function AiAgentTaskConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+  aiProviderId,
+  aiModel,
+}: ConfigProps) {
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const fields = getUpstreamFields(config);
   const upstream = upstreamOutputs ?? [];
@@ -68,7 +81,13 @@ export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, a
           className="loop-config-upstream-toggle"
           onClick={() => setUpstreamOpen((v) => !v)}
         >
-          {upstreamOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <MorphToggleIcon
+            active={upstreamOpen}
+            activeIcon={ChevronDownData}
+            inactiveIcon={ChevronRightData}
+            size={14}
+            aria-hidden
+          />
           <span>引用上游字段</span>
           <span className="loop-config-upstream-badge">可选</span>
           {fields.length > 0 && (
@@ -90,7 +109,8 @@ export default function AiAgentTaskConfig({ config, onChange, upstreamOutputs, a
           <div className="loop-config-upstream-body">
             {fields.length === 0 && (
               <span className="loop-config-hint">
-                默认情况下，上游的输出会自动传给本节点。点击「添加」可定义命名引用，在指令中用 {"{{名称}}"} 精确引用。
+                默认情况下，上游的输出会自动传给本节点。点击「添加」可定义命名引用，在指令中用{" "}
+                {"{{名称}}"} 精确引用。
               </span>
             )}
             {fields.map((entry, idx) => (
@@ -207,7 +227,9 @@ function UpstreamFieldRow({
                     }}
                   >
                     <span className="loop-var-item-label">{f.label}</span>
-                    <code className="loop-var-item-ref">{varRef(u.nodeLabel, f.key)}</code>
+                    <code className="loop-var-item-ref">
+                      {varRef(u.nodeLabel, f.key)}
+                    </code>
                   </button>
                 ))}
               </div>

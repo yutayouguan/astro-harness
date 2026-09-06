@@ -15,7 +15,6 @@ use memory::{
     apply_review_suggestions, build_review_digest, load_auxiliary_config, parse_review_llm_output,
     MemoryManager, REVIEW_SYSTEM_PROMPT,
 };
-use providers::types::message::Message as ProviderMessage;
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 use tracing::{info, warn};
@@ -29,8 +28,8 @@ pub struct BackgroundReviewJob {
     pub agent_id: String,
     /// `(role, content)` 升序。
     pub messages: Vec<(String, String)>,
-    /// preferred + 可选 fallback；每项是完整 ChatTarget。
-    pub targets: Vec<types::ChatTarget>,
+    /// preferred + 可选 fallback；每项是完整 ModelTarget。
+    pub targets: Vec<types::ModelTarget>,
 }
 
 /// review 写盘后的轻量通知（`op` + `content`）。
@@ -45,14 +44,19 @@ pub async fn job_from_agent(agent: &AgentLoop) -> BackgroundReviewJob {
     let history = agent.clone_history().await;
     let messages = history
         .iter()
-        .filter_map(|m| {
-            let role = match m.role {
-                types::message::Role::User => "user",
-                types::message::Role::Assistant => "assistant",
-                types::message::Role::Tool => "tool",
-                types::message::Role::System => return None,
-            };
-            let content = m.content_str().trim();
+        .filter_map(|item| {
+            let role = item.role().unwrap_or_else(|| {
+                if item.is_tool_output() {
+                    "tool"
+                } else {
+                    "assistant"
+                }
+            });
+            if matches!(role, "system" | "developer") {
+                return None;
+            }
+            let content = item.text();
+            let content = content.trim();
             if content.is_empty() {
                 return None;
             }
@@ -113,11 +117,11 @@ pub async fn spawn_background_review_after_turn(
 
 /// 按 preferred→fallback 完成；返回首个非空响应。全部失败返回 Err。
 pub async fn complete_review_with_targets<F, Fut>(
-    targets: &[types::ChatTarget],
+    targets: &[types::ModelTarget],
     mut complete: F,
 ) -> Result<String, String>
 where
-    F: FnMut(&types::ChatTarget) -> Fut,
+    F: FnMut(&types::ModelTarget) -> Fut,
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let mut last_err = "no review targets".to_string();
@@ -176,7 +180,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
         let digest = digest.clone();
         let target = target.clone();
         async move {
-            complete_review_chat(
+            complete_review_response(
                 &target.backend_id,
                 &target.model,
                 &target.api_key,
@@ -217,7 +221,7 @@ pub async fn maybe_run_background_review(job: BackgroundReviewJob) -> anyhow::Re
     Ok(applied)
 }
 
-async fn complete_review_chat(
+async fn complete_review_response(
     backend_id: &str,
     model: &str,
     api_key: &str,
@@ -241,12 +245,8 @@ async fn complete_review_chat(
         previous_interaction_id: None,
         api_mode: String::new(),
     };
-    let messages = vec![
-        ProviderMessage::system(system),
-        ProviderMessage::user_text(user),
-    ];
     let mut stream =
-        providers::dispatch::chat_stream(backend_id, messages, vec![], &config).await?;
+        providers::dispatch::agent_responses_prompt(backend_id, system, user, &config).await?;
     let mut out = String::new();
     while let Some(item) = stream.next().await {
         let chunk = item?;
@@ -264,14 +264,13 @@ async fn complete_review_chat(
 mod tests {
     use super::*;
 
-    fn target(id: &str, backend: &str, model: &str, key: &str) -> types::ChatTarget {
-        types::ChatTarget {
+    fn target(id: &str, backend: &str, model: &str, key: &str) -> types::ModelTarget {
+        types::ModelTarget {
             provider_id: id.into(),
             backend_id: backend.into(),
             model: model.into(),
             api_key: key.into(),
             base_url: format!("https://{id}.example"),
-            api_mode: String::new(),
         }
     }
 

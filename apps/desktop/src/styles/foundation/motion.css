@@ -1,0 +1,85 @@
+/* ── Stagger entrance ─────────────────────────────────────────────────── */
+
+.stagger-enter > * {
+  animation: stagger-fade-up var(--duration-normal) var(--ease-out) both;
+}
+
+.stagger-enter > *:nth-child(1) {
+  animation-delay: calc(var(--stagger-step) * 0);
+}
+.stagger-enter > *:nth-child(2) {
+  animation-delay: calc(var(--stagger-step) * 1);
+}
+.stagger-enter > *:nth-child(3) {
+  animation-delay: calc(var(--stagger-step) * 2);
+}
+.stagger-enter > *:nth-child(4) {
+  animation-delay: calc(var(--stagger-step) * 3);
+}
+.stagger-enter > *:nth-child(5) {
+  animation-delay: calc(var(--stagger-step) * 4);
+}
+.stagger-enter > *:nth-child(6) {
+  animation-delay: calc(var(--stagger-step) * 5);
+}
+.stagger-enter > *:nth-child(7) {
+  animation-delay: calc(var(--stagger-step) * 6);
+}
+.stagger-enter > *:nth-child(8) {
+  animation-delay: calc(var(--stagger-step) * 7);
+}
+.stagger-enter > *:nth-child(n + 9) {
+  animation-delay: calc(var(--stagger-step) * 8);
+}
+
+@keyframes stagger-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Shimmer sweep (for card hover) ───────────────────────────────────── */
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
+}
+
+/* ── Glow pulse (for icon hover) ──────────────────────────────────────── */
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.12);
+  }
+}
+
+/* ── Scale bounce-in ──────────────────────────────────────────────────── */
+
+@keyframes scale-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}

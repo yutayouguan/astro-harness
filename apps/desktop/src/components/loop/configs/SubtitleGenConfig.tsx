@@ -32,7 +32,11 @@ const TRANSLATE_LANGUAGE_OPTIONS = [
   { value: "ko", label: "한국어" },
 ];
 
-export default function SubtitleGenConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function SubtitleGenConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

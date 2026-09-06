@@ -61,8 +61,7 @@ export function resolveClipBounds(
     }
   }
   const w =
-    viewport?.width ??
-    (typeof window !== "undefined" ? window.innerWidth : 0);
+    viewport?.width ?? (typeof window !== "undefined" ? window.innerWidth : 0);
   const h =
     viewport?.height ??
     (typeof window !== "undefined" ? window.innerHeight : 0);
@@ -85,8 +84,7 @@ export function resolveClipBoundsAt(
     if (el) return resolveClipBounds(el, viewport);
   }
   const w =
-    viewport?.width ??
-    (typeof window !== "undefined" ? window.innerWidth : 0);
+    viewport?.width ?? (typeof window !== "undefined" ? window.innerWidth : 0);
   const h =
     viewport?.height ??
     (typeof window !== "undefined" ? window.innerHeight : 0);
@@ -125,8 +123,7 @@ export function clampPopover(input: ClampPopoverInput): ClampPopoverResult {
   const maxW = Math.max(0, innerRight - innerLeft);
   const width = Math.min(Math.max(input.popoverSize.width, 0), maxW);
 
-  let left =
-    preferAlign === "end" ? anchorRect.right - width : anchorRect.left;
+  let left = preferAlign === "end" ? anchorRect.right - width : anchorRect.left;
   if (preferAlign === "start" && left + width > innerRight) {
     left = anchorRect.right - width;
   }

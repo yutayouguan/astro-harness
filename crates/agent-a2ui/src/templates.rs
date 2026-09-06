@@ -2,78 +2,61 @@ use serde_json::{json, Value};
 
 use crate::catalog::ASTRO_CATALOG_ID;
 
-/// Build A2UI operations for a confirm (approve / deny) HITL surface.
+/// 构建确认（approve / deny）HITL 表面的 A2UI 操作。
 pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<Value> {
     build_confirm_surface_ex(surface_id, title, body, false)
 }
 
-/// Confirm surface with an optional third "Approve & always allow" button.
-///
-/// When `allow_always` is true, an extra button emits the `approve_always` event
-/// (frontend maps it to `{approved:true, always:true}`), used by dangerous-command
-/// approval to persist the command into the user allowlist.
+/// 使用 ClarifyWizard 的 approval 变体构建确认表面，使其在
+/// composer 区域内联渲染，而不会将结构化内容展平为类 markdown 的问题。
 pub fn build_confirm_surface_ex(
     surface_id: &str,
     title: &str,
     body: &str,
     allow_always: bool,
 ) -> Vec<Value> {
-    let mut actions_children: Vec<&str> = vec!["approve"];
-    if allow_always {
-        actions_children.push("approve_always");
-    }
-    actions_children.push("deny");
+    build_confirm_surface_with_rule(surface_id, title, body, allow_always, None)
+}
 
-    let mut components: Vec<Value> = vec![
+/// 带可选低风险命令族规则的审批确认表面。
+pub fn build_confirm_surface_with_rule(
+    surface_id: &str,
+    title: &str,
+    body: &str,
+    allow_always: bool,
+    command_family: Option<&str>,
+) -> Vec<Value> {
+    let mut options = vec![json!("approve"), json!("deny")];
+    if allow_always {
+        options.push(json!("approve_always"));
+    }
+    if command_family.is_some() {
+        options.push(json!("approve_type"));
+    }
+    let question = if title.is_empty() { body } else { title };
+
+    let components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
             "id": "col",
             "component": "Column",
-            "children": ["header", "body", "actions"]
+            "children": ["wizard"]
         }),
         json!({
-            "id": "header",
-            "component": "Row",
-            "children": ["avatar", "header_text", "badge"]
+            "id": "wizard",
+            "component": "ClarifyWizard",
+            "variant": "approval",
+            "title": title,
+            "body": body,
+            "allowAlways": allow_always,
+            "approvalTypeLabel": command_family,
+            "steps": [{
+                "id": "confirm",
+                "question": question,
+                "options": options,
+            }]
         }),
-        json!({ "id": "avatar", "component": "Avatar", "name": "shield" }),
-        json!({ "id": "header_text", "component": "Column", "children": ["title"] }),
-        json!({ "id": "title", "component": "Text", "text": title, "variant": "h2" }),
-        json!({ "id": "badge", "component": "Badge", "text": "Confirm", "variant": "warn" }),
-        json!({ "id": "body", "component": "Text", "text": body }),
-        json!({ "id": "actions", "component": "Row", "children": actions_children }),
-        json!({
-            "id": "approve",
-            "component": "Button",
-            "child": "approve_label",
-            "variant": "primary",
-            "action": { "event": { "name": "approve" } }
-        }),
-        json!({ "id": "approve_label", "component": "Text", "text": "Approve" }),
-        json!({
-            "id": "deny",
-            "component": "Button",
-            "child": "deny_label",
-            "variant": "secondary",
-            "action": { "event": { "name": "deny" } }
-        }),
-        json!({ "id": "deny_label", "component": "Text", "text": "Deny" }),
     ];
-
-    if allow_always {
-        components.push(json!({
-            "id": "approve_always",
-            "component": "Button",
-            "child": "approve_always_label",
-            "variant": "secondary",
-            "action": { "event": { "name": "approve_always" } }
-        }));
-        components.push(json!({
-            "id": "approve_always_label",
-            "component": "Text",
-            "text": "Approve & always allow"
-        }));
-    }
 
     vec![
         json!({
@@ -87,19 +70,55 @@ pub fn build_confirm_surface_ex(
     ]
 }
 
-/// One step in a clarify wizard.
+/// 沙箱重试审批表面。面向用户的文案由前端 locale 解析；
+/// 后端仅发送语义类型和原始拒绝详情。
+pub fn build_sandbox_retry_surface(surface_id: &str, denial_detail: &str) -> Vec<Value> {
+    let components = vec![
+        json!({ "id": "root", "component": "Card", "child": "col" }),
+        json!({
+            "id": "col",
+            "component": "Column",
+            "children": ["wizard"]
+        }),
+        json!({
+            "id": "wizard",
+            "component": "ClarifyWizard",
+            "variant": "approval",
+            "approvalKind": "sandbox_retry",
+            "approvalDetail": denial_detail,
+            "steps": [{
+                "id": "confirm",
+                "question": "sandbox_retry",
+                "options": ["approve", "deny"],
+            }]
+        }),
+    ];
+
+    vec![
+        json!({
+            "version": "v0.9",
+            "createSurface": { "surfaceId": surface_id, "catalogId": ASTRO_CATALOG_ID }
+        }),
+        json!({
+            "version": "v0.9",
+            "updateComponents": { "surfaceId": surface_id, "components": components }
+        }),
+    ]
+}
+
+/// 澄清向导中的单个步骤。
 #[derive(Debug, Clone)]
 pub struct ClarifyStep {
-    /// Stable answer key (also used as tab id).
+    /// 稳定的应答键（也用作 tab id）。
     pub id: String,
     pub question: String,
     pub options: Vec<String>,
 }
 
-/// Clarify HITL surface via stacked-tab `ClarifyWizard` (1+ steps).
+/// 通过堆叠标签页 `ClarifyWizard`（1 个或多个步骤）的澄清 HITL 表面。
 ///
-/// Frontend renders tabs (when 2+) + layered cards with transition animation.
-/// Submit emits `choose` with `{ answers: { stepId: option }, value: summary }`.
+/// 前端渲染标签页（2 个以上时）+ 带过渡动画的分层卡片。
+/// 提交时发出 `choose` 事件，携带 `{ answers: { stepId: option }, value: summary }`。
 pub fn build_clarify_surface(surface_id: &str, title: &str, steps: &[ClarifyStep]) -> Vec<Value> {
     let steps_json: Vec<Value> = steps
         .iter()
@@ -164,7 +183,7 @@ pub fn build_clarify_surface(surface_id: &str, title: &str, steps: &[ClarifyStep
     ]
 }
 
-/// Build A2UI operations for a location-request HITL surface (share GPS / deny / city).
+/// 构建位置请求 HITL 表面的 A2UI 操作（共享 GPS / 拒绝 / 手动填写城市）。
 pub fn build_location_request_surface(surface_id: &str, message: &str) -> Vec<Value> {
     vec![
         json!({
@@ -274,7 +293,7 @@ pub fn build_location_request_surface(surface_id: &str, message: &str) -> Vec<Va
     ]
 }
 
-/// Build a read-only info card surface (title + body + optional image).
+/// 构建只读信息卡片表面（标题 + 正文 + 可选图片）。
 pub fn build_info_surface(
     surface_id: &str,
     title: &str,
@@ -330,7 +349,7 @@ pub fn build_info_surface(
     ]
 }
 
-/// Metrics list inside a glass Card (title + Metric rows).
+/// 玻璃 Card 内的指标列表（标题 + Metric 行）。
 pub fn build_metrics_surface(
     surface_id: &str,
     title: &str,
@@ -430,7 +449,7 @@ pub fn build_result_surface(surface_id: &str, title: &str, body: &str, status: &
     ]
 }
 
-/// Build a `deleteSurface` operation — removes an A2UI surface from the chat.
+/// 构建 `deleteSurface` 操作 -- 从聊天中移除一个 A2UI 表面。
 pub fn build_delete_surface(surface_id: &str) -> Vec<Value> {
     vec![json!({
         "version": "v0.9",
@@ -438,26 +457,26 @@ pub fn build_delete_surface(surface_id: &str) -> Vec<Value> {
     })]
 }
 
-/// Form field descriptor for [`build_form_surface`].
+/// [`build_form_surface`] 的表单字段描述符。
 pub struct FormField<'a> {
-    /// Component id (also used as data-model key).
+    /// 组件 id（也用作数据模型键）。
     pub id: &'a str,
-    /// `"text"` → TextField, `"checkbox"` → CheckBox.
+    /// `"text"` 对应 TextField，`"checkbox"` 对应 CheckBox。
     pub kind: &'a str,
     pub label: &'a str,
     pub required: bool,
 }
 
-/// Build a form surface with TextField / CheckBox fields and a submit button.
+/// 构建包含 TextField / CheckBox 字段和提交按钮的表单表面。
 ///
-/// Emits `{ event: { name: "submit" } }` when the user taps the button.
+/// 用户点击按钮时发出 `{ event: { name: "submit" } }`。
 pub fn build_form_surface(
     surface_id: &str,
     title: &str,
     fields: &[FormField<'_>],
     submit_label: &str,
 ) -> Vec<Value> {
-    // Internal IDs are prefixed with "_" so they can never collide with caller-supplied field IDs.
+    // 内部 ID 以 "_" 为前缀，确保不会与调用方提供的字段 ID 冲突。
     let mut col_children: Vec<String> = vec!["_title".into(), "_divider".into()];
     for f in fields {
         col_children.push(f.id.to_string());
@@ -511,10 +530,10 @@ pub fn build_form_surface(
     ]
 }
 
-/// Build a network host approval surface for managed proxy denials.
+/// 构建受管代理拒绝的网络主机审批表面。
 ///
-/// Shows the target host, profile, and four action buttons:
-/// allow-once, allow-for-session, allow-always (persistent), and deny.
+/// 显示目标主机、profile 以及四个操作按钮：
+/// 允许一次、允许本次会话、始终允许（持久化）和拒绝。
 pub fn build_network_approval_surface(
     surface_id: &str,
     host: &str,
@@ -602,7 +621,7 @@ pub fn build_network_approval_surface(
     ]
 }
 
-/// Build a tag/chip-list surface — title row + horizontal row of Chip labels.
+/// 构建标签/芯片列表表面 -- 标题行 + 水平排列的 Chip 标签行。
 pub fn build_chip_list_surface(
     surface_id: &str,
     title: &str,

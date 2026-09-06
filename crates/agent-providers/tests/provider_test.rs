@@ -29,12 +29,13 @@ fn test_profile_has_all_providers() {
         assert!(resolve(id).is_some(), "profile missing for {id}");
     }
     assert!(resolve("anthropic").is_some());
-    assert!(resolve("minmax").is_some());
+    assert!(resolve("minmax").is_none());
 }
 
 #[test]
-fn test_google_supports_image_gen() {
+fn test_image_generation_provider_support() {
     assert!(providers::dispatch::supports_image_gen("google"));
+    assert!(providers::dispatch::supports_image_gen("azure"));
 }
 
 #[test]
@@ -59,6 +60,7 @@ fn test_image_request_builder() {
 fn test_default_image_models() {
     assert_eq!(default_image_model("google"), "gemini-3.6-flash");
     assert_eq!(default_image_model("openai"), "gpt-image-2");
+    assert_eq!(default_image_model("azure"), "gpt-image-2");
     let openai_req = ImageGenRequest::builder()
         .prompt("cat")
         .provider("openai")
@@ -72,7 +74,7 @@ fn test_auth_kind_for_providers() {
     assert_eq!(AuthKind::for_provider("claude"), AuthKind::AnthropicKey);
     assert_eq!(AuthKind::for_provider("anthropic"), AuthKind::AnthropicKey);
     assert_eq!(AuthKind::for_provider("google"), AuthKind::GoogleApiKey);
-    assert_eq!(AuthKind::for_provider("azure"), AuthKind::AzureHeader);
+    assert_eq!(AuthKind::for_provider("azure"), AuthKind::Bearer);
     assert_eq!(AuthKind::for_provider("openai"), AuthKind::Bearer);
     assert_eq!(AuthKind::for_provider("deepseek"), AuthKind::Bearer);
 }

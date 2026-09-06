@@ -1,9 +1,7 @@
-//! Stable bounded identities for the serialized event protocol.
+//! 序列化事件协议的稳定有界标识。
 //!
-//! Provider/session raw identifiers remain authoritative for model history,
-//! tool result correlation, and internal exact-turn routing. Only event-facing
-//! copies are bounded here, preventing adversarial identifiers from defeating
-//! the durable/live event payload cap.
+//! Provider/session 原始标识符仍为模型历史、工具结果关联和内部精确轮次路由的权威来源。
+//! 此处仅对事件侧的副本进行有界截断，防止恶意标识符突破持久化/实时事件载荷上限。
 
 use std::fmt::Write;
 
@@ -57,14 +55,14 @@ fn normalize_text_item(item: &mut TextItem) {
 fn normalize_turn_item(item: &mut TurnItem) {
     match item {
         TurnItem::UserMessage(item)
-        | TurnItem::HookPrompt(item)
-        | TurnItem::AgentMessage(item)
         | TurnItem::Plan(item)
         | TurnItem::Reasoning(item)
         | TurnItem::SubAgentActivity(item)
         | TurnItem::ContextCompaction(item)
         | TurnItem::EnteredReviewMode(item)
         | TurnItem::ExitedReviewMode(item) => normalize_text_item(item),
+        TurnItem::HookPrompt(item) => item.id = event_item_id(&item.id),
+        TurnItem::AgentMessage(item) => item.id = event_item_id(&item.id),
         TurnItem::CommandExecution(item)
         | TurnItem::DynamicToolCall(item)
         | TurnItem::McpToolCall(item)
@@ -80,23 +78,38 @@ fn normalize_turn_item(item: &mut TurnItem) {
     }
 }
 
-/// Normalize all typed correlation fields before persistence/live delivery.
-/// Returns the event-facing turn id used by the outer [`agent_protocol::Event`].
+/// 在持久化/实时分发前规范化所有类型化的关联字段。
+/// 返回外层 [`agent_protocol::Event`] 使用的事件侧 turn id。
 pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> String {
     let turn_id = event_turn_id(raw_turn_id);
     match msg {
+        EventMsg::RealtimeConversationStarted(_)
+        | EventMsg::RealtimeConversationSdp(_)
+        | EventMsg::RealtimeConversationRealtime(_)
+        | EventMsg::RealtimeConversationClosed(_)
+        | EventMsg::RealtimeConversationListVoicesResponse(_) => {}
         EventMsg::TurnStarted(event) => event.turn_id.clone_from(&turn_id),
         EventMsg::UserInputCommitted(event) => event.turn_id.clone_from(&turn_id),
         EventMsg::ItemStarted(event)
         | EventMsg::ItemCompleted(event)
         | EventMsg::McpToolCallBegin(event)
         | EventMsg::McpToolCallEnd(event)
-        | EventMsg::HookStarted(event)
-        | EventMsg::HookCompleted(event)
         | EventMsg::SubAgentActivity(event)
         | EventMsg::ContextCompacted(event) => {
             event.turn_id.clone_from(&turn_id);
             normalize_turn_item(&mut event.item);
+        }
+        EventMsg::HookStarted(event) => {
+            if let Some(event_turn_id) = &mut event.turn_id {
+                event_turn_id.clone_from(&turn_id);
+            }
+            event.run.id = event_item_id(&event.run.id);
+        }
+        EventMsg::HookCompleted(event) => {
+            if let Some(event_turn_id) = &mut event.turn_id {
+                event_turn_id.clone_from(&turn_id);
+            }
+            event.run.id = event_item_id(&event.run.id);
         }
         EventMsg::AgentMessageContentDelta(event)
         | EventMsg::PlanDelta(event)
@@ -125,6 +138,11 @@ pub(crate) fn normalize_event_msg(msg: &mut EventMsg, raw_turn_id: &str) -> Stri
             }
         }
         EventMsg::ContextUsage(event) => event.turn_id.clone_from(&turn_id),
+        EventMsg::GuardianAssessment(event) => {
+            event.turn_id.clone_from(&turn_id);
+            event.id = event_item_id(&event.id);
+            event.target_item_id = event_item_id(&event.target_item_id);
+        }
         EventMsg::TokenCount(event) => {
             if event.turn_id.is_some() {
                 event.turn_id = Some(turn_id.clone());
@@ -207,7 +225,10 @@ mod tests {
                 arguments: serde_json::json!({}),
                 output: None,
                 media: Vec::new(),
+                file_changes: Vec::new(),
                 status: ToolStatus::InProgress,
+                batch_id: None,
+                execution_mode: None,
             })
         };
         let mut started = EventMsg::ItemStarted(ItemEvent {
@@ -276,7 +297,10 @@ mod tests {
                 arguments: serde_json::json!({}),
                 output: None,
                 media: Vec::new(),
+                file_changes: Vec::new(),
                 status: ToolStatus::InProgress,
+                batch_id: None,
+                execution_mode: None,
             })
         };
         let mut request = EventMsg::DynamicToolCallRequest(ControlRequestEvent {

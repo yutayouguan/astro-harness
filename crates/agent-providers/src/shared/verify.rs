@@ -42,11 +42,7 @@ pub async fn probe(
     };
 
     let message = if let Some(p) = profile::resolve(provider_id) {
-        let effective_mode = if config.api_mode == "responses" && p.supports_responses {
-            ApiMode::Responses
-        } else {
-            p.api_mode
-        };
+        let effective_mode = profile::effective_api_mode(provider_id, &config.api_mode);
         match (effective_mode, p.azure_deployment_style) {
             (ApiMode::AnthropicMessages, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
@@ -57,14 +53,13 @@ pub async fn probe(
                     Err(e) => return fail(e),
                 }
             }
-            (ApiMode::ChatCompletions, true) => {
-                match crate::impls::azure::probe_azure(client, &model, config).await {
-                    Ok(m) => m,
-                    Err(e) => return fail(e),
-                }
-            }
             (ApiMode::Responses, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
+                let endpoint = if p.id == "azure" {
+                    crate::impls::azure::azure_openai_v1_base(&endpoint)
+                } else {
+                    endpoint
+                };
                 match crate::impls::openai::probe_openai_responses(
                     client,
                     &endpoint,
@@ -83,8 +78,13 @@ pub async fn probe(
                     Err(e) => return fail(e),
                 }
             }
-            (ApiMode::GeminiNative, _) | (ApiMode::ChatCompletions, false) => {
+            (ApiMode::GeminiNative, _) | (ApiMode::ChatCompletions, _) => {
                 let endpoint = resolve_endpoint(config, p.default_base_url);
+                let endpoint = if p.id == "azure" {
+                    crate::impls::azure::azure_openai_v1_base(&endpoint)
+                } else {
+                    endpoint
+                };
                 match crate::impls::openai::probe_openai_compat(
                     client,
                     &endpoint,

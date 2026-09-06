@@ -16,8 +16,9 @@ use crate::{
 /// 与前端 `AGENT_TOOLS` id 对齐的已知工具集标识列表。
 pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "web_search",
-    "terminal",
-    "file_ops",
+    "browser",
+    "exec_command",
+    "apply_patch",
     "code_exec",
     "image_analyze",
     "robotics",
@@ -32,10 +33,12 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "context_search",
     "pin_context",
     "ask_user",
+    "request_user_input_async",
     "switch_mode",
     "present",
     "subagents",
     "cron",
+    "workflow",
     "persona",
     "todo",
 ];
@@ -188,15 +191,16 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "memory" => "memory",
         "context_search" => "context_search",
         "pin_context" => "pin_context",
-        "cron" | "cron.add" | "cron.list" | "cron.remove" | "cron.enable" | "cron.disable" => {
-            "cron"
-        }
+        "cron" | "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
+        | "cron.add" | "cron.list" | "cron.remove" | "cron.enable" | "cron.disable" => "cron",
         "image_gen" => "image_gen",
         "video_gen" => "video_gen",
         "video_analyze" | "video_understand" => "video_analyze",
-        "file_ops" => "file_ops",
-        "terminal" => "terminal",
+        "exec_command" | "write_stdin" | "request_permissions" => "exec_command",
+        "apply_patch" => "apply_patch",
         "web_search" | "web_fetch" | "web_extract" | "http_fetch" => "web_search",
+        "browser_open" | "browser_snapshot" | "browser_click" | "browser_type"
+        | "browser_scroll" | "browser_wait" | "browser_screenshot" | "browser_close" => "browser",
         "code_exec" => "code_exec",
         "image_analyze" | "image_understand" => "image_analyze",
         "robotics" => "robotics",
@@ -205,11 +209,13 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "music_gen" => "music_gen",
         "skills" => "skills",
         "ask_user" => "ask_user",
+        "request_user_input_async" => "request_user_input_async",
         "switch_mode" => "switch_mode",
         "present" => "present",
         "spawn_agent" | "list_agents" | "followup_task" | "send_message" | "wait_agent"
         | "interrupt_agent" => "subagents",
         "persona_create" => "persona",
+        name if name.starts_with("workflow__") || name.starts_with("workflow.") => "workflow",
         "todo" => "todo",
         other => other,
     }
@@ -271,6 +277,14 @@ mod tests {
     }
 
     #[test]
+    fn async_user_input_uses_the_canonical_toolset() {
+        assert_eq!(
+            tool_name_to_toolset("request_user_input_async"),
+            "request_user_input_async"
+        );
+    }
+
+    #[test]
     fn non_default_agent_tools_enabled_overrides_global() {
         let dir = TempDir::new().unwrap();
         let _env = crate::test_env::AstroMemoryDirGuard::set(dir.path());
@@ -289,5 +303,12 @@ mod tests {
         let raw = fs::read_to_string(dir.path().join("tools-enabled.json")).unwrap();
         let map: HashMap<String, bool> = serde_json::from_str(&raw).unwrap();
         assert_eq!(map.get("memory"), Some(&true));
+    }
+
+    #[test]
+    fn workflow_names_share_the_workflow_toolset() {
+        assert_eq!(tool_name_to_toolset("workflow__saved-id"), "workflow");
+        assert_eq!(tool_name_to_toolset("workflow.weekly_report"), "workflow");
+        assert!(KNOWN_TOOLSET_IDS.contains(&"workflow"));
     }
 }

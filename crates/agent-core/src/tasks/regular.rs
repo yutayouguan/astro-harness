@@ -8,14 +8,25 @@ use crate::streaming::multi_turn::{run_turn, RunTurnArgs};
 
 use super::{SessionTask, SessionTaskResult, TaskKind, TurnCancelled, TurnInput};
 
-/// Standard model-and-tool turn.
+/// 标准的模型与工具 turn。
 pub(crate) struct RegularTask {
     args: RunTurnArgs,
+    recovery: bool,
 }
 
 impl RegularTask {
     pub(crate) fn new(args: RunTurnArgs) -> Self {
-        Self { args }
+        Self {
+            args,
+            recovery: false,
+        }
+    }
+
+    pub(crate) fn recovery(args: RunTurnArgs) -> Self {
+        Self {
+            args,
+            recovery: true,
+        }
     }
 
     async fn run_with_args(
@@ -33,17 +44,22 @@ impl RegularTask {
                 }),
             )
             .await;
-        let prepared = match args.prepared_system_prompt().map(str::to_owned) {
-            Some(system_prompt) => {
+        let prepared = match args.prepared_prompt() {
+            Some(prompt) => {
                 anyhow::ensure!(
                     input.is_empty(),
-                    "prebuilt system prompt cannot be combined with initial input"
+                    "prebuilt prompt cannot be combined with initial input"
                 );
-                Ok(system_prompt)
+                Ok(prompt)
             }
-            None => match args.session().prepare_turn(&input).await {
+            None => match if self.recovery {
+                anyhow::ensure!(input.is_empty(), "recovery turn cannot append new input");
+                args.session().prepare_recovery_turn().await
+            } else {
+                args.session().prepare_turn(&input).await
+            } {
                 Err(error) => Err(error),
-                Ok(TurnResult::Continue { system_prompt, .. }) => Ok(system_prompt),
+                Ok(TurnResult::Continue { prompt, .. }) => Ok(prompt),
                 Ok(TurnResult::BudgetExhausted) => {
                     Err(anyhow::anyhow!("conversation turn budget exhausted"))
                 }
@@ -58,17 +74,17 @@ impl RegularTask {
                 )),
             },
         };
-        let system_prompt = match prepared {
-            Ok(system_prompt) => {
+        let prompt = match prepared {
+            Ok(prompt) => {
                 ctx.open_input_admission();
-                system_prompt
+                prompt
             }
             Err(error) => {
                 ctx.close_input_admission();
                 return Err(error);
             }
         };
-        let result = run_turn(args.with_system_prompt(system_prompt), cancellation_token).await;
+        let result = run_turn(args.with_prompt(prompt), cancellation_token).await;
         let error = result.as_ref().err().map(ToString::to_string);
         let turn = args.session().session_turn().await;
         let _ = args.session().fire_hook(

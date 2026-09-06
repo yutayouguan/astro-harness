@@ -18,13 +18,17 @@
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.22)),
     color-mix(in srgb, var(--tone-soft) 40%, transparent);
   color: var(--tone);
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.14s ease;
 }
 
 .skills-preview-root-btn:hover {
@@ -52,18 +56,30 @@ html[data-theme="dark"] .skills-preview-root-btn {
   color: var(--tone);
 }
 
-.skills-preview-filechip[data-kind="md"] svg { color: #4f46e5; }
+.skills-preview-filechip[data-kind="md"] svg {
+  color: #4f46e5;
+}
 .skills-preview-filechip[data-kind="code-shell"] svg,
 .skills-preview-filechip[data-kind="code-js"] svg,
 .skills-preview-filechip[data-kind="code-ts"] svg,
 .skills-preview-filechip[data-kind="code-py"] svg,
-.skills-preview-filechip[data-kind="code"] svg { color: #0d9488; }
-.skills-preview-filechip[data-kind="code-web"] svg { color: #ea580c; }
+.skills-preview-filechip[data-kind="code"] svg {
+  color: #0d9488;
+}
+.skills-preview-filechip[data-kind="code-web"] svg {
+  color: #ea580c;
+}
 .skills-preview-filechip[data-kind="json"] svg,
-.skills-preview-filechip[data-kind="config"] svg { color: #d97706; }
+.skills-preview-filechip[data-kind="config"] svg {
+  color: #d97706;
+}
 
-html[data-theme="dark"] .skills-preview-filechip[data-kind="md"] svg { color: #a5b4fc; }
-html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg { color: #5eead4; }
+html[data-theme="dark"] .skills-preview-filechip[data-kind="md"] svg {
+  color: #a5b4fc;
+}
+html[data-theme="dark"] .skills-preview-filechip[data-kind^="code"] svg {
+  color: #5eead4;
+}
 
 .skills-preview-filepath {
   gap: 8px;
@@ -190,9 +206,14 @@ html[data-theme="dark"] .skills-file-viewer-mode.is-active {
   height: 32px;
   padding: 0;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.18)
+    ),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
   color: var(--tone);
   cursor: pointer;
@@ -216,9 +237,14 @@ html[data-theme="dark"] .skills-file-viewer-reveal {
   flex-shrink: 0;
   padding: 6px 10px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 16%, rgba(255, 255, 255, 0.5));
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.18)
+    ),
     color-mix(in srgb, var(--tone-soft) 35%, transparent);
   color: var(--tone);
   font-size: 12px;
@@ -269,9 +295,14 @@ html[data-theme="dark"] .skills-file-viewer-body {
   margin: 0 0 16px;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
+  border: 1px solid
+    color-mix(in srgb, var(--tone) 18%, rgba(255, 255, 255, 0.55));
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.28)),
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(255, 255, 255, 0.28)
+    ),
     color-mix(in srgb, var(--tone-soft) 42%, transparent);
 }
 

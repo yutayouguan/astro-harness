@@ -1,6 +1,9 @@
 //! 可恢复任务生命周期——Session 拥有的单活跃任务调度与中断。
 
+mod compact;
 mod regular;
+mod review;
+mod user_shell;
 
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -9,7 +12,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub use agent_protocol::TurnInput;
-use agent_protocol::{ErrorEvent, EventMsg, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent};
+use agent_protocol::{
+    ErrorEvent, EventMsg, SuspendTurnOutcome, TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent,
+};
 use futures::FutureExt;
 use tokio::sync::{oneshot, Notify};
 use tokio::task::JoinHandle;
@@ -17,7 +22,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::runtime::{Session, TurnContext};
 
+pub(crate) use compact::CompactTask;
 pub(crate) use regular::RegularTask;
+pub(crate) use review::ReviewTask;
+pub(crate) use user_shell::UserShellTask;
 
 pub(crate) type SessionTaskResult = anyhow::Result<Option<String>>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -37,11 +45,11 @@ pub(crate) struct TurnCancelled;
 
 /// 任务类型枚举：Regular / Review / Compact。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // ReviewTask and CompactTask land in the next Phase B batch.
 pub enum TaskKind {
     Regular,
     Review,
     Compact,
+    UserShell,
 }
 
 /// 驱动单个 session turn 的异步任务 trait。
@@ -191,6 +199,135 @@ impl ActiveTurn {
 }
 
 impl Session {
+    pub(crate) async fn launch_user_shell(
+        self: &Arc<Self>,
+        command: String,
+        cwd: Option<std::path::PathBuf>,
+    ) -> Result<agent_protocol::UserShellLaunch, String> {
+        let command = command.trim().to_string();
+        if command.is_empty() {
+            return Err("user shell command cannot be empty".into());
+        }
+        let item_id = uuid::Uuid::new_v4().to_string();
+        let mut active_turn = self.active_turn.lock().await;
+        if let Some(running) = active_turn.as_mut().and_then(|turn| turn.task.as_mut()) {
+            let turn_context = Arc::clone(&running.turn_context);
+            let turn_id = turn_context.sub_id().to_string();
+            let cancellation = running.cancellation_token.child_token();
+            let permit = turn_context.track_child();
+            let session = Arc::clone(self);
+            let command_for_task = command.clone();
+            let cwd_for_task = cwd.clone();
+            let item_for_task = item_id.clone();
+            let handle = tokio::spawn(async move {
+                let _permit = permit;
+                if let Err(error) = user_shell::run_user_shell_process(
+                    session,
+                    turn_context,
+                    command_for_task,
+                    cwd_for_task,
+                    item_for_task,
+                    cancellation,
+                )
+                .await
+                {
+                    tracing::debug!(%error, "attached user shell ended");
+                }
+            });
+            running.auxiliary_handles.push(handle);
+            return Ok(agent_protocol::UserShellLaunch {
+                turn_id,
+                item_id,
+                attached_to_active_turn: true,
+            });
+        }
+        drop(active_turn);
+
+        let turn_id = uuid::Uuid::new_v4().to_string();
+        let turn_context = self.create_turn_context(turn_id.clone()).await;
+        self.spawn_task(
+            turn_context,
+            Vec::new(),
+            UserShellTask {
+                command,
+                cwd,
+                item_id: item_id.clone(),
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        Ok(agent_protocol::UserShellLaunch {
+            turn_id,
+            item_id,
+            attached_to_active_turn: false,
+        })
+    }
+
+    /// Detach an unfinished regular turn for recovery by another runtime.
+    ///
+    /// Unlike interruption, suspension deliberately emits no terminal turn event.
+    pub(crate) async fn suspend_active_regular_turn(
+        self: &Arc<Self>,
+    ) -> anyhow::Result<SuspendTurnOutcome> {
+        let _admission = self.task_admission.lock().await;
+        {
+            let active_turn = self.active_turn.lock().await;
+            let Some(running) = active_turn.as_ref().and_then(|turn| turn.task.as_ref()) else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            if running.kind != TaskKind::Regular {
+                return Ok(SuspendTurnOutcome::UnsupportedTask);
+            }
+            if running.turn_context.has_live_children() {
+                return Ok(SuspendTurnOutcome::HasLiveDescendants);
+            }
+        }
+
+        self.flush_rollout().await?;
+        let mut running = {
+            let mut active_turn = self.active_turn.lock().await;
+            let Some(turn) = active_turn.as_mut() else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            let Some(running) = turn.task.as_ref() else {
+                return Ok(SuspendTurnOutcome::NotActive);
+            };
+            if running.kind != TaskKind::Regular {
+                return Ok(SuspendTurnOutcome::UnsupportedTask);
+            }
+            if running.turn_context.has_live_children() {
+                return Ok(SuspendTurnOutcome::HasLiveDescendants);
+            }
+            let running = turn
+                .task
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("accepted turn suspension lost its task"))?;
+            *active_turn = None;
+            running
+        };
+        let turn_id = running.turn_context.sub_id().to_string();
+        running.turn_context.close_input_admission();
+        running.cancellation_token.cancel();
+        self.cancel_signal().cancel();
+        if tokio::time::timeout(TASK_ABORT_TIMEOUT, &mut running.handle)
+            .await
+            .is_err()
+        {
+            running.handle.abort();
+            let _ = (&mut running.handle).await;
+        }
+        running.turn_context.wait_for_children().await;
+        drop(running.task);
+        Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
+        if self.current_turn_id().await.as_deref() == Some(&turn_id) {
+            self.clear_current_turn_id().await;
+        }
+        self.complete_task_lifecycle(&turn_id, &running.completion)
+            .await;
+        self.flush_rollout().await?;
+        Ok(SuspendTurnOutcome::Suspended { turn_id })
+    }
+
     /// 启动一个 session 任务，若已有活跃任务则先中止。
     pub(crate) async fn spawn_task<T: SessionTask>(
         self: &Arc<Self>,
@@ -202,8 +339,7 @@ impl Session {
             .await
     }
 
-    #[cfg(test)]
-    async fn spawn_task_with_install_hook<T, F>(
+    pub(crate) async fn spawn_task_with_install_hook<T, F>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
@@ -234,7 +370,7 @@ impl Session {
             !self.runtime_is_shutting_down(),
             "session runtime is shutting down"
         );
-        self.abort_all_tasks_inner(TurnAbortReason::Replaced)
+        self.abort_all_tasks_inner(TurnAbortReason::Replaced, false)
             .await?;
 
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
@@ -304,7 +440,7 @@ impl Session {
         active_turn.start(task, cancellation_token, turn_context, completion, handle)
     }
 
-    /// Wait until the exact turn's full task lifecycle has completed.
+    /// 等待指定 turn 的完整任务生命周期结束。
     pub async fn wait_for_task(&self, turn_id: &str) {
         let completion = self.task_completions.lock().await.get(turn_id).cloned();
         if let Some(completion) = completion {
@@ -422,10 +558,12 @@ impl Session {
         }
     }
 
-    /// Cooperatively abort the active task and wait for its lifecycle to finish.
+    /// 协作式中止活跃任务，并等待其生命周期结束。
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) -> anyhow::Result<()> {
         let _admission = self.task_admission.lock().await;
-        self.abort_all_tasks_inner(reason).await
+        let emit_interrupt_hook = reason == TurnAbortReason::Interrupted;
+        self.abort_all_tasks_inner(reason, emit_interrupt_hook)
+            .await
     }
 
     pub(crate) async fn abort_all_tasks_for_shutdown(
@@ -458,13 +596,14 @@ impl Session {
                 None => None,
             },
         };
-        let result = self.abort_all_tasks_inner(reason).await;
+        let result = self.abort_all_tasks_inner(reason, false).await;
         (lifecycle, result)
     }
 
     async fn abort_all_tasks_inner(
         self: &Arc<Self>,
         reason: TurnAbortReason,
+        emit_interrupt_hook: bool,
     ) -> anyhow::Result<()> {
         let running = {
             let mut active_turn = self.active_turn.lock().await;
@@ -490,7 +629,7 @@ impl Session {
         let session = Arc::clone(self);
         tokio::spawn(async move {
             session
-                .supervise_abort_lifecycle(running, reason, reply_tx)
+                .supervise_abort_lifecycle(running, reason, emit_interrupt_hook, reply_tx)
                 .await;
         });
         reply_rx
@@ -502,6 +641,7 @@ impl Session {
         self: &Arc<Self>,
         mut running: RunningTask,
         reason: TurnAbortReason,
+        emit_interrupt_hook: bool,
         reply_tx: oneshot::Sender<anyhow::Result<()>>,
     ) {
         let turn_id = running.turn_context.sub_id().to_string();
@@ -564,6 +704,19 @@ impl Session {
 
         drop(running.task);
         Self::await_auxiliary_handles(&mut running.auxiliary_handles).await;
+        if reason == TurnAbortReason::Interrupted {
+            if let Err(error) = self.record_interrupted_turn_marker().await {
+                tracing::warn!(%error, %turn_id, "failed to persist interrupted-turn history marker");
+            } else if let Err(error) = self.flush_rollout().await {
+                tracing::warn!(%error, %turn_id, "failed to flush interrupted-turn marker before TurnAborted");
+            }
+        }
+        if emit_interrupt_hook && self.subagent_hook_context().is_none() {
+            if let Err(error) = self.flush_rollout().await {
+                tracing::warn!(%error, %turn_id, "failed to flush rollout before interrupt hook");
+            }
+            let _ = self.run_interrupt_hook(turn_id.clone());
+        }
         self.send_event(
             &turn_id,
             EventMsg::TurnAborted(TurnAbortedEvent {
@@ -680,6 +833,7 @@ mod tests {
             crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
             "locked-active-turn".into(),
         )
+        .await
         .unwrap();
 
         let active_turn = session.active_turn.lock().await;
@@ -742,6 +896,7 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "abort-task-test".into(),
             )
+            .await
             .unwrap(),
         );
         let turn_context = session.create_turn_context("turn-abort".into()).await;
@@ -770,6 +925,7 @@ mod tests {
                 crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
                 "install-bind-abort-race".into(),
             )
+            .await
             .unwrap(),
         );
         let context = session
@@ -891,6 +1047,7 @@ mod tests {
             .unwrap();
         let session = Arc::new(
             Session::with_session_id(Config::with_defaults(dir.path().to_path_buf()), name.into())
+                .await
                 .unwrap(),
         );
         let thread = AstroThread::spawn(Arc::clone(&session), rollout).unwrap();
@@ -967,7 +1124,133 @@ mod tests {
                 .count(),
             1
         );
+        let history = session.clone_response_history().await;
+        assert!(matches!(
+            history.last(),
+            Some(agent_protocol::ResponseItem::Message { role, content, .. })
+                if role == "developer"
+                    && matches!(content.first(), Some(agent_protocol::ContentItem::InputText { text }) if text.contains("<turn_aborted>"))
+        ));
         assert_eq!(thread.status(), AgentStatus::Idle);
+    }
+
+    #[tokio::test]
+    async fn cleaning_background_terminals_does_not_interrupt_the_active_turn() {
+        let (_dir, session, thread) = task_test_thread("task-clean-background-test").await;
+        let started = Arc::new(Notify::new());
+        let context = session
+            .create_turn_context("turn-clean-background".into())
+            .await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&started),
+                },
+            )
+            .await
+            .unwrap();
+        started.notified().await;
+
+        thread.submit(Op::CleanBackgroundTerminals).await.unwrap();
+        tokio::task::yield_now().await;
+        assert!(session.active_turn.lock().await.is_some());
+
+        thread.submit(Op::Interrupt).await.unwrap();
+        let _ = collect_terminal(&thread, "turn-clean-background").await;
+    }
+
+    #[tokio::test]
+    async fn interrupt_fires_root_hook_once_with_turn_context() {
+        let (_dir, session, thread) = task_test_thread("task-interrupt-hook-test").await;
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let observed_for_hook = Arc::clone(&observed);
+        bus.register(hooks::INTERRUPT, move |payload| {
+            observed_for_hook.lock().unwrap().push((
+                payload.hook_event_name.clone(),
+                payload.turn_id.clone(),
+                payload.reason.clone(),
+            ));
+            hooks::HookOutcome::Continue
+        });
+        session.set_hook_bus(bus);
+
+        let turn_id = "turn-interrupt-hook";
+        let started = Arc::new(Notify::new());
+        let context = session.create_turn_context(turn_id.into()).await;
+        session
+            .spawn_task(
+                context,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&started),
+                },
+            )
+            .await
+            .unwrap();
+        started.notified().await;
+
+        thread.submit(Op::Interrupt).await.unwrap();
+        let events = collect_terminal(&thread, turn_id).await;
+        assert!(matches!(
+            events.last().unwrap().msg,
+            EventMsg::TurnAborted(_)
+        ));
+        assert_eq!(
+            observed.lock().unwrap().as_slice(),
+            &[(
+                hooks::INTERRUPT.to_string(),
+                Some(turn_id.to_string()),
+                None,
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn replacing_a_task_does_not_fire_interrupt_hook() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = Arc::new(
+            Session::with_session_id(
+                crate::runtime::Config::with_defaults(dir.path().to_path_buf()),
+                "task-replacement-hook-test".into(),
+            )
+            .await
+            .unwrap(),
+        );
+        let interrupt_count = Arc::new(AtomicUsize::new(0));
+        let bus = Arc::new(hooks::PluginHookBus::new());
+        let interrupt_count_for_hook = Arc::clone(&interrupt_count);
+        bus.register(hooks::INTERRUPT, move |_| {
+            interrupt_count_for_hook.fetch_add(1, Ordering::SeqCst);
+            hooks::HookOutcome::Continue
+        });
+        session.set_hook_bus(bus);
+
+        let first_started = Arc::new(Notify::new());
+        session
+            .spawn_task(
+                session.create_turn_context("turn-replaced".into()).await,
+                Vec::new(),
+                PendingTask {
+                    started: Arc::clone(&first_started),
+                },
+            )
+            .await
+            .unwrap();
+        first_started.notified().await;
+        session
+            .spawn_task(
+                session.create_turn_context("turn-replacement".into()).await,
+                Vec::new(),
+                NoopTask,
+            )
+            .await
+            .unwrap();
+        session.wait_for_task("turn-replacement").await;
+
+        assert_eq!(interrupt_count.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -1300,9 +1583,10 @@ mod tests {
         }
     }
 
-    #[tokio::test(start_paused = true)]
+    #[tokio::test]
     async fn abort_forces_run_then_bounds_hook_and_emits_one_terminal() {
         let (_dir, session, thread) = task_test_thread("bounded-abort-test").await;
+        tokio::time::pause();
         let run_dropped = Arc::new(AtomicBool::new(false));
         let hook_called = Arc::new(AtomicBool::new(false));
         let hook_saw_run_dropped = Arc::new(AtomicBool::new(false));
@@ -1716,6 +2000,8 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::StartIfIdle,
             ),
@@ -1737,6 +2023,8 @@ mod tests {
                         image_data_urls: Vec::new(),
                         client_message_id: None,
                     }],
+                    rollback_keep_chat_bubbles: None,
+                    thread_settings: Default::default(),
                 },
                 agent_protocol::TurnInputMode::StartOrSteer,
             ),
@@ -1969,6 +2257,7 @@ mod tests {
                 Config::with_defaults(dir.path().to_path_buf()),
                 "concurrent-spawn-admission".into(),
             )
+            .await
             .unwrap(),
         );
         let active_turn_guard = session.active_turn.lock().await;

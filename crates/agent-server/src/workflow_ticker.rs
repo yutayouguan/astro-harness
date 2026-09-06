@@ -109,13 +109,13 @@ async fn tick_inner() -> anyhow::Result<()> {
         let schedule_clone = schedule.to_string();
         let wf_id = wf.id.clone();
 
-        // spawn_blocking 隔离 rusqlite
+        // spawn_blocking 隔离同步逻辑
         let result = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let run_db = WorkflowRunDb::open_default()?;
+                let run_db = WorkflowRunDb::open_default().await?;
                 workflow::engine::execute_workflow(
                     &wf_clone,
                     serde_json::json!({ "trigger": "scheduled", "schedule": schedule_clone }),

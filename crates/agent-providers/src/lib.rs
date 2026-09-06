@@ -2,8 +2,8 @@
 
 //! 多供应商 AI 能力统一封装。
 //!
-//! - [`types`]：统一消息模型（`Message` enum + `StreamChunk` + `Usage` + `ProviderConfig`）
-//! - [`traits`]：能力 trait 系统（`CompletionModel` + `Capable<M>/Nothing` 编译期检查）
+//! - [`types`]：Responses/Chat Completions 输入、流式分片与 Provider 配置
+//! - [`traits`]：能力 trait 系统（`ResponsesModel` / `ChatCompletionModel` + `Capable<M>/Nothing`）
 //! - [`compat`]：OpenAI 兼容层（`OpenAICompatible` trait — 一行接厂商）
 //! - [`impls`]：19 个厂商实现（5 种协议管线）
 //! - [`registry`]：协议管线注册表（trait-based `Registry`）
@@ -47,8 +47,8 @@ pub use types::stream::{CompletionStream, PauseControl, StreamChunk, Usage};
 // ── Media types ──
 pub use types::media::{GeneratedAudio, GeneratedImage, GeneratedVideo};
 
-// ── Message types ──
-pub use types::message::Message;
+// ── Chat Completions compatibility types ──
+pub use types::request_content::ChatCompletionMessage;
 
 // ── Config ──
 pub use types::ProviderConfig;

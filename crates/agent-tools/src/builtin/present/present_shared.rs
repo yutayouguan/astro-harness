@@ -1,4 +1,4 @@
-//! 共享 dispatch helper for present_metrics / present_callout / present_result.
+//! 共享 dispatch 辅助函数，用于 present_metrics / present_callout / present_result。
 
 use serde_json::{json, Value};
 

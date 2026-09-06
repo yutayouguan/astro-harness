@@ -9,7 +9,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { Eye, ExternalLink, FileCode2, Save, Undo2 } from "lucide-react";
+import { ExternalLink, Save, Undo2 } from "lucide-react";
+import { Eye as EyeData, FileCode2 as FileCode2Data } from "lucide";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useTheme } from "../../hooks/app/useTheme";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -24,11 +25,14 @@ import {
   type MdMode,
 } from "../../lib/filespace/workspaceMdMode";
 import { buildWorkspaceMenuItems } from "../../lib/filespace/workspaceMenuItems";
-import AnimatedSwitch from "../ui/AnimatedSwitch";
+import MotionSwitch from "../ui/MotionSwitch";
+import { MorphToggleIcon } from "../icons/MorphIcon";
 import MediaToolbar from "../media/MediaToolbar";
 import FilePreviewContent from "../filespace/FilePreviewContent";
 import ExpandableSearch from "../ui/ExpandableSearch";
-import FileContextMenu, { type FileMenuAction } from "../filespace/FileContextMenu";
+import FileContextMenu, {
+  type FileMenuAction,
+} from "../filespace/FileContextMenu";
 import FileGlyph from "../filespace/FileGlyph";
 import { formatSize, isTauri } from "../../lib/filespace/fileMeta";
 import WorkspaceBatchBar from "./WorkspaceBatchBar";
@@ -62,6 +66,41 @@ type Props = {
   /** 打开某文件的来源会话（若该文件已被编入产物索引且关联会话） */
   onOpenSession?: (sessionId: string, messageId?: string | null) => void;
 };
+
+export function MarkdownPreviewToggle({
+  preview,
+  onToggle,
+}: {
+  preview: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  const label = preview
+    ? t("workspace.previewSource")
+    : t("workspace.previewMode");
+
+  return (
+    <div className="ws-md-modes" aria-label={t("workspace.previewMode")}>
+      <button
+        type="button"
+        className="ws-md-mode ws-md-mode--icon is-active"
+        aria-pressed={preview}
+        onClick={onToggle}
+        title={label}
+        aria-label={label}
+      >
+        <MorphToggleIcon
+          active={preview}
+          activeIcon={EyeData}
+          inactiveIcon={FileCode2Data}
+          size={15}
+          strokeWidth={2.3}
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+}
 
 /** 浏览 / 文本编辑 / 媒体预览 */
 type ViewMode = "browse" | "editor" | "media";
@@ -133,7 +172,8 @@ function formatTildePath(absPath: string): string {
   if (unixHome && absPath.startsWith(unixHome)) {
     return `~${absPath.slice(unixHome.length)}`;
   }
-  const winHome = absPath.match(/^([A-Za-z]:[\\/]Users[\\/][^\\/]+)/)?.[1] ?? null;
+  const winHome =
+    absPath.match(/^([A-Za-z]:[\\/]Users[\\/][^\\/]+)/)?.[1] ?? null;
   if (winHome && absPath.toLowerCase().startsWith(winHome.toLowerCase())) {
     return `~${absPath.slice(winHome.length).replace(/\\/g, "/")}`;
   }
@@ -173,12 +213,8 @@ export default function WorkspacePanel({
   const { t } = useI18n();
   const confirm = useConfirm();
   const { resolved: theme } = useTheme();
-  const {
-    activeAgentId,
-    workspaceDir,
-    setActiveAgent,
-    refreshAgents,
-  } = useActiveAgent();
+  const { activeAgentId, workspaceDir, setActiveAgent, refreshAgents } =
+    useActiveAgent();
   const [root, setRoot] = useState("");
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [loadedAgentId, setLoadedAgentId] = useState<string | null>(null);
@@ -268,7 +304,6 @@ export default function WorkspacePanel({
     }
   }, [listLayout]);
 
-
   const load = useCallback(async (path?: string) => {
     setLoadingList(true);
     setError(null);
@@ -327,9 +362,7 @@ export default function WorkspacePanel({
       try {
         const dir =
           workspaceDir ||
-          (
-            await invoke<{ workspace_dir: string }>("get_config")
-          ).workspace_dir;
+          (await invoke<{ workspace_dir: string }>("get_config")).workspace_dir;
         setWorkspaceRoot(dir);
         setRoot(dir);
         setView("browse");
@@ -373,10 +406,10 @@ export default function WorkspacePanel({
       return;
     }
     let cancelled = false;
-    void invoke<{ session_id: string | null; message_id: string | null } | null>(
-      "find_artifact_by_path",
-      { path: editorPath },
-    )
+    void invoke<{
+      session_id: string | null;
+      message_id: string | null;
+    } | null>("find_artifact_by_path", { path: editorPath })
       .then((a) => {
         if (cancelled) return;
         setSourceSessionId(a?.session_id ?? null);
@@ -508,7 +541,9 @@ export default function WorkspacePanel({
 
   const goUp = async () => {
     if (!workspaceRoot || root === workspaceRoot) return;
-    const parent = root.replace(/\/$/, "").split("/").slice(0, -1).join("/") || workspaceRoot;
+    const parent =
+      root.replace(/\/$/, "").split("/").slice(0, -1).join("/") ||
+      workspaceRoot;
     setView("browse");
     setEditorPath(null);
     setMediaKind(null);
@@ -659,7 +694,10 @@ export default function WorkspacePanel({
     const files = targets.filter((e) => !e.is_dir);
     if (files.length) {
       if (files.length > MAX_OPEN_EXTERNALLY) {
-        showToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }), { error: true });
+        showToast(
+          t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }),
+          { error: true },
+        );
       }
       for (const entry of files.slice(0, MAX_OPEN_EXTERNALLY)) {
         openEntry(entry);
@@ -672,7 +710,9 @@ export default function WorkspacePanel({
 
   const clipboardFailToast = useCallback(
     (err: unknown) => {
-      showToast(`${String(err)} · ${t("workspace.toast.clipboardHint")}`, { error: true });
+      showToast(`${String(err)} · ${t("workspace.toast.clipboardHint")}`, {
+        error: true,
+      });
     },
     [t, showToast],
   );
@@ -719,10 +759,13 @@ export default function WorkspacePanel({
         count = moved.length;
         setPendingCut(null);
       } else {
-        const pasted = await invoke<FileEntryDto[]>("paste_paths_from_clipboard", {
-          destDir: root,
-          mode: null,
-        });
+        const pasted = await invoke<FileEntryDto[]>(
+          "paste_paths_from_clipboard",
+          {
+            destDir: root,
+            mode: null,
+          },
+        );
         count = pasted.length;
       }
       showToast(t("workspace.toast.pasted", { n: String(count) }), {
@@ -757,13 +800,34 @@ export default function WorkspacePanel({
   const runOpenExternally = async (targets: FileEntryDto[]) => {
     if (!targets.length) return;
     if (targets.length > MAX_OPEN_EXTERNALLY) {
-      showToast(t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }), { error: true });
+      showToast(
+        t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }),
+        { error: true },
+      );
     }
     for (const entry of targets.slice(0, MAX_OPEN_EXTERNALLY)) {
       try {
         await invoke("open_path_externally", { path: entry.path });
       } catch {
         // ignore per-file failures
+      }
+    }
+  };
+
+  const runOpenInVscode = async (targets: FileEntryDto[]) => {
+    if (!targets.length) return;
+    if (targets.length > MAX_OPEN_EXTERNALLY) {
+      showToast(
+        t("workspace.toast.openLimit", { n: String(MAX_OPEN_EXTERNALLY) }),
+        { error: true },
+      );
+    }
+    for (const entry of targets.slice(0, MAX_OPEN_EXTERNALLY)) {
+      try {
+        await invoke("open_path_in_vscode", { path: entry.path });
+      } catch (e) {
+        showToast(String(e), { error: true });
+        break;
       }
     }
   };
@@ -842,7 +906,10 @@ export default function WorkspacePanel({
     [dirty, editorPath, t, confirm, runTrash],
   );
 
-  const dispatchAction = async (action: FileMenuAction, targets: FileEntryDto[]) => {
+  const dispatchAction = async (
+    action: FileMenuAction,
+    targets: FileEntryDto[],
+  ) => {
     switch (action) {
       case "open":
         await runOpen(targets);
@@ -876,6 +943,9 @@ export default function WorkspacePanel({
       case "openExternally":
         await runOpenExternally(targets);
         break;
+      case "openInVscode":
+        await runOpenInVscode(targets);
+        break;
       case "trash":
         requestTrash(targets);
         break;
@@ -886,7 +956,11 @@ export default function WorkspacePanel({
 
   const handleMenuAction = async (action: FileMenuAction) => {
     const targets =
-      menuKind === "blank" ? [] : resolvePaths(menuPaths.length ? menuPaths : [...selection.selectedIds]);
+      menuKind === "blank"
+        ? []
+        : resolvePaths(
+            menuPaths.length ? menuPaths : [...selection.selectedIds],
+          );
     closeMenu();
     await dispatchAction(action, targets);
   };
@@ -956,7 +1030,10 @@ export default function WorkspacePanel({
   useEffect(() => {
     const panelFocused = () => {
       const el = document.activeElement;
-      return !!panelRef.current && (el === panelRef.current || panelRef.current.contains(el));
+      return (
+        !!panelRef.current &&
+        (el === panelRef.current || panelRef.current.contains(el))
+      );
     };
 
     const onKey = (e: KeyboardEvent) => {
@@ -1008,7 +1085,9 @@ export default function WorkspacePanel({
         if (!visibleIds.length) return;
         selection.onItemClick(visibleIds[0], {});
         if (visibleIds.length > 1) {
-          selection.onItemClick(visibleIds[visibleIds.length - 1], { shiftKey: true });
+          selection.onItemClick(visibleIds[visibleIds.length - 1], {
+            shiftKey: true,
+          });
         }
         return;
       }
@@ -1062,34 +1141,10 @@ export default function WorkspacePanel({
     ) : null;
 
   const previewToggle = canTogglePreview ? (
-    <div
-      className="ws-md-modes"
-      role="tablist"
-      aria-label={t("workspace.previewMode")}
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={docPreview}
-        className={`ws-md-mode ws-md-mode--icon ${docPreview ? "is-active" : ""}`}
-        onClick={() => setMdModePersist("preview")}
-        title={t("workspace.previewMode")}
-        aria-label={t("workspace.previewMode")}
-      >
-        <Eye size={15} strokeWidth={2.3} aria-hidden />
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={!docPreview}
-        className={`ws-md-mode ws-md-mode--icon ${!docPreview ? "is-active" : ""}`}
-        onClick={() => setMdModePersist("source")}
-        title={t("workspace.previewSource")}
-        aria-label={t("workspace.previewSource")}
-      >
-        <FileCode2 size={15} strokeWidth={2.3} aria-hidden />
-      </button>
-    </div>
+    <MarkdownPreviewToggle
+      preview={docPreview}
+      onToggle={() => setMdModePersist(docPreview ? "source" : "preview")}
+    />
   ) : null;
 
   return (
@@ -1099,476 +1154,506 @@ export default function WorkspacePanel({
       tabIndex={0}
       onMouseDown={(e) => {
         if (isTypingTarget(e.target)) return;
-        if (panelRef.current && !panelRef.current.contains(document.activeElement)) {
+        if (
+          panelRef.current &&
+          !panelRef.current.contains(document.activeElement)
+        ) {
           panelRef.current.focus({ preventScroll: true });
         }
       }}
     >
-      <AnimatedSwitch switchKey={view} className="anim-switch--fill">
-      {view === "browse" ? (
-        <>
-          <div className="ws-toolbar">
-            <h2 className="ws-toolbar-title">{t("workspace.title")}</h2>
-            <div className="ws-toolbar-actions">
-              <button
-                type="button"
-                className="ws-tool-btn"
-                onClick={() => {
-                  setCreateMode("file");
-                  setNewName("");
-                }}
-                title={t("workspace.newFile")}
-                aria-label={t("workspace.newFile")}
-              >
-                <IconWsNewFile width={18} height={18} />
-              </button>
-              <button
-                type="button"
-                className="ws-tool-btn"
-                onClick={() => {
-                  setCreateMode("folder");
-                  setNewName("");
-                }}
-                title={t("workspace.newFolder")}
-                aria-label={t("workspace.newFolder")}
-              >
-                <IconWsNewFolder width={18} height={18} />
-              </button>
-              {onClose && (
+      <MotionSwitch switchKey={view} className="anim-switch--fill">
+        {view === "browse" ? (
+          <>
+            <div className="ws-toolbar">
+              <h2 className="ws-toolbar-title">{t("workspace.title")}</h2>
+              <div className="ws-toolbar-actions">
                 <button
                   type="button"
                   className="ws-tool-btn"
-                  onClick={onClose}
-                  title={t("workspace.back")}
-                  aria-label={t("workspace.back")}
+                  onClick={() => {
+                    setCreateMode("file");
+                    setNewName("");
+                  }}
+                  title={t("workspace.newFile")}
+                  aria-label={t("workspace.newFile")}
                 >
-                  <IconWsBackChat width={18} height={18} />
+                  <IconWsNewFile width={18} height={18} />
                 </button>
-              )}
-            </div>
-          </div>
-
-          {createMode && (
-            <form className="ws-create-row" onSubmit={(e) => void submitCreate(e)}>
-              <input
-                className="ws-create-input"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder={
-                  createMode === "file"
-                    ? t("workspace.newFilePlaceholder")
-                    : t("workspace.newFolderPlaceholder")
-                }
-                autoFocus
-                disabled={creating}
-              />
-              <button
-                type="submit"
-                className="ghost-btn active"
-                disabled={creating || !newName.trim()}
-                data-tip={t("workspace.create")}
-              >
-                {creating ? "…" : t("workspace.create")}
-              </button>
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={cancelCreate}
-                disabled={creating}
-                data-tip={t("workspace.cancel")}
-              >
-                {t("workspace.cancel")}
-              </button>
-            </form>
-          )}
-
-          <div className="ws-path-row">
-            <button
-              type="button"
-              className="ws-icon-btn"
-              onClick={() => void goUp()}
-              title={t("workspace.up")}
-              aria-label={t("workspace.up")}
-              disabled={!workspaceRoot || root === workspaceRoot}
-            >
-              <IconWsArrowUp width={16} height={16} />
-            </button>
-            <nav className="ws-breadcrumb" aria-label={t("workspace.title")}>
-              {breadcrumbs.map((crumb, i) => (
-                <span key={crumb.path} className="ws-crumb-wrap">
-                  {i > 0 && <span className="ws-crumb-sep">/</span>}
+                <button
+                  type="button"
+                  className="ws-tool-btn"
+                  onClick={() => {
+                    setCreateMode("folder");
+                    setNewName("");
+                  }}
+                  title={t("workspace.newFolder")}
+                  aria-label={t("workspace.newFolder")}
+                >
+                  <IconWsNewFolder width={18} height={18} />
+                </button>
+                {onClose && (
                   <button
                     type="button"
-                    className={`ws-crumb ${i === breadcrumbs.length - 1 ? "is-current" : ""}`}
-                    onClick={() => {
-                      selection.clear();
-                      void load(crumb.path);
-                    }}
-                    disabled={i === breadcrumbs.length - 1}
+                    className="ws-tool-btn"
+                    onClick={onClose}
+                    title={t("workspace.back")}
+                    aria-label={t("workspace.back")}
                   >
-                    {crumb.label}
+                    <IconWsBackChat width={18} height={18} />
                   </button>
-                </span>
-              ))}
-            </nav>
-            <div className="ws-path-actions">
-              <ExpandableSearch
-                value={fileSearch}
-                onChange={setFileSearch}
-                placeholderKey="workspace.search"
-              />
-              <div className="ws-layout-toggle" role="group" aria-label={t("workspace.viewMode")}>
-                {(
-                  [
-                    { id: "list" as const, Icon: IconWsViewList, labelKey: "workspace.viewList" as const },
-                    { id: "grid" as const, Icon: IconWsViewGrid, labelKey: "workspace.viewGrid" as const },
-                    { id: "compact" as const, Icon: IconWsViewCompact, labelKey: "workspace.viewCompact" as const },
-                  ] as const
-                ).map(({ id, Icon, labelKey }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`ws-layout-btn ${listLayout === id ? "is-active" : ""}`}
-                    onClick={() => setListLayout(id)}
-                    title={t(labelKey)}
-                    aria-label={t(labelKey)}
-                    aria-pressed={listLayout === id}
-                  >
-                    <Icon width={15} height={15} />
-                  </button>
-                ))}
+                )}
               </div>
             </div>
-          </div>
 
-          <WorkspaceBatchBar
-            count={selectedEntries.length}
-            onAction={(a) => void handleBatchAction(a)}
-            onClear={selection.clear}
-          />
-
-          {error && <div className="side-error">{error}</div>}
-
-          <div
-            className={`ws-file-tree is-${listLayout}`}
-            onClick={(e) => {
-              if ((e.target as HTMLElement).closest(".ws-file-row-wrap")) return;
-              selection.clear();
-            }}
-            onContextMenu={(e) => {
-              const target = e.target as HTMLElement;
-              if (target.closest(".ws-file-row-wrap")) return;
-              e.preventDefault();
-              openBlankMenu(e.clientX, e.clientY);
-            }}
-          >
-            {loadingList ? (
-              <p className="ws-muted">{t("workspace.loading")}</p>
-            ) : entries.length === 0 ? (
-              <EmptyIllustration
-                scene="workspace"
-                className="ws-empty-illust"
-                title={t("workspace.empty")}
-              />
-            ) : filteredEntries.length === 0 ? (
-              <EmptyIllustration
-                scene="workspace"
-                size="sm"
-                className="ws-empty-illust"
-                title={t("workspace.searchEmpty")}
-              />
-            ) : (
-              filteredEntries.map((entry) => {
-                const kind = fileKind(entry.name, entry.is_dir);
-                const meta = entry.is_dir ? t("workspace.folder") : formatSize(entry.size);
-                const thumb =
-                  listLayout === "grid" && kind === "image"
-                    ? localMediaSrc(entry.path)
-                    : null;
-                const checked = selection.selectedIds.has(entry.path);
-                const isRenaming = renamingPath === entry.path;
-                return (
-                  <div
-                    key={entry.path}
-                    className={`ws-file-row-wrap ${checked ? "is-checked" : ""} ${
-                      pendingCut?.includes(entry.path) ? "is-cut" : ""
-                    }`}
-                    onClick={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      openMenuAt(entry.path, e.clientX, e.clientY);
-                    }}
-                  >
-                    {isRenaming ? (
-                      <div className={`ws-file-row ${checked ? "is-checked" : ""}`} data-kind={kind}>
-                        {thumb ? (
-                          <span className="ws-file-thumb" aria-hidden>
-                            <img src={thumb} alt="" loading="lazy" />
-                          </span>
-                        ) : (
-                          <FileGlyph name={entry.name} isDir={entry.is_dir} />
-                        )}
-                        <input
-                          className="ws-rename-input"
-                          value={renameDraft}
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setRenameDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              renameIgnoreBlurRef.current = true;
-                              void submitRename();
-                            } else if (e.key === "Escape") {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              renameIgnoreBlurRef.current = true;
-                              cancelRename();
-                            }
-                          }}
-                          onBlur={() => {
-                            if (renameIgnoreBlurRef.current) {
-                              renameIgnoreBlurRef.current = false;
-                              return;
-                            }
-                            void submitRename();
-                          }}
-                        />
-                        <span className="ws-file-meta">{meta}</span>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className={`ws-file-row ${checked ? "is-checked" : ""}`}
-                        data-kind={kind}
-                        onClick={(e) => onRowClick(entry, e)}
-                        disabled={loadingFile}
-                      >
-                        {thumb ? (
-                          <span className="ws-file-thumb" aria-hidden>
-                            <img src={thumb} alt="" loading="lazy" />
-                          </span>
-                        ) : (
-                          <FileGlyph name={entry.name} isDir={entry.is_dir} />
-                        )}
-                        <span className="ws-file-name">{entry.name}</span>
-                        <span className="ws-file-meta">{meta}</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="ws-file-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestTrash([entry]);
-                      }}
-                      data-tip={t("workspace.menu.trash")}
-                      data-tip-pos="left"
-                      aria-label={`${t("workspace.menu.trash")} ${entry.name}`}
-                    >
-                      <IconWsTrash width={16} height={16} />
-                    </button>
-                  </div>
-                );
-              })
+            {createMode && (
+              <form
+                className="ws-create-row"
+                onSubmit={(e) => void submitCreate(e)}
+              >
+                <input
+                  className="ws-create-input"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder={
+                    createMode === "file"
+                      ? t("workspace.newFilePlaceholder")
+                      : t("workspace.newFolderPlaceholder")
+                  }
+                  autoFocus
+                  disabled={creating}
+                />
+                <button
+                  type="submit"
+                  className="ghost-btn active"
+                  disabled={creating || !newName.trim()}
+                  data-tip={t("workspace.create")}
+                >
+                  {creating ? "…" : t("workspace.create")}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={cancelCreate}
+                  disabled={creating}
+                  data-tip={t("workspace.cancel")}
+                >
+                  {t("workspace.cancel")}
+                </button>
+              </form>
             )}
-          </div>
 
-          {menu && (
-            <FileContextMenu
-              className="ws-ctx-menu"
-              x={menu.x}
-              y={menu.y}
-              items={menuItems}
-              onAction={(a) => void handleMenuAction(a)}
-              onClose={closeMenu}
-            />
-          )}
-        </>
-      ) : view === "media" ? (
-        <>
-          <div className="ws-editor-toolbar">
-            <div className="ws-editor-toolbar-lead">
+            <div className="ws-path-row">
               <button
                 type="button"
-                className="ws-tool-btn"
-                onClick={() => void backToBrowse()}
-                title={t("workspace.backToList")}
-                aria-label={t("workspace.backToList")}
+                className="ws-icon-btn"
+                onClick={() => void goUp()}
+                title={t("workspace.up")}
+                aria-label={t("workspace.up")}
+                disabled={!workspaceRoot || root === workspaceRoot}
               >
-                <IconWsArrowLeft width={18} height={18} />
+                <IconWsArrowUp width={16} height={16} />
               </button>
-              <div className="ws-editor-head-inline">
-                <FileGlyph name={editorName} isDir={false} />
-                <div className="ws-editor-meta-block">
-                  <h3 className="ws-editor-filename">{editorName}</h3>
-                  <p className="ws-editor-path">
-                    {mediaKind === "video"
-                      ? t("workspace.mediaVideo")
-                      : mediaKind === "audio"
-                        ? t("workspace.mediaAudio")
-                        : mediaKind === "html"
-                          ? t("workspace.mediaHtml")
-                          : t("workspace.mediaImage")}
-                    {mediaMeta ? ` · ${mediaMeta}` : ""}
-                  </p>
+              <nav className="ws-breadcrumb" aria-label={t("workspace.title")}>
+                {breadcrumbs.map((crumb, i) => (
+                  <span key={crumb.path} className="ws-crumb-wrap">
+                    {i > 0 && <span className="ws-crumb-sep">/</span>}
+                    <button
+                      type="button"
+                      className={`ws-crumb ${i === breadcrumbs.length - 1 ? "is-current" : ""}`}
+                      onClick={() => {
+                        selection.clear();
+                        void load(crumb.path);
+                      }}
+                      disabled={i === breadcrumbs.length - 1}
+                    >
+                      {crumb.label}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+              <div className="ws-path-actions">
+                <ExpandableSearch
+                  value={fileSearch}
+                  onChange={setFileSearch}
+                  placeholderKey="workspace.search"
+                />
+                <div
+                  className="ws-layout-toggle"
+                  role="group"
+                  aria-label={t("workspace.viewMode")}
+                >
+                  {(
+                    [
+                      {
+                        id: "list" as const,
+                        Icon: IconWsViewList,
+                        labelKey: "workspace.viewList" as const,
+                      },
+                      {
+                        id: "grid" as const,
+                        Icon: IconWsViewGrid,
+                        labelKey: "workspace.viewGrid" as const,
+                      },
+                      {
+                        id: "compact" as const,
+                        Icon: IconWsViewCompact,
+                        labelKey: "workspace.viewCompact" as const,
+                      },
+                    ] as const
+                  ).map(({ id, Icon, labelKey }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`ws-layout-btn ${listLayout === id ? "is-active" : ""}`}
+                      onClick={() => setListLayout(id)}
+                      title={t(labelKey)}
+                      aria-label={t(labelKey)}
+                      aria-pressed={listLayout === id}
+                    >
+                      <Icon width={15} height={15} />
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
-            <div className="ws-editor-actions">
-              {editorPath && mediaKind ? (
-                <MediaToolbar
-                  path={editorPath}
-                  kind={mediaKind}
-                  className="is-inline"
+
+            <WorkspaceBatchBar
+              count={selectedEntries.length}
+              onAction={(a) => void handleBatchAction(a)}
+              onClear={selection.clear}
+            />
+
+            {error && <div className="side-error">{error}</div>}
+
+            <div
+              className={`ws-file-tree is-${listLayout}`}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest(".ws-file-row-wrap"))
+                  return;
+                selection.clear();
+              }}
+              onContextMenu={(e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest(".ws-file-row-wrap")) return;
+                e.preventDefault();
+                openBlankMenu(e.clientX, e.clientY);
+              }}
+            >
+              {loadingList ? (
+                <p className="ws-muted">{t("workspace.loading")}</p>
+              ) : entries.length === 0 ? (
+                <EmptyIllustration
+                  scene="workspace"
+                  className="ws-empty-illust"
+                  title={t("workspace.empty")}
+                />
+              ) : filteredEntries.length === 0 ? (
+                <EmptyIllustration
+                  scene="workspace"
+                  size="sm"
+                  className="ws-empty-illust"
+                  title={t("workspace.searchEmpty")}
                 />
               ) : (
+                filteredEntries.map((entry) => {
+                  const kind = fileKind(entry.name, entry.is_dir);
+                  const meta = entry.is_dir
+                    ? t("workspace.folder")
+                    : formatSize(entry.size);
+                  const thumb =
+                    listLayout === "grid" && kind === "image"
+                      ? localMediaSrc(entry.path)
+                      : null;
+                  const checked = selection.selectedIds.has(entry.path);
+                  const isRenaming = renamingPath === entry.path;
+                  return (
+                    <div
+                      key={entry.path}
+                      className={`ws-file-row-wrap ${checked ? "is-checked" : ""} ${
+                        pendingCut?.includes(entry.path) ? "is-cut" : ""
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openMenuAt(entry.path, e.clientX, e.clientY);
+                      }}
+                    >
+                      {isRenaming ? (
+                        <div
+                          className={`ws-file-row ${checked ? "is-checked" : ""}`}
+                          data-kind={kind}
+                        >
+                          {thumb ? (
+                            <span className="ws-file-thumb" aria-hidden>
+                              <img src={thumb} alt="" loading="lazy" />
+                            </span>
+                          ) : (
+                            <FileGlyph name={entry.name} isDir={entry.is_dir} />
+                          )}
+                          <input
+                            className="ws-rename-input"
+                            value={renameDraft}
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                renameIgnoreBlurRef.current = true;
+                                void submitRename();
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                renameIgnoreBlurRef.current = true;
+                                cancelRename();
+                              }
+                            }}
+                            onBlur={() => {
+                              if (renameIgnoreBlurRef.current) {
+                                renameIgnoreBlurRef.current = false;
+                                return;
+                              }
+                              void submitRename();
+                            }}
+                          />
+                          <span className="ws-file-meta">{meta}</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`ws-file-row ${checked ? "is-checked" : ""}`}
+                          data-kind={kind}
+                          onClick={(e) => onRowClick(entry, e)}
+                          disabled={loadingFile}
+                        >
+                          {thumb ? (
+                            <span className="ws-file-thumb" aria-hidden>
+                              <img src={thumb} alt="" loading="lazy" />
+                            </span>
+                          ) : (
+                            <FileGlyph name={entry.name} isDir={entry.is_dir} />
+                          )}
+                          <span className="ws-file-name">{entry.name}</span>
+                          <span className="ws-file-meta">{meta}</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ws-file-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestTrash([entry]);
+                        }}
+                        data-tip={t("workspace.menu.trash")}
+                        data-tip-pos="left"
+                        aria-label={`${t("workspace.menu.trash")} ${entry.name}`}
+                      >
+                        <IconWsTrash width={16} height={16} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {menu && (
+              <FileContextMenu
+                className="ws-ctx-menu"
+                x={menu.x}
+                y={menu.y}
+                items={menuItems}
+                onAction={(a) => void handleMenuAction(a)}
+                onClose={closeMenu}
+              />
+            )}
+          </>
+        ) : view === "media" ? (
+          <>
+            <div className="ws-editor-toolbar">
+              <div className="ws-editor-toolbar-lead">
                 <button
                   type="button"
                   className="ws-tool-btn"
-                  onClick={() => void openCurrentExternally()}
-                  disabled={!editorPath}
-                  title={t("workspace.openExternally")}
-                  aria-label={t("workspace.openExternally")}
+                  onClick={() => void backToBrowse()}
+                  title={t("workspace.backToList")}
+                  aria-label={t("workspace.backToList")}
                 >
-                  <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
+                  <IconWsArrowLeft width={18} height={18} />
                 </button>
-              )}
-              {sourceSessionBtn}
-              <button
-                type="button"
-                className="ws-tool-btn ws-delete-btn"
-                onClick={() => void deleteCurrentFile()}
-                disabled={deleting}
-                title={t("workspace.delete")}
-                aria-label={t("workspace.delete")}
-              >
-                <IconWsTrash width={18} height={18} />
-              </button>
+                <div className="ws-editor-head-inline">
+                  <FileGlyph name={editorName} isDir={false} />
+                  <div className="ws-editor-meta-block">
+                    <h3 className="ws-editor-filename">{editorName}</h3>
+                    <p className="ws-editor-path">
+                      {mediaKind === "video"
+                        ? t("workspace.mediaVideo")
+                        : mediaKind === "audio"
+                          ? t("workspace.mediaAudio")
+                          : mediaKind === "html"
+                            ? t("workspace.mediaHtml")
+                            : t("workspace.mediaImage")}
+                      {mediaMeta ? ` · ${mediaMeta}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="ws-editor-actions">
+                {editorPath && mediaKind ? (
+                  <MediaToolbar
+                    path={editorPath}
+                    kind={mediaKind}
+                    className="is-inline"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="ws-tool-btn"
+                    onClick={() => void openCurrentExternally()}
+                    disabled={!editorPath}
+                    title={t("workspace.openExternally")}
+                    aria-label={t("workspace.openExternally")}
+                  >
+                    <ExternalLink size={17} strokeWidth={2.1} aria-hidden />
+                  </button>
+                )}
+                {sourceSessionBtn}
+                <button
+                  type="button"
+                  className="ws-tool-btn ws-delete-btn"
+                  onClick={() => void deleteCurrentFile()}
+                  disabled={deleting}
+                  title={t("workspace.delete")}
+                  aria-label={t("workspace.delete")}
+                >
+                  <IconWsTrash width={18} height={18} />
+                </button>
+              </div>
             </div>
-          </div>
 
-          {error && <div className="side-error">{error}</div>}
+            {error && <div className="side-error">{error}</div>}
 
-          {editorPath && mediaKind ? (
+            {editorPath && mediaKind ? (
+              <FilePreviewContent
+                kind={mediaKind}
+                path={editorPath}
+                name={editorName}
+                theme={theme}
+                draft={draftContent}
+                onDraftChange={setDraftContent}
+                previewMode={false}
+                onOpenExternally={() => void openCurrentExternally()}
+              />
+            ) : (
+              <div className="ws-media-stage" data-kind="image">
+                <div className="ws-media-frame">
+                  <div className="ws-media-fallback">
+                    <FileGlyph name={editorName} isDir={false} />
+                    <p>{t("workspace.mediaLoadError")}</p>
+                    <button
+                      type="button"
+                      className="ghost-btn active"
+                      onClick={() => void openCurrentExternally()}
+                    >
+                      {t("workspace.openExternally")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="ws-editor-toolbar">
+              <div className="ws-editor-toolbar-lead">
+                <button
+                  type="button"
+                  className="ws-tool-btn"
+                  onClick={() => void backToBrowse()}
+                  title={t("workspace.backToList")}
+                  aria-label={t("workspace.backToList")}
+                >
+                  <IconWsArrowLeft width={18} height={18} />
+                </button>
+                <div className="ws-editor-head-inline">
+                  <FileGlyph name={editorName} isDir={false} />
+                  <div className="ws-editor-meta-block">
+                    <h3 className="ws-editor-filename">{editorName}</h3>
+                    <p className="ws-editor-path">{editorPath}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="ws-editor-actions">
+                {dirty && (
+                  <span className="ws-dirty-badge">
+                    {t("workspace.unsaved")}
+                  </span>
+                )}
+                {dirty && (
+                  <>
+                    <button
+                      type="button"
+                      className="ws-tool-btn"
+                      onClick={undoEdits}
+                      disabled={saving || deleting}
+                      title={t("workspace.undo")}
+                      aria-label={t("workspace.undo")}
+                    >
+                      <Undo2 size={17} strokeWidth={2.1} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="ws-tool-btn is-active"
+                      onClick={() => void saveFile()}
+                      disabled={saving || deleting}
+                      title={t("workspace.save")}
+                      aria-label={t("workspace.save")}
+                    >
+                      <Save size={17} strokeWidth={2.1} aria-hidden />
+                    </button>
+                  </>
+                )}
+                {editorIsHtml && editorPath ? (
+                  <MediaToolbar
+                    path={editorPath}
+                    kind="html"
+                    className="is-inline"
+                  />
+                ) : null}
+                {previewToggle}
+                {sourceSessionBtn}
+                <button
+                  type="button"
+                  className="ws-tool-btn ws-delete-btn"
+                  onClick={() => void deleteCurrentFile()}
+                  disabled={saving || deleting}
+                  title={t("workspace.delete")}
+                  aria-label={t("workspace.delete")}
+                >
+                  <IconWsTrash width={16} height={16} />
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="side-error">{error}</div>}
+
             <FilePreviewContent
-              kind={mediaKind}
-              path={editorPath}
+              kind={
+                editorIsHtml ? "html" : editorIsMarkdown ? "markdown" : "text"
+              }
+              path={editorPath ?? ""}
               name={editorName}
               theme={theme}
               draft={draftContent}
               onDraftChange={setDraftContent}
-              previewMode={false}
+              previewMode={docPreview}
               onOpenExternally={() => void openCurrentExternally()}
             />
-          ) : (
-            <div className="ws-media-stage" data-kind="image">
-              <div className="ws-media-frame">
-                <div className="ws-media-fallback">
-                  <FileGlyph name={editorName} isDir={false} />
-                  <p>{t("workspace.mediaLoadError")}</p>
-                  <button
-                    type="button"
-                    className="ghost-btn active"
-                    onClick={() => void openCurrentExternally()}
-                  >
-                    {t("workspace.openExternally")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="ws-editor-toolbar">
-            <div className="ws-editor-toolbar-lead">
-              <button
-                type="button"
-                className="ws-tool-btn"
-                onClick={() => void backToBrowse()}
-                title={t("workspace.backToList")}
-                aria-label={t("workspace.backToList")}
-              >
-                <IconWsArrowLeft width={18} height={18} />
-              </button>
-              <div className="ws-editor-head-inline">
-                <FileGlyph name={editorName} isDir={false} />
-                <div className="ws-editor-meta-block">
-                  <h3 className="ws-editor-filename">{editorName}</h3>
-                  <p className="ws-editor-path">{editorPath}</p>
-                </div>
-              </div>
-            </div>
-            <div className="ws-editor-actions">
-              {dirty && (
-                <span className="ws-dirty-badge">{t("workspace.unsaved")}</span>
-              )}
-              {dirty && (
-                <>
-                  <button
-                    type="button"
-                    className="ws-tool-btn"
-                    onClick={undoEdits}
-                    disabled={saving || deleting}
-                    title={t("workspace.undo")}
-                    aria-label={t("workspace.undo")}
-                  >
-                    <Undo2 size={17} strokeWidth={2.1} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="ws-tool-btn is-active"
-                    onClick={() => void saveFile()}
-                    disabled={saving || deleting}
-                    title={t("workspace.save")}
-                    aria-label={t("workspace.save")}
-                  >
-                    <Save size={17} strokeWidth={2.1} aria-hidden />
-                  </button>
-                </>
-              )}
-              {editorIsHtml && editorPath ? (
-                <MediaToolbar
-                  path={editorPath}
-                  kind="html"
-                  className="is-inline"
-                />
-              ) : null}
-              {previewToggle}
-              {sourceSessionBtn}
-              <button
-                type="button"
-                className="ws-tool-btn ws-delete-btn"
-                onClick={() => void deleteCurrentFile()}
-                disabled={saving || deleting}
-                title={t("workspace.delete")}
-                aria-label={t("workspace.delete")}
-              >
-                <IconWsTrash width={16} height={16} />
-              </button>
-            </div>
-          </div>
-
-          {error && <div className="side-error">{error}</div>}
-
-          <FilePreviewContent
-            kind={
-              editorIsHtml ? "html" : editorIsMarkdown ? "markdown" : "text"
-            }
-            path={editorPath ?? ""}
-            name={editorName}
-            theme={theme}
-            draft={draftContent}
-            onDraftChange={setDraftContent}
-            previewMode={docPreview}
-            onOpenExternally={() => void openCurrentExternally()}
-          />
-        </>
-      )}
-      </AnimatedSwitch>
+          </>
+        )}
+      </MotionSwitch>
       {toastHost}
     </aside>
   );

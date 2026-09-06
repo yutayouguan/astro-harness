@@ -1,19 +1,24 @@
-//! 单库会话存储（schema v17）：sessions、富 messages、FTS5；旧库走增量迁移不丢数据。
+//! 单库会话存储：sessions、原生 Response items 与 FTS5。
 
-mod messages;
+mod branches;
+pub mod projects;
+mod response_items;
 mod rollout_projection;
 mod schema;
 mod search;
 mod sessions;
 
+use agent_db::sqlx::{self, Row};
+use agent_db::{AstroDb, DbSpec, SqlitePool};
+pub use agent_protocol::ResponseItem;
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use types::SqliteStore;
 
-pub use rollout_projection::rebuild_messages_from_rollout;
+const DB_SPEC: DbSpec = DbSpec::new("session", "state.db");
+
+pub use rollout_projection::rebuild_response_items_from_rollout;
 pub use schema::SCHEMA_VERSION;
 
 /// 单次 LLM 调用的账单增量（累加到 sessions 行）。
@@ -56,70 +61,81 @@ pub struct SessionBillingRow {
 }
 
 #[derive(Debug, Clone)]
-pub struct NewMessage<'a> {
+pub struct NewResponseItem<'a> {
     pub session_id: &'a str,
-    pub role: &'a str,
-    pub content: Option<&'a str>,
-    /// Provider-facing/internal delivery view persisted by the initial INSERT.
-    pub compressed_content: Option<&'a str>,
-    pub tool_calls: Option<Value>,
-    pub tool_call_id: Option<&'a str>,
-    pub tool_name: Option<&'a str>,
+    pub item: &'a ResponseItem,
     pub token_count: Option<i64>,
     pub finish_reason: Option<&'a str>,
-    pub reasoning: Option<&'a str>,
-    pub reasoning_content: Option<&'a str>,
-    pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
-    /// 结构化媒体 JSON 数组（`MediaAsset[]`）；空则不写列。
-    pub media_json: Option<&'a str>,
 }
 
-impl<'a> NewMessage<'a> {
-    /// 仅填 `session_id` / `role`，其余 Option 字段为 `None`（便于 struct update）。
-    pub fn empty(session_id: &'a str, role: &'a str) -> Self {
+impl<'a> NewResponseItem<'a> {
+    pub fn new(session_id: &'a str, item: &'a ResponseItem) -> Self {
         Self {
             session_id,
-            role,
-            content: None,
-            compressed_content: None,
-            tool_calls: None,
-            tool_call_id: None,
-            tool_name: None,
+            item,
             token_count: None,
             finish_reason: None,
-            reasoning: None,
-            reasoning_content: None,
-            reasoning_details: None,
-            codex_reasoning_items: None,
-            codex_message_items: None,
-            media_json: None,
         }
     }
 }
 
-/// 从库中读出的富消息行。
+/// 从库中读出的原生 Responses item。
 #[derive(Debug, Clone)]
-pub struct StoredMessage {
+pub struct StoredResponseItem {
     pub id: i64,
     pub session_id: String,
-    pub role: String,
-    pub content: Option<String>,
-    pub compressed_content: Option<String>,
-    pub tool_call_id: Option<String>,
-    pub tool_calls: Option<Value>,
-    pub tool_name: Option<String>,
+    pub item: ResponseItem,
     pub timestamp: f64,
     pub token_count: Option<i64>,
     pub finish_reason: Option<String>,
-    pub reasoning: Option<String>,
-    pub reasoning_content: Option<String>,
-    pub reasoning_details: Option<Value>,
-    pub codex_reasoning_items: Option<Value>,
-    pub codex_message_items: Option<Value>,
-    /// 结构化媒体 JSON 数组字符串。
-    pub media_json: Option<String>,
+}
+
+impl StoredResponseItem {
+    pub fn role(&self) -> Option<&str> {
+        self.item.role().or_else(|| {
+            if self.item.is_tool_output() {
+                Some("tool")
+            } else if matches!(
+                self.item,
+                ResponseItem::FunctionCall { .. }
+                    | ResponseItem::CustomToolCall { .. }
+                    | ResponseItem::ToolSearchCall { .. }
+                    | ResponseItem::Reasoning { .. }
+                    | ResponseItem::LocalShellCall { .. }
+                    | ResponseItem::WebSearchCall { .. }
+                    | ResponseItem::ImageGenerationCall { .. }
+                    | ResponseItem::AgentMessage { .. }
+            ) {
+                Some("assistant")
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn text(&self) -> String {
+        self.item.text()
+    }
+
+    pub fn tool_name(&self) -> Option<&str> {
+        self.item.tool_name()
+    }
+
+    pub fn qualified_tool_name(&self) -> Option<String> {
+        self.item.qualified_tool_name()
+    }
+
+    pub fn call_id(&self) -> Option<&str> {
+        self.item.call_id()
+    }
+
+    pub fn compressed_text(&self) -> Option<&str> {
+        self.item.compressed_text()
+    }
+
+    pub fn is_tool_output(&self) -> bool {
+        self.item.is_tool_output()
+    }
 }
 
 /// 从库中读出的会话元数据行。
@@ -137,6 +153,13 @@ pub struct StoredSession {
     pub tool_call_count: i64,
     pub archived_at: Option<f64>,
     pub pinned_at: Option<f64>,
+    /// 分支类型：`"branch"`、`"side"`、`"agent"`，根会话为 `None`。
+    pub branch_kind: Option<String>,
+    /// 此分支在父会话中分叉的消息 id。
+    pub branch_parent_message_id: Option<i64>,
+    pub branch_parent_turn_index: Option<i64>,
+    pub branch_inherited_turn_count: Option<i64>,
+    pub branch_created_at: Option<f64>,
 }
 
 /// FTS 搜索命中。
@@ -151,24 +174,12 @@ pub struct SearchHit {
     pub tool_name: Option<String>,
 }
 
-/// UI 恢复用的折叠后聊天气泡。
-#[derive(Debug, Clone)]
-pub struct ChatHistoryMessage {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub reasoning: Option<String>,
-    pub activities: Vec<ChatActivityStored>,
-    /// `reasoning_details.astro_timeline_v1`（JSON array）
-    pub segments: Option<Value>,
-    /// `reasoning_details.astro_surfaces_v1`（JSON array）
-    pub ui_surfaces: Option<Value>,
-}
-
 /// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 截断作 preview。
 #[derive(Debug, Clone)]
 pub struct RecentSession {
     pub id: String,
+    pub source: String,
+    pub project_id: Option<String>,
     pub title: Option<String>,
     pub started_at: f64,
     /// 首条 user 消息正文截断；无则 `None`。
@@ -186,17 +197,14 @@ pub enum SessionListFilter {
     Archived,
 }
 
-/// 助手气泡上的工具/活动条（由 `tool_calls` + 后续 `tool` 行折叠）。
-#[derive(Debug, Clone)]
-pub struct ChatActivityStored {
-    pub id: String,
-    pub kind: String,
-    pub title: String,
-    pub input: Option<String>,
-    pub output: Option<String>,
-    pub status: Option<String>,
-    /// 工具结果结构化媒体（`messages.media_json` 解析后的 JSON 数组）。
-    pub media: Option<Value>,
+/// 侧栏会话的互斥展示分组。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionPlacementFilter {
+    All,
+    Pinned,
+    Project,
+    Automation,
+    Recent,
 }
 
 pub(crate) fn now_epoch_secs() -> Result<f64> {
@@ -206,67 +214,107 @@ pub(crate) fn now_epoch_secs() -> Result<f64> {
         .as_secs_f64())
 }
 
-pub(crate) fn json_to_db(value: &Option<Value>) -> Result<Option<String>> {
-    match value {
-        Some(v) => Ok(Some(serde_json::to_string(v)?)),
-        None => Ok(None),
+// ---------------------------------------------------------------------------
+// 分支 / 谱系类型
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BranchKind {
+    Fork,
+    Side,
+    Agent,
+}
+
+impl BranchKind {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            BranchKind::Fork => "fork",
+            BranchKind::Side => "side",
+            BranchKind::Agent => "agent",
+        }
     }
 }
 
-pub(crate) fn json_from_db(raw: Option<String>) -> Result<Option<Value>> {
-    match raw {
-        Some(s) => Ok(Some(serde_json::from_str(&s)?)),
-        None => Ok(None),
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ForkBoundary {
+    ThroughTurn,
+    BeforeTurn,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForkedSession {
+    pub session_id: String,
+    pub parent_session_id: String,
+    pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
+    pub inherited_turn_count: i64,
+    pub copied_message_count: i64,
+    pub copied_user_turns: i64,
+    pub created_at: f64,
+}
+
+/// 会话谱系节点中的单个 user-turn 锚点。
+#[derive(Debug, Clone)]
+pub struct SessionTurnNode {
+    pub user_message_id: i64,
+    pub turn_index: i64,
+    pub content: Option<String>,
+    pub completed: bool,
+    pub child_session_ids: Vec<String>,
+}
+
+/// 谱系图中的一个会话节点。
+#[derive(Debug, Clone)]
+pub struct SessionLineageNode {
+    pub session_id: String,
+    pub parent_session_id: Option<String>,
+    pub parent_message_id: Option<i64>,
+    pub parent_turn_index: Option<i64>,
+    pub inherited_turn_count: i64,
+    pub branch_created_at: Option<f64>,
+    pub orphaned: bool,
+    pub turns: Vec<SessionTurnNode>,
+}
+
+/// 会话树的完整谱系图。
+#[derive(Debug, Clone)]
+pub struct SessionLineageGraph {
+    pub requested_session_id: String,
+    pub root_session_id: String,
+    pub nodes: Vec<SessionLineageNode>,
+    pub cycle_detected: bool,
+    pub orphaned_parent_ids: Vec<String>,
 }
 
 /// 单库会话存储：元数据、富消息行与消息级 FTS。
 pub struct SessionStore {
-    pub(crate) conn: Connection,
+    pub(crate) pool: SqlitePool,
     path: PathBuf,
 }
 
 impl SessionStore {
-    /// 打开或创建 `state.db`。schema 低于 [`SCHEMA_VERSION`] 时进行增量迁移。
-    pub fn open(path: &Path) -> Result<Self> {
-        if path.exists() {
-            let version = peek_schema_version(path).unwrap_or(0);
-            // v13→v17 为 additive（ALTER / 数据清洗），可就地升级，不必丢历史。
-            let additive_only = (13..SCHEMA_VERSION).contains(&version);
-            if version < SCHEMA_VERSION && !additive_only {
-                tracing::warn!(
-                    version,
-                    target = SCHEMA_VERSION,
-                    "session state.db outdated; discarding prior chat history"
-                );
-                types::delete_sqlite_files(path);
-            } else {
-                tracing::debug!(version, target = SCHEMA_VERSION, "session state.db opened");
-            }
-        }
-        let conn = types::open_wal(path)
+    /// 打开或创建 `state.db`。已有数据库必须匹配当前 schema。
+    pub async fn open(path: &Path) -> Result<Self> {
+        let parent = path.parent().unwrap_or(Path::new("."));
+        let db = AstroDb::new(parent);
+        let pool = db
+            .open_pool_at_path(&DB_SPEC, path)
+            .await
             .with_context(|| format!("open session store at {}", path.display()))?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
         let store = Self {
-            conn,
+            pool,
             path: path.to_path_buf(),
         };
-        store.migrate_schema()?;
-        // FTS 触发器自愈。
-        store.repair_messages_fts_if_needed()?;
-        // 补齐「有 messages、无 sessions 行」的孤儿会话。
-        store.backfill_sessions_from_messages()?;
+        store.initialize_schema().await?;
         Ok(store)
     }
 
-    /// 打开 `sessions_dir/state.db`；若存在旁路旧 `sessions.db` 则删除（不导入）。
-    pub fn open_sessions_dir(sessions_dir: &Path) -> Result<Self> {
-        std::fs::create_dir_all(sessions_dir)
-            .with_context(|| format!("create sessions dir {}", sessions_dir.display()))?;
-        discard_sidecar_sessions_db(sessions_dir);
-        let store = Self::open(&sessions_dir.join("state.db"))?;
-        store.backfill_sessions_from_messages()?;
-        Ok(store)
+    /// 打开 `database_dir/state.db`。
+    pub async fn open_sessions_dir(database_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(database_dir)
+            .with_context(|| format!("create session database dir {}", database_dir.display()))?;
+        Self::open(&database_dir.join("state.db")).await
     }
 
     /// 数据库文件路径
@@ -275,122 +323,112 @@ impl SessionStore {
     }
 
     /// 读取当前 `schema_version` 表中的版本号。
-    pub fn schema_version(&self) -> Result<i32> {
-        let version: Option<i32> = self
-            .conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        version.ok_or_else(|| anyhow!("schema_version table is empty"))
+    pub async fn schema_version(&self) -> Result<i32> {
+        let row = sqlx::query("SELECT version FROM schema_version LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(r.get::<i32, _>(0)),
+            None => Err(anyhow!("schema_version table is empty")),
+        }
     }
 }
 
+#[async_trait::async_trait]
 impl crate::ConversationStore for SessionStore {
-    fn append_message(&self, msg: NewMessage<'_>) -> Result<i64> {
-        SessionStore::append_message(self, msg)
+    #[allow(refining_impl_trait)]
+    async fn append_response_item(&self, item: NewResponseItem<'_>) -> Result<i64> {
+        SessionStore::append_response_item(self, item).await
     }
 
-    fn get_messages(&self, session_id: &str) -> Result<Vec<StoredMessage>> {
-        SessionStore::get_messages(self, session_id)
+    #[allow(refining_impl_trait)]
+    async fn get_response_items(&self, session_id: &str) -> Result<Vec<StoredResponseItem>> {
+        SessionStore::get_response_items(self, session_id).await
     }
 
-    fn update_message_compressed_content(
+    #[allow(refining_impl_trait)]
+    async fn replace_response_items(
+        &self,
+        session_id: &str,
+        items: &[agent_protocol::ResponseItem],
+    ) -> Result<()> {
+        SessionStore::replace_response_items(self, session_id, items).await
+    }
+
+    #[allow(refining_impl_trait)]
+    async fn update_response_item_compressed_content(
         &self,
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()> {
-        SessionStore::update_message_compressed_content(self, message_id, compressed)
+        SessionStore::update_response_item_compressed_content(self, message_id, compressed).await
     }
 
-    fn patch_last_assistant_reasoning_details(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()> {
-        SessionStore::patch_last_assistant_reasoning_details(self, session_id, details)
+    #[allow(refining_impl_trait)]
+    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
+        SessionStore::patch_last_assistant_metadata(self, session_id, details).await
     }
 
-    fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
-        SessionStore::ensure_session(self, id, source)
+    #[allow(refining_impl_trait)]
+    async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
+        SessionStore::ensure_session(self, id, source).await
     }
 
-    fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
-        SessionStore::update_session_billing(self, id, d)
+    #[allow(refining_impl_trait)]
+    async fn update_session_billing(&self, id: &str, d: BillingDelta) -> Result<()> {
+        SessionStore::update_session_billing(self, id, d).await
     }
 
-    fn recent_messages(
+    #[allow(refining_impl_trait)]
+    async fn recent_messages(
         &self,
         session_id: &str,
         limit: usize,
-    ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::recent_messages(self, session_id, limit)
+    ) -> Result<Vec<crate::ScrolledResponseItem>> {
+        SessionStore::recent_messages(self, session_id, limit).await
     }
 
-    fn recall_message_ids(&self, session_id: &str, query: &str, limit: usize) -> Result<Vec<i64>> {
-        SessionStore::recall_message_ids(self, session_id, query, limit)
+    #[allow(refining_impl_trait)]
+    async fn recall_message_ids(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
+        SessionStore::recall_message_ids(self, session_id, query, limit).await
     }
 
-    fn scroll_context_window(
+    #[allow(refining_impl_trait)]
+    async fn scroll_context_window(
         &self,
         session_id: &str,
         around_message_id: i64,
         window_size: i64,
-    ) -> Result<Vec<crate::ScrolledMessage>> {
-        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size)
+    ) -> Result<Vec<crate::ScrolledResponseItem>> {
+        SessionStore::scroll_context_window(self, session_id, around_message_id, window_size).await
     }
 
-    fn search_messages(
+    #[allow(refining_impl_trait)]
+    async fn search_messages(
         &self,
         query: &str,
         source_filter: Option<&str>,
         role_filter: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SearchHit>> {
-        SessionStore::search_messages(self, query, source_filter, role_filter, limit)
+        SessionStore::search_messages(self, query, source_filter, role_filter, limit).await
     }
 }
 
-impl SqliteStore for SessionStore {
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn migrate(&self) -> anyhow::Result<()> {
-        self.migrate_schema()
+impl types::SqliteStore for SessionStore {
+    fn pool(&self) -> &types::SqlitePool {
+        &self.pool
     }
 }
 
-/// 读取已有库的 schema 版本；无法读取时视为 0。
-fn peek_schema_version(path: &Path) -> Result<i32> {
-    let conn = Connection::open(path)?;
-    let has: bool = conn.query_row(
-        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_version'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has {
-        return Ok(0);
-    }
-    let version: Option<i32> = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
-            row.get(0)
-        })
-        .optional()?;
-    Ok(version.unwrap_or(0))
-}
-
-/// 删除旁路旧 `sessions.db`（不再导入）。
-fn discard_sidecar_sessions_db(sessions_dir: &Path) {
-    let base = sessions_dir.join("sessions.db");
-    types::delete_sqlite_files(&base);
-}
-
-pub(crate) fn is_unique_constraint(err: &rusqlite::Error) -> bool {
+pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
     match err {
-        rusqlite::Error::SqliteFailure(e, _) => {
-            e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
-        }
+        sqlx::Error::Database(e) => e.code().is_some_and(|c| c == "2067"),
         _ => false,
     }
 }
@@ -402,179 +440,3 @@ pub(crate) fn escape_fts5_query(query: &str) -> String {
 }
 
 pub(crate) use types::truncate_chars;
-
-pub(crate) fn activities_from_tool_calls(tool_calls: Option<&Value>) -> Vec<ChatActivityStored> {
-    let Some(Value::Array(arr)) = tool_calls else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|tc| {
-            let id = tc
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            if id.is_empty() {
-                return None;
-            }
-            // OpenAI 形状可能是 name 在顶层，或 function.name
-            let title = tc
-                .get("name")
-                .and_then(|v| v.as_str())
-                .or_else(|| {
-                    tc.get("function")
-                        .and_then(|f| f.get("name"))
-                        .and_then(|v| v.as_str())
-                })
-                .unwrap_or("tool")
-                .to_string();
-            let input = tc
-                .get("arguments")
-                .cloned()
-                .or_else(|| tc.get("function").and_then(|f| f.get("arguments")).cloned())
-                .map(|args| match args {
-                    Value::String(s) => s,
-                    other => other.to_string(),
-                });
-            Some(ChatActivityStored {
-                id,
-                kind: "tool".into(),
-                title,
-                input,
-                output: None,
-                status: Some("running".into()),
-                media: None,
-            })
-        })
-        .collect()
-}
-
-/// 将同轮连续 assistant 气泡合并为一条（工具循环落盘会产生多条）。
-pub(crate) fn coalesce_consecutive_assistants(
-    messages: Vec<ChatHistoryMessage>,
-) -> Vec<ChatHistoryMessage> {
-    let mut out: Vec<ChatHistoryMessage> = Vec::with_capacity(messages.len());
-    for m in messages {
-        if m.role != "assistant" {
-            out.push(m);
-            continue;
-        }
-        let Some(prev) = out.last_mut().filter(|p| p.role == "assistant") else {
-            out.push(m);
-            continue;
-        };
-        let contents = [prev.content.as_str(), m.content.as_str()]
-            .into_iter()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>();
-        prev.content = contents.join("\n\n");
-        merge_history_activities(&mut prev.activities, m.activities);
-        let prev_seg_len = prev
-            .segments
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        let next_seg_len = m
-            .segments
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        if next_seg_len >= prev_seg_len && next_seg_len > 0 {
-            prev.segments = m.segments;
-        }
-        let prev_surf_len = prev
-            .ui_surfaces
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        let next_surf_len = m
-            .ui_surfaces
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-        if next_surf_len >= prev_surf_len && next_surf_len > 0 {
-            prev.ui_surfaces = m.ui_surfaces;
-        }
-        if let Some(r) = m.reasoning.filter(|s| !s.trim().is_empty()) {
-            prev.reasoning = Some(r);
-        }
-    }
-    out
-}
-
-fn merge_history_activities(dest: &mut Vec<ChatActivityStored>, incoming: Vec<ChatActivityStored>) {
-    for act in incoming {
-        if let Some(prev) = dest.iter_mut().find(|a| a.id == act.id) {
-            if act.output.is_some() {
-                prev.output = act.output;
-            }
-            if act.input.is_some() {
-                prev.input = act.input;
-            }
-            if act.media.is_some() {
-                prev.media = act.media;
-            }
-            if act.status.is_some() {
-                prev.status = act.status;
-            }
-            if prev.title == "tool" && act.title != "tool" {
-                prev.title = act.title;
-            }
-        } else {
-            dest.push(act);
-        }
-    }
-}
-
-pub(crate) fn attach_tool_output(
-    assistant: &mut ChatHistoryMessage,
-    call_id: Option<&str>,
-    output: Option<String>,
-    tool_name: Option<&str>,
-    media: Option<Value>,
-) {
-    if let Some(cid) = call_id {
-        if let Some(act) = assistant.activities.iter_mut().find(|a| a.id == cid) {
-            act.output = output;
-            act.status = Some("done".into());
-            if media.is_some() {
-                act.media = media;
-            }
-            if act.title == "tool" {
-                if let Some(name) = tool_name {
-                    act.title = name.to_string();
-                }
-            }
-            return;
-        }
-    }
-    // 无匹配 skeleton：按顺序挂到第一个尚无 output 的 activity，或追加。
-    if let Some(act) = assistant.activities.iter_mut().find(|a| a.output.is_none()) {
-        if let Some(cid) = call_id {
-            act.id = cid.to_string();
-        }
-        if let Some(name) = tool_name {
-            act.title = name.to_string();
-        }
-        act.output = output;
-        act.status = Some("done".into());
-        if media.is_some() {
-            act.media = media;
-        }
-        return;
-    }
-    assistant.activities.push(ChatActivityStored {
-        id: call_id.unwrap_or("unknown").to_string(),
-        kind: "tool".into(),
-        title: tool_name.unwrap_or("tool").to_string(),
-        input: None,
-        output,
-        status: Some("done".into()),
-        media,
-    });
-}

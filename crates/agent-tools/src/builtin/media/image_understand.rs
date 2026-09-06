@@ -17,18 +17,18 @@ use crate::context::{ImageGenCreds, ToolContext};
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Arguments for the `image_understand` tool.
+/// `image_understand` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageUnderstandArgs {
-    /// Workspace-relative paths or http(s) URLs (primary field).
+    /// 工作区相对路径或 http(s) URL（主字段）。
     #[serde(default)]
     pub image_urls: Option<Vec<String>>,
-    /// Legacy single-image field; merged into image_urls when set.
+    /// 旧版单图片字段；设置时合并到 image_urls。
     #[serde(default)]
     pub image_url: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// describe | detect | segment; default describe.
+    /// describe | detect | segment；默认 describe。
     #[serde(default)]
     pub mode: Option<String>,
 }
@@ -164,7 +164,7 @@ fn resolve_openai_image_urls(
 }
 
 /// 将用户/AI 给定的图片路径解析为本地绝对路径。
-/// - 绝对路径：拒绝含 `..` 的路径后直接使用（supports uploads dir outside workspace）。
+/// - 绝对路径：拒绝含 `..` 的路径后直接使用（支持工作区外的上传目录）。
 /// - 相对路径：经 `path_safe::resolve_safe` 解析到 workspace，防止逃逸与 symlink 攻击。
 fn resolve_local_path(ctx: &ToolContext<'_>, raw: &str) -> anyhow::Result<std::path::PathBuf> {
     let p = std::path::Path::new(raw);

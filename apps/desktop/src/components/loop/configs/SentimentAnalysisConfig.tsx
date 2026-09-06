@@ -9,7 +9,11 @@ interface ConfigProps {
   upstreamOutputs?: UpstreamOutput[];
 }
 
-export default function SentimentAnalysisConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function SentimentAnalysisConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>

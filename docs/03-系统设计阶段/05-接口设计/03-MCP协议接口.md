@@ -1,10 +1,10 @@
 # MCP 协议接口设计文档
 
-> 阶段：系统设计 | 状态：定稿 | 说明：JSON-RPC 2.0、连接生命周期
+> 阶段：系统设计 | 状态：当前 Client 契约 + Server 目标设计 | 说明：JSON-RPC 2.0、连接生命周期
 
 **协议版本**：2024-11-05  
 **传输层**：JSON-RPC 2.0 over STDIO / Streamable HTTP  
-**项目角色**：Astro Agent 同时实现 MCP 客户端（调用外部工具服务器）与 MCP 服务端（向宿主暴露自身能力）
+**项目角色**：Astro 当前只实现 MCP 客户端；下文 MCP Server 工具表是未实现的目标设计
 
 ---
 
@@ -65,7 +65,7 @@ Astro Agent 作为 MCP 客户端时，主动发起以下请求：
 
 ---
 
-## 3. 服务端侧暴露的工具列表
+## 3. 服务端侧目标工具列表（未实现）
 
 Astro Agent 作为 MCP Server 时，向宿主（如 Claude Desktop）注册以下工具：
 
@@ -158,7 +158,8 @@ Client                          Server
 
 ## 6. Rust rmcp Crate 集成方式
 
-项目使用 [`rmcp`](https://crates.io/crates/rmcp) crate（官方 Rust MCP SDK）：
+项目使用 [`rmcp`](https://crates.io/crates/rmcp) crate 实现客户端。下面的 ServerHandler 示例
+仅是目标设计，不对应当前 workspace crate：
 
 ```toml
 [dependencies]
@@ -186,6 +187,11 @@ tokio = { version = "1", features = ["full"] }
 | 认证 | 不需要 | Bearer Token / OAuth |
 | Rust 实现 | `rmcp::transport::stdio()` | `rmcp::transport::streamable_http()` + Axum |
 
-stdio 模式下，Astro Agent 在 Tauri sidecar 中以子进程形式运行 MCP Server，主进程通过管道通信；Streamable HTTP 模式下，Server 监听本地 `127.0.0.1:3000`，通过单一 `/mcp` 端点提供服务，供浏览器扩展或远程宿主接入。两种模式共享同一套工具注册逻辑，传输层通过 trait 抽象解耦。
+stdio 模式下，Astro 作为客户端启动外部 MCP Server 子进程并通过管道通信；Streamable
+HTTP 模式下，Astro 作为客户端连接 Server 明确提供的单一 `/mcp` endpoint。Astro 当前不
+监听 MCP 端口，也不自动把内部工具暴露给第三方宿主。
+
+`McpEventStreamManager` 已定义独立于 turn task 的订阅所有权、active 握手、attempt id、
+有界队列以及权限/Server 取消边界；具体 Server opener 和 Desktop 订阅 RPC 尚未接线。
 
 > **注**：旧 `/sse` + `/message` 双端点传输不受支持。历史配置必须迁移到 Server 明确提供的 Streamable HTTP `/mcp` endpoint，禁止自动转换 URL。

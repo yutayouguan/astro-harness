@@ -9,42 +9,42 @@ use crate::context::ToolContext;
 use crate::registry::ToolRegistry;
 use crate::schema::schema_for_args;
 
-/// `memory` tool actions.
+/// `memory` 工具操作类型。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MemoryAction {
-    /// Append a refined memory entry.
+    /// 追加一条精炼的记忆条目。
     Add,
-    /// Replace an entry by unique substring match.
+    /// 按唯一子串匹配替换一条条目。
     Replace,
-    /// Remove an entry by unique substring match.
+    /// 按唯一子串匹配移除一条条目。
     Remove,
 }
 
-/// Memory write target: `memory` → MEMORY.md; `user` → USER.md.
+/// 记忆写入目标：`memory` → MEMORY.md；`user` → USER.md。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
 pub enum MemoryTarget {
-    /// Long-term refined memory (`MEMORY.md`).
+    /// 长期精炼记忆（`MEMORY.md`）。
     #[default]
     Memory,
-    /// User profile (`USER.md`).
+    /// 用户画像（`USER.md`）。
     User,
 }
 
-/// Arguments for the `memory` tool.
+/// `memory` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MemoryArgs {
-    /// Action: `add` / `replace` / `remove`.
+    /// 操作：`add` / `replace` / `remove`。
     pub action: MemoryAction,
-    /// Write target; default `memory`.
+    /// 写入目标；默认 `memory`。
     #[serde(default)]
     pub target: MemoryTarget,
-    /// New content for add / replace.
+    /// add / replace 的新内容。
     #[serde(default)]
     pub content: Option<String>,
-    /// Substring used to locate the entry for replace / remove.
+    /// 用于定位 replace / remove 条目的子串。
     #[serde(default)]
     pub old_text: Option<String>,
 }

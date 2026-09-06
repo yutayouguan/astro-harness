@@ -1,6 +1,11 @@
 import { TextField, SelectField, cfgStr } from "./ConfigField";
 import ProviderModelSelect from "./ProviderModelSelect";
-import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
+import {
+  KeyValueEditor,
+  KvEntry,
+  jsonToKvEntries,
+  kvEntriesToObj,
+} from "./StructuredEditors";
 import type { UpstreamOutput } from "./upstreamOutputs";
 
 interface ConfigProps {
@@ -22,7 +27,11 @@ const LANGUAGE_OPTIONS = [
   { value: "ar", label: "العربية" },
 ];
 
-export default function TranslationConfig({ config, onChange, upstreamOutputs }: ConfigProps) {
+export default function TranslationConfig({
+  config,
+  onChange,
+  upstreamOutputs,
+}: ConfigProps) {
   const up = upstreamOutputs ?? [];
   return (
     <>
@@ -56,7 +65,9 @@ export default function TranslationConfig({ config, onChange, upstreamOutputs }:
       <KeyValueEditor
         label="术语表"
         value={jsonToKvEntries(config.glossary)}
-        onChange={(v: KvEntry[]) => onChange({ ...config, glossary: kvEntriesToObj(v) })}
+        onChange={(v: KvEntry[]) =>
+          onChange({ ...config, glossary: kvEntriesToObj(v) })
+        }
         keyPlaceholder="原文术语"
         valuePlaceholder="翻译"
         hint="指定专有名词的固定翻译"

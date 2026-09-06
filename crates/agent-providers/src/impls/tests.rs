@@ -14,25 +14,25 @@ use crate::traits::client::{ChatClient, ProviderClient};
 #[test]
 fn deepseek_has_chat() {
     let client = ProviderClient::new("test-key", DeepSeek);
-    let _model = client.completion_model("deepseek-chat");
+    let _model = client.chat_completion_model("deepseek-chat");
 }
 
 #[test]
 fn openai_has_chat() {
     let client = ProviderClient::new("test-key", OpenAI);
-    let _model = client.completion_model("gpt-4o");
+    let _model = client.chat_completion_model("gpt-4o");
 }
 
 #[test]
 fn ollama_has_chat_no_key() {
     let client = ProviderClient::new("", Ollama);
-    let _model = client.completion_model("llama3.3");
+    let _model = client.chat_completion_model("llama3.3");
 }
 
 #[test]
 fn zhipu_has_chat() {
     let client = ProviderClient::new("test-key", Zhipu);
-    let _model = client.completion_model("glm-4");
+    let _model = client.chat_completion_model("glm-4");
 }
 
 // ── finalize_body 单元测试 ──
@@ -101,7 +101,7 @@ mod finalize_body {
     }
 
     #[test]
-    fn azure_removes_model() {
+    fn azure_openai_v1_keeps_model() {
         let az = crate::impls::azure::Azure;
         let mut body = json!({
             "model": "gpt-4o",
@@ -109,7 +109,7 @@ mod finalize_body {
             "stream": true
         });
         az.finalize_body(&mut body);
-        assert!(body.get("model").is_none());
+        assert_eq!(body["model"], "gpt-4o");
         assert_eq!(body["stream"], true);
     }
 

@@ -53,7 +53,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 ## Workspace Crate Map
 
-仓库按职责分为 7 个顶层目录，共 25 个 crate：
+仓库按职责分为 7 个顶层目录，共 28 个 crate：
 
 ### core/ — Agent 大脑
 
@@ -87,11 +87,11 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-types` | `types` | 跨 crate 共享类型：`Message`、`Role`、`ToolCall`、`MediaAsset`、`ChatTarget`、`ModelSpec`、SQLite helpers、tool-spill。无业务逻辑。 |
+| `crates/agent-types` | `types` | 跨 crate 共享类型：`ModelTarget`、`model_tool::ToolCall`、`MediaAsset`、`ModelSpec`、SQLite helpers、tool-spill。Agent history 类型归 `agent-protocol`。 |
 | `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
 | `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v17，FTS5）— 消息、会话、billing、FTS 召回。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v22，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 
@@ -99,7 +99,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`data/cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
 | `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger、AI、Media、FlowControl、DataProcessing、Action），DAG 执行引擎、变量解析、运行 DB。持久化 `~/.astro/workflows/workflows.json`。 |
 
 ### extensions/ — 可插拔扩展
@@ -134,16 +134,31 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
   → run_multi_turn_stream() (streaming 路径)
   → run_headless_multi_turn() (cron/无流式路径)
       ├─ loop: maintain_tool_context → reload → LLM stream → accumulate
-      ├─ ToolCallAccumulator: native tool_call_deltas + XML <tool_call> 统一解析
+      ├─ ToolCallAccumulator: 仅累积原生 tool_call_deltas（自由文本不参与工具识别）
       ├─ record_assistant_message_with_tools()
       ├─ handle_tool_call_async() × N → record_tool_result_with_id()
       └─ 无工具调用时 → 返回最终文本
 ```
 
+### 网络访问
+
+网络默认放开，不需要任何预设、审批或域名白名单：
+
+- 子进程（`terminal`、`code_exec`、后台 job）：`build_command_sandbox_policy_with_roots`
+  统一给出 `network_access = true`，macOS seatbelt 直接 `(allow network*)`，Linux 不再
+  `--unshare-net`，Windows 不写 offline 标记。
+- 进程内 HTTP 工具（`web_search`、`web_fetch`）：直接发请求，无一次性审批卡、无 profile
+  域名裁决。唯一保留的检查是 `assert_public_http_url` 的 SSRF 防护——只允许 http/https，
+  并拦截本机、私网与云 metadata 目标（重定向每一跳同样校验）。
+- 远端 MCP（StreamableHttp）随之默认可连。
+
+权限 profile 只管文件系统写入与命令沙箱模式，不再决定能否联网。
+
 ### Managed subprocess network
 
-前台 `terminal action=run` 与 `code_exec` 在全局 proxy 开启且选中 custom
-profile 自身 `network.enabled=true` 时执行以下 attempt-scoped 链路：
+只有显式在 `~/.astro/config.yaml` 里开启 `network_proxy.enabled` 并让选中 custom
+profile 自身 `network.enabled=true` 时，前台 `terminal action=run` 与 `code_exec`
+才把流量收回受管代理，执行以下 attempt-scoped 链路：
 
 ```text
 ToolOrchestrator::run
@@ -160,6 +175,9 @@ ToolOrchestrator::run
 `:danger-full-access`、非进程工具、进程内 HTTP、MCP/provider 和后台 terminal job
 都不共享该 lease。结构化网络拒绝不进入文件系统 escalation；502/DNS/dial
 错误不是 policy denial。
+
+macOS managed sandbox 在存在 proxy lease 时自动允许 DNS，不要求用户通过
+`allow_local_binding` 一并开放本地回环能力。
 
 ### agent-core 模块组织
 
@@ -180,11 +198,11 @@ rollout snapshot + live boundary。
 
 ### Provider Fallback 链
 
-`AgentLoop.chat_targets: Vec<ChatTarget>` — primary + 最多 `MAX_CHAT_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。五类 `AuxiliaryTask`（Dreaming、Compaction、SmartApproval、TitleGen 等）各有独立目标链，缺省回退到 primary。
+`AgentLoop.model_targets: Vec<ModelTarget>` — primary + 最多 `MAX_MODEL_FALLBACKS` 个备用。首个 chunk 前失败则自动切换到下一目标。五类 `AuxiliaryTask`（Dreaming、Compaction、SmartApproval、TitleGen 等）各有独立目标链，缺省回退到 primary。
 
 ### 三总线 Hook 系统
 
-Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`、`TransformToolResult`、`TransformLlmOutput`、`PostLlmCall`、`PostToolUse`。事件名只接受 canonical 精确匹配；Hook 返回值：`Continue`、`Block`、`Modify`、`ReplaceText`、`InjectContext`、`KeepGoing`。
+Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`、`TransformToolResult`、`TransformFinalLlmOutput`、`PostLlmCall`、`PostToolUse`。事件名只接受 canonical 精确匹配；Hook 返回值：`Continue`、`Block`、`Modify`、`ReplaceText`、`InjectContext`、`KeepGoing`。
 
 ### 上下文压缩
 
@@ -196,7 +214,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 ### Agent Threads
 
-`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/subagents-v2.db`，真实对话写入 SessionStore；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
+`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/data/subagents-v2.db`，真实对话写入 `~/.astro/data/state.db`；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。root-scoped `AgentControl` 共享最新 service tier，子孙 Agent 的新 turn 在 OpenAI/Codex backend 上继承该 tier，不支持的 backend 不透传。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
 
 ### 可视化工作流引擎
 
@@ -212,33 +230,35 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
     USER.md            # 用户画像（快照）
     config.json        # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
-  sessions/
-    state.db           # 消息、会话、FTS5（schema v17）
+  data/
+    state.db           # ResponseItem、会话、FTS5（schema v22）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
-  cron/                # cron.db + jobs.json
+    subagents-v2.db    # Agent Graph、mailbox、状态事件与恢复元数据
+    usage.db           # 用量和成本事件
+    cron_v1.db         # Cron 运行记录
+  sessions/rollouts/   # append-only 事件事实源
+  cron/                # jobs.json
   workflows/workflows.json
-  subagents-v2.db       # Agent Graph、mailbox、状态事件与恢复元数据
-  usage/usage.db
 ```
 
 ## Key Invariants
 
-1. **角色顺序**：`session_messages` 中相邻消息不得连续出现相同 role（user/user 或 assistant/assistant）。由 `validate_message_order()` 强制。
+1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
 
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零（`begin_user_turn`）；单条用户消息内上限 `multi_turn`（默认 90，对齐 Hermes）。`increment_tool_round()` 在耗尽时返回 `MaxDepthError`。
 
-3. **streaming 不变量**：每轮 assistant 回复必须先写入 `session_messages`（含 `tool_calls` 字段）再执行工具；`code_exec` 独占轮可退还预算；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
+3. **streaming 不变量**：模型产生的 assistant/call items 必须先写入 `response_items`，再执行工具并写入 matching output item；`code_exec` 独占轮可退还预算；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
 
-4. **Tool spill**：tool 结果 ≥ `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，`compressed_content` 存 stub view，provider history 用 stub 而非原文。
+4. **Tool spill**：tool 结果 ≥ `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，item metadata 的 `astro_compressed_output` 存 stub view，provider history 用 stub 而非原文。
 
 5. **Skill soft-alias**：模型把 skill 名当工具调用时，若工具注册表中不存在但 skill 已安装且 enabled，自动改写为 `skills(action=load, skill_id=…)`。
 
 6. **MCP 工具名**：`mcp__{server_id}__{tool_name}` 前缀，`is_mcp_tool_name()` 检测。
 
-7. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system（`system_guidance`），用户消息不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。schema v17 起剥离历史 Mode 后缀。
+7. **交互模式**：`interaction_mode` 经 Agent turn 下传；行为说明只进 Responses `instructions`，用户 item 不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。
 
-8. **Managed network**：proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
+8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 
 ## Data Flow: cron.rs → headless.rs
 

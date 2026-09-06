@@ -13,7 +13,7 @@ use tokio::sync::Notify;
 
 use agent::runtime::{AgentConfig, AgentLoop};
 use agent::streaming::{
-    run_multi_turn_stream_with_chat_fn, run_thread_turn_events, ChatOverride,
+    run_multi_turn_stream_with_responses_fn, run_thread_turn_events, ResponsesOverride,
     StreamedAssistantContent, ThreadTurnEventArgs,
 };
 use agent::TurnInput;
@@ -47,14 +47,14 @@ enum ProjectedStreamItem {
 
 struct ProjectedStreamArgs {
     session: Arc<agent::Session>,
-    targets: Vec<types::ChatTarget>,
+    targets: Vec<types::ModelTarget>,
     base_config: ProviderConfig,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
     pause: Arc<PauseControl>,
     hitl_gate: Option<Arc<agent::HitlGate>>,
     tx: tokio::sync::mpsc::Sender<anyhow::Result<ProjectedStreamItem>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 }
 
 fn project_event(event: Event) -> Vec<ProjectedStreamItem> {
@@ -158,12 +158,23 @@ fn project_event(event: Event) -> Vec<ProjectedStreamItem> {
         )],
         EventMsg::TokenCount(tokens) => vec![ProjectedStreamItem::Assistant(
             StreamedAssistantContent::FinalUsage(Usage {
-                input_tokens: u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX),
+                input_tokens: u32::try_from(if tokens.input_tokens_include_cache {
+                    tokens.uncached_input_tokens
+                } else {
+                    tokens.input_tokens
+                })
+                .unwrap_or(u32::MAX),
                 output_tokens: u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX),
                 cache_read_tokens: u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX),
                 cache_write_tokens: u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX),
                 reasoning_tokens: u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX),
                 request_count: u32::try_from(tokens.request_count).unwrap_or(u32::MAX),
+                reported_total_tokens: tokens
+                    .provider_total_tokens
+                    .and_then(|value| u32::try_from(value).ok()),
+                cache_read_reported: tokens.cache_read_reported,
+                cache_write_reported: tokens.cache_write_reported,
+                reasoning_reported: tokens.reasoning_reported,
             }),
         )],
         EventMsg::Error(error) => vec![ProjectedStreamItem::Error(error.message)],
@@ -233,14 +244,14 @@ async fn run_projected_stream(args: ProjectedStreamArgs) {
         pause: args.pause,
         hitl_gate: args.hitl_gate,
         tx: event_tx,
-        chat_override: args.chat_override,
+        responses_override: args.responses_override,
     });
     tokio::join!(run, projected);
 }
 
-async fn run_projected_stream_with_chat_fn(
+async fn run_projected_stream_with_responses_fn(
     session: Arc<agent::Session>,
-    chat_fn: ChatOverride,
+    responses_fn: ResponsesOverride,
     config: ProviderConfig,
     system_prompt: String,
     pause: Arc<PauseControl>,
@@ -249,13 +260,12 @@ async fn run_projected_stream_with_chat_fn(
 ) {
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: config.model.clone(),
             api_key: config.api_key.clone(),
             base_url: config.base_url.clone().unwrap_or_default(),
-            api_mode: String::new(),
         }],
         base_config: config,
         input: Vec::new(),
@@ -263,7 +273,7 @@ async fn run_projected_stream_with_chat_fn(
         pause,
         hitl_gate,
         tx,
-        chat_override: Some(chat_fn),
+        responses_override: Some(responses_fn),
     })
     .await;
 }
@@ -273,12 +283,13 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "scripted-tool-turn";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -296,7 +307,7 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
             },
         ],
     ]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -325,10 +336,181 @@ async fn scripted_tool_turn_emits_item_lifecycle_and_one_terminal() {
     assert_eq!(
         events
             .iter()
+            .filter(|event| matches!(
+                &event.msg,
+                EventMsg::ItemStarted(item)
+                    if matches!(&item.item, TurnItem::AgentMessage(_))
+            ))
+            .count(),
+        1,
+        "the native tool-only round must not create an empty assistant item"
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(
+                &event.msg,
+                EventMsg::ItemCompleted(item)
+                    if matches!(&item.item, TurnItem::AgentMessage(_))
+            ))
+            .count(),
+        1,
+        "only the final text response should complete an assistant item"
+    );
+    assert_eq!(
+        events
+            .iter()
             .filter(|event| event.msg.is_terminal())
             .count(),
         1
     );
+}
+
+#[tokio::test]
+async fn legacy_xml_tool_markup_is_plain_text_and_never_executes() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "legacy-xml-is-text";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let legacy_markup =
+        "<tool_call>{\"name\":\"echo\",\"arguments\":{\"text\":\"hello\"}}</tool_call>";
+    let chat = scripted_responses(vec![vec![
+        StreamChunk::Text(legacy_markup.into()),
+        StreamChunk::Done {
+            finish_reason: "stop".into(),
+        },
+    ]]);
+
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "use the tool".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    let visible_text = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::AgentMessageContentDelta(delta) => Some(delta.delta.as_str()),
+            _ => None,
+        })
+        .collect::<String>();
+    assert_eq!(visible_text, legacy_markup);
+    assert!(!events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::ItemStarted(item)
+            if matches!(&item.item, TurnItem::DynamicToolCall(tool) if tool.name == "echo")
+    )));
+
+    let history = session.clone_history().await;
+    assert!(history
+        .iter()
+        .any(|message| message.text() == legacy_markup));
+    assert!(history
+        .iter()
+        .all(|item| !matches!(item, agent_protocol::ResponseItem::FunctionCall { .. })));
+}
+
+#[tokio::test]
+async fn async_user_message_is_a_durable_item_separate_from_the_final_answer() {
+    let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
+    let turn_id = "async-user-message";
+    let turn_context = session.create_turn_context(turn_id.into()).await;
+    let chat = scripted_responses(vec![
+        vec![
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call-async".into(),
+                name: "request_user_input_async".into(),
+                signature: None,
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"questions":[{"title":"Choose a target","options":["A","B"]}]}"#
+                    .into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        vec![
+            StreamChunk::Text("Final answer".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
+        Arc::clone(&session),
+        turn_context,
+        vec![TurnInput {
+            content: "do the work".into(),
+            image_data_urls: Vec::new(),
+            client_message_id: None,
+        }],
+        chat,
+    ));
+    let events = common::collect_through_terminal(&thread, turn_id).await;
+    run.await.unwrap().unwrap();
+
+    let async_events = events
+        .iter()
+        .filter_map(|event| match &event.msg {
+            EventMsg::ItemStarted(item) | EventMsg::ItemCompleted(item) => match &item.item {
+                TurnItem::AgentMessage(message)
+                    if message.delivery == Some(agent_protocol::AgentMessageDelivery::Async) =>
+                {
+                    Some((
+                        message.id.clone(),
+                        message.content.clone(),
+                        message.questions.clone(),
+                    ))
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        async_events,
+        vec![
+            (
+                "call-async:async-message".to_string(),
+                "Choose a target\n- A\n- B".to_string(),
+                Some(vec![agent_protocol::AsyncUserInputQuestion {
+                    title: "Choose a target".into(),
+                    options: Some(vec!["A".into(), "B".into()]),
+                }]),
+            ),
+            (
+                "call-async:async-message".to_string(),
+                "Choose a target\n- A\n- B".to_string(),
+                Some(vec![agent_protocol::AsyncUserInputQuestion {
+                    title: "Choose a target".into(),
+                    options: Some(vec!["A".into(), "B".into()]),
+                }]),
+            ),
+        ]
+    );
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::ItemCompleted(item)
+            if matches!(
+                &item.item,
+                TurnItem::DynamicToolCall(tool)
+                    if tool.id == "call-async"
+                        && tool.output == Some(serde_json::json!("{\"accepted\":true}"))
+            )
+    )));
+    assert!(events.iter().any(|event| matches!(
+        &event.msg,
+        EventMsg::AgentMessageContentDelta(delta) if delta.delta == "Final answer"
+    )));
 }
 
 fn assert_text_item_lifecycle(
@@ -399,7 +581,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "stable-tool-ids";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -408,7 +590,8 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "provider-call-1".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -422,7 +605,8 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "provider-call-2".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -435,7 +619,7 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
             },
         ],
     ]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -517,8 +701,8 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
     let history = session.clone_history().await;
     let recorded_call_ids = history
         .iter()
-        .flat_map(|message| message.tool_calls.iter().flatten())
-        .map(|call| call.id.as_str())
+        .filter(|item| !item.is_tool_output())
+        .filter_map(|item| item.call_id())
         .collect::<Vec<_>>();
     assert_eq!(
         recorded_call_ids,
@@ -526,7 +710,8 @@ async fn tool_argument_events_keep_stable_ids_across_late_start_and_rounds() {
     );
     let recorded_result_ids = history
         .iter()
-        .filter_map(|message| message.tool_call_id.as_deref())
+        .filter(|item| item.is_tool_output())
+        .filter_map(|item| item.call_id())
         .collect::<Vec<_>>();
     assert_eq!(
         recorded_result_ids,
@@ -539,7 +724,7 @@ async fn argument_only_malformed_tool_delta_emits_no_orphan_request() {
     let (_dir, session, thread, _recorder, _path) = common::new_thread().await;
     let turn_id = "malformed-tool-delta";
     let turn_context = session.create_turn_context(turn_id.into()).await;
-    let chat = scripted_chat(vec![vec![
+    let chat = scripted_responses(vec![vec![
         StreamChunk::ToolCallDelta {
             index: 0,
             arguments: r#"{"command":"pwd"}"#.into(),
@@ -548,7 +733,7 @@ async fn argument_only_malformed_tool_delta_emits_no_orphan_request() {
             finish_reason: "tool_calls".into(),
         },
     ]]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -583,15 +768,20 @@ async fn billing_token_count_total_includes_cached_tokens() {
         cache_write_tokens: 2,
         reasoning_tokens: 0,
         request_count: 1,
+        reported_total_tokens: Some(21),
+        cache_read_reported: true,
+        cache_write_reported: true,
+        reasoning_reported: true,
+        ..Default::default()
     };
-    let chat = scripted_chat(vec![vec![
+    let chat = scripted_responses(vec![vec![
         StreamChunk::Text("done".into()),
         StreamChunk::Usage(usage),
         StreamChunk::Done {
             finish_reason: "stop".into(),
         },
     ]]);
-    let run = tokio::spawn(run_multi_turn_stream_with_chat_fn(
+    let run = tokio::spawn(run_multi_turn_stream_with_responses_fn(
         Arc::clone(&session),
         turn_context,
         vec![TurnInput {
@@ -612,6 +802,31 @@ async fn billing_token_count_total_includes_cached_tokens() {
         })
         .expect("billing TokenCount event");
     assert_eq!(billing.total_tokens, 21);
+    assert_eq!(billing.input_tokens, 16);
+    assert_eq!(billing.uncached_input_tokens, 10);
+    assert_eq!(billing.provider_total_tokens, Some(21));
+    assert!(billing.cache_read_reported);
+
+    let context = events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.msg {
+            EventMsg::ContextUsage(context) => Some(context),
+            _ => None,
+        })
+        .expect("provider-calibrated context usage event");
+    assert_eq!(
+        context.source,
+        agent_protocol::ContextUsageSource::ProviderReported
+    );
+    assert_eq!(context.total_tokens, 21);
+    assert_eq!(
+        context
+            .latest_usage
+            .as_ref()
+            .map(|usage| usage.cache_read_tokens),
+        Some(4)
+    );
 }
 
 #[tokio::test]
@@ -622,6 +837,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "media-tool-session".into(),
     )
+    .await
     .unwrap();
     agent.tool_registry_mut().register_dynamic(
         types::ToolEntry {
@@ -654,14 +870,17 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     session
-        .record_items(vec![types::message::Message::user("generate media")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text(
+            "generate media",
+        )])
         .await;
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "media-call".into(),
                 name: "test_media".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -679,7 +898,7 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_projected_stream_with_chat_fn(
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -757,6 +976,116 @@ async fn media_tool_result_survives_rollout_and_legacy_adapter() {
 }
 
 #[tokio::test]
+async fn namespaced_tool_round_trips_from_prompt_to_runtime_and_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut agent = AgentLoop::with_session_id(
+        AgentConfig::with_defaults(dir.path().to_path_buf()),
+        "namespaced-tool-round-trip".into(),
+    )
+    .await
+    .unwrap();
+    let executions = Arc::new(AtomicUsize::new(0));
+    let execution_count = Arc::clone(&executions);
+    agent.tool_registry_mut().register_dynamic(
+        types::ToolEntry {
+            name: "clock_probe".into(),
+            namespace: "clock".into(),
+            toolset: "clock".into(),
+            description: "Probe the clock namespace".into(),
+            schema: serde_json::json!({"type": "object", "properties": {}}),
+            ..types::ToolEntry::lifecycle_defaults()
+        },
+        Arc::new(move |_name, _args| {
+            execution_count.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok(types::ToolOutput::from("probe-ok")) })
+        }),
+    );
+    let session = Arc::new(agent);
+    session
+        .record_items(vec![agent_protocol::ResponseItem::user_text("probe")])
+        .await;
+
+    let seen_tools = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen_tools_for_response = Arc::clone(&seen_tools);
+    let round = Arc::new(AtomicUsize::new(0));
+    let response_round = Arc::clone(&round);
+    let responses_fn: ResponsesOverride = Arc::new(move |_input, tools, _config| {
+        seen_tools_for_response.lock().unwrap().push(tools);
+        let current = response_round.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let chunks = if current == 0 {
+                vec![
+                    StreamChunk::ResponseItemDone(agent_protocol::ResponseItem::FunctionCall {
+                        id: Some("item-clock-probe".into()),
+                        name: "probe".into(),
+                        namespace: Some("clock".into()),
+                        arguments: "{}".into(),
+                        encrypted_function_args: None,
+                        call_id: "call-clock-probe".into(),
+                        internal_chat_message_metadata_passthrough: None,
+                    }),
+                    StreamChunk::Done {
+                        finish_reason: "tool_calls".into(),
+                    },
+                ]
+            } else {
+                vec![
+                    StreamChunk::Text("done".into()),
+                    StreamChunk::Done {
+                        finish_reason: "stop".into(),
+                    },
+                ]
+            };
+            Ok(Box::pin(futures::stream::iter(
+                chunks.into_iter().map(Ok::<_, anyhow::Error>),
+            )) as CompletionStream)
+        })
+    });
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
+        Arc::clone(&session),
+        responses_fn,
+        ProviderConfig::default(),
+        "system".into(),
+        PauseControl::new(),
+        None,
+        tx,
+    ));
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+    run.await.unwrap();
+
+    assert_eq!(executions.load(Ordering::SeqCst), 1);
+    let first_tools = seen_tools.lock().unwrap();
+    assert!(first_tools[0].iter().any(|spec| {
+        spec.get("type").and_then(serde_json::Value::as_str) == Some("namespace")
+            && spec.get("name").and_then(serde_json::Value::as_str) == Some("clock")
+            && spec
+                .get("tools")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|tools| {
+                    tools.iter().any(|tool| {
+                        tool.get("name").and_then(serde_json::Value::as_str) == Some("probe")
+                    })
+                })
+    }));
+    drop(first_tools);
+
+    let history = session.clone_history().await;
+    assert!(history.iter().any(|item| matches!(
+        item,
+        agent_protocol::ResponseItem::FunctionCallOutput {
+            call_id: Some(call_id),
+            name: Some(name),
+            namespace: Some(namespace),
+            ..
+        } if call_id == "call-clock-probe" && name == "probe" && namespace == "clock"
+    )));
+}
+
+#[tokio::test]
 async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
     const COMPLETED_EVENT_MAX_BYTES: usize = 1024 * 1024;
 
@@ -773,6 +1102,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         AgentConfig::with_defaults(dir.path().to_path_buf()),
         "large-media-tool-session".into(),
     )
+    .await
     .unwrap();
     agent.tool_registry_mut().register_dynamic(
         types::ToolEntry {
@@ -815,12 +1145,13 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         .await
         .unwrap();
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
-    let chat = scripted_chat(vec![
+    let chat = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "large-media-call".into(),
                 name: "test_large_media".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -838,7 +1169,7 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
         ],
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let run = tokio::spawn(run_projected_stream_with_chat_fn(
+    let run = tokio::spawn(run_projected_stream_with_responses_fn(
         Arc::clone(&session),
         chat,
         ProviderConfig::default(),
@@ -877,14 +1208,28 @@ async fn oversized_inline_media_is_bounded_only_in_completed_event_copy() {
     let history = session.clone_history().await;
     let recorded_tool = history
         .iter()
-        .find(|message| message.role == types::message::Role::Tool)
+        .find(|item| item.is_tool_output())
         .expect("original tool history");
-    assert_eq!(recorded_tool.content_str(), escape_heavy_text);
-    assert!(recorded_tool.media.iter().any(|asset| matches!(
+    assert_eq!(recorded_tool.content_str(), escape_heavy_text.as_str());
+    let recorded_media: Vec<types::MediaAsset> = recorded_tool
+        .metadata()
+        .and_then(|metadata| metadata.get("astro_media"))
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .unwrap()
+        .unwrap_or_default();
+    assert!(recorded_media.iter().any(|asset| matches!(
         &asset.reference,
         types::MediaRef::DataUrl(value) if value == &large_data_url
     )));
-
+    assert_eq!(
+        recorded_tool
+            .metadata()
+            .and_then(|metadata| metadata.get("astro_tool_status"))
+            .and_then(serde_json::Value::as_str),
+        Some("completed")
+    );
     let rollout = agent_rollout::read_rollout(&path).await.unwrap();
     let persisted = rollout
         .iter()
@@ -916,10 +1261,10 @@ fn assert_bounded_large_media_payload(serialized: Vec<u8>, sentinel: &str, max_b
     assert!(!serialized.contains("data:image/png;base64"));
 }
 
-/// 从脚本化轮次列表构造 [`ChatOverride`]。
+/// 从脚本化轮次列表构造 [`ResponsesOverride`]。
 ///
 /// 每次调用消费一轮 chunks；轮次用尽后返回默认 "done" 回复。
-fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
+fn scripted_responses(rounds: Vec<Vec<StreamChunk>>) -> ResponsesOverride {
     let rounds = Arc::new(tokio::sync::Mutex::new(rounds));
     Arc::new(move |_msgs, _tools, _cfg| {
         let rounds = rounds.clone();
@@ -943,11 +1288,11 @@ fn scripted_chat(rounds: Vec<Vec<StreamChunk>>) -> ChatOverride {
 }
 
 /// Boom 型 chat override：每次调用均返回错误。
-fn boom_chat() -> ChatOverride {
+fn boom_responses() -> ResponsesOverride {
     Arc::new(move |_msgs, _tools, _cfg| Box::pin(async move { Err(anyhow::anyhow!("boom")) }))
 }
 
-fn pending_chat() -> ChatOverride {
+fn pending_responses() -> ResponsesOverride {
     Arc::new(move |_msgs, _tools, _cfg| {
         Box::pin(async move { Ok(Box::pin(futures::stream::pending()) as CompletionStream) })
     })
@@ -957,18 +1302,19 @@ fn pending_chat() -> ChatOverride {
 async fn regular_task_owns_initial_input_persistence() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let session =
-        Arc::new(AgentLoop::with_session_id(config, "regular-task-input".into()).unwrap());
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "regular-task-input".into())
+            .await
+            .unwrap(),
+    );
     let saw_initial_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let chat_fn: ChatOverride = {
+    let responses_fn: ResponsesOverride = {
         let saw_initial_input = Arc::clone(&saw_initial_input);
         Arc::new(move |messages, _tools, _config| {
             let saw_initial_input = Arc::clone(&saw_initial_input);
             Box::pin(async move {
                 saw_initial_input.store(
-                    messages
-                        .iter()
-                        .any(|message| message.text_content() == "owned by regular task"),
+                    messages.contains_text("owned by regular task"),
                     Ordering::SeqCst,
                 );
                 Ok(Box::pin(futures::stream::iter(vec![
@@ -984,13 +1330,12 @@ async fn regular_task_owns_initial_input_persistence() {
 
     run_projected_stream(ProjectedStreamArgs {
         session: Arc::clone(&session),
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig {
             model: "test".into(),
@@ -1005,7 +1350,7 @@ async fn regular_task_owns_initial_input_persistence() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(chat_fn),
+        responses_override: Some(responses_fn),
     })
     .await;
     while rx.recv().await.is_some() {}
@@ -1020,19 +1365,21 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.max_turns = 0;
-    let session =
-        Arc::new(AgentLoop::with_session_id(config, "regular-task-prepare-error".into()).unwrap());
+    let session = Arc::new(
+        AgentLoop::with_session_id(config, "regular-task-prepare-error".into())
+            .await
+            .unwrap(),
+    );
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig::default(),
         input: vec![TurnInput {
@@ -1044,7 +1391,7 @@ async fn regular_task_prepare_failure_emits_error_then_done() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(pending_chat()),
+        responses_override: Some(pending_responses()),
     })
     .await;
 
@@ -1073,19 +1420,19 @@ async fn regular_task_prepare_error_emits_error_then_done() {
             AgentConfig::with_defaults(dir.path().to_path_buf()),
             "regular-task-prepare-error".into(),
         )
+        .await
         .unwrap(),
     );
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
 
     run_projected_stream(ProjectedStreamArgs {
         session,
-        targets: vec![types::ChatTarget {
+        targets: vec![types::ModelTarget {
             provider_id: "scripted".into(),
             backend_id: "scripted".into(),
             model: "test".into(),
             api_key: String::new(),
             base_url: String::new(),
-            api_mode: String::new(),
         }],
         base_config: ProviderConfig::default(),
         input: Vec::new(),
@@ -1093,7 +1440,7 @@ async fn regular_task_prepare_error_emits_error_then_done() {
         pause: PauseControl::new(),
         hitl_gate: None,
         tx,
-        chat_override: Some(pending_chat()),
+        responses_override: Some(pending_responses()),
     })
     .await;
 
@@ -1118,17 +1465,19 @@ async fn regular_task_prepare_error_emits_error_then_done() {
 async fn steered_input_is_consumed_by_the_active_regular_task() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "steer-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "steer-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     session
-        .record_items(vec![types::message::Message::user("initial")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text("initial")])
         .await;
 
     let calls = Arc::new(AtomicUsize::new(0));
     let saw_follow_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let first_started = Arc::new(Notify::new());
     let release_first = Arc::new(Notify::new());
-    let chat_fn: ChatOverride = {
+    let responses_fn: ResponsesOverride = {
         let calls = Arc::clone(&calls);
         let saw_follow_up = Arc::clone(&saw_follow_up);
         let first_started = Arc::clone(&first_started);
@@ -1140,11 +1489,7 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
             let release_first = Arc::clone(&release_first);
             Box::pin(async move {
                 let call = calls.fetch_add(1, Ordering::SeqCst);
-                if call > 0
-                    && messages
-                        .iter()
-                        .any(|message| message.text_content() == "follow up")
-                {
+                if call > 0 && messages.contains_text("follow up") {
                     saw_follow_up.store(true, Ordering::SeqCst);
                 }
                 if call == 0 {
@@ -1165,9 +1510,9 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
     let run = tokio::spawn({
         let session = Arc::clone(&session);
         async move {
-            run_projected_stream_with_chat_fn(
+            run_projected_stream_with_responses_fn(
                 session,
-                chat_fn,
+                responses_fn,
                 ProviderConfig {
                     model: "test".into(),
                     ..Default::default()
@@ -1208,33 +1553,31 @@ async fn steered_input_is_consumed_by_the_active_regular_task() {
         "durably persisted steer must emit its client ack"
     );
     let messages = session.clone_history().await;
-    assert!(messages.iter().any(|message| {
-        matches!(
-            &message.content,
-            types::message::MessageContent::Text(text) if text == "follow up"
-        )
-    }));
+    assert!(messages.iter().any(|message| message.text() == "follow up"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_emits_text_tool_result_and_usage() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "test-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "test-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("call a tool")])
+        a.record_items(vec![agent_protocol::ResponseItem::user_text("call a tool")])
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::Text("thinking…".into()),
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_1".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1262,9 +1605,9 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1341,18 +1684,21 @@ async fn multi_turn_emits_text_tool_result_and_usage() {
 async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "current-thread-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "current-thread-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     session
-        .record_items(vec![types::message::Message::user("call a tool")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text("call a tool")])
         .await;
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_current_thread".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1371,9 +1717,9 @@ async fn multi_turn_tool_exec_works_on_current_thread_runtime() {
     ]);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
-    run_projected_stream_with_chat_fn(
+    run_projected_stream_with_responses_fn(
         session,
-        chat_fn,
+        responses_fn,
         ProviderConfig {
             model: "test".into(),
             ..Default::default()
@@ -1409,14 +1755,16 @@ async fn cold_start_hydrates_history_from_db() {
             AgentConfig::with_defaults(path.clone()),
             "hydrate-me".into(),
         )
+        .await
         .unwrap();
-        agent.ensure_session("test").unwrap();
+        agent.ensure_session("test").await.unwrap();
         agent.start_or_steer_turn("hello", "hydrate").await.unwrap();
         agent.record_assistant_message("world").await.unwrap();
     }
 
-    let agent =
-        AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into()).unwrap();
+    let agent = AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-me".into())
+        .await
+        .unwrap();
     let history = agent.clone_history().await;
     assert_eq!(history.len(), 2);
     assert_eq!(history[0].content_str(), "hello");
@@ -1424,59 +1772,67 @@ async fn cold_start_hydrates_history_from_db() {
 }
 
 #[tokio::test]
-async fn cold_start_preserves_projected_user_audio_and_video_media_kinds() {
+async fn cold_start_preserves_native_responses_media_content() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().to_path_buf();
     let image_url = "data:image/png;base64,aW1hZ2U=";
     let audio_url = "data:audio/mpeg;base64,YXVkaW8=";
-    let video_url = "data:video/webm;base64,dmlkZW8=";
-    let projected_media = vec![
-        types::MediaAsset::data_url(types::MediaKind::Image, image_url, "image/png"),
-        types::MediaAsset::data_url(types::MediaKind::Audio, audio_url, "audio/mpeg"),
-        types::MediaAsset::data_url(types::MediaKind::Video, video_url, "video/webm"),
-    ];
-    let mut user = types::message::Message::user("inspect cold media");
-    user.media = projected_media.clone();
+    let user = agent_protocol::ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: vec![
+            agent_protocol::ContentItem::InputText {
+                text: "inspect cold media".into(),
+            },
+            agent_protocol::ContentItem::InputImage {
+                image_url: image_url.into(),
+                detail: None,
+            },
+            agent_protocol::ContentItem::InputAudio {
+                audio_url: audio_url.into(),
+            },
+        ],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
     {
-        let store = session::SessionStore::open_sessions_dir(&path.join("sessions")).unwrap();
-        session::store::rebuild_messages_from_rollout(
+        let store = session::SessionStore::open_sessions_dir(&path.join("data"))
+            .await
+            .unwrap();
+        session::store::rebuild_response_items_from_rollout(
             &store,
             "hydrate-media",
-            &[agent_rollout::RolloutItem::ResponseItem(user)],
+            &[agent_rollout::RolloutItem::ResponseItem(user.clone())],
         )
+        .await
         .unwrap();
     }
 
     let agent =
         AgentLoop::with_session_id(AgentConfig::with_defaults(path), "hydrate-media".into())
+            .await
             .unwrap();
     let history = agent.clone_history().await;
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].media, projected_media);
-    assert!(matches!(
-        &history[0].content,
-        types::message::MessageContent::Parts(parts)
-            if parts.iter().filter(|part| part.kind == "image_url").count() == 1
-                && parts.iter().any(|part| {
-                    part.image_url.as_ref().is_some_and(|image| image.url == image_url)
-                })
-    ));
+    assert_eq!(history[0], user);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "persist-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "persist-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.ensure_session("test").unwrap();
-        a.record_items(vec![types::message::Message::user("call a tool")])
+        a.ensure_session("test").await.unwrap();
+        a.record_items(vec![agent_protocol::ResponseItem::user_text("call a tool")])
             .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::Thinking("deep ".into()),
             StreamChunk::Thinking("thought".into()),
@@ -1485,6 +1841,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
                 index: 0,
                 id: "call_persist".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -1512,9 +1869,9 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1528,42 +1885,64 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         item.unwrap();
     }
 
-    let store = session::SessionStore::open(&dir.path().join("sessions/state.db")).unwrap();
-    let hist = store.build_chat_history("persist-session", 50).unwrap();
+    let store = session::SessionStore::open(&dir.path().join("data/state.db"))
+        .await
+        .unwrap();
+    let hist = store.get_response_items("persist-session").await.unwrap();
     assert!(
-        hist.iter()
-            .any(|m| m.reasoning.as_deref() == Some("deep thought")),
+        hist.iter().any(|item| matches!(
+            &item.item,
+            agent_protocol::ResponseItem::Reasoning { .. }
+                if item.text() == "deep thought"
+        )),
         "expected persisted reasoning; hist={hist:?}"
     );
     assert!(
-        hist.iter().any(|m| !m.activities.is_empty()),
-        "expected tool activities; hist={hist:?}"
+        hist.iter().any(|item| matches!(
+            &item.item,
+            agent_protocol::ResponseItem::FunctionCall { call_id, name, .. }
+                if call_id == "call_persist" && name == "echo"
+        )),
+        "expected native tool call; hist={hist:?}"
     );
-    let activity = hist
-        .iter()
-        .find(|m| !m.activities.is_empty())
-        .unwrap()
-        .activities
-        .first()
-        .unwrap();
-    assert_eq!(activity.id, "call_persist");
-    assert_eq!(activity.title, "echo");
-    assert!(activity.output.is_some(), "expected tool result output");
+    assert!(
+        hist.iter().any(|item| matches!(
+            &item.item,
+            agent_protocol::ResponseItem::FunctionCallOutput { call_id, .. }
+                if call_id.as_deref() == Some("call_persist") && !item.text().is_empty()
+        )),
+        "expected native tool output; hist={hist:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_fires_post_llm_call_after_model_stream() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "completion-hook".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "completion-hook".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
+    let telemetry: Arc<std::sync::Mutex<Vec<::hooks::HookInput>>> =
+        Arc::new(std::sync::Mutex::new(vec![]));
+    for event in [
+        ::hooks::PRE_API_REQUEST,
+        ::hooks::POST_API_REQUEST,
+        ::hooks::POST_LLM_CALL,
+    ] {
+        let telemetry = Arc::clone(&telemetry);
+        agent.hook_bus().register(event, move |payload| {
+            telemetry.lock().unwrap().push(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
+    }
     agent
-        .record_items(vec![types::message::Message::user("say hi")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text("say hi")])
         .await;
     let session = Arc::new(agent);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hello".into()),
         StreamChunk::Usage(Usage::from_parts(3, 2)),
         StreamChunk::Done {
@@ -1579,9 +1958,9 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1600,27 +1979,55 @@ async fn multi_turn_fires_post_llm_call_after_model_stream() {
         events.iter().any(|e| e == "PostLlmCall:5"),
         "expected PostLlmCall for \"hello\" (5 chars), events={events:?}"
     );
+
+    let telemetry = telemetry.lock().unwrap();
+    assert_eq!(telemetry.len(), 3, "telemetry={telemetry:?}");
+    let pre_api = &telemetry[0];
+    assert_eq!(pre_api.hook_event_name, ::hooks::PRE_API_REQUEST);
+    assert_eq!(pre_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(pre_api.model, "test");
+    assert_eq!(pre_api.attempt, Some(1));
+    assert_eq!(pre_api.duration_ms, Some(0));
+    assert_eq!(pre_api.status.as_deref(), Some("started"));
+
+    let post_api = &telemetry[1];
+    assert_eq!(post_api.hook_event_name, ::hooks::POST_API_REQUEST);
+    assert_eq!(post_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_api.model, "test");
+    assert_eq!(post_api.attempt, Some(1));
+    assert!(post_api.duration_ms.is_some());
+    assert_eq!(post_api.status.as_deref(), Some("succeeded"));
+
+    let post_llm = &telemetry[2];
+    assert_eq!(post_llm.hook_event_name, ::hooks::POST_LLM_CALL);
+    assert_eq!(post_llm.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_llm.model, "test");
+    assert_eq!(post_llm.attempt, Some(1));
+    assert!(post_llm.duration_ms.is_some());
+    assert_eq!(post_llm.status.as_deref(), Some("succeeded"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn transform_llm_output_replaces_before_post_llm_call() {
+async fn post_llm_call_observes_raw_candidate_before_final_transform() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "transform-llm-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "transform-llm-session".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
         .hook_bus()
-        .register(::hooks::TRANSFORM_LLM_OUTPUT, |_| {
+        .register(::hooks::TRANSFORM_FINAL_LLM_OUTPUT, |_| {
             ::hooks::HookOutcome::ReplaceText("REPLACED".into())
         });
     agent
-        .record_items(vec![types::message::Message::user("say hi")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text("say hi")])
         .await;
     let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hello world".into()),
         StreamChunk::Usage(Usage::from_parts(3, 2)),
         StreamChunk::Done {
@@ -1636,9 +2043,9 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1653,11 +2060,13 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     }
 
     let events = log.lock().unwrap().clone();
-    let transform_idx = events.iter().position(|e| e == "TransformLlmOutput:11");
-    let post_idx = events.iter().position(|e| e == "PostLlmCall:8");
+    let post_idx = events.iter().position(|e| e == "PostLlmCall:11");
+    let transform_idx = events
+        .iter()
+        .position(|e| e == "TransformFinalLlmOutput:11");
     assert!(
-        transform_idx.is_some() && post_idx.is_some() && transform_idx < post_idx,
-        "expected TransformLlmOutput before PostLlmCall with replaced length, events={events:?}"
+        post_idx.is_some() && transform_idx.is_some() && post_idx < transform_idx,
+        "expected PostLlmCall to observe the raw candidate before final transform, events={events:?}"
     );
 
     let agent = session_for_check.as_ref();
@@ -1665,7 +2074,7 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
     assert_eq!(
         history.last().map(|m| m.content_str().to_string()),
         Some("REPLACED".to_string()),
-        "final assistant message should reflect TransformLlmOutput replacement"
+        "final assistant message should reflect TransformFinalLlmOutput replacement"
     );
 }
 
@@ -1673,15 +2082,19 @@ async fn transform_llm_output_replaces_before_post_llm_call() {
 async fn stop_fires_at_terminal_boundary_without_disk_write() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-no-write".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent
-        .record_items(vec![types::message::Message::user("just say hi, no tools")])
+        .record_items(vec![agent_protocol::ResponseItem::user_text(
+            "just say hi, no tools",
+        )])
         .await;
     let session = Arc::new(agent);
 
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("hi there".into()),
         StreamChunk::Done {
             finish_reason: "stop".into(),
@@ -1696,9 +2109,9 @@ async fn stop_fires_at_terminal_boundary_without_disk_write() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1729,31 +2142,34 @@ async fn stop_fires_at_terminal_boundary_without_disk_write() {
 async fn pre_verify_keep_going_retries_capped_at_two() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "pre-verify-keep-going".into())
+        .await
+        .unwrap();
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     ::hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
     agent.hook_bus().register(::hooks::STOP, |_| {
         ::hooks::HookOutcome::KeepGoing("请再检查一下你的改动".into())
     });
     agent
-        .record_items(vec![types::message::Message::user(
+        .record_items(vec![agent_protocol::ResponseItem::user_text(
             "write a file then confirm",
         )])
         .await;
     let session = Arc::new(agent);
     let session_for_check = Arc::clone(&session);
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         // round 1: 写盘工具调用，置位 turn_wrote_disk
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_write".into(),
-                name: "file_ops".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
-                arguments: r#"{"path":"verify.txt","operation":"write","content":"hi"}"#.into(),
+                arguments: r#"{"command":"echo hi > verify.txt"}"#.into(),
             },
             StreamChunk::Done {
                 finish_reason: "tool_calls".into(),
@@ -1790,9 +2206,9 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
     };
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             cfg,
             "You are a test agent".into(),
             pause,
@@ -1826,8 +2242,8 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         .filter(|e| e.starts_with("PostLlmCall"))
         .count();
     assert_eq!(
-        post_llm_count, 2,
-        "PostLlmCall must be skipped while Stop keeps going; only the tool round and the final round should fire it, events={events:?}"
+        post_llm_count, 4,
+        "PostLlmCall must fire once for every sampling, including Stop continuation candidates, events={events:?}"
     );
 
     assert!(items.iter().any(|i| matches!(
@@ -1847,48 +2263,52 @@ async fn pre_verify_keep_going_retries_capped_at_two() {
         "history must alternate roles (no consecutive same role) after capped KeepGoing retries, messages={:?}",
         history
             .iter()
-            .map(|m| (m.role.clone(), m.content_str().to_string()))
+            .map(|m| (m.role(), m.content_str()))
             .collect::<Vec<_>>()
     );
 
-    let bridge_users: Vec<&types::message::Message> = history
+    let hook_prompt_users: Vec<&agent_protocol::ResponseItem> = history
         .iter()
         .filter(|m| {
-            m.role == types::message::Role::User
-                && m.content_str().starts_with("[astro:hook-context]")
+            m.role() == Some("user") && m.content_str().starts_with("<hook_prompt hook_run_id=")
         })
         .collect();
     assert_eq!(
-        bridge_users.len(),
+        hook_prompt_users.len(),
         2,
-        "expect one persisted bridging user message per KeepGoing attempt (capped at 2), messages={:?}",
+        "expect one native hook prompt per KeepGoing attempt (capped at 2), messages={:?}",
         history
             .iter()
-            .map(|m| (m.role.clone(), m.content_str().to_string()))
+            .map(|m| (m.role(), m.content_str()))
             .collect::<Vec<_>>()
     );
-    for m in &bridge_users {
-        assert_eq!(
-            m.content_str(),
-            "[astro:hook-context]\n请再检查一下你的改动",
-            "persisted bridging message text must match the inject format used at multi_turn.rs"
-        );
+    for message in &hook_prompt_users {
+        assert!(message.content_str().contains("请再检查一下你的改动"));
+        assert!(message.content_str().contains("plugin-hook-run-"));
     }
 
-    let provider_messages = agent::prompt::messages::to_provider_messages("sys", &history);
-    for window in provider_messages.windows(2) {
-        let (a, b) = (window[0].role(), window[1].role());
-        assert!(
-            !(a == providers::types::message::Role::Assistant
-                && b == providers::types::message::Role::Assistant),
-            "to_provider_messages must not contain consecutive assistant entries"
-        );
-        assert!(
-            !(a == providers::types::message::Role::User
-                && b == providers::types::message::Role::User),
-            "to_provider_messages must not contain consecutive user entries"
-        );
+    let response_history = agent.clone_response_history().await;
+    let hook_prompts = response_history
+        .iter()
+        .filter_map(|item| match item {
+            agent_protocol::ResponseItem::Message {
+                id, role, content, ..
+            } if role == "user" => {
+                agent_protocol::parse_hook_prompt_message(id.as_deref(), content)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(hook_prompts.len(), 2);
+    for prompt in hook_prompts {
+        assert_eq!(prompt.fragments.len(), 1);
+        assert_eq!(prompt.fragments[0].text, "请再检查一下你的改动");
+        assert!(prompt.fragments[0]
+            .hook_run_id
+            .starts_with("plugin-hook-run-"));
     }
+
+    assert!(agent::runtime::validate_message_order(&response_history));
 }
 
 #[tokio::test]
@@ -1907,14 +2327,16 @@ async fn pause_control_blocks_then_cancels() {
 async fn cumulative_usage_chunks_use_last_per_round() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "usage-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "usage-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("hi")])
+        a.record_items(vec![agent_protocol::ResponseItem::user_text("hi")])
             .await;
     }
-    let chat_fn = scripted_chat(vec![vec![
+    let responses_fn = scripted_responses(vec![vec![
         StreamChunk::Text("a".into()),
         StreamChunk::Usage(Usage::from_parts(1, 1)),
         StreamChunk::Text("b".into()),
@@ -1926,9 +2348,9 @@ async fn cumulative_usage_chunks_use_last_per_round() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -1956,20 +2378,38 @@ async fn cumulative_usage_chunks_use_last_per_round() {
 async fn error_has_single_error_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "err-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "err-session".into())
+        .await
+        .unwrap();
+    let post_api = Arc::new(std::sync::Mutex::new(None));
+    let post_api_capture = Arc::clone(&post_api);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_API_REQUEST, move |payload| {
+            *post_api_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
+    let post_llm = Arc::new(std::sync::Mutex::new(None));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            *post_llm_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("x")])
+        a.record_items(vec![agent_protocol::ResponseItem::user_text("x")])
             .await;
     }
-    let chat_fn = boom_chat();
+    let responses_fn = boom_responses();
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2001,18 +2441,97 @@ async fn error_has_single_error_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["error"]);
     assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
+    let post_api = post_api.lock().unwrap();
+    let post_api = post_api.as_ref().expect("PostApiRequest payload");
+    assert_eq!(post_api.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_api.model, "test");
+    assert_eq!(post_api.attempt, Some(1));
+    assert!(post_api.duration_ms.is_some());
+    assert_eq!(post_api.status.as_deref(), Some("failed"));
+    let post_llm = post_llm.lock().unwrap();
+    let post_llm = post_llm.as_ref().expect("PostLlmCall payload");
+    assert_eq!(post_llm.provider.as_deref(), Some("scripted"));
+    assert_eq!(post_llm.model, "test");
+    assert_eq!(post_llm.attempt, Some(1));
+    assert!(post_llm.duration_ms.is_some());
+    assert_eq!(post_llm.status.as_deref(), Some("failed"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stream_failure_emits_one_failed_post_llm_call_with_partial_length() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = AgentConfig::with_defaults(dir.path().to_path_buf());
+    let agent = AgentLoop::with_session_id(config, "stream-error-session".into())
+        .await
+        .unwrap();
+    let post_llm = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            post_llm_capture.lock().unwrap().push(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
+    agent
+        .record_items(vec![agent_protocol::ResponseItem::user_text("x")])
+        .await;
+    let session = Arc::new(agent);
+    let responses_fn: ResponsesOverride = Arc::new(move |_messages, _tools, _config| {
+        Box::pin(async move {
+            let chunks: Vec<anyhow::Result<StreamChunk>> = vec![
+                Ok(StreamChunk::Text("partial".into())),
+                Err(anyhow::anyhow!("stream boom")),
+            ];
+            Ok(Box::pin(futures::stream::iter(chunks)) as CompletionStream)
+        })
+    });
+    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+    tokio::spawn(async move {
+        run_projected_stream_with_responses_fn(
+            session,
+            responses_fn,
+            ProviderConfig {
+                model: "test".into(),
+                ..Default::default()
+            },
+            "sys".into(),
+            PauseControl::new(),
+            None,
+            tx,
+        )
+        .await;
+    });
+    while let Some(item) = rx.recv().await {
+        item.unwrap();
+    }
+
+    let post_llm = post_llm.lock().unwrap();
+    assert_eq!(post_llm.len(), 1);
+    assert_eq!(post_llm[0].status.as_deref(), Some("failed"));
+    assert_eq!(post_llm[0].assistant_chars, Some("partial".len()));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancellation_has_single_interrupt_terminal_before_done() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "cancel-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "cancel-session".into())
+        .await
+        .unwrap();
+    let post_llm = Arc::new(std::sync::Mutex::new(None));
+    let post_llm_capture = Arc::clone(&post_llm);
+    agent
+        .hook_bus()
+        .register(::hooks::POST_LLM_CALL, move |payload| {
+            *post_llm_capture.lock().unwrap() = Some(payload.clone());
+            ::hooks::HookOutcome::Continue
+        });
     let session = Arc::new(agent);
     {
         let agent = session.as_ref();
         agent
-            .record_items(vec![types::message::Message::user("wait")])
+            .record_items(vec![agent_protocol::ResponseItem::user_text("wait")])
             .await;
     }
 
@@ -2020,9 +2539,9 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
     let pause = PauseControl::new();
     let run_pause = pause.clone();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            pending_chat(),
+            pending_responses(),
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2055,26 +2574,34 @@ async fn cancellation_has_single_interrupt_terminal_before_done() {
         .collect();
     assert_eq!(terminal_outcomes, ["interrupt"]);
     assert!(matches!(items.last(), Some(ProjectedStreamItem::Done)));
+    let post_llm = post_llm.lock().unwrap();
+    let post_llm = post_llm.as_ref().expect("PostLlmCall payload");
+    assert_eq!(post_llm.status.as_deref(), Some("cancelled"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_call_delta_and_memory_path() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "mem-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "mem-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("remember this")])
-            .await;
+        a.record_items(vec![agent_protocol::ResponseItem::user_text(
+            "remember this",
+        )])
+        .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "c1".into(),
                 name: "memory".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2099,9 +2626,9 @@ async fn tool_call_delta_and_memory_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2148,20 +2675,25 @@ async fn hitl_waiting_parks_then_continues_same_run() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "hitl-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "hitl-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("please confirm")])
-            .await;
+        a.record_items(vec![agent_protocol::ResponseItem::user_text(
+            "please confirm",
+        )])
+        .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_confirm".into(),
                 name: "ask_user".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2187,9 +2719,9 @@ async fn hitl_waiting_parks_then_continues_same_run() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2260,7 +2792,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "approval-allow-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "approval-allow-session".into())
+        .await
+        .unwrap();
 
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
@@ -2297,17 +2831,20 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("clean up the temp dir")])
-            .await;
+        a.record_items(vec![agent_protocol::ResponseItem::user_text(
+            "clean up the temp dir",
+        )])
+        .await;
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-allow";
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_term_allow".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2331,9 +2868,9 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2388,7 +2925,7 @@ async fn approval_hooks_fire_pre_then_post_on_allow() {
         pre_idx.is_some() && post_idx.is_some() && pre_idx < post_idx,
         "expected PermissionRequest before PostApprovalResponse, events={events:?}"
     );
-    let post_tool_idx = events.iter().position(|e| e == "PostToolUse:terminal");
+    let post_tool_idx = events.iter().position(|e| e == "PostToolUse:exec_command");
     assert!(
         post_idx < post_tool_idx,
         "expected PostApprovalResponse before PostToolUse, events={events:?}"
@@ -2448,7 +2985,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
 
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());
-    let agent = AgentLoop::with_session_id(config, "approval-deny-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "approval-deny-session".into())
+        .await
+        .unwrap();
 
     let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     hooks::install_recording(&agent.hook_bus(), Arc::clone(&log));
@@ -2466,17 +3005,20 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let session = Arc::new(agent);
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("clean up the temp dir")])
-            .await;
+        a.record_items(vec![agent_protocol::ResponseItem::user_text(
+            "clean up the temp dir",
+        )])
+        .await;
     }
 
     let cmd = "rm -rf /tmp/astro-approval-test-deny";
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_term_deny".into(),
-                name: "terminal".into(),
+                name: "exec_command".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2500,9 +3042,9 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
     let pause = PauseControl::new();
 
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()
@@ -2573,7 +3115,7 @@ async fn approval_hooks_fire_pre_then_post_on_deny() {
         items.iter().any(|i| matches!(
             i,
             ProjectedStreamItem::ToolResult { name, result, .. }
-            if name == "terminal" && result.contains("denied by user")
+            if name == "exec_command" && result.contains("denied by user")
         )),
         "expected denial tool result; got: {:?}",
         items.iter().map(|i| format!("{i:?}")).collect::<Vec<_>>()
@@ -2596,7 +3138,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = AgentConfig::with_defaults(dir.path().to_path_buf());
     config.multi_turn = 1;
-    let agent = AgentLoop::with_session_id(config, "budget-session".into()).unwrap();
+    let agent = AgentLoop::with_session_id(config, "budget-session".into())
+        .await
+        .unwrap();
     let session = Arc::new(agent);
     let recorder = agent_rollout::RolloutRecorder::open(dir.path().join("budget-rollout.jsonl"))
         .await
@@ -2604,16 +3148,19 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let thread = agent::AstroThread::spawn(Arc::clone(&session), recorder).unwrap();
     {
         let a = session.as_ref();
-        a.record_items(vec![types::message::Message::user("keep using tools")])
-            .await;
+        a.record_items(vec![agent_protocol::ResponseItem::user_text(
+            "keep using tools",
+        )])
+        .await;
     }
 
-    let chat_fn = scripted_chat(vec![
+    let responses_fn = scripted_responses(vec![
         vec![
             StreamChunk::ToolCallStart {
                 index: 0,
                 id: "call_b".into(),
                 name: "echo".into(),
+                signature: None,
             },
             StreamChunk::ToolCallDelta {
                 index: 0,
@@ -2638,9 +3185,9 @@ async fn multi_turn_budget_exhausted_forces_toolless_summary() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let pause = PauseControl::new();
     tokio::spawn(async move {
-        run_projected_stream_with_chat_fn(
+        run_projected_stream_with_responses_fn(
             session,
-            chat_fn,
+            responses_fn,
             ProviderConfig {
                 model: "test".into(),
                 ..Default::default()

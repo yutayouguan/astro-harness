@@ -28,6 +28,10 @@ pub struct TurnSnapshot {
 pub struct ThreadSnapshot {
     pub thread_id: String,
     pub status: String,
+    pub provider_id: Option<String>,
+    pub backend_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub turns: Vec<TurnSnapshot>,
     pub active_turn: Option<TurnSnapshot>,
     pub pending_background_turn_ids: Vec<String>,
@@ -37,11 +41,23 @@ pub struct ThreadSnapshot {
 pub struct ThreadHistoryBuilder {
     active: Option<TurnSnapshot>,
     completed: Vec<TurnSnapshot>,
+    provider_id: Option<String>,
+    backend_id: Option<String>,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
 }
 
 impl ThreadHistoryBuilder {
     pub fn track(&mut self, event: &Event) {
         match &event.msg {
+            EventMsg::ThreadSettingsApplied(applied) => {
+                self.provider_id = applied.thread_settings.provider_id.clone();
+                self.backend_id = Some(applied.thread_settings.provider.clone());
+                self.model = Some(applied.thread_settings.model.clone());
+                self.reasoning_effort =
+                    (!applied.thread_settings.reasoning_effort.trim().is_empty())
+                        .then(|| applied.thread_settings.reasoning_effort.clone());
+            }
             EventMsg::TurnStarted(started) => {
                 if self
                     .active
@@ -51,8 +67,8 @@ impl ThreadHistoryBuilder {
                 {
                     return;
                 }
-                // Codex finishes the previous pending turn before opening the next one,
-                // preserving its last observed status and items when no terminal arrived.
+                // 在打开下一个 turn 前结束上一个 pending turn，
+                // 若未收到终止事件则保留其最后观察到的状态和 items。
                 if let Some(turn) = self.active.take() {
                     self.completed.push(turn);
                 }
@@ -120,6 +136,13 @@ impl ThreadHistoryBuilder {
                     }
                 }
             }
+            EventMsg::ThreadRolledBack(rollback) => {
+                let keep = self
+                    .completed
+                    .len()
+                    .saturating_sub(rollback.num_turns as usize);
+                self.completed.truncate(keep);
+            }
             _ => {}
         }
     }
@@ -180,9 +203,8 @@ impl ThreadHistoryBuilder {
             return;
         };
         match (&mut item.item, reasoning) {
-            (TurnItem::AgentMessage(message), false) | (TurnItem::Reasoning(message), true) => {
-                message.content.push_str(delta)
-            }
+            (TurnItem::AgentMessage(message), false) => message.content.push_str(delta),
+            (TurnItem::Reasoning(message), true) => message.content.push_str(delta),
             _ => {}
         }
     }
@@ -193,6 +215,22 @@ impl ThreadHistoryBuilder {
 
     pub fn completed_turns(&self) -> &[TurnSnapshot] {
         &self.completed
+    }
+
+    pub fn thread_settings(
+        &self,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
+        (
+            self.provider_id.clone(),
+            self.backend_id.clone(),
+            self.model.clone(),
+            self.reasoning_effort.clone(),
+        )
     }
 
     pub fn contains_item_payload(&self, item_id: &str, payload_json: &str) -> bool {
@@ -208,7 +246,7 @@ impl ThreadHistoryBuilder {
 
 pub enum ListenerCommand {
     CoreEvent(Event),
-    /// Runtime event observed by the production side-effect supervisor.
+    /// 由生产环境副作用监控器观察到的运行时事件。
     ObservedCoreEvent(Event),
     Resume {
         subscription: ConnectionGenerationKey,
@@ -248,7 +286,7 @@ pub struct ThreadState {
     pub status: String,
     pub history: ThreadHistoryBuilder,
     pub subscribers: HashMap<ConnectionId, ConnectionGenerationKey>,
-    /// Terminal-time logical delivery targets retained only until `astro.background_complete`.
+    /// 终止时的逻辑投递目标，仅保留到 `astro.background_complete` 事件到达。
     pub background_extension_sinks: HashMap<String, HashSet<ConnectionId>>,
     pub listener_command_tx: mpsc::UnboundedSender<ListenerCommand>,
     pub activity_tx: tokio::sync::watch::Sender<ThreadActivity>,
@@ -336,8 +374,8 @@ impl ThreadStateManager {
 mod tests {
     use super::*;
     use agent_protocol::{
-        DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, TurnAbortReason,
-        TurnAbortedEvent, TurnCompleteEvent, TurnItem, TurnStartedEvent,
+        DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem, ThreadRolledBackEvent,
+        TurnAbortReason, TurnAbortedEvent, TurnCompleteEvent, TurnItem, TurnStartedEvent,
     };
     use tokio::sync::{mpsc, watch, Mutex};
 
@@ -353,9 +391,11 @@ mod tests {
     fn item(turn_id: &str, item_id: &str, content: &str, completed: bool) -> Event {
         let event = ItemEvent {
             turn_id: turn_id.into(),
-            item: TurnItem::AgentMessage(TextItem {
+            item: TurnItem::AgentMessage(agent_protocol::AgentMessageItem {
                 id: item_id.into(),
                 content: content.into(),
+                delivery: None,
+                questions: None,
             }),
         };
         Event {
@@ -414,6 +454,41 @@ mod tests {
         });
         assert!(builder.active_turn_snapshot().is_none());
         assert!(builder.completed_turns().is_empty());
+    }
+
+    #[test]
+    fn builder_restores_latest_thread_settings_without_a_live_session() {
+        let mut builder = ThreadHistoryBuilder::default();
+        builder.track(&Event {
+            id: "settings-1".into(),
+            msg: EventMsg::ThreadSettingsApplied(agent_protocol::ThreadSettingsAppliedEvent {
+                thread_settings: agent_protocol::ThreadSettingsSnapshot {
+                    provider_id: Some("profile-1".into()),
+                    provider: "openai".into(),
+                    model: "gpt-5.6".into(),
+                    model_profile: types::ModelProfile::default(),
+                    interaction_mode: types::InteractionMode::Agent,
+                    project_root: None,
+                    workspace_roots: Vec::new(),
+                    context_window: 128_000,
+                    temperature: 0.7,
+                    thinking_enabled: true,
+                    reasoning_effort: "high".into(),
+                    service_tier: None,
+                    max_tokens: 4096,
+                },
+            }),
+        });
+
+        assert_eq!(
+            builder.thread_settings(),
+            (
+                Some("profile-1".into()),
+                Some("openai".into()),
+                Some("gpt-5.6".into()),
+                Some("high".into()),
+            )
+        );
     }
 
     #[test]
@@ -491,6 +566,32 @@ mod tests {
         assert!(builder.active_turn_snapshot().is_none());
         assert_eq!(builder.completed_turns().len(), 1);
         assert_eq!(builder.completed_turns()[0].status, "completed");
+    }
+
+    #[test]
+    fn builder_removes_replaced_turns_after_history_rollback() {
+        let mut builder = ThreadHistoryBuilder::default();
+        for turn_id in ["turn-1", "turn-2"] {
+            builder.track(&started(turn_id));
+            builder.track(&Event {
+                id: turn_id.into(),
+                msg: EventMsg::TurnComplete(TurnCompleteEvent {
+                    turn_id: turn_id.into(),
+                    last_agent_message: Some(format!("answer {turn_id}")),
+                    error: None,
+                }),
+            });
+        }
+        builder.track(&Event {
+            id: "edit".into(),
+            msg: EventMsg::ThreadRolledBack(ThreadRolledBackEvent {
+                num_turns: 1,
+                keep_chat_bubbles: Some(2),
+            }),
+        });
+
+        assert_eq!(builder.completed_turns().len(), 1);
+        assert_eq!(builder.completed_turns()[0].id, "turn-1");
     }
 
     #[test]

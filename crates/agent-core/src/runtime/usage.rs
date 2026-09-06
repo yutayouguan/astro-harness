@@ -105,7 +105,7 @@ pub(crate) fn build_llm_usage_event(ctx: &LlmUsageWrite<'_>) -> (NewUsageEvent, 
 ///
 /// `sessions` 应与写入消息的同一会话存储（通常来自 `AgentLoop`），
 /// 避免再按 `default_memory_dir` 另开库导致自定义 `memory_dir` 下账单分叉。
-pub(crate) fn apply_llm_usage_dual_write(
+pub(crate) async fn apply_llm_usage_dual_write(
     ctx: &LlmUsageWrite<'_>,
     meta_json: Option<String>,
     sessions: Option<&dyn ConversationStore>,
@@ -117,7 +117,7 @@ pub(crate) fn apply_llm_usage_dual_write(
     if let Some(meta) = meta_json {
         event.meta_json = Some(meta);
     }
-    UsageDb::try_record(event);
+    UsageDb::try_record(event).await;
     let Some(sid) = ctx.session_id else {
         return;
     };
@@ -128,7 +128,7 @@ pub(crate) fn apply_llm_usage_dual_write(
         );
         return;
     };
-    if let Err(e) = store.update_session_billing(sid, delta) {
+    if let Err(e) = store.update_session_billing(sid, delta).await {
         tracing::warn!(session_id = sid, error = %e, "update_session_billing failed");
     }
 }

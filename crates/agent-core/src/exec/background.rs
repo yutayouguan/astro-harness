@@ -12,14 +12,13 @@
 use std::sync::Arc;
 
 use providers::{PauseControl, ProviderConfig, Usage};
-use types::message::{MessageContent, Role};
-use types::ChatTarget;
+use types::ModelTarget;
 
 use crate::runtime::Session;
 use crate::streaming::multi_turn::{
     install_multi_turn_task, InstalledMultiTurn, ThreadTurnTaskArgs,
 };
-use crate::streaming::ChatOverride;
+use crate::streaming::ResponsesOverride;
 use agent_protocol::{Event, EventMsg, TurnInput};
 
 #[derive(Debug)]
@@ -32,7 +31,7 @@ struct BackgroundCollected {
 /// 使用统一多轮引擎执行后台任务。
 pub async fn run_background_multi_turn(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
 ) -> anyhow::Result<(String, Usage)> {
     run_background_multi_turn_controlled(session, targets, input, None).await
@@ -41,60 +40,64 @@ pub async fn run_background_multi_turn(
 /// 带 Agent Thread interrupt / close 控制的后台执行入口。
 pub async fn run_background_multi_turn_controlled(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat(session, targets, input, control, None).await
+    run_background_multi_turn_controlled_with_responses(session, targets, input, control, None)
+        .await
 }
 
-pub(crate) async fn run_background_multi_turn_controlled_with_chat(
+pub(crate) async fn run_background_multi_turn_controlled_with_responses(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat_and_system(
+    run_background_multi_turn_controlled_with_responses_and_system(
         session,
         targets,
         input,
         None,
+        None,
         control,
-        chat_override,
+        responses_override,
     )
     .await
 }
 
-pub(crate) async fn run_background_prepared_turn_controlled_with_chat(
+pub(crate) async fn run_background_prepared_turn_controlled_with_responses(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
-    system_prompt: String,
+    targets: Vec<ModelTarget>,
+    prompt: crate::prompt::PromptContract,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
-    run_background_multi_turn_controlled_with_chat_and_system(
+    run_background_multi_turn_controlled_with_responses_and_system(
         session,
         targets,
         Vec::new(),
-        Some(system_prompt),
+        None,
+        Some(prompt),
         control,
-        chat_override,
+        responses_override,
     )
     .await
 }
 
-async fn run_background_multi_turn_controlled_with_chat_and_system(
+async fn run_background_multi_turn_controlled_with_responses_and_system(
     session: Arc<Session>,
-    targets: Vec<ChatTarget>,
+    targets: Vec<ModelTarget>,
     input: Vec<TurnInput>,
     system_prompt: Option<String>,
+    prompt: Option<crate::prompt::PromptContract>,
     control: Option<Arc<subagents::AgentThreadControl>>,
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 ) -> anyhow::Result<(String, Usage)> {
     let (base_config, message_start) = {
         let agent = session.as_ref();
-        let history = agent.clone_history().await;
+        let history = agent.clone_response_history().await;
         (
             ProviderConfig {
                 temperature: agent.temperature(),
@@ -119,9 +122,10 @@ async fn run_background_multi_turn_controlled_with_chat_and_system(
         base_config,
         input,
         system_prompt,
+        prompt,
         pause,
         hitl_gate: None,
-        chat_override,
+        responses_override,
     })
     .await;
     let InstalledMultiTurn {
@@ -189,7 +193,12 @@ async fn collect_background_events(
             EventMsg::ItemStarted(_) => event_kinds.push("item_started"),
             EventMsg::ItemCompleted(_) => event_kinds.push("item_completed"),
             EventMsg::TokenCount(tokens) => {
-                usage.input_tokens = u32::try_from(tokens.input_tokens).unwrap_or(u32::MAX);
+                let uncached_input_tokens = if tokens.input_tokens_include_cache {
+                    tokens.uncached_input_tokens
+                } else {
+                    tokens.input_tokens
+                };
+                usage.input_tokens = u32::try_from(uncached_input_tokens).unwrap_or(u32::MAX);
                 usage.output_tokens = u32::try_from(tokens.output_tokens).unwrap_or(u32::MAX);
                 usage.cache_read_tokens =
                     u32::try_from(tokens.cache_read_tokens).unwrap_or(u32::MAX);
@@ -197,6 +206,12 @@ async fn collect_background_events(
                     u32::try_from(tokens.cache_write_tokens).unwrap_or(u32::MAX);
                 usage.reasoning_tokens = u32::try_from(tokens.reasoning_tokens).unwrap_or(u32::MAX);
                 usage.request_count = u32::try_from(tokens.request_count).unwrap_or(u32::MAX);
+                usage.reported_total_tokens = tokens
+                    .provider_total_tokens
+                    .and_then(|value| u32::try_from(value).ok());
+                usage.cache_read_reported = tokens.cache_read_reported;
+                usage.cache_write_reported = tokens.cache_write_reported;
+                usage.reasoning_reported = tokens.reasoning_reported;
             }
             EventMsg::Error(error) | EventMsg::StreamError(error) => {
                 stream_error = Some(error.message)
@@ -218,6 +233,11 @@ async fn collect_background_events(
                 anyhow::bail!("background turn aborted: {:?}", event.reason);
             }
             EventMsg::Warning(_)
+            | EventMsg::RealtimeConversationStarted(_)
+            | EventMsg::RealtimeConversationSdp(_)
+            | EventMsg::RealtimeConversationRealtime(_)
+            | EventMsg::RealtimeConversationClosed(_)
+            | EventMsg::RealtimeConversationListVoicesResponse(_)
             | EventMsg::UserInputCommitted(_)
             | EventMsg::TurnStarted(_)
             | EventMsg::AgentMessageContentDelta(_)
@@ -230,6 +250,7 @@ async fn collect_background_events(
             | EventMsg::RequestPermissions(_)
             | EventMsg::RequestUserInput(_)
             | EventMsg::ElicitationRequest(_)
+            | EventMsg::GuardianAssessment(_)
             | EventMsg::DynamicToolCallRequest(_)
             | EventMsg::DynamicToolCallResponse(_)
             | EventMsg::McpToolCallBegin(_)
@@ -248,31 +269,37 @@ async fn collect_background_events(
 }
 
 async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> Option<String> {
-    let history = session.clone_history().await;
+    let history = session.clone_response_history().await;
     history[message_start..]
         .iter()
         .rev()
-        .find(|message| message.role == Role::Assistant)
-        .map(|message| match &message.content {
-            MessageContent::Text(text) => text.clone(),
-            MessageContent::Parts(parts) => parts
-                .iter()
-                .filter_map(|part| part.text.as_deref())
-                .collect::<Vec<_>>()
-                .join("\n"),
+        .find_map(|item| match item {
+            agent_protocol::ResponseItem::Message { role, content, .. } if role == "assistant" => {
+                Some(
+                    content
+                        .iter()
+                        .filter_map(|content| match content {
+                            agent_protocol::ContentItem::OutputText { text } => Some(text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+            }
+            _ => None,
         })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::run_multi_turn_events_with_chat_fn;
+    use crate::streaming::run_multi_turn_events_with_responses_fn;
     use agent_protocol::{
         ErrorEvent, Event, EventMsg, ItemEvent, TokenCountEvent, TurnCompleteEvent,
     };
     use agent_protocol::{ToolItem, ToolStatus, TurnItem};
 
-    fn pending_chat() -> ChatOverride {
+    fn pending_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(futures::stream::pending()) as providers::CompletionStream)
@@ -280,7 +307,7 @@ mod tests {
         })
     }
 
-    fn completed_chat() -> ChatOverride {
+    fn completed_responses() -> ResponsesOverride {
         Arc::new(move |_messages, _tools, _config| {
             Box::pin(async move {
                 Ok(Box::pin(futures::stream::iter(vec![
@@ -293,14 +320,13 @@ mod tests {
         })
     }
 
-    fn test_target() -> ChatTarget {
-        ChatTarget {
+    fn test_target() -> ModelTarget {
+        ModelTarget {
             provider_id: "test".into(),
             backend_id: "openai".into(),
             model: "test".into(),
             api_key: "test".into(),
             base_url: "http://127.0.0.1.invalid".into(),
-            api_mode: String::new(),
         }
     }
 
@@ -309,11 +335,14 @@ mod tests {
         let (tx, rx) = async_channel::unbounded();
         let item = TurnItem::CommandExecution(ToolItem {
             id: "call-1".into(),
-            name: "terminal".into(),
+            name: "exec_command".into(),
             arguments: serde_json::json!({"command": "pwd"}),
             output: None,
             media: Vec::new(),
+            file_changes: Vec::new(),
             status: ToolStatus::InProgress,
+            batch_id: None,
+            execution_mode: None,
         });
         for msg in [
             EventMsg::ItemStarted(ItemEvent {
@@ -385,13 +414,19 @@ mod tests {
             id: "turn-1".into(),
             msg: EventMsg::TokenCount(TokenCountEvent {
                 turn_id: Some("turn-1".into()),
-                input_tokens: 12,
+                input_tokens: 18,
+                input_tokens_include_cache: true,
+                uncached_input_tokens: 12,
                 output_tokens: 3,
-                total_tokens: 15,
+                total_tokens: 21,
+                provider_total_tokens: Some(21),
                 cache_read_tokens: 4,
                 cache_write_tokens: 2,
                 reasoning_tokens: 1,
                 request_count: 2,
+                cache_read_reported: true,
+                cache_write_reported: true,
+                reasoning_reported: true,
             }),
         })
         .await
@@ -412,25 +447,28 @@ mod tests {
         assert_eq!(usage.input_tokens, 12);
         assert_eq!(usage.output_tokens, 3);
         assert_eq!(usage.cache_read_tokens, 4);
+        assert_eq!(usage.reported_total_tokens, Some(21));
+        assert!(usage.reasoning_reported);
     }
 
     #[tokio::test]
     async fn agent_thread_interrupt_cancels_unified_engine() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let agent = Session::with_session_id(config, "background-cancel".into()).unwrap();
+        let agent = Session::with_session_id(config, "background-cancel".into())
+            .await
+            .unwrap();
         let session = Arc::new(agent);
         let control = Arc::new(subagents::AgentThreadControl::default());
-        let target = ChatTarget {
+        let target = ModelTarget {
             provider_id: "test".into(),
             backend_id: "openai".into(),
             model: "test".into(),
             api_key: "test".into(),
             base_url: "http://127.0.0.1.invalid".into(),
-            api_mode: String::new(),
         };
 
-        let run = run_background_multi_turn_controlled_with_chat(
+        let run = run_background_multi_turn_controlled_with_responses(
             session,
             vec![target],
             vec![TurnInput {
@@ -439,7 +477,7 @@ mod tests {
                 client_message_id: None,
             }],
             Some(Arc::clone(&control)),
-            Some(pending_chat()),
+            Some(pending_responses()),
         );
         let interrupt = async {
             tokio::task::yield_now().await;
@@ -454,12 +492,15 @@ mod tests {
     async fn replacement_collects_only_the_new_background_turn() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "background-replace".into()).unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "background-replace".into())
+                .await
+                .unwrap(),
+        );
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(8);
-        let old_run = tokio::spawn(run_multi_turn_events_with_chat_fn(
+        let old_run = tokio::spawn(run_multi_turn_events_with_responses_fn(
             Arc::clone(&session),
-            pending_chat(),
+            pending_responses(),
             ProviderConfig::default(),
             "system".into(),
             PauseControl::new(),
@@ -484,7 +525,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(2),
-            run_background_multi_turn_controlled_with_chat(
+            run_background_multi_turn_controlled_with_responses(
                 Arc::clone(&session),
                 vec![test_target()],
                 vec![TurnInput {
@@ -493,7 +534,7 @@ mod tests {
                     client_message_id: None,
                 }],
                 None,
-                Some(completed_chat()),
+                Some(completed_responses()),
             ),
         )
         .await
@@ -510,13 +551,16 @@ mod tests {
     async fn runtime_shutdown_install_failure_returns_without_hanging() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "background-shutdown".into()).unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "background-shutdown".into())
+                .await
+                .unwrap(),
+        );
         session.begin_runtime_shutdown();
 
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(1),
-            run_background_multi_turn_controlled_with_chat(
+            run_background_multi_turn_controlled_with_responses(
                 session,
                 vec![test_target()],
                 vec![TurnInput {
@@ -525,7 +569,7 @@ mod tests {
                     client_message_id: None,
                 }],
                 None,
-                Some(completed_chat()),
+                Some(completed_responses()),
             ),
         )
         .await
@@ -538,8 +582,11 @@ mod tests {
     async fn install_failure_is_structured_without_legacy_channel() {
         let temp = tempfile::tempdir().unwrap();
         let config = crate::runtime::Config::with_defaults(temp.path().to_path_buf());
-        let session =
-            Arc::new(Session::with_session_id(config, "structured-install-error".into()).unwrap());
+        let session = Arc::new(
+            Session::with_session_id(config, "structured-install-error".into())
+                .await
+                .unwrap(),
+        );
         session.begin_runtime_shutdown();
 
         let error = match install_multi_turn_task(ThreadTurnTaskArgs {
@@ -552,9 +599,10 @@ mod tests {
                 client_message_id: None,
             }],
             system_prompt: None,
+            prompt: None,
             pause: PauseControl::new(),
             hitl_gate: None,
-            chat_override: Some(completed_chat()),
+            responses_override: Some(completed_responses()),
         })
         .await
         {

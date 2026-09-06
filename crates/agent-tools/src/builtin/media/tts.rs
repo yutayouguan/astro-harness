@@ -20,34 +20,34 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Multi-speaker entry (names should match roles in the transcript).
+/// 多说话人条目（名称应匹配转录稿中的角色）。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TtsSpeaker {
-    /// Speaker name (appears in text / transcript).
+    /// 说话人名称（出现在文本/转录稿中）。
     pub speaker: String,
-    /// Google preset voice, e.g. `Kore` / `Puck`.
+    /// Google 预设语音，如 `Kore` / `Puck`。
     pub voice: String,
 }
 
-/// Arguments for the `tts` tool.
+/// `tts` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TtsArgs {
-    /// Text to synthesize (required; may include markers like `[whispers]`).
+    /// 待合成文本（必填；可包含 `[whispers]` 等标记）。
     pub text: String,
-    /// Short title for the filename; default "Speech".
+    /// 文件名短标题；默认 "Speech"。
     #[serde(default)]
     pub title: Option<String>,
-    /// Single-speaker voice: Google presets like `Kore`; OpenAI path may use `alloy`, etc.
-    /// If `speakers` is also set, `speakers` wins.
+    /// 单说话人语音：Google 预设如 `Kore`；OpenAI 路径可用 `alloy` 等。
+    /// 若同时设置 `speakers`，以 `speakers` 为准。
     #[serde(default)]
     pub voice: Option<String>,
-    /// Multi-speaker (max 2); Google Interactions only.
+    /// 多说话人（最多 2 个）；仅 Google Interactions。
     #[serde(default)]
     pub speakers: Option<Vec<TtsSpeaker>>,
-    /// Director / style notes (accent, tone, pacing); Google Interactions only.
+    /// 导演/风格说明（口音、语调、节奏）；仅 Google Interactions。
     #[serde(default)]
     pub style: Option<String>,
-    /// Stream generation and aggregate to disk; Google Interactions only (default false).
+    /// 流式生成并聚合到磁盘；仅 Google Interactions（默认 false）。
     #[serde(default)]
     pub stream: Option<bool>,
 }
@@ -57,6 +57,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "speech_gen".to_string(),
         toolset: "speech_gen".to_string(),
+        namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
         description: "Convert text to speech. Google: Gemini TTS (multi-speaker, style, stream). OpenAI: /audio/speech fallback. Advanced features are Google-only."
             .to_string(),
         schema: schema_for_args::<TtsArgs>(),
@@ -119,7 +120,7 @@ pub async fn dispatch(
         .unwrap_or("alloy");
     let output = synthesize_openai(ctx, text, voice, parsed.title.as_deref()).await?;
     if advanced {
-        // Append note to the text portion of the ToolOutput
+        // 在 ToolOutput 的文本部分追加提示
         let output = match output {
             types::ToolOutput::Media { text, assets } => types::ToolOutput::Media {
                 text: format!(

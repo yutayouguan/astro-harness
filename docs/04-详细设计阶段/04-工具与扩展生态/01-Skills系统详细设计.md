@@ -1,5 +1,9 @@
 # Skills 系统详细设计
 
+> **当前实现边界（2026-09-01）**：Skill frontmatter 可通过 `astro_tools` additive 开放 toolset；下文“Skill 作用域 Hooks”与 `allowed-tools` / `disallowed-tools` 示例是历史目标设计，当前不会注册 `HookRegistry` 或改变权限集合。Hooks 的现行配置面见 [Hooks 系统详细设计](../01-核心引擎层/08-Hooks系统详细设计.md)。
+
+> **Harness 当前基线（2026-08-29）**：Skill 是可按需加载的 scaffold/能力包，由 `agent-skills` 管理安装、加载、注册表和备份。Skill frontmatter 的 `astro_tools` 只能 additive 放宽 toolset，不能跳过 StepContext、审批、sandbox 或 hooks。Skill 执行不隐式等于 subagent。
+
 > 版本：v2.0 | 日期：2026-08-10 | 状态：草稿
 > 对应需求：F-04 Skills 系统、F-12 自我进化引擎、F-23 插件生态、F-30 子 Agent 派生
 > 参考模型：Claude Code Skills Architecture
@@ -1144,6 +1148,8 @@ pub async fn execute_skill_as_subagent(
 ---
 
 ## 10. Skill 作用域 Hooks
+
+> **状态：目标设计，未实现。** 当前 Skill 加载不会注册运行时 Hook；不要使用本节 frontmatter 作为有效配置。
 
 ### 10.1 概念
 

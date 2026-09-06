@@ -1,13 +1,7 @@
 /** 媒体悬停工具条：引用 / 放大 / 下载 / 复制 */
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
-import {
-  Check,
-  Copy,
-  Download,
-  ExternalLink,
-  Maximize2,
-  Quote,
-} from "lucide-react";
+import { Download, ExternalLink, Maximize2, Quote } from "lucide-react";
+import { CopyMorphIcon } from "../icons/MorphIcon";
 import { invoke } from "@tauri-apps/api/core";
 import { useChatMediaAttach } from "../../contexts/ChatMediaAttachContext";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -65,7 +59,7 @@ export default function MediaToolbar({
       if (busy || !attachApi) return;
       setBusy("quote");
       try {
-        await attachApi.attachMediaPath(path);
+        await attachApi.attachMediaPath(path, kind);
         showToast(t("media.quoted"), { tone: "success" });
       } catch (err) {
         showToast(
@@ -76,7 +70,7 @@ export default function MediaToolbar({
         setBusy(null);
       }
     },
-    [attachApi, busy, path, showToast, t],
+    [attachApi, busy, kind, path, showToast, t],
   );
 
   const onPreview = useCallback((e: MouseEvent) => {
@@ -208,11 +202,7 @@ export default function MediaToolbar({
           title={copyLabel}
           aria-label={copyLabel}
         >
-          {copied ? (
-            <Check size={icon} strokeWidth={2.4} aria-hidden />
-          ) : (
-            <Copy size={icon} strokeWidth={2.1} aria-hidden />
-          )}
+          <CopyMorphIcon copied={copied} size={icon} aria-hidden />
         </button>
       </div>
       {toastHost}

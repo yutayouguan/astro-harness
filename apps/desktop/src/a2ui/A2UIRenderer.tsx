@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/LocaleContext";
-import { renderCatalogTree } from "./CatalogAdapter";
+import { CatalogTree } from "./CatalogAdapter";
 import { mergeInitialFieldValues } from "./initialFieldValues";
 import { collectComponents, parseOperations } from "./validate";
 
@@ -46,7 +46,8 @@ export default function A2UIRenderer({
   }, [key]);
 
   useEffect(() => {
-    if (!initialFieldValues || Object.keys(initialFieldValues).length === 0) return;
+    if (!initialFieldValues || Object.keys(initialFieldValues).length === 0)
+      return;
     setFieldValues((current) =>
       mergeInitialFieldValues(current, initialFieldValues),
     );
@@ -56,15 +57,17 @@ export default function A2UIRenderer({
 
   return (
     <div className={`a2ui-surface ${disabled ? "is-disabled" : ""}`}>
-      {renderCatalogTree(components, {
-        disabled,
-        onAction,
-        unknownLabel: t("chat.a2ui.unknown"),
-        fieldValues,
-        setFieldValue: (id, value) =>
-          setFieldValues((prev) => ({ ...prev, [id]: value })),
-        mediaBaseDir,
-      })}
+      <CatalogTree
+        components={components}
+        disabled={disabled}
+        onAction={onAction}
+        unknownLabel={t("chat.a2ui.unknown")}
+        fieldValues={fieldValues}
+        setFieldValue={(id, value) =>
+          setFieldValues((prev) => ({ ...prev, [id]: value }))
+        }
+        mediaBaseDir={mediaBaseDir}
+      />
     </div>
   );
 }

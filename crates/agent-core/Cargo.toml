@@ -13,7 +13,6 @@ home = { path = "../agent-home" }
 session = { path = "../agent-session" }
 usage = { path = "../agent-usage" }
 subagents = { path = "../agent-subagents" }
-worktree = { path = "../agent-delegate" }
 cron = { path = "../agent-cron" }
 skills = { path = "../agent-skills" }
 providers = { path = "../agent-providers" }
@@ -26,6 +25,10 @@ sandbox = { path = "../agent-sandbox" }
 network-proxy = { path = "../agent-network-proxy" }
 agent-protocol = { path = "../agent-protocol" }
 agent-rollout = { path = "../agent-rollout" }
+realtime = { path = "../agent-realtime" }
+agent-extensions = { path = "../agent-extensions" }
+agent-config = { path = "../agent-config" }
+worktree = { path = "../agent-delegate" }
 tracing = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -35,12 +38,17 @@ sha2 = "0.10"
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 chrono = { version = "0.4", features = ["clock"] }
 futures = "0.3"
+regex = "1"
 async-channel = "2"
+base64 = { workspace = true }
+rquickjs = { workspace = true }
+tokio-tungstenite = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
-rusqlite = { version = "0.31", features = ["bundled"] }
+agent-db = { path = "../agent-db" }
 tokio = { workspace = true, features = ["test-util"] }

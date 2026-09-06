@@ -8,10 +8,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  resolveThemePreference,
+  type ResolvedTheme,
+  type ThemeMode,
+} from "../../lib/ui/themeResolution";
 
-export type ThemeMode = "light" | "dark" | "auto";
-export type ResolvedTheme = "light" | "dark";
-export type GlassLevel = "rich" | "normal" | "minimal";
+export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
+export type GlassLevel =
+  | "liquid"
+  | "liquid-soft"
+  | "rich"
+  | "normal"
+  | "minimal";
+
+const GLASS_LEVELS: readonly GlassLevel[] = [
+  "liquid",
+  "liquid-soft",
+  "rich",
+  "normal",
+  "minimal",
+];
+const DEFAULT_GLASS_LEVEL: GlassLevel = "liquid";
 
 const STORAGE_KEY = "astro-theme-mode";
 const GLASS_KEY = "astro-glass-level";
@@ -46,13 +64,16 @@ export function resolveTheme(mode: ThemeMode): ResolvedTheme {
 function readGlassLevel(): GlassLevel {
   try {
     const v = localStorage.getItem(GLASS_KEY);
-    if (v === "rich" || v === "normal" || v === "minimal") return v;
-  } catch { /* ignore */ }
-  return "rich";
+    if (GLASS_LEVELS.includes(v as GlassLevel)) return v as GlassLevel;
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_GLASS_LEVEL;
 }
 
 function applyGlass(level: GlassLevel) {
   const root = document.documentElement;
+  // rich 是 token 基线本身，不需要属性钩子。
   if (level === "rich") {
     root.removeAttribute("data-glass");
   } else {
@@ -67,19 +88,32 @@ function applyResolved(next: ResolvedTheme) {
   root.style.colorScheme = next;
   root.setAttribute("data-theme", next);
 
-  if (prev && prev !== next && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (
+    prev &&
+    prev !== next &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
     root.classList.add("theme-transitioning");
-    const tid = setTimeout(() => root.classList.remove("theme-transitioning"), 350);
+    const tid = setTimeout(
+      () => root.classList.remove("theme-transitioning"),
+      350,
+    );
     root.dataset.themeTimer = String(tid);
   }
 }
 
 /** 同步 Tauri 原生窗主题，避免 WKWebView 在换 underlay 时跟着系统外观跳变 */
-async function syncNativeWindowTheme(mode: ThemeMode, resolved: ResolvedTheme) {
+async function syncNativeWindowTheme(
+  mode: ThemeMode,
+  resolved: ResolvedTheme,
+  wallpaperTheme: ResolvedTheme | null,
+) {
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     // auto → null 跟随系统；light/dark 锁定，防止切 tab 时原生外观翻转
-    await getCurrentWindow().setTheme(mode === "auto" ? null : resolved);
+    await getCurrentWindow().setTheme(
+      mode === "auto" && wallpaperTheme == null ? null : resolved,
+    );
   } catch {
     // 浏览器预览或 API 不可用时忽略
   }
@@ -91,6 +125,7 @@ type ThemeContextValue = {
   resolved: ResolvedTheme;
   glassLevel: GlassLevel;
   setGlassLevel: (level: GlassLevel) => void;
+  setWallpaperTheme: (theme: ResolvedTheme | null) => void;
   /** 在切 tab / tone 后重新断言当前主题，防止 data-theme 被冲掉 */
   reassert: () => void;
 };
@@ -105,31 +140,40 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     typeof window === "undefined" ? "dark" : resolveTheme(readStoredMode()),
   );
   const [glassLevel, setGlassState] = useState<GlassLevel>(() =>
-    typeof window === "undefined" ? "rich" : readGlassLevel(),
+    typeof window === "undefined" ? DEFAULT_GLASS_LEVEL : readGlassLevel(),
+  );
+  const [wallpaperTheme, setWallpaperThemeState] =
+    useState<ResolvedTheme | null>(null);
+
+  const apply = useCallback(
+    (nextMode: ThemeMode, nextWallpaperTheme: ResolvedTheme | null) => {
+      const next = resolveThemePreference(
+        nextMode,
+        systemPrefersDark(),
+        nextWallpaperTheme,
+      );
+      setResolved(next);
+      applyResolved(next);
+      persistMode(nextMode);
+      void syncNativeWindowTheme(nextMode, next, nextWallpaperTheme);
+    },
+    [],
   );
 
-  const apply = useCallback((nextMode: ThemeMode) => {
-    const next = resolveTheme(nextMode);
-    setResolved(next);
-    applyResolved(next);
-    persistMode(nextMode);
-    void syncNativeWindowTheme(nextMode, next);
-  }, []);
-
   useEffect(() => {
-    apply(mode);
+    apply(mode, wallpaperTheme);
     applyGlass(glassLevel);
-  }, [mode, apply, glassLevel]);
+  }, [mode, apply, glassLevel, wallpaperTheme]);
 
   useEffect(() => {
     if (mode !== "auto") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      apply("auto");
+      apply("auto", wallpaperTheme);
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, [mode, apply]);
+  }, [mode, apply, wallpaperTheme]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
@@ -138,17 +182,43 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setGlassLevel = useCallback((level: GlassLevel) => {
     setGlassState(level);
     applyGlass(level);
-    try { localStorage.setItem(GLASS_KEY, level); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(GLASS_KEY, level);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setWallpaperTheme = useCallback((theme: ResolvedTheme | null) => {
+    setWallpaperThemeState((current) => (current === theme ? current : theme));
   }, []);
 
   const reassert = useCallback(() => {
-    applyResolved(resolveTheme(mode));
+    applyResolved(
+      resolveThemePreference(mode, systemPrefersDark(), wallpaperTheme),
+    );
     applyGlass(glassLevel);
-  }, [mode, glassLevel]);
+  }, [mode, glassLevel, wallpaperTheme]);
 
   const value = useMemo(
-    () => ({ mode, setMode, resolved, glassLevel, setGlassLevel, reassert }),
-    [mode, setMode, resolved, glassLevel, setGlassLevel, reassert],
+    () => ({
+      mode,
+      setMode,
+      resolved,
+      glassLevel,
+      setGlassLevel,
+      setWallpaperTheme,
+      reassert,
+    }),
+    [
+      mode,
+      setMode,
+      resolved,
+      glassLevel,
+      setGlassLevel,
+      setWallpaperTheme,
+      reassert,
+    ],
   );
 
   return (

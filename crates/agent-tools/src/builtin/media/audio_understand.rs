@@ -25,20 +25,20 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 60;
 /// 远程音频下载的字节数上限（25 MiB），适用于 `Content-Length` 预检与累计字节数双重校验。
 const MAX_AUDIO_DOWNLOAD_BYTES: u64 = 25 * 1024 * 1024;
 
-/// Arguments for the `audio_understand` tool.
+/// `audio_understand` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct AudioUnderstandArgs {
-    /// Workspace-relative path, http(s) audio URL, or YouTube URL.
+    /// 工作区相对路径、http(s) 音频 URL 或 YouTube URL。
     pub audio_url: String,
     #[serde(default)]
     pub prompt: Option<String>,
-    /// describe | transcribe; default describe.
+    /// describe | transcribe；默认 describe。
     #[serde(default)]
     pub mode: Option<String>,
-    /// Optional time-window start MM:SS.
+    /// 可选时间窗口起始 MM:SS。
     #[serde(default)]
     pub start: Option<String>,
-    /// Optional time-window end MM:SS.
+    /// 可选时间窗口结束 MM:SS。
     #[serde(default)]
     pub end: Option<String>,
 }
@@ -614,11 +614,13 @@ mod path_escape_tests {
             memory_dir,
             workspace_dir,
             project_root: None,
+            workspace_roots: Vec::new(),
             image_gen_targets: targets,
             session_id: "test".into(),
             turn_id: None,
             credentials: creds,
-            chat_targets: &[],
+            service_tier: None,
+            model_targets: &[],
             execution: None,
             permission_profile: None,
             skill_config_overrides: &[],
@@ -626,10 +628,10 @@ mod path_escape_tests {
             hook_runtime: None,
             workspace_write_grant: false,
             sandbox_policy: None,
-            network_grant: crate::InProcessNetworkGrant::default(),
             managed_network: None,
             context_window: None,
             context_tokens_used: None,
+            tool_registry: None,
         }
     }
 
@@ -644,8 +646,9 @@ mod path_escape_tests {
         std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -675,8 +678,9 @@ mod path_escape_tests {
         std::fs::write(ws.join("ok.wav"), b"ok-bytes").unwrap();
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -705,8 +709,9 @@ mod path_escape_tests {
         std::fs::write(outside.join("secret.mp3"), b"top-secret-bytes").unwrap();
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -738,8 +743,9 @@ mod path_escape_tests {
         std::fs::write(ws.join("clip.wav"), b"pcm-bytes").unwrap();
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(
@@ -779,8 +785,9 @@ mod path_escape_tests {
         std::fs::create_dir_all(&ws).unwrap();
 
         let memory = std::sync::RwLock::new(MemoryManager::new(dir.path().to_path_buf()).unwrap());
-        let sessions =
-            session::SessionStore::open_sessions_dir(&dir.path().join("sessions")).unwrap();
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+            .await
+            .unwrap();
         let targets = ImageGenTargets::default();
         let creds = crate::context::ModelCredentials::default();
         let ctx = build_ctx(

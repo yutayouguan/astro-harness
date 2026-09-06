@@ -1,5 +1,16 @@
-import { TextField, SelectField, NumberField, cfgStr, cfgNum } from "./ConfigField";
-import { KeyValueEditor, KvEntry, jsonToKvEntries, kvEntriesToObj } from "./StructuredEditors";
+import {
+  TextField,
+  SelectField,
+  NumberField,
+  cfgStr,
+  cfgNum,
+} from "./ConfigField";
+import {
+  KeyValueEditor,
+  KvEntry,
+  jsonToKvEntries,
+  kvEntriesToObj,
+} from "./StructuredEditors";
 
 interface ConfigProps {
   config: Record<string, unknown>;
@@ -23,10 +34,14 @@ const AUTH_OPTIONS = [
 
 function authPlaceholder(type: string): string {
   switch (type) {
-    case "bearer": return "Token";
-    case "basic": return "user:password";
-    case "api_key": return "Key 值";
-    default: return "";
+    case "bearer":
+      return "Token";
+    case "basic":
+      return "user:password";
+    case "api_key":
+      return "Key 值";
+    default:
+      return "";
   }
 }
 
@@ -65,7 +80,9 @@ export default function HttpRequestConfig({ config, onChange }: ConfigProps) {
       <KeyValueEditor
         label="请求头"
         value={jsonToKvEntries(config.headers)}
-        onChange={(v: KvEntry[]) => onChange({ ...config, headers: kvEntriesToObj(v) })}
+        onChange={(v: KvEntry[]) =>
+          onChange({ ...config, headers: kvEntriesToObj(v) })
+        }
         keyPlaceholder="Header 名"
         valuePlaceholder="值"
         hint="常用头如 Content-Type, Accept"

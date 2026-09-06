@@ -1,7 +1,7 @@
 //! 创建持久人设：在 `~/.astro` 下新建独立记忆空间与配置。
 //!
 //! 调用 [`home::create_agent_with_profile`]；若 `activate`，会就地更新
-//! [`ToolContext`] 的工作区与 MemoryManager，便于后续 file_ops 写到新空间。
+//! [`ToolContext`] 的工作区与 MemoryManager，便于后续写到新空间。
 //!
 //! **禁止**用本工具拆解当前回合任务——这类任务应启动 Agent Thread。
 
@@ -12,37 +12,37 @@ use crate::context::ToolContext;
 use crate::registry::{ToolEntry, ToolRegistry};
 use crate::schema::schema_for_args;
 
-/// Persona / preference profile fields for AGENT / IDENTITY / SOUL / USER templates.
+/// AGENT / IDENTITY / SOUL / USER 模板的人设 / 偏好字段。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 pub struct AgentProfileArgs {
     #[serde(default)]
     pub background: Option<String>,
     #[serde(default)]
     pub style: Option<String>,
-    /// Primary ways to help the user.
+    /// 帮助用户的主要方式。
     #[serde(default)]
     pub focus: Option<String>,
     #[serde(default)]
     pub avoid: Option<String>,
-    /// How to address the user.
+    /// 如何称呼用户。
     #[serde(default)]
     pub call_me: Option<String>,
     #[serde(default)]
     pub preferences: Option<String>,
 }
 
-/// Arguments for the `persona_create` tool.
+/// `persona_create` 工具的参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PersonaCreateArgs {
-    /// Display name (any language; may collide; decoupled from immutable id).
+    /// 显示名称（任意语言；可重名；与不可变 id 解耦）。
     pub name: String,
-    /// Optional explicit id (advanced / tests). Default `{slug}--{hex12}` from name.
+    /// 可选的显式 id（高级用法 / 测试）。默认由 name 生成 `{slug}--{hex12}`。
     #[serde(default)]
     pub id: Option<String>,
-    /// Switch to this agent after create (updates ASTRO_WORKSPACE / MEMORY); default `false`.
+    /// 创建后切换到此 agent（更新 ASTRO_WORKSPACE / MEMORY）；默认 `false`。
     #[serde(default)]
     pub activate: Option<bool>,
-    /// Copy global tool gates into `agents/{id}/config.json` as a starting point; default `true`.
+    /// 将全局工具开关复制到 `agents/{id}/config.json` 作为起点；默认 `true`。
     #[serde(default)]
     pub inherit_config: Option<bool>,
     #[serde(default)]
@@ -56,8 +56,7 @@ pub fn register(registry: &mut ToolRegistry) {
         toolset: "persona".to_string(),
         description:
             "Create a durable Agent persona with persistent workspace (MEMORY/IDENTITY/SOUL). \
-FORBIDDEN for in-turn task splitting—use spawn_agent to create an Agent Thread. \
-Prefer after loading the create-agent skill."
+FORBIDDEN for in-turn task splitting—use spawn_agent to create an Agent Thread."
                 .to_string(),
         schema: schema_for_args::<PersonaCreateArgs>(),
         check_fn: None,
@@ -66,11 +65,7 @@ Prefer after loading the create-agent skill."
     });
 }
 
-crate::submit_builtin_tool! {
-    register: register,
-    names: ["persona_create"],
-    sync_ctx: dispatch,
-}
+// 单专家模式不再把 persona_create 暴露给模型；保留实现仅供旧数据迁移工具复用。
 
 /// 将可选字符串规范为空串（缺省或仅空白视为空）。
 fn opt_str(v: &Option<String>) -> String {
@@ -117,7 +112,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
         activate,
     )?;
 
-    // 若已切换，更新当前 ToolContext 工作区，便于后续 file_ops 写到新空间
+    // 若已切换，更新当前 ToolContext 工作区，便于后续写到新空间
     if activate {
         ctx.workspace_dir = std::path::PathBuf::from(&info.path);
         skills::set_workspace_override(std::path::Path::new(&info.path));
@@ -127,7 +122,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     }
 
     Ok(format!(
-        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 file_ops 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
+        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 apply_patch 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
         name = info.name,
         id = info.id,
         path = info.path,

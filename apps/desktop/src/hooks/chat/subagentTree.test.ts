@@ -12,6 +12,7 @@ import {
   isAgentTreeGenerationCurrent,
   isAgentTreeRequestCurrent,
   reduceAgentThreadEvent,
+  summarizeAgentActivity,
   type AgentThread,
   type AgentThreadChanged,
   type AgentTreeSnapshot,
@@ -27,7 +28,8 @@ function thread(
   return {
     threadId: `${taskName}-id`,
     rootThreadId: "root-session",
-    parentThreadId: canonicalPath === "/root" ? null : `${segments.at(-2) ?? "root"}-id`,
+    parentThreadId:
+      canonicalPath === "/root" ? null : `${segments.at(-2) ?? "root"}-id`,
     canonicalPath,
     taskName,
     agentType: "default",
@@ -39,8 +41,17 @@ function thread(
   };
 }
 
-function snapshot(threads: AgentThread[], activitySequence = 1): AgentTreeSnapshot {
-  return { rootThreadId: "root-session", threads, activitySequence };
+function snapshot(
+  threads: AgentThread[],
+  activitySequence = 1,
+  rootServiceTier: string | null = null,
+): AgentTreeSnapshot {
+  return {
+    rootThreadId: "root-session",
+    threads,
+    activitySequence,
+    rootServiceTier,
+  };
 }
 
 function changed(
@@ -58,22 +69,38 @@ function changed(
 }
 
 test("builds a stable nested tree sorted by canonical path", () => {
-  const root = thread("/root", { kind: "running" }, {
-    threadId: "root-session",
-    parentThreadId: null,
-    sessionId: "root-session",
-  });
-  const research = thread("/root/research", { kind: "running" }, {
-    threadId: "research-id",
-    parentThreadId: "root-session",
-  });
-  const citations = thread("/root/research/citations", {
-    kind: "completed",
-    payload: { lastMessage: "done" },
-  }, { parentThreadId: "research-id" });
-  const analysis = thread("/root/analysis", { kind: "running" }, {
-    parentThreadId: "root-session",
-  });
+  const root = thread(
+    "/root",
+    { kind: "running" },
+    {
+      threadId: "root-session",
+      parentThreadId: null,
+      sessionId: "root-session",
+    },
+  );
+  const research = thread(
+    "/root/research",
+    { kind: "running" },
+    {
+      threadId: "research-id",
+      parentThreadId: "root-session",
+    },
+  );
+  const citations = thread(
+    "/root/research/citations",
+    {
+      kind: "completed",
+      payload: { lastMessage: "done" },
+    },
+    { parentThreadId: "research-id" },
+  );
+  const analysis = thread(
+    "/root/analysis",
+    { kind: "running" },
+    {
+      parentThreadId: "root-session",
+    },
+  );
 
   const state = fromSnapshot(snapshot([citations, research, analysis, root]));
   assert.deepEqual(
@@ -90,13 +117,47 @@ test("builds a stable nested tree sorted by canonical path", () => {
   );
 });
 
+test("summarizes every visible subagent lifecycle state", () => {
+  const state = fromSnapshot(
+    snapshot([
+      thread("/root/pending", { kind: "pending_init" }),
+      thread("/root/running", { kind: "running" }),
+      thread("/root/done", {
+        kind: "completed",
+        payload: { lastMessage: "done" },
+      }),
+      thread("/root/error", {
+        kind: "errored",
+        payload: { message: "failed" },
+      }),
+      thread("/root/interrupted", { kind: "interrupted" }),
+    ]),
+  );
+
+  assert.deepEqual(summarizeAgentActivity(state.roots), {
+    total: 5,
+    pending: 1,
+    running: 1,
+    completed: 1,
+    errored: 1,
+    interrupted: 1,
+    shutdown: 0,
+  });
+});
+
 test("ignores duplicate and out-of-order activity sequences", () => {
   const worker = thread("/root/a", { kind: "running" });
   const initial = fromSnapshot(snapshot([worker], 10));
-  const completed = reduceAgentThreadEvent(initial, changed({
-    ...worker,
-    status: { kind: "completed", payload: { lastMessage: "done" } },
-  }, 11));
+  const completed = reduceAgentThreadEvent(
+    initial,
+    changed(
+      {
+        ...worker,
+        status: { kind: "completed", payload: { lastMessage: "done" } },
+      },
+      11,
+    ),
+  );
   assert.strictEqual(
     reduceAgentThreadEvent(completed, changed(worker, 10)),
     completed,
@@ -110,15 +171,21 @@ test("ignores duplicate and out-of-order activity sequences", () => {
 test("replays only newer buffered events from the active stream generation", () => {
   const worker = thread("/root/a", { kind: "running" });
   const initial = fromSnapshot(snapshot([worker], 8));
-  const completed = changed({
-    ...worker,
-    status: { kind: "completed", payload: { lastMessage: "current" } },
-  }, 11);
+  const completed = changed(
+    {
+      ...worker,
+      status: { kind: "completed", payload: { lastMessage: "current" } },
+    },
+    11,
+  );
   const stale = changed(worker, 9);
-  const otherGeneration = changed({
-    ...worker,
-    status: { kind: "errored", payload: { message: "wrong stream" } },
-  }, 12);
+  const otherGeneration = changed(
+    {
+      ...worker,
+      status: { kind: "errored", payload: { message: "wrong stream" } },
+    },
+    12,
+  );
   const next = fromSnapshotWithBufferedEvents(
     snapshot([worker], 10),
     initial,
@@ -139,43 +206,69 @@ test("replays only newer buffered events from the active stream generation", () 
 test("marks mailbox and final activity unread until the thread is opened", () => {
   const worker = thread("/root/a", { kind: "running" });
   const initial = fromSnapshot(snapshot([worker]));
-  const mailbox = reduceAgentThreadEvent(initial, changed(worker, 2, "mailbox"));
+  const mailbox = reduceAgentThreadEvent(
+    initial,
+    changed(worker, 2, "mailbox"),
+  );
   assert.equal(mailbox.byPath["/root/a"]?.unread, true);
 
   const read = markThreadRead(mailbox, "/root/a");
   assert.equal(read.byPath["/root/a"]?.unread, false);
 
-  const completed = reduceAgentThreadEvent(read, changed({
-    ...worker,
-    status: { kind: "completed", payload: { lastMessage: "final" } },
-  }, 3));
+  const completed = reduceAgentThreadEvent(
+    read,
+    changed(
+      {
+        ...worker,
+        status: { kind: "completed", payload: { lastMessage: "final" } },
+      },
+      3,
+    ),
+  );
   assert.equal(completed.byPath["/root/a"]?.unread, true);
 });
 
 test("does not mark lifecycle noise unread", () => {
   const pending = thread("/root/a", { kind: "pending_init" });
   const initial = fromSnapshot(snapshot([pending]));
-  const running = reduceAgentThreadEvent(initial, changed({
-    ...pending,
-    status: { kind: "running" },
-  }, 2));
+  const running = reduceAgentThreadEvent(
+    initial,
+    changed(
+      {
+        ...pending,
+        status: { kind: "running" },
+      },
+      2,
+    ),
+  );
   assert.equal(running.byPath["/root/a"]?.unread, false);
 });
 
 test("keeps orphans stable and reparents them when the parent arrives", () => {
-  const child = thread("/root/parent/child", { kind: "running" }, {
-    threadId: "child-id",
-    parentThreadId: "parent-id",
-  });
+  const child = thread(
+    "/root/parent/child",
+    { kind: "running" },
+    {
+      threadId: "child-id",
+      parentThreadId: "parent-id",
+    },
+  );
   const initial = fromSnapshot(snapshot([child]));
   assert.equal(initial.roots[0]?.thread.threadId, "child-id");
 
-  const parent = thread("/root/parent", { kind: "running" }, {
-    threadId: "parent-id",
-    parentThreadId: "root-session",
-  });
+  const parent = thread(
+    "/root/parent",
+    { kind: "running" },
+    {
+      threadId: "parent-id",
+      parentThreadId: "root-session",
+    },
+  );
   const next = reduceAgentThreadEvent(initial, changed(parent, 2, "spawned"));
-  assert.equal(next.byPath["/root/parent"]?.children[0]?.thread.threadId, "child-id");
+  assert.equal(
+    next.byPath["/root/parent"]?.children[0]?.thread.threadId,
+    "child-id",
+  );
 });
 
 test("projects shutdown rows as archived and preserves unread state across snapshots", () => {
@@ -199,23 +292,27 @@ test("normalizes the complete Tauri snapshot into camelCase V2 DTOs", () => {
   const normalized = normalizeAgentTreeSnapshot({
     root_thread_id: "root-session",
     activity_sequence: 9,
-    threads: [{
-      thread_id: "worker-id",
-      root_thread_id: "root-session",
-      parent_thread_id: "root-session",
-      canonical_path: "/root/worker",
-      task_name: "worker",
-      agent_type: "reviewer",
-      session_id: "worker-session",
-      status: {
-        kind: "completed",
-        payload: { last_message: "finished" },
+    root_service_tier: "priority",
+    threads: [
+      {
+        thread_id: "worker-id",
+        root_thread_id: "root-session",
+        parent_thread_id: "root-session",
+        canonical_path: "/root/worker",
+        task_name: "worker",
+        agent_type: "reviewer",
+        session_id: "worker-session",
+        status: {
+          kind: "completed",
+          payload: { last_message: "finished" },
+        },
+        created_at: "created",
+        updated_at: "updated",
       },
-      created_at: "created",
-      updated_at: "updated",
-    }],
+    ],
   });
   assert.equal(normalized.activitySequence, 9);
+  assert.equal(normalized.rootServiceTier, "priority");
   assert.deepEqual(normalized.threads[0], {
     threadId: "worker-id",
     rootThreadId: "root-session",
@@ -230,6 +327,27 @@ test("normalizes the complete Tauri snapshot into camelCase V2 DTOs", () => {
   });
 });
 
+test("preserves root service tier across live events and read projections", () => {
+  const worker = thread("/root/worker", { kind: "running" });
+  const state = fromSnapshot(snapshot([worker], 3, "priority"));
+  const updated = reduceAgentThreadEvent(
+    state,
+    changed(
+      thread("/root/worker", {
+        kind: "completed",
+        payload: { lastMessage: "done" },
+      }),
+      4,
+    ),
+  );
+
+  assert.equal(updated.rootServiceTier, "priority");
+  assert.equal(
+    markThreadRead(updated, "/root/worker").rootServiceTier,
+    "priority",
+  );
+});
+
 test("normalizes field 13 event status payload and empty root parent", () => {
   const event = normalizeAgentThreadChanged({
     activitySequence: 12,
@@ -241,7 +359,7 @@ test("normalizes field 13 event status payload and empty root parent", () => {
     agentType: "default",
     sessionId: "root-session",
     statusKind: "shutdown",
-    statusPayloadJson: "{\"kind\":\"shutdown\"}",
+    statusPayloadJson: '{"kind":"shutdown"}',
     activityKind: "edge_closed",
   });
   assert.equal(event.parentThreadId, null);
@@ -249,19 +367,23 @@ test("normalizes field 13 event status payload and empty root parent", () => {
 });
 
 test("rejects a field 13 status discriminator that disagrees with its payload", () => {
-  assert.throws(() => normalizeAgentThreadChanged({
-    activitySequence: 12,
-    rootThreadId: "root-session",
-    threadId: "worker-id",
-    parentThreadId: "root-session",
-    canonicalPath: "/root/worker",
-    taskName: "worker",
-    agentType: "default",
-    sessionId: "worker-session",
-    statusKind: "running",
-    statusPayloadJson: "{\"kind\":\"shutdown\"}",
-    activityKind: "status_changed",
-  }), /discriminator/);
+  assert.throws(
+    () =>
+      normalizeAgentThreadChanged({
+        activitySequence: 12,
+        rootThreadId: "root-session",
+        threadId: "worker-id",
+        parentThreadId: "root-session",
+        canonicalPath: "/root/worker",
+        taskName: "worker",
+        agentType: "default",
+        sessionId: "worker-session",
+        statusKind: "running",
+        statusPayloadJson: '{"kind":"shutdown"}',
+        activityKind: "status_changed",
+      }),
+    /discriminator/,
+  );
 });
 
 test("normalizes the real SessionStore timeline including tool metadata", () => {
@@ -278,25 +400,24 @@ test("normalizes the real SessionStore timeline including tool metadata", () => 
       created_at: "created",
       updated_at: "updated",
     },
-    messages: [{
-      id: 4,
-      session_id: "worker-session",
-      role: "tool",
-      content: "result",
-      compressed_content: "short result",
-      tool_call_id: "call-1",
-      tool_calls: [{ name: "exec" }],
-      tool_name: "exec",
-      timestamp: 123.5,
-      token_count: 8,
-      finish_reason: null,
-      reasoning: null,
-      reasoning_content: null,
-      reasoning_details: null,
-      codex_reasoning_items: null,
-      codex_message_items: null,
-      media_json: null,
-    }],
+    messages: [
+      {
+        id: 4,
+        session_id: "worker-session",
+        role: "tool",
+        content: "result",
+        compressed_content: "short result",
+        tool_call_id: "call-1",
+        tool_calls: [{ name: "exec" }],
+        tool_name: "exec",
+        timestamp: 123.5,
+        token_count: 8,
+        finish_reason: null,
+        reasoning: null,
+        reasoning_details: null,
+        media_json: null,
+      },
+    ],
   });
   assert.equal(detail.messages[0]?.toolName, "exec");
   assert.equal(detail.messages[0]?.toolCallId, "call-1");
@@ -304,20 +425,28 @@ test("normalizes the real SessionStore timeline including tool metadata", () => 
 });
 
 test("ignores same-session local events before inspecting their empty stream id", () => {
-  const result = classifyAgentThreadSessionEvent({
-    sessionId: "root-session",
-    streamId: "",
-    memoryUpdated: { summary: "unrelated" },
-  }, "root-session", "server-stream");
+  const result = classifyAgentThreadSessionEvent(
+    {
+      sessionId: "root-session",
+      streamId: "",
+      memoryUpdated: { summary: "unrelated" },
+    },
+    "root-session",
+    "server-stream",
+  );
   assert.deepEqual(result, { kind: "ignore" });
 });
 
 test("classifies field 14 as refresh even when the stream id is unchanged", () => {
-  const result = classifyAgentThreadSessionEvent({
-    sessionId: "root-session",
-    streamId: "server-stream",
-    resyncRequired: { reason: "activity_gap" },
-  }, "root-session", "server-stream");
+  const result = classifyAgentThreadSessionEvent(
+    {
+      sessionId: "root-session",
+      streamId: "server-stream",
+      resyncRequired: { reason: "activity_gap" },
+    },
+    "root-session",
+    "server-stream",
+  );
   assert.equal(result.kind, "refresh");
   if (result.kind === "refresh") {
     assert.equal(result.streamChanged, false);

@@ -1,0 +1,616 @@
+/* 项目文件工作台：右侧目录树是贴窗的方角玻璃侧栏，
+   编辑器仍是独立卡片，只替换聊天消息区。 */
+.chat-layout-with-right {
+  --pf-gutter: 6px;
+  --pf-radius-card: 18px;
+  --pf-radius-control: 10px;
+  --pf-radius-row: 8px;
+  --pf-radius-tight: 6px;
+}
+
+.content-pane--chat > .page-body--chat.has-project-file {
+  padding-left: 0;
+}
+
+.project-files-panel {
+  --tone-blue: var(--tone);
+  --tone-blue-soft: var(--tone-soft);
+  position: relative;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--chat-dock-inset) 0;
+  padding-top: var(--chat-header-overlay-height, 50px);
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+  border: var(--chat-dock-surface-border);
+  border-width: 0;
+  border-radius: var(--chat-dock-radius);
+  background: var(--chat-dock-surface-background);
+  box-shadow: var(--chat-dock-surface-shadow);
+  backdrop-filter: var(--chat-dock-surface-filter);
+  -webkit-backdrop-filter: var(--chat-dock-surface-filter);
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(18px) scale(0.985);
+  transform-origin: right center;
+  transition:
+    flex-basis 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-width 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 300ms;
+}
+
+.project-files-panel.is-open {
+  flex-basis: min(var(--project-files-width, 264px), 42%);
+  width: min(var(--project-files-width, 264px), 42%);
+  margin: var(--chat-dock-inset);
+  border-width: 0.5px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+  transition-delay: 0s;
+}
+
+.project-files-resizer {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  bottom: 8px;
+  left: -7px;
+  width: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.project-files-resizer::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--tone);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.project-files-resizer:hover::after,
+.project-files-resizer:focus-visible::after {
+  opacity: 0.62;
+}
+
+.project-files-header {
+  height: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 13px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--glass-edge) 52%, transparent);
+}
+
+.project-files-heading,
+.project-files-actions {
+  display: flex;
+  align-items: center;
+}
+
+.project-files-heading {
+  min-width: 0;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.project-files-heading svg {
+  flex-shrink: 0;
+  color: var(--tone);
+}
+
+.project-files-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 620;
+}
+
+.project-files-actions {
+  gap: 2px;
+}
+
+.project-files-actions button,
+.project-file-tab-actions button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pf-radius-row, 8px);
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.project-files-actions button:hover,
+.project-file-tab-actions button:hover:not(:disabled) {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+
+.project-files-search {
+  height: 32px;
+  margin: 9px 10px 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 58%, transparent);
+  border-radius: var(--pf-radius-control, 10px);
+  background: color-mix(in srgb, var(--ink) 2.8%, rgba(255, 255, 255, 0.18));
+  color: var(--ink-mute);
+}
+
+.project-files-search:focus-within {
+  border-color: color-mix(in srgb, var(--tone) 34%, var(--glass-edge));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tone) 9%, transparent);
+}
+
+.project-files-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.project-files-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1px 8px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tone) 18%, transparent) transparent;
+}
+
+.project-file-row {
+  width: 100%;
+  height: 27px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px 0 calc(4px + var(--tree-level, 0) * 13px);
+  border: 0;
+  border-radius: var(--pf-radius-row, 8px);
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-file-row:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 4.5%, transparent);
+}
+
+.project-file-row.is-active {
+  color: color-mix(in srgb, var(--tone) 76%, var(--ink));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tone) 12%, transparent),
+      transparent 92%
+    ),
+    color-mix(in srgb, var(--glass-panel) 58%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 8%, transparent);
+}
+
+/* material-icon-theme 图标自带配色，只控制尺寸与对齐。 */
+.project-file-icon {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.project-file-chevron,
+.project-file-chevron-spacer {
+  width: 13px;
+  flex: 0 0 13px;
+}
+
+.project-file-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.project-file-loading,
+.project-file-spin {
+  animation: project-file-spin 0.8s linear infinite;
+}
+
+.project-file-loading {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--tone) 25%, transparent);
+  border-top-color: var(--tone);
+  border-radius: 50%;
+}
+
+.project-file-empty-row {
+  padding-left: calc(29px + var(--tree-level, 0) * 14px);
+  color: var(--ink-mute);
+  font-size: 11px;
+  line-height: 26px;
+}
+
+.project-files-empty,
+.project-file-editor-state {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink-mute);
+  font-size: 12px;
+  text-align: center;
+}
+
+.project-file-workbench {
+  flex: 1;
+  min-height: 0;
+  margin: var(--chat-header-overlay-height, 50px) 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.project-file-tabs {
+  height: 34px;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.project-file-tabs-scroll {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.project-file-tab {
+  position: relative;
+  height: 30px;
+  min-width: 112px;
+  max-width: 210px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--pf-radius-control, 10px);
+  color: var(--ink-mute);
+  cursor: pointer;
+  outline: none;
+}
+
+.project-file-tab:hover:not(.is-active) {
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.project-file-tab.is-active {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--tone) 16%, var(--glass-edge));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--tone-soft) 30%, rgba(255, 255, 255, 0.16)),
+      transparent
+    ),
+    color-mix(in srgb, var(--glass-panel) 68%, transparent);
+  box-shadow: 0 1px 2px rgba(var(--shadow-ink), 0.05);
+}
+
+.project-file-tab:not(.is-active) .project-file-icon {
+  opacity: 0.8;
+}
+
+.project-file-tab > span:not(.project-file-tab-close) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.project-file-tab-close {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--pf-radius-tight, 6px);
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.project-file-tab:hover .project-file-tab-close,
+.project-file-tab.is-active .project-file-tab-close {
+  opacity: 0.9;
+}
+
+.project-file-tab-close:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.project-file-dirty {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.project-file-tab-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--glass-edge) 40%, transparent);
+}
+
+.project-file-tab-actions button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.project-file-tab-actions button.is-active {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.project-file-editor-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.project-file-markdown-preview {
+  height: 100%;
+  overflow: auto;
+  padding: 24px clamp(24px, 5vw, 64px) 168px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tone) 18%, transparent) transparent;
+}
+
+.project-file-markdown-preview > .msg-content {
+  width: min(100%, 860px);
+  margin: 0 auto;
+}
+
+.project-file-editor-body .ws-codemirror,
+.project-file-editor-body .cm-editor,
+.project-file-editor-body .cm-scroller {
+  height: 100%;
+}
+
+.project-file-editor-body .cm-editor {
+  background: transparent;
+}
+
+.project-file-editor-body .cm-gutters {
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 38%, transparent);
+  background: color-mix(in srgb, var(--glass-panel) 22%, transparent);
+}
+
+.project-file-editor-body .cm-content {
+  padding-top: 8px;
+  padding-bottom: 156px;
+}
+
+.project-file-editor-state {
+  height: 100%;
+}
+
+.project-file-editor-state.is-error {
+  color: var(--danger);
+}
+
+.project-file-editor-state.is-error span {
+  max-width: 420px;
+  color: var(--ink-mute);
+}
+
+.project-file-editor-body > .ws-media-stage,
+.project-file-editor-body > .fs-preview-pdf-wrap {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+}
+
+.project-file-editor-body > .fs-preview-pdf-wrap {
+  border-radius: 10px;
+}
+
+.project-file-editor-body > .ws-media-stage {
+  padding: 18px;
+}
+
+.project-file-editor-body > .ws-media-stage .ws-media-frame {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.project-file-editor-body
+  .ws-media-stage[data-kind="image"]
+  .media-preview-image,
+.project-file-editor-body
+  .ws-media-stage[data-kind="video"]
+  .media-preview-video {
+  border-radius: 10px;
+}
+
+.project-file-external-state span {
+  max-width: min(520px, 80%);
+  overflow: hidden;
+  color: var(--ink-mute);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-file-external-state button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-file-external-state button:hover {
+  background: color-mix(in srgb, var(--tone) 17%, transparent);
+}
+
+.project-file-streaming-badge {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 14%, var(--glass-panel));
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge));
+  color: var(--tone);
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+/* 文件打开时，顶栏与内容共享同一层玻璃，底边保持直角。 */
+html .chat-pane.has-project-file {
+  position: relative;
+  border-radius: 0;
+  background: var(--sidebar-chrome-background);
+  backdrop-filter: var(--sidebar-chrome-filter);
+  -webkit-backdrop-filter: var(--sidebar-chrome-filter);
+}
+
+.chat-pane.has-project-file .composer-shell {
+  max-width: 760px;
+}
+
+.chat-pane.has-project-file .composer-shell.is-capsule {
+  max-width: 640px;
+}
+
+/* 文件打开时仍沿用侧栏同款材质，只略微增强边界。 */
+.chat-pane.has-project-file .composer {
+  border-color: color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  box-shadow:
+    var(--glass-rim),
+    0 2px 8px rgba(var(--shadow-ink), 0.04);
+}
+
+@media (max-width: 760px) {
+  .project-files-panel {
+    position: absolute;
+    z-index: 18;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin: var(--chat-dock-inset) 0;
+    width: 0;
+    max-width: calc(100% - 24px);
+    box-shadow: var(--chat-dock-surface-shadow);
+  }
+
+  .project-files-panel.is-open {
+    margin: var(--chat-dock-inset);
+    width: min(var(--project-files-width, 264px), calc(100% - 24px));
+  }
+
+  .chat-pane.has-project-file .composer-shell {
+    right: 12px;
+    bottom: 10px;
+    left: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-files-panel {
+    transform: none;
+    transition: none;
+  }
+
+  .project-files-resizer::after {
+    transition: none;
+  }
+
+  .project-file-loading,
+  .project-file-spin {
+    animation: none;
+  }
+}
+
+@keyframes project-file-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

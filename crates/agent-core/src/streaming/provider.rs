@@ -1,25 +1,106 @@
 //! [`ProviderStreamer`]：包装 fallback 链，实现三层 Streaming trait。
 
+use std::ops::Deref;
 use std::sync::{Arc, Mutex as StdMutex};
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use providers::types::message::Message as ProviderMessage;
-use providers::types::stream::{CompletionStream, StreamChunk};
+use providers::types::stream::CompletionStream;
 use providers::ProviderConfig;
-use types::message::Message;
-use types::ChatTarget;
+use types::ModelTarget;
 
-use crate::prompt::messages::to_provider_messages;
-
-use super::fallback::{try_stream_completion_with_fallback, ActiveTargetMeta};
-use super::traits::{StreamingChat, StreamingCompletion, StreamingPrompt};
+use super::fallback::{try_stream_responses_with_fallback, ActiveTargetMeta};
+use super::traits::StreamingResponses;
 use super::types::{map_new_provider_stream, AssistantContentStream};
 
-/// 测试用 chat 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
-pub type ChatOverride = Arc<
+/// 一次 Responses sampling 的完整、不可变请求投影。
+#[derive(Debug, Clone)]
+pub(crate) struct Prompt {
+    pub(crate) instructions: String,
+    pub(crate) input: Vec<agent_protocol::ResponseItem>,
+    pub(crate) tools: Arc<[serde_json::Value]>,
+}
+
+/// 从 StepContext 已冻结的输入和工具计划构建 Provider prompt。
+pub(crate) fn build_prompt(
+    contract: &crate::prompt::PromptContract,
+    step_context: &crate::runtime::StepContext,
+) -> Prompt {
+    Prompt {
+        instructions: contract.base_instructions.clone(),
+        input: crate::prompt::response_input::to_response_items_with_context_history(
+            &step_context.prompt_context,
+            &step_context.history,
+        ),
+        tools: step_context.tool_router.model_visible_specs(),
+    }
+}
+
+/// 测试用 Responses 调用快照，保留顶层 instructions 与原生 item 历史的边界。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ResponsesOverrideInput {
+    pub instructions: String,
+    pub items: Vec<agent_protocol::ResponseItem>,
+}
+
+impl Deref for ResponsesOverrideInput {
+    type Target = [agent_protocol::ResponseItem];
+
+    fn deref(&self) -> &Self::Target {
+        &self.items
+    }
+}
+
+impl ResponsesOverrideInput {
+    pub fn contains_text(&self, expected: &str) -> bool {
+        self.items.iter().any(|item| match item {
+            agent_protocol::ResponseItem::Message { content, .. } => content.iter().any(|part| {
+                matches!(
+                    part,
+                    agent_protocol::ContentItem::InputText { text }
+                        | agent_protocol::ContentItem::OutputText { text }
+                        if text == expected
+                )
+            }),
+            _ => false,
+        })
+    }
+
+    pub fn message_roles(&self) -> impl Iterator<Item = &str> {
+        self.items.iter().filter_map(|item| match item {
+            agent_protocol::ResponseItem::Message { role, .. } => Some(role.as_str()),
+            _ => None,
+        })
+    }
+
+    pub fn message_summaries(&self) -> Vec<(String, String)> {
+        self.items
+            .iter()
+            .filter_map(|item| match item {
+                agent_protocol::ResponseItem::Message { role, content, .. } => Some((
+                    role.clone(),
+                    content
+                        .iter()
+                        .filter_map(|part| match part {
+                            agent_protocol::ContentItem::InputText { text }
+                            | agent_protocol::ContentItem::OutputText { text } => {
+                                Some(text.as_str())
+                            }
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+/// 测试用 Responses 函数覆盖：跳过 dispatch，直接返回脚本化的 CompletionStream。
+pub type ResponsesOverride = Arc<
     dyn Fn(
-            Vec<ProviderMessage>,
+            ResponsesOverrideInput,
             Vec<serde_json::Value>,
             ProviderConfig,
         ) -> std::pin::Pin<
@@ -31,46 +112,51 @@ pub type ChatOverride = Arc<
 /// 包装 fallback 链，实现三层 Streaming trait。
 pub struct ProviderStreamer {
     /// 含 primary 的聊天目标链（失败切模仅用此列表，不改会话默认凭据）。
-    pub targets: Vec<ChatTarget>,
+    pub targets: Vec<ModelTarget>,
     /// temperature / thinking 等；model/key/url 由每跳 target 覆盖。
     pub base_config: ProviderConfig,
     /// 最近一次成功补全命中的目标元数据（供 usage 记录）。
     last_hit: StdMutex<Option<ActiveTargetMeta>>,
-    /// Google Interactions：上一轮 `interaction.id`，供工具多轮 `previous_interaction_id`。
-    previous_interaction_id: Arc<StdMutex<Option<String>>>,
+    /// 最近一次已尝试的目标，包括最终失败的 fallback 目标。
+    last_attempt: StdMutex<Option<ActiveTargetMeta>>,
     /// 测试覆盖：非空时跳过 dispatch，直接使用此函数获取 CompletionStream。
-    chat_override: Option<ChatOverride>,
+    responses_override: Option<ResponsesOverride>,
 }
 
 impl ProviderStreamer {
-    pub fn new(targets: Vec<ChatTarget>, base_config: ProviderConfig) -> Self {
+    pub fn new(targets: Vec<ModelTarget>, base_config: ProviderConfig) -> Self {
         Self {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
-            previous_interaction_id: Arc::new(StdMutex::new(None)),
-            chat_override: None,
+            last_attempt: StdMutex::new(None),
+            responses_override: None,
         }
     }
 
     /// 构造带测试覆盖的 ProviderStreamer（供集成测试注入脚本化回复）。
-    pub fn with_chat_override(
-        targets: Vec<ChatTarget>,
+    pub fn with_responses_override(
+        targets: Vec<ModelTarget>,
         base_config: ProviderConfig,
-        chat_override: ChatOverride,
+        responses_override: ResponsesOverride,
     ) -> Self {
         Self {
             targets,
             base_config,
             last_hit: StdMutex::new(None),
-            previous_interaction_id: Arc::new(StdMutex::new(None)),
-            chat_override: Some(chat_override),
+            last_attempt: StdMutex::new(None),
+            responses_override: Some(responses_override),
         }
     }
 
     /// 最近一次成功 stream 的命中元数据。
     pub fn last_hit_meta(&self) -> Option<ActiveTargetMeta> {
         self.last_hit.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// 最近一次实际发起请求的目标，失败时也可用。
+    pub fn last_attempt_meta(&self) -> Option<ActiveTargetMeta> {
+        self.last_attempt.lock().ok().and_then(|g| g.clone())
     }
 
     pub(crate) fn api_key_for(&self, meta: &ActiveTargetMeta) -> String {
@@ -91,29 +177,64 @@ impl ProviderStreamer {
             .map(|t| t.model.clone())
             .unwrap_or_else(|| self.base_config.model.clone())
     }
+
+    /// 使用稳定指令采样，同时保持持久化的角色上下文历史独立分离。
+    /// 原生工具 schema 保留在独立的 `tools` 参数中。
+    pub(crate) async fn stream_responses_with_contract(
+        &self,
+        prompt: &crate::prompt::PromptContract,
+        prompt_context: &[crate::prompt::context_state::PromptContextEvent],
+        history: &[agent_protocol::ResponseItem],
+        tools: Vec<serde_json::Value>,
+    ) -> anyhow::Result<AssistantContentStream> {
+        let prompt = Prompt {
+            instructions: prompt.base_instructions.clone(),
+            input: crate::prompt::response_input::to_response_items_with_context_history(
+                prompt_context,
+                history,
+            ),
+            tools: tools.into(),
+        };
+        self.stream_prompt(&prompt).await
+    }
+
+    pub(crate) async fn stream_prompt(
+        &self,
+        prompt: &Prompt,
+    ) -> anyhow::Result<AssistantContentStream> {
+        self.stream_response(
+            prompt.instructions.clone(),
+            prompt.input.clone(),
+            prompt.tools.to_vec(),
+        )
+        .await
+    }
 }
 
 #[async_trait]
-impl StreamingCompletion for ProviderStreamer {
-    /// 经 [`try_stream_completion_with_fallback`] 再 [`map_new_provider_stream`] 归一化。
-    ///
-    /// Google Interactions：自动注入/更新 `previous_interaction_id`，使工具多轮
-    /// 保留服务端 thought/signature。
-    async fn stream_completion(
+impl StreamingResponses for ProviderStreamer {
+    async fn stream_response(
         &self,
-        messages: Vec<ProviderMessage>,
+        instructions: String,
+        input: Vec<agent_protocol::ResponseItem>,
         tools: Vec<serde_json::Value>,
     ) -> anyhow::Result<AssistantContentStream> {
-        let mut config = self.base_config.clone();
-        config.previous_interaction_id = self
-            .previous_interaction_id
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
+        let config = self.base_config.clone();
 
-        let (stream, meta) = if let Some(ref chat_fn) = self.chat_override {
-            // 测试覆盖路径：直接调用自定义函数
-            let stream = chat_fn(messages, tools, config.clone()).await?;
+        if let Ok(mut guard) = self.last_attempt.lock() {
+            *guard = self.targets.first().map(ActiveTargetMeta::from_target);
+        }
+
+        let (stream, meta) = if let Some(ref responses_fn) = self.responses_override {
+            let stream = responses_fn(
+                ResponsesOverrideInput {
+                    instructions,
+                    items: input,
+                },
+                tools,
+                config.clone(),
+            )
+            .await?;
             let meta = ActiveTargetMeta {
                 provider_id: self
                     .targets
@@ -138,87 +259,37 @@ impl StreamingCompletion for ProviderStreamer {
             };
             (stream, meta)
         } else {
-            try_stream_completion_with_fallback(
+            try_stream_responses_with_fallback(
                 &self.targets,
-                messages,
+                instructions,
+                input,
                 tools,
                 &config,
                 |from, to, err| {
+                    if let Ok(mut guard) = self.last_attempt.lock() {
+                        *guard = Some(ActiveTargetMeta::from_target(to));
+                    }
                     tracing::warn!(
                         from_backend = %from.backend_id,
                         from_model = %from.model,
                         to_backend = %to.backend_id,
                         to_model = %to.model,
                         error = %err,
-                        "chat failover: switching target before first content"
+                        "Responses failover: switching target before first content"
                     );
                 },
             )
             .await?
         };
 
-        let is_google = meta.backend_id == "google" || meta.provider_id == "google";
-        if !is_google {
-            if let Ok(mut guard) = self.previous_interaction_id.lock() {
-                *guard = None;
-            }
-        }
-
-        let prev_slot = if is_google {
-            Some(Arc::clone(&self.previous_interaction_id))
-        } else {
-            None
-        };
-        let tracked: CompletionStream = Box::pin(futures::stream::unfold(
-            (stream, prev_slot),
-            |(mut stream, prev_slot)| async move {
-                match stream.next().await {
-                    Some(item) => {
-                        if let (Some(ref slot), Ok(StreamChunk::InteractionId(ref id))) =
-                            (&prev_slot, &item)
-                        {
-                            if let Ok(mut g) = slot.lock() {
-                                *g = Some(id.clone());
-                            }
-                        }
-                        Some((item, (stream, prev_slot)))
-                    }
-                    None => None,
-                }
-            },
-        ));
+        let tracked: CompletionStream =
+            Box::pin(futures::stream::unfold(stream, |mut stream| async move {
+                stream.next().await.map(|item| (item, stream))
+            }));
 
         if let Ok(mut guard) = self.last_hit.lock() {
             *guard = Some(meta);
         }
         Ok(map_new_provider_stream(tracked))
-    }
-}
-
-#[async_trait]
-impl StreamingChat for ProviderStreamer {
-    /// 通过 [`to_provider_messages`] 转换历史后调用 `stream_completion`。
-    async fn stream_chat(
-        &self,
-        system_prompt: &str,
-        history: &[Message],
-        tools: Vec<serde_json::Value>,
-    ) -> anyhow::Result<AssistantContentStream> {
-        let messages = to_provider_messages(system_prompt, history);
-        self.stream_completion(messages, tools).await
-    }
-}
-
-#[async_trait]
-impl StreamingPrompt for ProviderStreamer {
-    /// 构造单条 user 历史后委托 `stream_chat`。
-    async fn stream_prompt(
-        &self,
-        system_prompt: &str,
-        prompt: &str,
-        tools: Vec<serde_json::Value>,
-    ) -> anyhow::Result<AssistantContentStream> {
-        let history = vec![Message::user(prompt)];
-        self.stream_chat(system_prompt, &history, tools).await
     }
 }

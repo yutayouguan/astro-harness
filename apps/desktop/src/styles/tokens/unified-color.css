@@ -1,0 +1,286 @@
+/* Unified/dynamic color remapping and its existing visual overrides. */
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-icon,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-nav-indicator,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-pin-btn,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-section,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-category-nav,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-category-nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-icon-badge,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .theme-option,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .shell-dynamic-reshuffle,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .page-title-icon {
+  transition-property: transform, opacity, width, box-shadow;
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .app-shell[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .app-shell[data-tone]
+  .sidebar {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --shell-tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .nav-item,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .nav-item[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .page-title-icon,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .page-title-icon[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-title[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-pin-btn,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-pin-btn[data-tone],
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-toggle,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-toggle[data-tone] {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-title[data-tone] {
+  color: var(--unified-tone, var(--tone-blue));
+}
+
+/* 会话名是窗口标题，不与页面级标题争抢强调色。 */
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-header--chat
+  .conversation-title,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-header--chat
+  .conversation-title[data-tone] {
+  color: var(--ink);
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-logo,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .sidebar-brand-text {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --astro-mark-c0: color-mix(
+    in srgb,
+    var(--unified-tone, #2563eb) 82%,
+    #0b1020 18%
+  );
+  --astro-mark-c1: var(--unified-tone, #2563eb);
+  --astro-mark-c2: color-mix(
+    in srgb,
+    var(--unified-tone, #2563eb) 60%,
+    #ffffff 40%
+  );
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-pane {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --accent: var(--unified-tone, var(--tone-blue));
+  --accent-2: var(--unified-tone, var(--tone-blue));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .memory-panel {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-green: var(--unified-tone, var(--tone-blue));
+  --tone-green-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-green-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .workspace-panel,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .filespace-panel {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-purple: var(--unified-tone, var(--tone-blue));
+  --tone-purple-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .content-header {
+  --tone-purple: var(--unified-tone, var(--tone-blue));
+  --tone-purple-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-purple-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .agent-tools-page {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-orange: var(--unified-tone, var(--tone-blue));
+  --tone-orange-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-orange-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .skills-page {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-indigo: var(--unified-tone, var(--tone-blue));
+  --tone-indigo-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-indigo-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .cron-page {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-teal: var(--unified-tone, var(--tone-blue));
+  --tone-teal-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-teal-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .insights-panel {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-aurora: var(--unified-tone, var(--tone-blue));
+  --tone-aurora-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-aurora-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .providers-page {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-page,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .preferences-page {
+  --tone: var(--unified-tone, var(--tone-blue));
+  --tone-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+  --tone-twilight: var(--unified-tone, var(--tone-blue));
+  --tone-twilight-soft: var(--unified-tone-soft, var(--tone-blue-soft));
+  --tone-twilight-glow: var(--unified-tone-glow, var(--tone-blue-glow));
+}
+
+html[data-glass-flush] .sidebar,
+html[data-glass-flush] .sidebar-nav-indicator,
+html[data-glass-flush] .prefs-card,
+html[data-glass-flush] .prefs-section,
+html[data-glass-flush] .prefs-category-nav,
+html[data-glass-flush] .theme-option,
+html[data-glass-flush] .prefs-icon-badge,
+html[data-glass-flush] .content-pane {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .body-row {
+  --sidebar-chrome-sheen: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--unified-tone-soft, transparent) 26%, transparent),
+    transparent 72%
+  );
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-section {
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.52),
+      rgba(255, 255, 255, 0.18)
+    ),
+    color-mix(in srgb, var(--tone-soft) 52%, var(--glass-panel, transparent));
+}
+
+html[data-theme="dark"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .prefs-card,
+html[data-theme="dark"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .prefs-section {
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
+    color-mix(in srgb, var(--tone-soft) 42%, rgba(8, 6, 18, 0.62));
+}
+
+html:is([data-color-style="unified"], [data-color-style="dynamic"])
+  .prefs-category-nav {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
+    color-mix(in srgb, var(--tone-soft) 40%, var(--glass-panel, transparent));
+}
+
+html[data-theme="dark"]:is(
+    [data-color-style="unified"],
+    [data-color-style="dynamic"]
+  )
+  .prefs-category-nav {
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    ),
+    color-mix(in srgb, var(--tone-soft) 34%, rgba(8, 6, 18, 0.6));
+}
+
+/* 壁纸自适应主题色最后覆盖页面/组件 data-tone，避免原有 Tab 色谱反压。 */
+html[data-wallpaper-palette="true"],
+html[data-wallpaper-palette="true"] [data-tone] {
+  --tone: var(--wallpaper-tone, var(--tone-blue));
+  --tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --tone-glow: var(--wallpaper-tone-glow, var(--tone-blue-glow));
+  --shell-tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --unified-tone: var(--wallpaper-tone, var(--tone-blue));
+  --unified-tone-soft: var(--wallpaper-tone-soft, var(--tone-blue-soft));
+  --unified-tone-glow: var(--wallpaper-tone-glow, var(--tone-blue-glow));
+  --accent-2: var(--wallpaper-accent-2, var(--tone));
+}
