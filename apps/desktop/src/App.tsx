@@ -114,6 +114,11 @@ import type { ComposerContextToken } from "./lib/chat/composerContext";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
+import {
+  DEFAULT_PROJECT_PLACEHOLDER,
+  ensureDefaultProjectVisible,
+  loadProjectsWithRetry,
+} from "./lib/projects/projectBootstrap";
 import { resolveContextWindow, usagePercent } from "./lib/chat/contextUsage";
 import {
   readWorkspaceMdMode,
@@ -228,7 +233,9 @@ export default function App() {
       };
     }).filter((group) => group.items.length > 0);
   }, [settingsQuery, t]);
-  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [projects, setProjects] = useState<ProjectDto[]>(() => [
+    DEFAULT_PROJECT_PLACEHOLDER,
+  ]);
   // 选中的项目决定工具执行目录，重启后必须沿用上次的选择，否则会退回默认空间。
   const [activeProjectId, setActiveProjectId] = useState(
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "default",
@@ -269,18 +276,28 @@ export default function App() {
   const searchingSessions = sessionQuery.trim().length > 0;
   // 启动时确保默认项目存在于 DB，然后加载全部项目
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       try {
-        await invoke<ProjectDto>("ensure_default_project");
-        const list = await invoke<ProjectDto[]>("list_projects");
-        setProjects(list ?? []);
-        if (list?.length && !list.some((p) => p.id === activeProjectId)) {
-          setActiveProjectId(list[0].id);
-        }
-      } catch {
-        setProjects([]);
+        const list = await loadProjectsWithRetry(() =>
+          invoke<ProjectDto[]>("list_projects"),
+        );
+        if (cancelled) return;
+        setProjects(list);
+        setActiveProjectId((current) =>
+          list.some((project) => project.id === current) ? current : list[0].id,
+        );
+        dispatchSessionsChanged();
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("load projects failed", error);
+        setProjects((current) => ensureDefaultProjectVisible(current));
+        setActiveProjectId("default");
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useEffect(() => {
     localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId);
