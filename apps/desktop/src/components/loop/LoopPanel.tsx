@@ -19,7 +19,11 @@ import {
 import { LOOP_ICON_MAP } from "./loopIcons";
 import type { LoopDto } from "./loopTypes";
 import { parseLoopIcon } from "./loopTypes";
-import { LOOP_TEMPLATES, type LoopTemplate } from "./loopTemplates";
+import {
+  LOOP_TEMPLATES,
+  loopTemplateCopy,
+  type LoopTemplate,
+} from "./loopTemplates";
 import { layoutNodes } from "./loopLayout";
 import LoopIcon from "./LoopIcon";
 import LoopEditor from "./LoopEditor";
@@ -129,7 +133,7 @@ export default function LoopPanel({
   onCollapseSidebar,
   onExpandSidebar,
 }: Props) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { showToast, toastHost } = useTransientToast();
   const confirm = useConfirm();
   const [loops, setLoops] = useState<LoopDto[]>([]);
@@ -220,10 +224,11 @@ export default function LoopPanel({
   };
 
   const handleCreateFromTemplate = async (tpl: LoopTemplate) => {
+    const copy = loopTemplateCopy(tpl, locale);
     try {
       const created = await invoke<LoopDto>("create_loop", {
-        name: tpl.name,
-        description: tpl.description,
+        name: copy.name,
+        description: copy.description,
       });
       const dtoNodes = tpl.nodes.map((n) => ({
         ...n,
@@ -245,8 +250,8 @@ export default function LoopPanel({
       await invoke("save_loop", {
         data: {
           id: created.id,
-          name: tpl.name,
-          description: tpl.description,
+          name: copy.name,
+          description: copy.description,
           nodes,
           edges: dtoEdges,
           variables: {},
@@ -794,6 +799,29 @@ export default function LoopPanel({
     { id: "detail", Icon: IconViewDetail, labelKey: "loop.view.detail" },
   ];
 
+  const renderTemplateGrid = () => (
+    <div className="loop-template-grid">
+      {LOOP_TEMPLATES.map((tpl) => {
+        const Icon = LOOP_ICON_MAP[tpl.icon];
+        const copy = loopTemplateCopy(tpl, locale);
+        return (
+          <button
+            key={tpl.id}
+            type="button"
+            className="loop-template-card"
+            onClick={() => void handleCreateFromTemplate(tpl)}
+          >
+            <span className="loop-template-card-icon">
+              {Icon && <Icon size={20} />}
+            </span>
+            <span className="loop-template-card-name">{copy.name}</span>
+            <span className="loop-template-card-desc">{copy.description}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="loop-panel">
       {/* ── Toolbar ── */}
@@ -865,26 +893,7 @@ export default function LoopPanel({
               <LOOP_ICON_MAP.X size={14} />
             </button>
           </div>
-          <div className="loop-template-grid">
-            {LOOP_TEMPLATES.map((tpl) => {
-              const Icon = LOOP_ICON_MAP[tpl.icon];
-              return (
-                <button
-                  key={tpl.id}
-                  className="loop-template-card"
-                  onClick={() => void handleCreateFromTemplate(tpl)}
-                >
-                  <span className="loop-template-card-icon">
-                    {Icon && <Icon size={20} />}
-                  </span>
-                  <span className="loop-template-card-name">{tpl.name}</span>
-                  <span className="loop-template-card-desc">
-                    {tpl.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {renderTemplateGrid()}
         </div>
       )}
 
@@ -906,28 +915,7 @@ export default function LoopPanel({
                 <div className="loop-empty-templates-title">
                   {t("loop.templateQuickStart")}
                 </div>
-                <div className="loop-template-grid">
-                  {LOOP_TEMPLATES.slice(0, 3).map((tpl) => {
-                    const Icon = LOOP_ICON_MAP[tpl.icon];
-                    return (
-                      <button
-                        key={tpl.id}
-                        className="loop-template-card"
-                        onClick={() => void handleCreateFromTemplate(tpl)}
-                      >
-                        <span className="loop-template-card-icon">
-                          {Icon && <Icon size={20} />}
-                        </span>
-                        <span className="loop-template-card-name">
-                          {tpl.name}
-                        </span>
-                        <span className="loop-template-card-desc">
-                          {tpl.description}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {renderTemplateGrid()}
               </div>
             )}
           </div>

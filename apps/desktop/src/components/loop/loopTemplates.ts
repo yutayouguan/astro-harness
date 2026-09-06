@@ -24,6 +24,15 @@ export interface LoopTemplate {
   edges: TemplateEdge[];
 }
 
+export function loopTemplateCopy(
+  template: LoopTemplate,
+  locale: string,
+): { name: string; description: string } {
+  return locale.startsWith("en")
+    ? { name: template.nameEn, description: template.descriptionEn }
+    : { name: template.name, description: template.description };
+}
+
 export const LOOP_TEMPLATES: LoopTemplate[] = [
   {
     id: "customer_service",
