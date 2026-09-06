@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [component, css] = await Promise.all([
+const [component, css, componentCss] = await Promise.all([
   readFile(
     new URL(
       "../../components/settings/CompressionSettingsCard.tsx",
@@ -12,6 +12,10 @@ const [component, css] = await Promise.all([
   ),
   readFile(
     new URL("../../styles/features/preferences.css", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../../styles/features/compression-settings.css", import.meta.url),
     "utf8",
   ),
 ]);
@@ -25,6 +29,23 @@ test("automatic compression keeps its compact card title and direct-manipulation
   assert.match(component, /onPointerUp=/);
   assert.match(component, /className="prefs-context-range-value"/);
   assert.match(component, /className="prefs-context-stage-accent"/);
+});
+
+test("automatic compression separates overview, stages, and advanced settings into cards", () => {
+  for (const section of ["overview", "stages", "advanced"]) {
+    assert.match(
+      component,
+      new RegExp(`prefs-context-card prefs-context-card--${section}`),
+    );
+  }
+  assert.match(
+    component,
+    /<section className="prefs-card prefs-context-card prefs-context-card--advanced">[\s\S]*?<details className="prefs-context-advanced">/,
+  );
+  assert.match(
+    componentCss,
+    /\.prefs-page\.is-embedded \.prefs-context-card--advanced\s*\{[\s\S]*?padding:\s*0;/,
+  );
 });
 
 test("compression ranges expose filled tracks, focus feedback, and responsive rows", () => {

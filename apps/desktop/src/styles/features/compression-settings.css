@@ -1,0 +1,35 @@
+/* Automatic compression uses one card per functional group. */
+
+.prefs-context-card--overview .prefs-context-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--settings-divider, var(--glass-edge));
+}
+
+.prefs-context-card--stages > .prefs-context-section-head {
+  margin-top: 0;
+}
+
+.prefs-page.is-embedded .prefs-context-card--advanced {
+  padding: 0;
+  overflow: hidden;
+}
+
+.prefs-page.is-embedded
+  .prefs-context-card--advanced
+  > .prefs-context-advanced {
+  margin: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.prefs-context-card--advanced .prefs-context-advanced > summary {
+  min-height: 58px;
+  padding: 0 18px;
+}
+
+.prefs-context-card--advanced .prefs-context-advanced-body {
+  padding: 0 18px 18px;
+}
