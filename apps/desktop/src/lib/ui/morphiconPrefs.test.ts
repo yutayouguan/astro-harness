@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   DEFAULT_MORPHICON_PREFS,
   MORPHICON_PREFS_KEY,
+  MORPHICON_STROKE_WIDTHS,
   normalizeMorphiconPrefs,
   readMorphiconPrefs,
   writeMorphiconPrefs,
@@ -26,12 +27,20 @@ function installStorage(): Map<string, string> {
 }
 
 test("normalizeMorphiconPrefs validates each preference independently", () => {
+  assert.deepEqual(MORPHICON_STROKE_WIDTHS, [1, 2, 2.5]);
   assert.deepEqual(normalizeMorphiconPrefs(null), DEFAULT_MORPHICON_PREFS);
+  assert.deepEqual(
+    normalizeMorphiconPrefs({ spring: "bouncy", strokeWidth: 2.5 }),
+    {
+      spring: "bouncy",
+      strokeWidth: 2.5,
+    },
+  );
   assert.deepEqual(
     normalizeMorphiconPrefs({ spring: "bouncy", strokeWidth: 1.5 }),
     {
       spring: "bouncy",
-      strokeWidth: 1.5,
+      strokeWidth: 2,
     },
   );
   assert.deepEqual(

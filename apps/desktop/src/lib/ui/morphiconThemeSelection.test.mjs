@@ -47,8 +47,11 @@ test("morphicon controls use a compact track and a distinct selection pill", () 
   assert.ok(subtitle, "missing Morphicon subtitle contrast treatment");
   assert.match(subtitle, /color:\s*var\(--ink-soft\)/);
   assert.ok(row, "missing Morphicon compact row layout");
-  assert.match(row, /grid-template-columns:\s*58px minmax\(260px, 560px\)/);
-  assert.match(row, /max-width:\s*630px/);
+  assert.match(
+    row,
+    /grid-template-columns:\s*minmax\(180px, 1fr\) minmax\(260px, 360px\)/,
+  );
+  assert.match(row, /min-height:\s*54px/);
   assert.ok(track, "missing Morphicon segmented track");
   assert.match(track, /gap:\s*2px/);
   assert.match(track, /padding:\s*3px/);

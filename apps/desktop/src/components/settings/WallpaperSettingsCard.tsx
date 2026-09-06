@@ -7,6 +7,7 @@ import {
   Loader2,
   MonitorUp,
   Palette,
+  Plus,
   Sparkles,
   Upload,
   X,
@@ -311,58 +312,50 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
 
         {prefs.mode === "wallpaper" ? (
           <>
-            <div className="wallpaper-adaptive-color wallpaper-system-follow">
-              <span className="wallpaper-system-icon" aria-hidden>
-                <MonitorUp size={17} />
-              </span>
-              <span className="wallpaper-adaptive-copy">
-                <strong>{t("prefs.wallpaper.followSystem")}</strong>
-                <small>{t("prefs.wallpaper.followSystemDesc")}</small>
-              </span>
-              <button
-                type="button"
-                role="switch"
-                className="prefs-switch"
-                data-tone={tone}
-                aria-checked={prefs.followSystemWallpaper}
-                onClick={() =>
-                  controller.setFollowSystemWallpaper(
-                    !prefs.followSystemWallpaper,
-                  )
-                }
-              >
-                <span className="prefs-switch-thumb" />
-              </button>
-            </div>
-            <div className="wallpaper-adaptive-color">
-              <span
-                className="wallpaper-adaptive-swatch"
-                style={{
-                  background: prefs.current?.accentColor
-                    ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
-                    : undefined,
-                }}
-                aria-hidden
-              />
-              <span className="wallpaper-adaptive-copy">
-                <strong>{t("prefs.wallpaper.adaptiveColor")}</strong>
-                <small>{t("prefs.wallpaper.adaptiveColorDesc")}</small>
-              </span>
-              <button
-                type="button"
-                role="switch"
-                className="prefs-switch"
-                data-tone={tone}
-                aria-checked={prefs.adaptiveColor}
-                onClick={() =>
-                  controller.setAdaptiveColor(!prefs.adaptiveColor)
-                }
-              >
-                <span className="prefs-switch-thumb" />
-              </button>
-            </div>
             <div className="wallpaper-editor">
               <div className="wallpaper-preview-column">
+                <div className="wallpaper-preview-toggles">
+                  <button
+                    type="button"
+                    role="switch"
+                    className="wallpaper-preview-toggle"
+                    aria-checked={prefs.followSystemWallpaper}
+                    aria-label={t("prefs.wallpaper.followSystem")}
+                    title={t("prefs.wallpaper.followSystemDesc")}
+                    onClick={() =>
+                      controller.setFollowSystemWallpaper(
+                        !prefs.followSystemWallpaper,
+                      )
+                    }
+                  >
+                    <MonitorUp size={13} aria-hidden />
+                    <span>{t("prefs.wallpaper.followSystem")}</span>
+                    <i aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="wallpaper-preview-toggle"
+                    aria-checked={prefs.adaptiveColor}
+                    aria-label={t("prefs.wallpaper.adaptiveColor")}
+                    title={t("prefs.wallpaper.adaptiveColorDesc")}
+                    onClick={() =>
+                      controller.setAdaptiveColor(!prefs.adaptiveColor)
+                    }
+                  >
+                    <span
+                      className="wallpaper-preview-toggle-swatch"
+                      style={{
+                        background: prefs.current?.accentColor
+                          ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
+                          : undefined,
+                      }}
+                      aria-hidden
+                    />
+                    <span>{t("prefs.wallpaper.adaptiveColor")}</span>
+                    <i aria-hidden />
+                  </button>
+                </div>
                 {prefs.current && currentSrc ? (
                   <WallpaperPreview
                     path={prefs.current.path}
@@ -468,36 +461,43 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                   />
                 </label>
 
-                {prefs.recent.length > 0 ? (
-                  <div className="wallpaper-control-group">
-                    <span className="wallpaper-control-label">
-                      {t("prefs.wallpaper.recent")}
-                    </span>
-                    <div className="wallpaper-recent-list">
-                      {prefs.recent.map((asset) => {
-                        const src = resolveMediaSrc(asset.path);
-                        return (
-                          <button
-                            key={asset.id}
-                            type="button"
-                            className={
-                              prefs.current?.id === asset.id ? "is-active" : ""
-                            }
-                            aria-label={asset.name}
-                            title={asset.name}
-                            onClick={() => controller.select(asset)}
-                          >
-                            {src ? (
-                              <img src={src} alt="" />
-                            ) : (
-                              <ImageIcon size={17} />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+                <div className="wallpaper-control-group wallpaper-recent-group">
+                  <span className="wallpaper-control-label">
+                    {t("prefs.wallpaper.recent")}
+                  </span>
+                  <div className="wallpaper-recent-list">
+                    {prefs.recent.slice(0, 2).map((asset) => {
+                      const src = resolveMediaSrc(asset.path);
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          className={
+                            prefs.current?.id === asset.id ? "is-active" : ""
+                          }
+                          aria-label={asset.name}
+                          title={asset.name}
+                          onClick={() => controller.select(asset)}
+                        >
+                          {src ? (
+                            <img src={src} alt="" />
+                          ) : (
+                            <ImageIcon size={17} />
+                          )}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="wallpaper-recent-add"
+                      aria-label={t("prefs.wallpaper.upload")}
+                      title={t("prefs.wallpaper.upload")}
+                      onClick={() => void chooseImage()}
+                    >
+                      <Plus size={20} aria-hidden />
+                    </button>
                   </div>
-                ) : null}
+                </div>
               </div>
             </div>
           </>

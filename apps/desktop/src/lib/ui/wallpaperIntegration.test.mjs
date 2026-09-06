@@ -39,6 +39,9 @@ test("wallpaper commands are registered and the settings card calls each source"
   assert.match(panel, /controller\.importImage\(path\)/);
   assert.match(panel, /controller\.generate\(generatedPrompt\)/);
   assert.match(panel, /controller\.setFollowSystemWallpaper/);
+  assert.match(panel, /className="wallpaper-preview-toggles"/);
+  assert.match(panel, /prefs\.recent\.slice\(0, 2\)/);
+  assert.match(panel, /className="wallpaper-recent-add"/);
 });
 
 test("app renders wallpaper behind shell chrome and fails closed on missing files", () => {

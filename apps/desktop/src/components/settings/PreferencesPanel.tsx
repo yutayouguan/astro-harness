@@ -9,7 +9,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  Blend,
   Brain,
   Clock,
   Dices,
@@ -64,16 +63,10 @@ import {
   MORPHICON_SPRINGS,
   MORPHICON_STROKE_WIDTHS,
   type MorphiconSpring,
+  type MorphiconStrokeWidth,
 } from "../../lib/ui/morphiconPrefs";
 import { AppMorphIcon } from "../icons/MorphIcon";
-import {
-  IconGlobe,
-  IconMonitor,
-  IconMoon,
-  IconSun,
-  IconChat,
-  IconAtom,
-} from "../icons/NavIcons";
+import { IconGlobe, IconChat, IconAtom } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
@@ -177,6 +170,12 @@ const MORPHICON_SPRING_LABEL: Record<MorphiconSpring, MessageKey> = {
   smooth: "prefs.morphicons.spring.smooth",
   snappy: "prefs.morphicons.spring.snappy",
   bouncy: "prefs.morphicons.spring.bouncy",
+};
+
+const MORPHICON_STROKE_LABEL: Record<MorphiconStrokeWidth, MessageKey> = {
+  1: "prefs.appearance.motion.stroke.thin",
+  2: "prefs.appearance.motion.stroke.regular",
+  2.5: "prefs.appearance.motion.stroke.bold",
 };
 
 const ABOUT_FEATURES: MessageKey[] = [
@@ -726,80 +725,59 @@ export default function PreferencesPanel({
   const themeOptions: {
     id: ThemeMode;
     label: string;
-    desc: string;
-    Icon: typeof IconSun;
   }[] = [
     {
       id: "light",
-      label: t("prefs.theme.light"),
-      desc: t("prefs.theme.lightDesc"),
-      Icon: IconSun,
-    },
-    {
-      id: "dark",
-      label: t("prefs.theme.dark"),
-      desc: t("prefs.theme.darkDesc"),
-      Icon: IconMoon,
+      label: t("prefs.appearance.theme.light"),
     },
     {
       id: "auto",
-      label: t("prefs.theme.auto"),
-      desc: t("prefs.theme.autoDesc"),
-      Icon: IconMonitor,
+      label: t("prefs.appearance.theme.system"),
+    },
+    {
+      id: "dark",
+      label: t("prefs.appearance.theme.dark"),
     },
   ];
 
   const colorStyleOptions: {
     id: ShellColorStyle;
     label: string;
-    desc: string;
-    Icon: LucideIcon;
   }[] = [
-    {
-      id: "colorful",
-      label: t("prefs.colorStyle.colorful"),
-      desc: t("prefs.colorStyle.colorfulDesc"),
-      Icon: Palette,
-    },
     {
       id: "unified",
       label: t("prefs.colorStyle.unified"),
-      desc: t("prefs.colorStyle.unifiedDesc"),
-      Icon: Blend,
     },
     {
       id: "dynamic",
       label: t("prefs.colorStyle.dynamic"),
-      desc: t("prefs.colorStyle.dynamicDesc"),
-      Icon: Sparkles,
+    },
+    {
+      id: "colorful",
+      label: t("prefs.colorStyle.colorful"),
     },
   ];
 
-  const glassOptions: { id: GlassLevel; label: string; desc: string }[] = [
+  const glassOptions: { id: GlassLevel; label: string }[] = [
     {
-      id: "liquid",
-      label: t("prefs.glass.liquid"),
-      desc: t("prefs.glass.liquidDesc"),
-    },
-    {
-      id: "liquid-soft",
-      label: t("prefs.glass.liquidSoft"),
-      desc: t("prefs.glass.liquidSoftDesc"),
-    },
-    {
-      id: "rich",
-      label: t("prefs.glass.rich"),
-      desc: t("prefs.glass.richDesc"),
+      id: "minimal",
+      label: t("prefs.appearance.glass.minimal"),
     },
     {
       id: "normal",
-      label: t("prefs.glass.normal"),
-      desc: t("prefs.glass.normalDesc"),
+      label: t("prefs.appearance.glass.normal"),
     },
     {
-      id: "minimal",
-      label: t("prefs.glass.minimal"),
-      desc: t("prefs.glass.minimalDesc"),
+      id: "rich",
+      label: t("prefs.appearance.glass.rich"),
+    },
+    {
+      id: "liquid-soft",
+      label: t("prefs.appearance.glass.liquidSoft"),
+    },
+    {
+      id: "liquid",
+      label: t("prefs.appearance.glass.liquid"),
     },
   ];
 
@@ -862,9 +840,6 @@ export default function PreferencesPanel({
     },
   ];
 
-  const ModeIcon = themeOptions.find((o) => o.id === mode)?.Icon ?? IconSun;
-  const ColorStyleIcon =
-    colorStyleOptions.find((o) => o.id === colorStyle)?.Icon ?? Palette;
   const selectedAppIcon = appIcon?.options.find(
     (option) => option.id === appIcon.current,
   );
@@ -1049,7 +1024,7 @@ export default function PreferencesPanel({
           <section className="prefs-card prefs-card--appearance-material">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <ModeIcon width={22} height={22} />
+                <span className="appearance-card-symbol appearance-card-symbol--material" />
               </div>
               <div>
                 <h2 className="prefs-card-title">
@@ -1064,13 +1039,13 @@ export default function PreferencesPanel({
             <div className="appearance-control-list">
               <div className="appearance-control-row">
                 <div className="appearance-control-copy">
-                  <strong>{t("prefs.theme.title")}</strong>
-                  <span>{t("prefs.theme.sub")}</span>
+                  <strong>{t("prefs.appearance.theme.title")}</strong>
+                  <span>{t("prefs.appearance.theme.sub")}</span>
                 </div>
                 <div
                   className="appearance-segmented"
                   role="radiogroup"
-                  aria-label={t("prefs.theme.title")}
+                  aria-label={t("prefs.appearance.theme.title")}
                 >
                   {themeOptions.map(({ id, label }) => (
                     <button
@@ -1089,13 +1064,13 @@ export default function PreferencesPanel({
 
               <div className="appearance-control-row">
                 <div className="appearance-control-copy">
-                  <strong>{t("prefs.glass.title")}</strong>
-                  <span>{t("prefs.glass.sub")}</span>
+                  <strong>{t("prefs.appearance.glass.title")}</strong>
+                  <span>{t("prefs.appearance.glass.sub")}</span>
                 </div>
                 <div
                   className="appearance-segmented appearance-segmented--wide"
                   role="radiogroup"
-                  aria-label={t("prefs.glass.title")}
+                  aria-label={t("prefs.appearance.glass.title")}
                 >
                   {glassOptions.map(({ id, label }) => (
                     <button
@@ -1117,7 +1092,7 @@ export default function PreferencesPanel({
           <section className="prefs-card prefs-card--appearance-color">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <ColorStyleIcon width={22} height={22} />
+                <span className="appearance-card-symbol appearance-card-symbol--accent" />
               </div>
               <div>
                 <h2 className="prefs-card-title">
@@ -1132,19 +1107,13 @@ export default function PreferencesPanel({
             <div className="appearance-control-list">
               <div className="appearance-control-row">
                 <div className="appearance-control-copy">
-                  <strong>{t("prefs.colorStyle.title")}</strong>
-                  <span>
-                    {
-                      colorStyleOptions.find(
-                        (option) => option.id === colorStyle,
-                      )?.desc
-                    }
-                  </span>
+                  <strong>{t("prefs.appearance.strategy.title")}</strong>
+                  <span>{t("prefs.appearance.strategy.sub")}</span>
                 </div>
                 <div
                   className="appearance-segmented"
                   role="radiogroup"
-                  aria-label={t("prefs.colorStyle.title")}
+                  aria-label={t("prefs.appearance.strategy.title")}
                 >
                   {colorStyleOptions.map(({ id, label }) => (
                     <button
@@ -1164,8 +1133,8 @@ export default function PreferencesPanel({
               {colorStyle === "unified" ? (
                 <div className="appearance-control-row appearance-control-row--swatches">
                   <div className="appearance-control-copy">
-                    <strong>{t("prefs.colorStyle.presets")}</strong>
-                    <span>{t("prefs.colorStyle.unifiedDesc")}</span>
+                    <strong>{t("prefs.appearance.strategy.unified")}</strong>
+                    <span>{t("prefs.appearance.strategy.unifiedSub")}</span>
                   </div>
                   <div
                     className="shell-color-presets"
@@ -1229,8 +1198,8 @@ export default function PreferencesPanel({
               {colorStyle === "dynamic" ? (
                 <div className="appearance-control-row">
                   <div className="appearance-control-copy">
-                    <strong>{t("prefs.colorStyle.dynamic")}</strong>
-                    <span>{t("prefs.colorStyle.dynamicHint")}</span>
+                    <strong>{t("prefs.appearance.strategy.dynamic")}</strong>
+                    <span>{t("prefs.appearance.strategy.dynamicSub")}</span>
                   </div>
                   <button
                     type="button"
@@ -1241,6 +1210,18 @@ export default function PreferencesPanel({
                     <Dices width={16} height={16} aria-hidden />
                     {t("prefs.colorStyle.reshuffle")}
                   </button>
+                </div>
+              ) : null}
+
+              {colorStyle === "colorful" ? (
+                <div className="appearance-control-row">
+                  <div className="appearance-control-copy">
+                    <strong>{t("prefs.appearance.strategy.colorful")}</strong>
+                    <span>{t("prefs.appearance.strategy.colorfulSub")}</span>
+                  </div>
+                  <span className="appearance-auto-badge">
+                    {t("prefs.appearance.strategy.auto")}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -1273,13 +1254,14 @@ export default function PreferencesPanel({
             </div>
 
             <div className="morphicon-setting-row">
-              <span className="morphicon-setting-label">
-                {t("prefs.morphicons.spring")}
-              </span>
+              <div className="appearance-control-copy">
+                <strong>{t("prefs.appearance.motion.spring")}</strong>
+                <span>{t("prefs.appearance.motion.springSub")}</span>
+              </div>
               <div
                 className="morphicon-segmented"
                 role="radiogroup"
-                aria-label={t("prefs.morphicons.spring")}
+                aria-label={t("prefs.appearance.motion.spring")}
               >
                 {MORPHICON_SPRINGS.map((value) => (
                   <button
@@ -1314,13 +1296,14 @@ export default function PreferencesPanel({
             </div>
 
             <div className="morphicon-setting-row">
-              <span className="morphicon-setting-label">
-                {t("prefs.morphicons.stroke")}
-              </span>
+              <div className="appearance-control-copy">
+                <strong>{t("prefs.appearance.motion.stroke")}</strong>
+                <span>{t("prefs.appearance.motion.strokeSub")}</span>
+              </div>
               <div
                 className="morphicon-segmented"
                 role="radiogroup"
-                aria-label={t("prefs.morphicons.stroke")}
+                aria-label={t("prefs.appearance.motion.stroke")}
               >
                 {MORPHICON_STROKE_WIDTHS.map((value) => (
                   <button
@@ -1346,7 +1329,9 @@ export default function PreferencesPanel({
                         aria-hidden
                       />
                     ) : null}
-                    <span className="morphicon-segmented-label">{value}</span>
+                    <span className="morphicon-segmented-label">
+                      {t(MORPHICON_STROKE_LABEL[value])}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1356,7 +1341,9 @@ export default function PreferencesPanel({
           <section className="prefs-card prefs-card--app-icon">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <IconAtom width={22} height={22} />
+                <span className="appearance-card-symbol appearance-card-symbol--app">
+                  A
+                </span>
               </div>
               <div>
                 <h2 className="prefs-card-title">{t("prefs.appIcon.title")}</h2>

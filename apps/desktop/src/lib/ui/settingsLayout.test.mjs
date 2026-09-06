@@ -66,6 +66,9 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /prefs-card--appearance-material/);
   assert.match(preferences, /prefs-card--appearance-color/);
   assert.match(preferences, /appearance-control-row/);
+  assert.match(preferences, /prefs\.appearance\.material\.title/);
+  assert.match(preferences, /prefs\.appearance\.accent\.title/);
+  assert.match(preferences, /prefs\.appearance\.motion\.title/);
   assert.doesNotMatch(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);
   assert.match(preferences, /ConversationLayoutPreview/);
@@ -76,6 +79,51 @@ test("appearance and conversation use responsive grouped layouts", () => {
     preferencesCss,
     /\.prefs-category-stack--appearance:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2,/,
   );
+  assert.match(
+    preferencesCss,
+    /\.prefs-category-stack--appearance > \.prefs-card\s*\{[\s\S]*?grid-column:\s*1 \/ -1/,
+  );
+  assert.match(
+    preferencesCss,
+    /\.app-icon-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5,/,
+  );
+
+  const themeOptions = preferences.slice(
+    preferences.indexOf("const themeOptions"),
+    preferences.indexOf("const colorStyleOptions"),
+  );
+  assert.ok(
+    themeOptions.indexOf('id: "light"') < themeOptions.indexOf('id: "auto"'),
+  );
+  assert.ok(
+    themeOptions.indexOf('id: "auto"') < themeOptions.indexOf('id: "dark"'),
+  );
+
+  const colorOptions = preferences.slice(
+    preferences.indexOf("const colorStyleOptions"),
+    preferences.indexOf("const glassOptions"),
+  );
+  assert.ok(
+    colorOptions.indexOf('id: "unified"') <
+      colorOptions.indexOf('id: "dynamic"'),
+  );
+  assert.ok(
+    colorOptions.indexOf('id: "dynamic"') <
+      colorOptions.indexOf('id: "colorful"'),
+  );
+
+  const glassOptions = preferences.slice(
+    preferences.indexOf("const glassOptions"),
+    preferences.indexOf("const langOptions"),
+  );
+  for (const [left, right] of [
+    ['id: "minimal"', 'id: "normal"'],
+    ['id: "normal"', 'id: "rich"'],
+    ['id: "rich"', 'id: "liquid-soft"'],
+    ['id: "liquid-soft"', 'id: "liquid"'],
+  ]) {
+    assert.ok(glassOptions.indexOf(left) < glassOptions.indexOf(right));
+  }
   assert.match(
     preferencesCss,
     /\.prefs-card--conversation-display \.prefs-toggle-list[\s\S]*?grid-template-columns:\s*repeat\(2,/,

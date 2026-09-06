@@ -3,7 +3,7 @@ export const MORPHICON_PREFS_KEY = "astro-morphicons.v1";
 export const MORPHICON_SPRINGS = ["smooth", "snappy", "bouncy"] as const;
 export type MorphiconSpring = (typeof MORPHICON_SPRINGS)[number];
 
-export const MORPHICON_STROKE_WIDTHS = [1, 1.5, 2, 2.5] as const;
+export const MORPHICON_STROKE_WIDTHS = [1, 2, 2.5] as const;
 export type MorphiconStrokeWidth = (typeof MORPHICON_STROKE_WIDTHS)[number];
 
 export type MorphiconPrefs = {
@@ -20,15 +20,19 @@ export function normalizeMorphiconPrefs(value: unknown): MorphiconPrefs {
   if (!value || typeof value !== "object")
     return { ...DEFAULT_MORPHICON_PREFS };
   const candidate = value as Partial<MorphiconPrefs>;
+  const storedStrokeWidth = (value as { strokeWidth?: unknown }).strokeWidth;
   return {
     spring: MORPHICON_SPRINGS.includes(candidate.spring as MorphiconSpring)
       ? (candidate.spring as MorphiconSpring)
       : DEFAULT_MORPHICON_PREFS.spring,
-    strokeWidth: MORPHICON_STROKE_WIDTHS.includes(
-      candidate.strokeWidth as MorphiconStrokeWidth,
-    )
-      ? (candidate.strokeWidth as MorphiconStrokeWidth)
-      : DEFAULT_MORPHICON_PREFS.strokeWidth,
+    strokeWidth:
+      storedStrokeWidth === 1.5
+        ? DEFAULT_MORPHICON_PREFS.strokeWidth
+        : MORPHICON_STROKE_WIDTHS.includes(
+              candidate.strokeWidth as MorphiconStrokeWidth,
+            )
+          ? (candidate.strokeWidth as MorphiconStrokeWidth)
+          : DEFAULT_MORPHICON_PREFS.strokeWidth,
   };
 }
 
