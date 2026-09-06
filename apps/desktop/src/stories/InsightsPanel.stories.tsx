@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import InsightsPanel, {
+  type TraceInsights,
   type UsageInsights,
 } from "../components/settings/InsightsPanel";
 import { ActiveAgentProvider } from "../hooks/app/useActiveAgent";
@@ -42,7 +43,25 @@ const sampleData: UsageInsights = {
     };
   }),
   rankings: {
-    by_kind: [],
+    by_kind: [
+      { kind: "tool", name: "browser", calls: 128, tokens: 0, cost_usd: 0 },
+      { kind: "tool", name: "terminal", calls: 86, tokens: 0, cost_usd: 0 },
+      {
+        kind: "skill",
+        name: "code-review",
+        calls: 34,
+        tokens: 0,
+        cost_usd: 0,
+      },
+      { kind: "mcp", name: "lark-doc", calls: 22, tokens: 0, cost_usd: 0 },
+      {
+        kind: "cron",
+        name: "daily-brief",
+        calls: 11,
+        tokens: 0,
+        cost_usd: 0,
+      },
+    ],
     by_agent: [
       {
         kind: "agent",
@@ -87,7 +106,99 @@ const sampleData: UsageInsights = {
   unpriced_llm_events: 44,
 };
 
-function InsightsPreview() {
+const sampleTraces: TraceInsights = {
+  kpis: { traces: 2, events: 4, llm: 2, tools: 1, skills: 1 },
+  traces: [
+    {
+      session_id: "session-research-01",
+      agent_id: "research",
+      title: "整理本周研究资料",
+      started_at: "2026-09-07T09:12:00Z",
+      ended_at: "2026-09-07T09:18:32Z",
+      event_count: 2,
+      tokens: 11_940,
+      cost_usd: 0.28,
+      kinds: ["user", "llm", "tool", "skill"],
+      events: [
+        {
+          id: "research-llm",
+          ts: "2026-09-07T09:12:02Z",
+          kind: "llm",
+          name: "openai/gpt-5.6",
+          agent_id: "research",
+          input_tokens: 9_840,
+          output_tokens: 2_100,
+          total_tokens: 11_940,
+          cost_usd: 0.28,
+          duration_ms: 5_420,
+          turn_id: "turn-research",
+          status: "done",
+        },
+        {
+          id: "research-skill",
+          ts: "2026-09-07T09:13:14Z",
+          kind: "skill",
+          name: "research-digest",
+          agent_id: "research",
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+          cost_usd: 0,
+          duration_ms: 1_260,
+          turn_id: "turn-research",
+          status: "done",
+        },
+      ],
+    },
+    {
+      session_id: "session-code-02",
+      agent_id: "default",
+      title: "修复桌面端设置回归",
+      started_at: "2026-09-07T08:40:00Z",
+      ended_at: "2026-09-07T08:47:18Z",
+      event_count: 2,
+      tokens: 9_740,
+      cost_usd: 0.24,
+      kinds: ["user", "llm", "tool"],
+      events: [
+        {
+          id: "code-llm",
+          ts: "2026-09-07T08:40:03Z",
+          kind: "llm",
+          name: "openai/gpt-5.6",
+          agent_id: "default",
+          input_tokens: 7_800,
+          output_tokens: 1_940,
+          total_tokens: 9_740,
+          cost_usd: 0.24,
+          duration_ms: 4_820,
+          turn_id: "turn-code",
+          status: "done",
+        },
+        {
+          id: "code-tool",
+          ts: "2026-09-07T08:41:26Z",
+          kind: "tool",
+          name: "exec_command",
+          agent_id: "default",
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+          cost_usd: 0,
+          duration_ms: 860,
+          turn_id: "turn-code",
+          status: "done",
+        },
+      ],
+    },
+  ],
+};
+
+function InsightsPreview({
+  initialView = "overview",
+}: {
+  initialView?: "overview" | "models" | "tools" | "tracing";
+}) {
   return (
     <LocaleProvider>
       <ActiveAgentProvider>
@@ -99,7 +210,12 @@ function InsightsPreview() {
             background: "var(--shell-bg)",
           }}
         >
-          <InsightsPanel active initialData={sampleData} />
+          <InsightsPanel
+            active
+            initialData={sampleData}
+            initialTraces={sampleTraces}
+            initialView={initialView}
+          />
         </main>
       </ActiveAgentProvider>
     </LocaleProvider>
@@ -118,3 +234,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Overview: Story = {};
+export const ModelUsage: Story = {
+  render: () => <InsightsPreview initialView="models" />,
+};
+export const ToolsAndSkills: Story = {
+  render: () => <InsightsPreview initialView="tools" />,
+};
+export const Tracing: Story = {
+  render: () => <InsightsPreview initialView="tracing" />,
+};

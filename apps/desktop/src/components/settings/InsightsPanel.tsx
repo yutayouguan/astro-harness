@@ -9,14 +9,18 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
+  CircleDollarSign,
   Cpu,
+  Gauge,
   GitBranch,
   Layers,
   LayoutDashboard,
   Puzzle,
+  Sparkles,
   Timer,
   UserRound,
   Wrench,
+  Zap,
 } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
@@ -123,7 +127,7 @@ type TraceSummary = {
   events: TraceEvent[];
 };
 
-type TraceInsights = {
+export type TraceInsights = {
   kpis: {
     traces: number;
     events: number;
@@ -186,6 +190,11 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+function percentOf(part: number, total: number): string {
+  if (part <= 0 || total <= 0) return "0";
+  return String(Math.round((part / total) * 100));
 }
 
 /** 按 period / locale 格式化桶标签。滚动周期均由后端返回每日桶。 */
@@ -251,19 +260,25 @@ function RankIdentityIcon({
 export default function InsightsPanel({
   active,
   initialData,
+  initialTraces,
+  initialView = DEFAULT_INSIGHTS_VIEW,
 }: {
   active: boolean;
   initialData?: UsageInsights;
+  initialTraces?: TraceInsights;
+  initialView?: InsightsViewMode;
 }) {
   const { t, locale } = useI18n();
   const { activeAgentId: agentId } = useActiveAgent();
-  const [view, setView] = useState<ViewMode>(DEFAULT_INSIGHTS_VIEW);
+  const [view, setView] = useState<ViewMode>(initialView);
   const [period, setPeriod] = useState<Period>("days30");
   const [data, setData] = useState<UsageInsights | null>(initialData ?? null);
   const [annualSeries, setAnnualSeries] = useState<UsageInsights["series"]>(
     initialData?.series ?? [],
   );
-  const [traces, setTraces] = useState<TraceInsights | null>(null);
+  const [traces, setTraces] = useState<TraceInsights | null>(
+    initialTraces ?? null,
+  );
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>(
     {},
@@ -306,6 +321,18 @@ export default function InsightsPanel({
   }, [active, period, agentId, initialData, view]);
 
   useEffect(() => {
+    if (initialTraces) {
+      setTraces(initialTraces);
+      setSelectedTraceId((prev) => {
+        if (
+          prev &&
+          initialTraces.traces.some((trace) => trace.session_id === prev)
+        )
+          return prev;
+        return initialTraces.traces[0]?.session_id ?? null;
+      });
+      return;
+    }
     if (!active || !isTauri() || view !== "tracing") return;
     let cancelled = false;
     void (async () => {
@@ -333,7 +360,7 @@ export default function InsightsPanel({
     return () => {
       cancelled = true;
     };
-  }, [active, period, agentId, view]);
+  }, [active, period, agentId, initialTraces, view]);
 
   const byProvider = useMemo(
     () => aggregateByProvider(data?.rankings.by_model ?? []),
@@ -353,6 +380,10 @@ export default function InsightsPanel({
     const max = Math.max(1, ...items.map((r) => r.tokens || r.calls));
     return { items, max };
   }, [data]);
+  const topModel = useMemo(
+    () => modelBars.items.find((item) => item.name.trim()) ?? null,
+    [modelBars],
+  );
   const toolRanks = useMemo(
     () => (data?.rankings.by_kind ?? []).filter((r) => r.kind === "tool"),
     [data],
@@ -385,6 +416,15 @@ export default function InsightsPanel({
     () => cronRanks.reduce((s, r) => s + r.calls, 0),
     [cronRanks],
   );
+  const capabilityCallTotal =
+    toolCallTotal + skillCallTotal + mcpCallTotal + cronCallTotal;
+  const activeCapabilityCount = useMemo(
+    () =>
+      [...toolRanks, ...skillRanks, ...mcpRanks, ...cronRanks].filter(
+        (item) => item.calls > 0,
+      ).length,
+    [toolRanks, skillRanks, mcpRanks, cronRanks],
+  );
   const toolSeriesMax = Math.max(
     1,
     ...(data?.series.map((s) => s.calls) ?? [1]),
@@ -409,6 +449,14 @@ export default function InsightsPanel({
 
   const selectedTrace =
     traces?.traces.find((t) => t.session_id === selectedTraceId) ?? null;
+  const traceTokenTotal = useMemo(
+    () => traces?.traces.reduce((sum, trace) => sum + trace.tokens, 0) ?? 0,
+    [traces],
+  );
+  const traceAverageEvents = traces?.kpis.traces
+    ? Math.round(traces.kpis.events / traces.kpis.traces)
+    : 0;
+  const traceAgentActions = traces ? traces.kpis.tools + traces.kpis.skills : 0;
   const turnGroups = useMemo(
     () =>
       selectedTrace ? groupEventsForTraceDisplay(selectedTrace.events) : [],
@@ -457,16 +505,63 @@ export default function InsightsPanel({
 
         {view === "models" && data && (
           <>
-            <div className="insights-kpis insights-kpis-models-secondary">
+            <div className="insights-kpis insights-kpis-summary">
               <KpiCard
-                icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.models")}
-                value={String(modelStats.modelCount)}
+                icon={<BarChart3 size={18} strokeWidth={2.2} aria-hidden />}
+                tone="blue"
+                emphasis="primary"
+                label={t("insights.kpi.tokens")}
+                value={formatTokens(data.kpis.tokens)}
+                detail={t("insights.summary.modelCalls", {
+                  n: String(data.kpis.llm_calls),
+                })}
               />
               <KpiCard
-                icon={<Bot size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.agents")}
-                value={String(modelStats.agentCount || data.kpis.active_agents)}
+                icon={
+                  <CircleDollarSign size={18} strokeWidth={2.2} aria-hidden />
+                }
+                tone="emerald"
+                label={t("insights.kpi.cost")}
+                value={formatCost(data.kpis.cost_usd)}
+                detail={
+                  data.kpis.llm_calls === 0
+                    ? t("insights.coverage.noCalls")
+                    : (data.unpriced_llm_events ?? 0) > 0
+                      ? t("insights.summary.unpricedCalls", {
+                          n: String(data.unpriced_llm_events ?? 0),
+                        })
+                      : t("insights.coverage.complete")
+                }
+              />
+              <KpiCard
+                icon={<Layers size={18} strokeWidth={2.2} aria-hidden />}
+                tone="violet"
+                label={t("insights.kpi.models")}
+                value={String(modelStats.modelCount)}
+                detail={t("insights.summary.activeAgents", {
+                  n: String(modelStats.agentCount || data.kpis.active_agents),
+                })}
+              />
+              <KpiCard
+                icon={
+                  topModel ? (
+                    <ModelBrandIcon modelId={topModel.name} size={18} />
+                  ) : (
+                    <Sparkles size={18} strokeWidth={2.2} aria-hidden />
+                  )
+                }
+                tone="amber"
+                label={t("insights.summary.topModel")}
+                value={topModel?.name ?? "—"}
+                valueKind="text"
+                detail={
+                  topModel
+                    ? t("insights.summary.topModelDetail", {
+                        tokens: formatTokens(topModel.tokens),
+                        calls: String(topModel.calls),
+                      })
+                    : t("insights.rank.empty")
+                }
               />
             </div>
 
@@ -548,26 +643,44 @@ export default function InsightsPanel({
 
         {view === "tools" && data && (
           <>
-            <div className="insights-kpis">
+            <div className="insights-kpis insights-kpis-summary">
               <KpiCard
-                icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
+                icon={<Zap size={18} strokeWidth={2.2} aria-hidden />}
+                tone="violet"
+                emphasis="primary"
+                label={t("insights.summary.capabilityCalls")}
+                value={String(capabilityCallTotal)}
+                detail={t("insights.summary.capabilityTypes", {
+                  n: String(activeCapabilityCount),
+                })}
+              />
+              <KpiCard
+                icon={<Wrench size={18} strokeWidth={2.2} aria-hidden />}
+                tone="blue"
                 label={t("insights.kpi.tools")}
                 value={String(toolCallTotal)}
+                detail={t("insights.summary.share", {
+                  pct: percentOf(toolCallTotal, capabilityCallTotal),
+                })}
               />
               <KpiCard
-                icon={<Puzzle size={16} strokeWidth={2.25} aria-hidden />}
+                icon={<Puzzle size={18} strokeWidth={2.2} aria-hidden />}
+                tone="rose"
                 label={t("insights.kpi.skills")}
                 value={String(skillCallTotal)}
+                detail={t("insights.summary.share", {
+                  pct: percentOf(skillCallTotal, capabilityCallTotal),
+                })}
               />
               <KpiCard
-                icon={<McpIcon size={16} />}
-                label={t("insights.kpi.mcp")}
-                value={String(mcpCallTotal)}
-              />
-              <KpiCard
-                icon={<Timer size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.cron")}
-                value={String(cronCallTotal)}
+                icon={<McpIcon size={18} />}
+                tone="emerald"
+                label={t("insights.summary.extensions")}
+                value={String(mcpCallTotal + cronCallTotal)}
+                detail={t("insights.summary.extensionsDetail", {
+                  mcp: String(mcpCallTotal),
+                  cron: String(cronCallTotal),
+                })}
               />
             </div>
 
@@ -699,26 +812,44 @@ export default function InsightsPanel({
 
         {view === "tracing" && traces && (
           <>
-            <div className="insights-kpis">
+            <div className="insights-kpis insights-kpis-summary">
               <KpiCard
-                icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
+                icon={<GitBranch size={18} strokeWidth={2.2} aria-hidden />}
+                tone="violet"
+                emphasis="primary"
                 label={t("insights.trace.kpi.traces")}
                 value={String(traces.kpis.traces)}
+                detail={t("insights.summary.traceTokens", {
+                  tokens: formatTokens(traceTokenTotal),
+                })}
               />
               <KpiCard
-                icon={<Layers size={16} strokeWidth={2.25} aria-hidden />}
+                icon={<Activity size={18} strokeWidth={2.2} aria-hidden />}
+                tone="blue"
                 label={t("insights.trace.kpi.events")}
                 value={String(traces.kpis.events)}
+                detail={t("insights.summary.avgEventsDetail", {
+                  n: String(traceAverageEvents),
+                })}
               />
               <KpiCard
-                icon={<Cpu size={16} strokeWidth={2.25} aria-hidden />}
+                icon={<Cpu size={18} strokeWidth={2.2} aria-hidden />}
+                tone="cyan"
                 label={t("insights.trace.kpi.llm")}
                 value={String(traces.kpis.llm)}
+                detail={t("insights.summary.eventShare", {
+                  pct: percentOf(traces.kpis.llm, traces.kpis.events),
+                })}
               />
               <KpiCard
-                icon={<Wrench size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.trace.kpi.tools")}
-                value={String(traces.kpis.tools)}
+                icon={<Gauge size={18} strokeWidth={2.2} aria-hidden />}
+                tone="emerald"
+                label={t("insights.summary.agentActions")}
+                value={String(traceAgentActions)}
+                detail={t("insights.summary.agentActionsDetail", {
+                  tools: String(traces.kpis.tools),
+                  skills: String(traces.kpis.skills),
+                })}
               />
             </div>
 
@@ -1011,6 +1142,8 @@ function KpiCard({
   onAction,
   compact = false,
   emphasis = "default",
+  tone = "violet",
+  valueKind = "number",
 }: {
   icon: ReactNode;
   label: string;
@@ -1020,16 +1153,24 @@ function KpiCard({
   onAction?: () => void;
   compact?: boolean;
   emphasis?: "default" | "primary" | "muted" | "warning";
+  tone?: "violet" | "blue" | "cyan" | "emerald" | "amber" | "rose";
+  valueKind?: "number" | "text";
 }) {
   return (
     <div
       className={`insights-kpi insights-kpi--${emphasis}${compact ? " insights-kpi--compact" : ""}`}
+      data-accent={tone}
     >
       <span className="insights-kpi-label">
         <span className="insights-kpi-icon">{icon}</span>
         {label}
       </span>
-      <span className="insights-kpi-value">{value}</span>
+      <span
+        className={`insights-kpi-value${valueKind === "text" ? " is-text" : ""}`}
+        title={valueKind === "text" ? value : undefined}
+      >
+        {value}
+      </span>
       {(detail || (actionLabel && onAction)) && (
         <span className="insights-kpi-footer">
           {detail && <span className="insights-kpi-detail">{detail}</span>}

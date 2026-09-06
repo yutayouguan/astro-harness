@@ -70,6 +70,21 @@ test("insights selections and cards share one scoped material hierarchy", () => 
   );
 });
 
+test("model, capability, and trace views expose distinctive summary cards", () => {
+  assert.match(source, /insights-kpis insights-kpis-summary/);
+  assert.match(source, /insights\.summary\.topModel/);
+  assert.match(source, /capabilityCallTotal/);
+  assert.match(source, /traceAgentActions/);
+  assert.match(source, /data-accent=\{tone\}/);
+  assert.match(styles, /\.insights-kpi\[data-accent="blue"\]/);
+  assert.match(styles, /--insights-kpi-accent/);
+  assert.match(styles, /\.insights-kpi-value\.is-text/);
+  assert.match(
+    styles,
+    /@media \(max-width: 640px\)[\s\S]*?\.insights-kpis-summary[\s\S]*?grid-template-columns: 1fr/,
+  );
+});
+
 test("future buckets and keyboard focus have distinct chart treatments", () => {
   assert.match(source, /usageBucketState/);
   assert.match(source, /tabIndex=\{bucketState === "future" \? -1 : 0\}/);
