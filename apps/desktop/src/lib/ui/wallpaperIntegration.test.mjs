@@ -44,6 +44,14 @@ const unifiedStyles = await readFile(
   new URL("../../styles/tokens/unified-color.css", import.meta.url),
   "utf8",
 );
+const welcomeStyles = await readFile(
+  new URL("../../styles/features/chat/markdown.css", import.meta.url),
+  "utf8",
+);
+const accessibilityStyles = await readFile(
+  new URL("../../styles/tokens/a11y.css", import.meta.url),
+  "utf8",
+);
 
 test("wallpaper commands are registered and the settings card calls each source", () => {
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
@@ -118,5 +126,36 @@ test("wallpaper mode remains independent from color style", () => {
   assert.match(
     unifiedStyles,
     /--unified-tone:\s*var\(--wallpaper-tone, var\(--tone-blue\)\)/,
+  );
+});
+
+test("wallpaper palette keeps chrome and welcome copy readable", () => {
+  assert.match(
+    unifiedStyles,
+    /html\[data-theme="light"\]\[data-wallpaper="true"\][\s\S]*?--color-text:\s*#1d2732;[\s\S]*?--sidebar-bg:\s*rgba\(248, 250, 252, 0\.72\);/,
+  );
+  assert.match(
+    unifiedStyles,
+    /html\[data-theme="dark"\]\[data-wallpaper="true"\][\s\S]*?--color-text:\s*#f5f7fa;[\s\S]*?--sidebar-bg:\s*rgba\(8, 12, 20, 0\.7\);/,
+  );
+  assert.match(
+    unifiedStyles,
+    /--wallpaper-readable-tone:\s*color-mix\([\s\S]*?var\(--wallpaper-tone/,
+  );
+  assert.match(
+    welcomeStyles,
+    /html\[data-wallpaper="true"\] \.chat-welcome-copy::before\s*\{[\s\S]*?--wallpaper-content-scrim[\s\S]*?backdrop-filter:/,
+  );
+  assert.match(
+    welcomeStyles,
+    /html\[data-wallpaper="true"\] \.chat-welcome-title-brand\s*\{[\s\S]*?--wallpaper-readable-tone/,
+  );
+  assert.match(
+    welcomeStyles,
+    /html\[data-wallpaper="true"\] \.chat-welcome-sub\s*\{[\s\S]*?color:\s*var\(--ink-soft\);[\s\S]*?font-weight:\s*500;/,
+  );
+  assert.match(
+    accessibilityStyles,
+    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?\.chat-welcome-copy::before\s*\{[\s\S]*?backdrop-filter:\s*none !important;/,
   );
 });

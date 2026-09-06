@@ -284,3 +284,36 @@ html[data-wallpaper-palette="true"] [data-tone] {
   --unified-tone-glow: var(--wallpaper-tone-glow, var(--tone-blue-glow));
   --accent-2: var(--wallpaper-accent-2, var(--tone));
 }
+
+/* Wallpaper colors are atmospheric accents, not foreground colors. Keep the
+ * semantic ink stable over changing imagery and derive a contrast-safe tone
+ * for the few labels that intentionally retain wallpaper color. */
+html[data-theme="light"][data-wallpaper="true"] {
+  --color-text: #1d2732;
+  --color-text-secondary: #46545f;
+  --color-text-muted: #5d6872;
+  --wallpaper-readable-tone: color-mix(
+    in srgb,
+    var(--wallpaper-tone, var(--tone-blue)) 30%,
+    #1d2732
+  );
+  --wallpaper-content-scrim: rgba(248, 250, 252, 0.48);
+  --sidebar-bg: rgba(248, 250, 252, 0.72);
+}
+
+html[data-theme="dark"][data-wallpaper="true"] {
+  --color-text: #f5f7fa;
+  --color-text-secondary: #d5dde7;
+  --color-text-muted: #b3beca;
+  --wallpaper-readable-tone: color-mix(
+    in srgb,
+    var(--wallpaper-tone, var(--tone-blue)) 34%,
+    #f5f7fa
+  );
+  --wallpaper-content-scrim: rgba(8, 12, 20, 0.52);
+  --sidebar-bg: rgba(8, 12, 20, 0.7);
+}
+
+html[data-wallpaper-palette="true"] .sidebar-brand-text {
+  --tone: var(--wallpaper-readable-tone, var(--ink));
+}
