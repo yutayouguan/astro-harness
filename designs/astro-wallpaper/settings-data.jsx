@@ -83,6 +83,29 @@ const LOG_ROWS = [
   { time: "10:40:05", level: "error", source: "mcp", message: "calendar transport unavailable; retry scheduled" },
 ];
 
+const HOME_CARDS = [
+  { id: "intro", glyph: "A", tone: "blue", title: "快速了解 Astro", description: "带我全面了解 Astro", prompt: "请结合「我的工作或使用场景」，介绍 Astro 能帮我完成什么。" },
+  { id: "skills", glyph: "✧", tone: "purple", title: "Skill 使用", description: "帮我安装个性化 Skill", prompt: "帮我找到并安装一个适合「使用场景」的 Skill，我希望它能「具体目标」。" },
+  { id: "files", glyph: "▧", tone: "teal", title: "文件处理", description: "帮我生成工作日报", prompt: "请根据「文件或资料」生成一份「文档类型」，重点包含「需要体现的内容」。" },
+  { id: "data", glyph: "∿", tone: "amber", title: "数据分析", description: "帮我分析一份数据", prompt: "请分析「数据来源或文件」，重点回答「分析目标」，并以「期望的输出形式」呈现。" },
+  { id: "image", glyph: "◈", tone: "rose", title: "图片创作", description: "帮我生成一张图片", prompt: "请生成一张「画面主体」的图片，视觉风格为「风格」，画幅为「尺寸或比例」。" },
+  { id: "music", glyph: "♫", tone: "violet", title: "音乐创作", description: "帮我生成一段音乐", prompt: "请创作一段用于「使用场景」的「音乐风格」音乐，情绪为「氛围情绪」。" },
+  { id: "video", glyph: "▷", tone: "indigo", title: "视频制作", description: "帮我生成一段视频", prompt: "请生成一段关于「画面内容」的短视频，风格为「视觉风格」。" },
+  { id: "web", glyph: "◎", tone: "emerald", title: "网页浏览", description: "帮我搜索最新资讯", prompt: "请浏览和检索「网站或主题」，关注「想了解的问题」。" },
+  { id: "code", glyph: "</>", tone: "sky", title: "代码助手", description: "帮我写一段代码", prompt: "请用「编程语言或框架」实现「需要的功能」，并满足「关键要求或限制」。" },
+  { id: "writing", glyph: "✎", tone: "pink", title: "写作助手", description: "帮我撰写一篇文章", prompt: "请为「目标读者」撰写一篇关于「文章主题」的「文章类型」。" },
+  { id: "search", glyph: "⌕", tone: "orange", title: "智能搜索", description: "帮我深度检索信息", prompt: "请深度检索「研究主题」，重点回答「核心问题」。" },
+  { id: "translate", glyph: "文A", tone: "cyan", title: "翻译助手", description: "帮我翻译一段内容", prompt: "请将「待翻译内容」翻译成「目标语言」，并保持专业术语准确。" },
+];
+
+const HOME_SESSIONS = [
+  { id: "new", title: "新会话", meta: "尚未开始", active: true },
+  { id: "settings", title: "设置中心交互原型", meta: "刚刚 · design" },
+  { id: "alignment", title: "Codex 每日源码对齐", meta: "昨天 · 31 轮" },
+  { id: "responses", title: "Responses 工具协议检查", meta: "9 月 4 日 · agent" },
+  { id: "wallpaper", title: "Astro 壁纸与动态色", meta: "9 月 2 日 · desktop" },
+];
+
 const INITIAL_SETTINGS = {
   language: "zh-CN",
   launchAtLogin: true,
@@ -139,5 +162,7 @@ Object.assign(window, {
   TOOLS,
   MODELS,
   LOG_ROWS,
+  HOME_CARDS,
+  HOME_SESSIONS,
   INITIAL_SETTINGS,
 });

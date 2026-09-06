@@ -16,6 +16,8 @@ const {
   InsightsPage,
   DiagnosticsPage,
   AboutPage,
+  HomeSidebar,
+  HomePage,
 } = window;
 
 const STORAGE_KEY = "astro-settings-prototype.v2";
@@ -35,8 +37,8 @@ function loadSettings() {
   }
 }
 
-function RailButton({ children, active = false, label }) {
-  return <button type="button" className={`rail-button ${active ? "active" : ""}`} aria-label={label} title={label}>{children}</button>;
+function RailButton({ children, active = false, label, onClick }) {
+  return <button type="button" className={`rail-button ${active ? "active" : ""}`} aria-label={label} title={label} onClick={onClick}>{children}</button>;
 }
 
 function NavRow({ item, active, onClick }) {
@@ -112,11 +114,14 @@ function App() {
   const initial = useMemo(() => loadSettings(), []);
   const [saved, setSaved] = useState(initial);
   const [settings, setSettings] = useState(initial);
-  const initialTab = ALL_TABS.some((tab) => tab.id === location.hash.slice(1)) ? location.hash.slice(1) : "appearance";
+  const initialHash = location.hash.slice(1);
+  const initialTab = ALL_TABS.some((tab) => tab.id === initialHash) ? initialHash : "appearance";
+  const [surface, setSurface] = useState(initialHash === "home" ? "home" : "settings");
   const [activeTab, setActiveTab] = useState(initialTab);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [homeSessionKey, setHomeSessionKey] = useState(0);
   const searchRef = useRef(null);
   const contentRef = useRef(null);
   const tab = ALL_TABS.find((item) => item.id === activeTab) ?? ALL_TABS[0];
@@ -143,14 +148,39 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const syncHash = () => {
+      const hash = location.hash.slice(1);
+      if (hash === "home") {
+        setSurface("home");
+      } else if (ALL_TABS.some((item) => item.id === hash)) {
+        setActiveTab(hash);
+        setSurface("settings");
+      }
+    };
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
   function patch(next) {
     setSettings((current) => ({ ...current, ...next }));
   }
 
   function navigate(id) {
+    setSurface("settings");
     setActiveTab(id);
     history.replaceState(null, "", `#${id}`);
     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openHome() {
+    setSurface("home");
+    history.replaceState(null, "", "#home");
+  }
+
+  function openSettings(id = activeTab) {
+    setSurface("settings");
+    navigate(id);
   }
 
   function notify(message) {
@@ -201,30 +231,30 @@ function App() {
   };
 
   return (
-    <main className="stage" lang="zh" data-screen-label="Astro 设置中心">
-      <section className="app-window" data-preview-theme={settings.theme} aria-label="Astro 桌面应用设置原型">
+    <main className="stage" lang="zh" data-screen-label="Astro 桌面应用">
+      <section className="app-window" data-preview-theme={settings.theme} data-surface={surface} aria-label="Astro 桌面应用原型">
         <div className="wallpaper-layer" style={wallpaperStyle}></div>
         <div className="wallpaper-shade" style={{ "--shade": settings.shade / 100 }}></div>
         <div className="shell">
           <header className="titlebar">
             <span className="traffic"><i></i><i></i><i></i></span>
-            <span className="window-title">Astro · 设置</span>
-            <span className="titlebar-status" data-dirty={dirty}>{dirty ? "有未保存更改" : "已保存"}</span>
+            <span className="window-title">Astro · {surface === "home" ? "主页" : "设置"}</span>
+            <span className="titlebar-status" data-dirty={dirty}>{dirty ? "设置草稿未保存" : surface === "home" ? "本地运行" : "已保存"}</span>
           </header>
           <aside className="rail" aria-label="主导航">
             <img className="brand" src="assets/astro-app-icon.png" alt="Astro" />
-            <RailButton label="对话">⌁</RailButton><RailButton label="文件">▱</RailButton><RailButton label="自动化">↻</RailButton>
-            <div style={{ flex: 1 }}></div><RailButton active label="设置">⚙</RailButton>
+            <RailButton active={surface === "home"} label="对话" onClick={openHome}>⌁</RailButton><RailButton label="文件" onClick={() => notify("已打开文件空间") }>▱</RailButton><RailButton label="自动化" onClick={() => notify("已打开自动化") }>↻</RailButton>
+            <div style={{ flex: 1 }}></div><RailButton active={surface === "settings"} label="设置" onClick={() => openSettings()}>⚙</RailButton>
           </aside>
-          <aside className="settings-nav" aria-label="设置导航">
+          {surface === "settings" ? <aside className="settings-nav" aria-label="设置导航">
             <div className="settings-heading-row"><h2 className="settings-heading">设置</h2><span className="settings-count">{ALL_TABS.length} 个页面</span></div>
             <div className="search-wrap"><span className="search-mark" aria-hidden>⌕</span><input ref={searchRef} className="settings-search" placeholder="搜索设置  ⌘K" aria-label="搜索设置" value={query} onChange={(event) => setQuery(event.target.value)} />{query ? <button className="search-clear" onClick={() => setQuery("")} aria-label="清空搜索">×</button> : null}</div>
             {filteredGroups.map((group) => <div className="nav-group" key={group.id}><div className="nav-label">{group.label}</div>{group.items.map((item) => <NavRow key={item.id} item={item} active={activeTab === item.id} onClick={() => navigate(item.id)} />)}</div>)}
             {filteredGroups.length === 0 ? <div className="nav-empty">没有匹配的设置<br />试试“模型”或“外观”</div> : null}
-          </aside>
-          <section className="content" ref={contentRef}>{pages[activeTab]}</section>
+          </aside> : <HomeSidebar notify={notify} onNewChat={() => { setHomeSessionKey((value) => value + 1); notify("已创建新会话"); }} />}
+          {surface === "settings" ? <section className="content" ref={contentRef}>{pages[activeTab]}</section> : <HomePage key={homeSessionKey} notify={notify} />}
         </div>
-        {dirty ? <div className="save-bar" role="status" aria-live="polite" aria-atomic="true"><div className="save-copy"><strong>你有未保存的更改</strong><small>可以继续切换页面，草稿不会丢失。</small></div><Button variant="ghost" onClick={reset}>撤销</Button><Button variant="primary" onClick={save}>保存设置</Button></div> : null}
+        {dirty && surface === "settings" ? <div className="save-bar" role="status" aria-live="polite" aria-atomic="true"><div className="save-copy"><strong>你有未保存的更改</strong><small>可以继续切换页面，草稿不会丢失。</small></div><Button variant="ghost" onClick={reset}>撤销</Button><Button variant="primary" onClick={save}>保存设置</Button></div> : null}
         <GenerateDialog open={generateOpen} onClose={() => setGenerateOpen(false)} onFinish={(wallpaper) => { patch({ wallpaper, backgroundMode: "wallpaper" }); setGenerateOpen(false); notify("AI 壁纸已生成，保存后应用"); }} />
         {toast ? <div className="toast" role="status"><span className="toast-mark">✓</span><span>{toast}</span></div> : null}
       </section>
