@@ -43,6 +43,10 @@ test("settings expose one shared inset and selected material contract", () => {
   assert.match(material, /\.prefs-card:not\(\.prefs-card--general\)/);
   assert.match(
     material,
+    /\.prefs-card:not\(\.prefs-card--general\), \.prefs-section\),[\s\S]*?background-clip:\s*padding-box;[\s\S]*?backdrop-filter:\s*none;/,
+  );
+  assert.match(
+    material,
     /\.settings-content-inline,\s*\.prefs-page\.is-embedded\s*\{/,
   );
 });
