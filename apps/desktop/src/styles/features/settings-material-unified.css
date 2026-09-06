@@ -1,0 +1,233 @@
+/* Settings material hierarchy
+ * 1. Functional cards use the shared content-card glass.
+ * 2. Nested groups use one quiet inset material without another blur layer.
+ * 3. Tone and semantic colors appear only on selected or status states.
+ */
+
+.settings-content-inline,
+.prefs-page.is-embedded {
+  --settings-divider: color-mix(in srgb, var(--ink) 8%, transparent);
+  --settings-inset-border: color-mix(in srgb, var(--ink) 10%, transparent);
+  --settings-inset-background: color-mix(
+    in srgb,
+    var(--surface-panel-background) 68%,
+    transparent
+  );
+  --settings-inset-background-strong: color-mix(
+    in srgb,
+    var(--surface-panel-background) 84%,
+    transparent
+  );
+  --settings-inset-hover: color-mix(
+    in srgb,
+    var(--tone-soft) 24%,
+    var(--settings-inset-background-strong)
+  );
+  --settings-selected-border: color-mix(
+    in srgb,
+    var(--tone) 34%,
+    var(--settings-inset-border)
+  );
+  --settings-selected-background: color-mix(
+    in srgb,
+    var(--tone-soft) 58%,
+    var(--surface-panel-background)
+  );
+  --settings-inset-shadow: inset 0 1px 0
+    color-mix(in srgb, #fff 22%, transparent);
+}
+
+/* Page cards stay on exactly the same material as Model Service and Tools. */
+.prefs-page.is-embedded
+  .prefs-category-stack
+  > :is(.prefs-card:not(.prefs-card--general), .prefs-section),
+.prefs-page.is-embedded .prefs-category-stack--general .prefs-general-group {
+  border-color: var(--settings-panel-border, var(--glass-edge));
+  background: var(--settings-panel-background, var(--glass-fill));
+  box-shadow: var(
+    --settings-panel-shadow,
+    var(--shadow-card),
+    var(--glass-rim)
+  );
+  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
+  -webkit-backdrop-filter: var(
+    --settings-panel-backdrop,
+    var(--backdrop-glass)
+  );
+}
+
+/* Quiet inset material: no blur-on-blur and no page-specific white recipe. */
+.prefs-page.is-embedded
+  :is(
+    .theme-option,
+    .appearance-segmented,
+    .morphicon-segmented,
+    .app-icon-option,
+    .prefs-toggle-list,
+    .prefs-conversation-preview,
+    .prefs-context-advanced,
+    .prefs-context-controls,
+    .prefs-diag-advanced,
+    .prefs-diag-log,
+    .prefs-about-meta,
+    .prefs-about-meta > div,
+    .prefs-about-features li,
+    .prefs-about-resources > div,
+    .terminal-mode-option,
+    .terminal-font-preview,
+    .terminal-cursor-options,
+    .browser-viewport-options,
+    .browser-permissions-list li,
+    .browser-permission-site-icon
+  ) {
+  border-color: var(--settings-inset-border);
+  background: var(--settings-inset-background);
+  box-shadow: var(--settings-inset-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.prefs-page.is-embedded
+  :is(
+    .prefs-diag-input,
+    .prefs-diag-select .select-menu-trigger,
+    .prefs-select,
+    .aux-number-input,
+    .terminal-settings-field > input[type="text"],
+    .terminal-settings-field > select,
+    .browser-data-path code,
+    .browser-permissions-list button,
+    .prefs-diag-btn:not(.primary),
+    .prefs-chip:not(.active),
+    .wallpaper-secondary-button,
+    .wallpaper-fit-options button,
+    .wallpaper-style-options button,
+    .prefs-appearance-preview-summary span
+  ) {
+  border-color: var(--settings-inset-border);
+  background: var(--settings-inset-background-strong);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Context pressure stages keep their meaning, but share the same material base. */
+.prefs-page.is-embedded :is(.prefs-context-stage, .prefs-context-budget-block) {
+  border-color: color-mix(
+    in srgb,
+    var(--stage-accent) 18%,
+    var(--settings-inset-border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--settings-inset-background) 92%,
+    var(--stage-accent)
+  );
+  box-shadow: var(--settings-inset-shadow);
+}
+
+.prefs-page.is-embedded .prefs-context-field--card {
+  border-color: var(--settings-inset-border);
+  background: var(--settings-inset-background);
+  box-shadow: none;
+}
+
+/* Hover changes weight slightly; the material itself does not change identity. */
+.prefs-page.is-embedded
+  :is(
+    .theme-option:hover,
+    .appearance-segmented button:not(.is-active):hover,
+    .app-icon-option:hover,
+    .terminal-mode-option:hover,
+    .browser-viewport-options button:hover:not(:disabled),
+    .prefs-toggle-row:hover
+  ) {
+  border-color: color-mix(
+    in srgb,
+    var(--tone) 22%,
+    var(--settings-inset-border)
+  );
+  background: var(--settings-inset-hover);
+  box-shadow: var(--settings-inset-shadow);
+}
+
+/* Selected controls use one tone recipe across every settings page. */
+.prefs-page.is-embedded
+  :is(
+    .theme-option.active,
+    .appearance-segmented button.is-active,
+    .app-icon-option.active,
+    .terminal-mode-option.is-active,
+    .browser-viewport-options button.is-active,
+    .terminal-cursor-options button.is-active,
+    .wallpaper-fit-options button.is-active,
+    .wallpaper-style-options button.is-active
+  ) {
+  border-color: var(--settings-selected-border);
+  background: var(--settings-selected-background);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 13%, transparent),
+    var(--settings-inset-shadow);
+}
+
+.prefs-page.is-embedded .morphicon-selection-indicator {
+  background: var(--settings-selected-background);
+  box-shadow:
+    inset 0 0 0 1px var(--settings-selected-border),
+    var(--settings-inset-shadow);
+}
+
+/* Preview shells use the same inset base; actual wallpaper imagery remains untouched. */
+.prefs-page.is-embedded
+  :is(
+    .prefs-appearance-preview,
+    .prefs-appearance-preview-shell,
+    .prefs-appearance-preview-canvas i,
+    .prefs-appearance-preview-canvas b
+  ) {
+  border-color: var(--settings-inset-border);
+  background: var(--settings-inset-background);
+  box-shadow: var(--settings-inset-shadow);
+}
+
+.prefs-page.is-embedded
+  :is(
+    .morphicon-setting-row + .morphicon-setting-row,
+    .terminal-settings-field,
+    .browser-data-path,
+    .browser-viewport-setting,
+    .browser-sensitive-note,
+    .prefs-toggle-heading
+  ) {
+  border-color: var(--settings-divider);
+}
+
+/* Semantic status colors remain meaningful, but keep the same weight and edge. */
+.prefs-page.is-embedded :is(.browser-runtime-status, .browser-permission-kind) {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .settings-content-inline,
+  .prefs-page.is-embedded {
+    --settings-inset-background: var(--surface-panel-background);
+    --settings-inset-background-strong: var(--surface-panel-background);
+    --settings-inset-hover: var(--surface-panel-background);
+    --settings-selected-background: color-mix(
+      in srgb,
+      var(--tone-soft) 42%,
+      var(--surface-panel-background)
+    );
+  }
+}
+
+@media (prefers-contrast: more) {
+  .settings-content-inline,
+  .prefs-page.is-embedded {
+    --settings-divider: var(--color-border);
+    --settings-inset-border: var(--color-border);
+    --settings-selected-border: var(--tone);
+  }
+}

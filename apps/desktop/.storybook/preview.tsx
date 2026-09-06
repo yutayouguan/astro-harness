@@ -1,5 +1,6 @@
 import type { Preview } from "@storybook/react-vite";
 import "../src/styles/index.css";
+import "../src/styles/features/settings-material-unified.css";
 
 const preview: Preview = {
   globalTypes: {

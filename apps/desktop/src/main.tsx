@@ -9,6 +9,7 @@ import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
 import "./styles/index.css";
+import "./styles/features/settings-material-unified.css";
 
 installContextMenuGuard();
 
