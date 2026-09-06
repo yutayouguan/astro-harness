@@ -226,7 +226,7 @@ test("settings sidebar uses clear category and capability names", () => {
     /"settings\.sidebar\.tab\.providers": "模型服务"/,
   );
   assert.match(messagesSource, /"settings\.sidebar\.tab\.context": "自动压缩"/);
-  assert.match(messagesSource, /"settings\.sidebar\.tab\.tools": "工具与技能"/);
+  assert.match(messagesSource, /"settings\.sidebar\.tab\.tools": "工具"/);
   assert.match(messagesSource, /"settings\.sidebar\.tab\.about": "关于 Astro"/);
   assert.match(messagesSource, /"settings\.sidebar\.group\.basics": "General"/);
   assert.match(
@@ -237,6 +237,7 @@ test("settings sidebar uses clear category and capability names", () => {
     messagesSource,
     /"settings\.sidebar\.tab\.context": "Automatic Compression"/,
   );
+  assert.match(messagesSource, /"settings\.sidebar\.tab\.tools": "Tools"/);
 });
 
 test("preference category navigation keeps the shared glass material", () => {

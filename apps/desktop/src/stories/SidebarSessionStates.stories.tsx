@@ -276,7 +276,7 @@ function SettingsMenu() {
     { label: "对话", Icon: MessageSquare },
     { label: "自动压缩", Icon: Layers2 },
     { label: "模型服务", Icon: Cpu, active: true },
-    { label: "工具与技能", Icon: Wrench },
+    { label: "工具", Icon: Wrench },
   ];
 
   return (
