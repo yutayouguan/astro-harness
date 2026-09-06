@@ -577,6 +577,9 @@ pub struct UsageInsightsArgs {
     pub as_of: Option<String>,
     /// 可选 Agent 筛选；`None` 表示全部
     pub agent_id: Option<String>,
+    /// 可选序列粒度：`day` | `week` | `month`；缺省时按 period 自适应。
+    #[serde(default)]
+    pub granularity: Option<String>,
 }
 
 /// Tauri 命令：按 period / agent 聚合用量洞察。
@@ -592,15 +595,25 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
+    let granularity = match args.granularity.as_deref().map(str::to_lowercase) {
+        None => None,
+        Some(value) if value == "day" => Some(usage::UsageGranularity::Day),
+        Some(value) if value == "week" => Some(usage::UsageGranularity::Week),
+        Some(value) if value == "month" => Some(usage::UsageGranularity::Month),
+        Some(value) => return Err(format!("invalid granularity: {value}")),
+    };
     let db = usage::UsageDb::open_default()
         .await
         .map_err(|e| e.to_string())?;
-    db.query_insights(usage::UsageInsightsQuery {
+    let query = usage::UsageInsightsQuery {
         period,
         as_of: args.as_of,
         agent_id,
-    })
-    .await
+    };
+    match granularity {
+        Some(granularity) => db.query_insights_with_granularity(query, granularity).await,
+        None => db.query_insights(query).await,
+    }
     .map_err(|e| e.to_string())
 }
 

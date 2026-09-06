@@ -1,5 +1,5 @@
 use anyhow::Context;
-use chrono::{Datelike, Duration, SecondsFormat, TimeZone, Utc};
+use chrono::{Datelike, Duration, NaiveDate, SecondsFormat, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -82,6 +82,25 @@ pub enum UsagePeriod {
     Days365,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UsageGranularity {
+    #[default]
+    Day,
+    Week,
+    Month,
+}
+
+impl UsageGranularity {
+    fn for_period(period: UsagePeriod) -> Self {
+        match period {
+            UsagePeriod::Days90 => Self::Week,
+            UsagePeriod::Days365 | UsagePeriod::Quarter | UsagePeriod::Year => Self::Month,
+            UsagePeriod::Days30 | UsagePeriod::Month => Self::Day,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewUsageEvent {
     pub ts: String,
@@ -124,6 +143,9 @@ pub struct UsageKpis {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageSeriesPoint {
     pub bucket: String,
+    pub bucket_start: String,
+    /// Exclusive end date (`YYYY-MM-DD`).
+    pub bucket_end: String,
     pub calls: i64,
     pub tokens: i64,
     pub cost_usd: f64,
@@ -186,6 +208,7 @@ pub struct TraceEventRow {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UsageInsights {
+    pub granularity: UsageGranularity,
     pub kpis: UsageKpis,
     pub series: Vec<UsageSeriesPoint>,
     pub rankings: UsageRankings,
@@ -216,7 +239,7 @@ fn fmt_utc_bound(dt: chrono::DateTime<Utc>) -> String {
 fn period_bounds(
     period: UsagePeriod,
     as_of: &chrono::DateTime<Utc>,
-) -> (String, String, &'static str) {
+) -> (String, String, UsageGranularity) {
     let y = as_of.year();
     let m = as_of.month();
     match period {
@@ -235,7 +258,11 @@ fn period_bounds(
             );
             let end = today + Duration::days(1);
             let start = end - Duration::days(days);
-            (fmt_utc_bound(start), fmt_utc_bound(end), "%Y-%m-%d")
+            (
+                fmt_utc_bound(start),
+                fmt_utc_bound(end),
+                UsageGranularity::for_period(period),
+            )
         }
         UsagePeriod::Month => {
             let start = Utc
@@ -251,7 +278,11 @@ fn period_bounds(
                     .single()
                     .expect("valid next month")
             };
-            (fmt_utc_bound(start), fmt_utc_bound(end), "%Y-%m-%d")
+            (
+                fmt_utc_bound(start),
+                fmt_utc_bound(end),
+                UsageGranularity::Day,
+            )
         }
         UsagePeriod::Quarter => {
             let q_start_month = ((m - 1) / 3) * 3 + 1;
@@ -268,7 +299,11 @@ fn period_bounds(
                     .single()
                     .expect("valid next quarter")
             };
-            (fmt_utc_bound(start), fmt_utc_bound(end), "%Y-%m")
+            (
+                fmt_utc_bound(start),
+                fmt_utc_bound(end),
+                UsageGranularity::Month,
+            )
         }
         UsagePeriod::Year => {
             let start = Utc
@@ -279,7 +314,11 @@ fn period_bounds(
                 .with_ymd_and_hms(y + 1, 1, 1, 0, 0, 0)
                 .single()
                 .expect("valid next year");
-            (fmt_utc_bound(start), fmt_utc_bound(end), "%Y-%m")
+            (
+                fmt_utc_bound(start),
+                fmt_utc_bound(end),
+                UsageGranularity::Month,
+            )
         }
     }
 }
@@ -308,37 +347,82 @@ fn normalize_event_ts(ts: &str) -> String {
     }
 }
 
-fn all_buckets(start: &str, end: &str, fmt: &str) -> anyhow::Result<Vec<String>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UsageBucket {
+    key: String,
+    start: String,
+    end: String,
+}
+
+fn format_bucket_date(date: NaiveDate) -> String {
+    date.format("%Y-%m-%d").to_string()
+}
+
+fn next_month(date: NaiveDate) -> anyhow::Result<NaiveDate> {
+    let (year, month) = if date.month() == 12 {
+        (date.year() + 1, 1)
+    } else {
+        (date.year(), date.month() + 1)
+    };
+    NaiveDate::from_ymd_opt(year, month, 1)
+        .ok_or_else(|| anyhow::anyhow!("date overflow filling month buckets"))
+}
+
+fn all_buckets(
+    start: &str,
+    end: &str,
+    granularity: UsageGranularity,
+) -> anyhow::Result<Vec<UsageBucket>> {
     let start_dt = chrono::DateTime::parse_from_rfc3339(start)?.with_timezone(&Utc);
     let end_dt = chrono::DateTime::parse_from_rfc3339(end)?.with_timezone(&Utc);
+    let start_date = start_dt.date_naive();
+    let end_date = end_dt.date_naive();
     let mut out = Vec::new();
-    match fmt {
-        "%Y-%m-%d" => {
-            let mut d = start_dt.date_naive();
-            let end_d = end_dt.date_naive();
-            while d < end_d {
-                out.push(d.format("%Y-%m-%d").to_string());
-                d = d
+    match granularity {
+        UsageGranularity::Day => {
+            let mut day = start_date;
+            while day < end_date {
+                let next = day
                     .succ_opt()
                     .ok_or_else(|| anyhow::anyhow!("date overflow filling day buckets"))?;
+                out.push(UsageBucket {
+                    key: format_bucket_date(day),
+                    start: format_bucket_date(day),
+                    end: format_bucket_date(next),
+                });
+                day = next;
             }
         }
-        "%Y-%m" => {
-            let mut y = start_dt.year();
-            let mut m = start_dt.month();
-            let end_y = end_dt.year();
-            let end_m = end_dt.month();
-            while y < end_y || (y == end_y && m < end_m) {
-                out.push(format!("{y:04}-{m:02}"));
-                if m == 12 {
-                    y += 1;
-                    m = 1;
-                } else {
-                    m += 1;
-                }
+        UsageGranularity::Week => {
+            let offset = i64::from(start_date.weekday().num_days_from_monday());
+            let mut week = start_date
+                .checked_sub_signed(Duration::days(offset))
+                .ok_or_else(|| anyhow::anyhow!("date overflow aligning week bucket"))?;
+            while week < end_date {
+                let next = week
+                    .checked_add_signed(Duration::days(7))
+                    .ok_or_else(|| anyhow::anyhow!("date overflow filling week buckets"))?;
+                out.push(UsageBucket {
+                    key: format_bucket_date(week),
+                    start: format_bucket_date(week.max(start_date)),
+                    end: format_bucket_date(next.min(end_date)),
+                });
+                week = next;
             }
         }
-        other => anyhow::bail!("unsupported bucket format: {other}"),
+        UsageGranularity::Month => {
+            let mut month = NaiveDate::from_ymd_opt(start_date.year(), start_date.month(), 1)
+                .expect("valid month start");
+            while month < end_date {
+                let next = next_month(month)?;
+                out.push(UsageBucket {
+                    key: month.format("%Y-%m").to_string(),
+                    start: format_bucket_date(month.max(start_date)),
+                    end: format_bucket_date(next.min(end_date)),
+                });
+                month = next;
+            }
+        }
     }
     Ok(out)
 }
@@ -444,13 +528,23 @@ impl UsageDb {
     }
 
     pub async fn query_insights(&self, q: UsageInsightsQuery) -> anyhow::Result<UsageInsights> {
+        let granularity = UsageGranularity::for_period(q.period);
+        self.query_insights_with_granularity(q, granularity).await
+    }
+
+    pub async fn query_insights_with_granularity(
+        &self,
+        q: UsageInsightsQuery,
+        granularity: UsageGranularity,
+    ) -> anyhow::Result<UsageInsights> {
         let as_of = parse_as_of(q.as_of.as_deref())?;
-        let (start, end, bucket_fmt) = period_bounds(q.period, &as_of);
+        let (start, end, _) = period_bounds(q.period, &as_of);
         let agent_id = q.agent_id.filter(|s| !s.is_empty());
         Ok(UsageInsights {
+            granularity,
             kpis: self.query_kpis(&start, &end, agent_id.as_deref()).await?,
             series: self
-                .query_series(&start, &end, bucket_fmt, agent_id.as_deref())
+                .query_series(&start, &end, granularity, agent_id.as_deref())
                 .await?,
             rankings: UsageRankings {
                 by_kind: self
@@ -567,13 +661,20 @@ impl UsageDb {
         &self,
         start: &str,
         end: &str,
-        bucket_fmt: &str,
+        granularity: UsageGranularity,
         agent_id: Option<&str>,
     ) -> anyhow::Result<Vec<UsageSeriesPoint>> {
         let agent_clause = Self::agent_filter_sql(agent_id);
+        let bucket_expr = match granularity {
+            UsageGranularity::Day => format!("strftime('%Y-%m-%d', {TS_NORM_SQL})"),
+            UsageGranularity::Week => format!(
+                "date({TS_NORM_SQL}, '-' || ((CAST(strftime('%w', {TS_NORM_SQL}) AS INTEGER) + 6) % 7) || ' days')"
+            ),
+            UsageGranularity::Month => format!("strftime('%Y-%m', {TS_NORM_SQL})"),
+        };
         let sql = format!(
             "SELECT
-                strftime('{bucket_fmt}', {TS_NORM_SQL}) AS bucket,
+                {bucket_expr} AS bucket,
                 COALESCE(SUM({CALLS_KIND_SQL}), 0),
                 COALESCE(SUM(total_tokens), 0),
                 COALESCE(SUM({COST_SUM_SQL}), 0.0)
@@ -601,10 +702,13 @@ impl UsageDb {
         }
 
         let mut series = Vec::new();
-        for bucket in all_buckets(start, end, bucket_fmt)? {
-            let (calls, tokens, cost_usd) = by_bucket.get(&bucket).copied().unwrap_or((0, 0, 0.0));
+        for bucket in all_buckets(start, end, granularity)? {
+            let (calls, tokens, cost_usd) =
+                by_bucket.get(&bucket.key).copied().unwrap_or((0, 0, 0.0));
             series.push(UsageSeriesPoint {
-                bucket,
+                bucket: bucket.key,
+                bucket_start: bucket.start,
+                bucket_end: bucket.end,
                 calls,
                 tokens,
                 cost_usd,
@@ -839,27 +943,58 @@ mod tests {
         let as_of = chrono::DateTime::parse_from_rfc3339("2026-07-13T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let (start, end, fmt) = period_bounds(UsagePeriod::Month, &as_of);
+        let (start, end, granularity) = period_bounds(UsagePeriod::Month, &as_of);
         assert_eq!(start, "2026-07-01T00:00:00Z");
         assert_eq!(end, "2026-08-01T00:00:00Z");
-        assert_eq!(fmt, "%Y-%m-%d");
+        assert_eq!(granularity, UsageGranularity::Day);
     }
 
     #[test]
-    fn rolling_period_bounds_include_today_and_use_daily_buckets() {
+    fn rolling_period_bounds_include_today_and_adapt_granularity() {
         let as_of = chrono::DateTime::parse_from_rfc3339("2026-07-13T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
 
-        let (start, end, fmt) = period_bounds(UsagePeriod::Days30, &as_of);
+        let (start, end, granularity) = period_bounds(UsagePeriod::Days30, &as_of);
         assert_eq!(start, "2026-06-14T00:00:00Z");
         assert_eq!(end, "2026-07-14T00:00:00Z");
-        assert_eq!(fmt, "%Y-%m-%d");
+        assert_eq!(granularity, UsageGranularity::Day);
 
-        let (start, end, fmt) = period_bounds(UsagePeriod::Days365, &as_of);
+        let (_, _, granularity) = period_bounds(UsagePeriod::Days90, &as_of);
+        assert_eq!(granularity, UsageGranularity::Week);
+
+        let (start, end, granularity) = period_bounds(UsagePeriod::Days365, &as_of);
         assert_eq!(start, "2025-07-14T00:00:00Z");
         assert_eq!(end, "2026-07-14T00:00:00Z");
-        assert_eq!(fmt, "%Y-%m-%d");
+        assert_eq!(granularity, UsageGranularity::Month);
+    }
+
+    #[test]
+    fn week_and_month_buckets_keep_exact_visible_bounds() {
+        let weeks = all_buckets(
+            "2026-07-01T00:00:00Z",
+            "2026-07-11T00:00:00Z",
+            UsageGranularity::Week,
+        )
+        .unwrap();
+        assert_eq!(weeks.len(), 2);
+        assert_eq!(weeks[0].key, "2026-06-29");
+        assert_eq!(weeks[0].start, "2026-07-01");
+        assert_eq!(weeks[0].end, "2026-07-06");
+        assert_eq!(weeks[1].key, "2026-07-06");
+        assert_eq!(weeks[1].end, "2026-07-11");
+
+        let months = all_buckets(
+            "2025-07-14T00:00:00Z",
+            "2026-07-14T00:00:00Z",
+            UsageGranularity::Month,
+        )
+        .unwrap();
+        assert_eq!(months.len(), 13);
+        assert_eq!(months[0].key, "2025-07");
+        assert_eq!(months[0].start, "2025-07-14");
+        assert_eq!(months[12].key, "2026-07");
+        assert_eq!(months[12].end, "2026-07-14");
     }
 
     fn zero_event(

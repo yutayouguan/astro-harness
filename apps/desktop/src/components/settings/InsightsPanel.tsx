@@ -62,6 +62,7 @@ type RankItem = {
 };
 
 export type UsageInsights = {
+  granularity: "day" | "week" | "month";
   kpis: {
     calls: number;
     tokens: number;
@@ -75,7 +76,14 @@ export type UsageInsights = {
     cache_write_tokens?: number;
     reasoning_tokens: number;
   };
-  series: { bucket: string; calls: number; tokens: number; cost_usd: number }[];
+  series: {
+    bucket: string;
+    bucket_start: string;
+    bucket_end: string;
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+  }[];
   rankings: {
     by_kind: RankItem[];
     by_agent: RankItem[];
@@ -304,10 +312,14 @@ export default function InsightsPanel({
           invoke<UsageInsights>("get_usage_insights", {
             args: { ...args, period },
           }),
-          view !== "overview" || period === "days365"
+          view !== "overview"
             ? Promise.resolve(null)
             : invoke<UsageInsights>("get_usage_insights", {
-                args: { ...args, period: "days365" },
+                args: {
+                  ...args,
+                  period: "days365",
+                  granularity: "day",
+                },
               }),
         ]);
         if (!cancelled) {

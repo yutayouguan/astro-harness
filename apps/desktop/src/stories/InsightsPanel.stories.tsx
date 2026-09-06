@@ -13,6 +13,8 @@ const today = now.getUTCDate();
 const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 const bucket = (day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+const bucketEnd = (day: number) =>
+  new Date(Date.UTC(year, month, day + 1)).toISOString().slice(0, 10);
 const dailyUsage = [
   { calls: 76, tokens: 45_100, cost_usd: 0.64 },
   { calls: 49, tokens: 13_800, cost_usd: 0.19 },
@@ -21,6 +23,7 @@ const dailyUsage = [
 ];
 
 const sampleData: UsageInsights = {
+  granularity: "day",
   kpis: {
     calls: 675,
     tokens: 378_800,
@@ -37,6 +40,8 @@ const sampleData: UsageInsights = {
     const usage = day <= today ? dailyUsage[index] : undefined;
     return {
       bucket: bucket(day),
+      bucket_start: bucket(day),
+      bucket_end: bucketEnd(day),
       calls: usage?.calls ?? 0,
       tokens: usage?.tokens ?? 0,
       cost_usd: usage?.cost_usd ?? 0,

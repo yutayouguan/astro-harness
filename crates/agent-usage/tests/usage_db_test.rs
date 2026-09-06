@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 use tempfile::TempDir;
 use usage::db::{
-    usage_db_path, NewUsageEvent, UsageDb, UsageInsightsQuery, UsagePeriod, USAGE_SCHEMA_VERSION,
+    usage_db_path, NewUsageEvent, UsageDb, UsageGranularity, UsageInsightsQuery, UsagePeriod,
+    USAGE_SCHEMA_VERSION,
 };
 
 use agent_db::sqlx;
@@ -182,6 +183,68 @@ async fn insert_and_count_events() {
     assert_eq!(insights.kpis.output_tokens, 50);
     assert_eq!(insights.kpis.cache_tokens, 0);
     assert_eq!(insights.kpis.reasoning_tokens, 0);
+    assert_eq!(insights.granularity, UsageGranularity::Day);
+    assert_eq!(insights.series.len(), 31);
+    assert_eq!(insights.series[12].bucket_start, "2026-07-13");
+    assert_eq!(insights.series[12].bucket_end, "2026-07-14");
+}
+
+#[tokio::test]
+async fn rolling_insights_adapt_buckets_and_allow_daily_override() {
+    let dir = TempDir::new().unwrap();
+    let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
+    for ts in ["2026-07-01T02:00:00Z", "2026-07-07T02:00:00Z"] {
+        db.insert(zero_billing_event(ZeroBillingEvent {
+            ts,
+            kind: "llm",
+            name: "gpt-test",
+            agent_id: "default",
+            session_id: Some("adaptive".into()),
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            cost_usd: 0.01,
+            meta_json: None,
+        }))
+        .await
+        .unwrap();
+    }
+
+    let query = UsageInsightsQuery {
+        period: UsagePeriod::Days90,
+        as_of: Some("2026-07-13T12:00:00Z".into()),
+        agent_id: None,
+    };
+    let weekly = db.query_insights(query.clone()).await.unwrap();
+    assert_eq!(weekly.granularity, UsageGranularity::Week);
+    assert!(weekly.series.len() <= 14);
+    assert_eq!(
+        weekly.series.iter().map(|point| point.tokens).sum::<i64>(),
+        30
+    );
+
+    let monthly = db
+        .query_insights(UsageInsightsQuery {
+            period: UsagePeriod::Days365,
+            ..query.clone()
+        })
+        .await
+        .unwrap();
+    assert_eq!(monthly.granularity, UsageGranularity::Month);
+    assert!(monthly.series.len() <= 13);
+
+    let daily = db
+        .query_insights_with_granularity(
+            UsageInsightsQuery {
+                period: UsagePeriod::Days365,
+                ..query
+            },
+            UsageGranularity::Day,
+        )
+        .await
+        .unwrap();
+    assert_eq!(daily.granularity, UsageGranularity::Day);
+    assert_eq!(daily.series.len(), 365);
 }
 
 #[tokio::test]

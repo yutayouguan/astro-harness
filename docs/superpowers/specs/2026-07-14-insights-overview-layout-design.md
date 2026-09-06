@@ -79,6 +79,8 @@
 
 - **复用**现有 `get_usage_insights` 与 `get_trace_insights`
 - KPI / series / rankings 均从现有响应派生；厂商维度沿用当前前端聚合逻辑
+- `get_usage_insights` 的趋势序列按范围自适应粒度：`days30 → day`、`days90 → week`、`days365 → month`。响应显式返回 `granularity`，每个 `UsageSeriesPoint` 携带 `bucket_start` 与 exclusive `bucket_end`，前端不解析 bucket 字符串猜测区间。
+- 总览年度热力图始终单独请求 `days365 + granularity=day`，因此趋势图降采样不会丢失每日活动；分析图全零时显示空态，不渲染零值柱列。
 - `TraceKpis` 新增 `tokens`、`cost_usd`、`avg_duration_ms`、`error_events`：聚合当前筛选范围内返回的 Trace；平均耗时只统计至少包含两个事件且时间戳可解析的调用链；异常数只统计明确标记为 `error` / `failed` 的事件。
 - 暂不展示“工具成功率 / P95 工具耗时”：`usage_events` 尚未完整持久化工具状态和耗时，将未知状态当作成功会产生误导。
 
@@ -98,6 +100,7 @@
 5. 触控板横向滑动不再拖偏整页  
 6. 模型 / 工具 / Tracing 子页均有 4 张摘要卡，空数据真实显示 0 或占位，不编造趋势
 7. 工具 / Tracing 明细功能回归不破
+8. 30 天趋势最多约 30 个日点；90 天约 13 个周点；滚动一年最多 13 个自然月点；年度热力图仍包含逐日桶
 
 ## 非目标（本期不做）
 

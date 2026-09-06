@@ -5,9 +5,12 @@ import { ModelBrandIcon } from "../icons/ProviderIcons";
 
 type Metric = "tokens" | "cost";
 type ChartType = "bar" | "line";
+type Granularity = "day" | "week" | "month";
 
 type SeriesPoint = {
   bucket: string;
+  bucket_start: string;
+  bucket_end: string;
   calls: number;
   tokens: number;
   cost_usd: number;
@@ -27,6 +30,7 @@ type RequestRow = {
 };
 
 export type UsageDashboardData = {
+  granularity: Granularity;
   kpis: {
     tokens: number;
     cost_usd: number;
@@ -65,14 +69,69 @@ function formatCost(value: number): string {
 }
 
 function formatDate(value: string, locale: string, withTime = false): string {
-  const date = new Date(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const date = new Date(dateOnly ? `${value}T00:00:00Z` : value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
+    ...(dateOnly ? { timeZone: "UTC" } : {}),
     ...(withTime ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
   }).format(date);
+}
+
+function parseUtcDate(value: string): Date | null {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatBucketRange(point: SeriesPoint, locale: string): string {
+  const start = parseUtcDate(point.bucket_start);
+  const endExclusive = parseUtcDate(point.bucket_end);
+  if (!start || !endExclusive) return point.bucket;
+  const end = new Date(endExclusive);
+  end.setUTCDate(end.getUTCDate() - 1);
+  if (point.bucket_start === end.toISOString().slice(0, 10)) {
+    return formatDate(point.bucket_start, locale);
+  }
+  const formatter = new Intl.DateTimeFormat(
+    locale === "zh" ? "zh-CN" : "en-US",
+    { month: "short", day: "numeric", timeZone: "UTC" },
+  );
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
+function formatAxisLabel(
+  point: SeriesPoint,
+  granularity: Granularity,
+  locale: string,
+  index: number,
+  total: number,
+): string {
+  const start = parseUtcDate(point.bucket_start);
+  if (!start) return point.bucket;
+  if (granularity === "month") {
+    return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+      month: "short",
+      ...(total > 12 && (index === 0 || index === total - 1)
+        ? { year: "numeric" }
+        : {}),
+      timeZone: "UTC",
+    }).format(start);
+  }
+  return `${String(start.getUTCMonth() + 1).padStart(2, "0")}/${String(start.getUTCDate()).padStart(2, "0")}`;
+}
+
+function shouldShowAxisLabel(
+  index: number,
+  total: number,
+  granularity: Granularity,
+): boolean {
+  if (total <= 10) return true;
+  const targetLabels = granularity === "day" ? 6 : 7;
+  const stride = Math.max(1, Math.ceil((total - 1) / targetLabels));
+  return index === 0 || index === total - 1 || index % stride === 0;
 }
 
 function metricValue(point: SeriesPoint, metric: Metric): number {
@@ -164,10 +223,10 @@ export default function UsageDashboard({
   const zh = locale === "zh";
   const [metric, setMetric] = useState<Metric>("tokens");
   const [chartType, setChartType] = useState<ChartType>("bar");
-  const activeDays = data.series.filter(
+  const activeBuckets = data.series.filter(
     (point) => point.calls > 0 || point.tokens > 0,
   );
-  const peak = activeDays.reduce<SeriesPoint | null>(
+  const peak = activeBuckets.reduce<SeriesPoint | null>(
     (best, point) => (!best || point.tokens > best.tokens ? point : best),
     null,
   );
@@ -179,22 +238,26 @@ export default function UsageDashboard({
   const cacheRate = cacheInput
     ? Math.min(100, (cacheRead / cacheInput) * 100)
     : 0;
-  const dailyAverage = activeDays.length
-    ? data.kpis.tokens / activeDays.length
+  const activeAverage = activeBuckets.length
+    ? data.kpis.tokens / activeBuckets.length
     : 0;
   const max = Math.max(
     1,
     ...data.series.map((point) => metricValue(point, metric)),
   );
-  const linePoints = data.series
-    .map((point, index) => {
-      const x =
-        data.series.length <= 1
-          ? 50
-          : (index / (data.series.length - 1)) * 1000;
-      return `${x},${205 - (metricValue(point, metric) / max) * 185}`;
-    })
-    .join(" ");
+  const lineCoordinates = data.series.map((point, index) => {
+    const x =
+      data.series.length <= 1 ? 50 : (index / (data.series.length - 1)) * 1000;
+    return {
+      point,
+      x,
+      y: 205 - (metricValue(point, metric) / max) * 185,
+    };
+  });
+  const linePoints = lineCoordinates.map(({ x, y }) => `${x},${y}`).join(" ");
+  const chartEmpty = data.series.every(
+    (point) => metricValue(point, metric) <= 0,
+  );
   const requests = useMemo(
     () => (data.recent_requests ?? []).slice(0, 50),
     [data.recent_requests],
@@ -207,10 +270,22 @@ export default function UsageDashboard({
         tokens: "总 Token 数",
         cache: "缓存命中率",
         cacheRead: "缓存读取",
-        activeDays: "活跃天数",
-        peak: "高峰日",
+        active: {
+          day: "活跃天数",
+          week: "活跃周数",
+          month: "活跃月数",
+        }[data.granularity],
+        peak: {
+          day: "高峰日",
+          week: "高峰周",
+          month: "高峰月",
+        }[data.granularity],
         topModel: "用量最高模型",
-        average: "日均",
+        average: {
+          day: "活跃日均",
+          week: "活跃周均",
+          month: "活跃月均",
+        }[data.granularity],
         analysis: "分析",
         bar: "柱状图",
         line: "折线图",
@@ -222,6 +297,10 @@ export default function UsageDashboard({
         requestCost: "成本",
         requestCache: "缓存",
         empty: "暂无请求记录",
+        emptyChart:
+          metric === "tokens"
+            ? "当前范围暂无 Token 用量"
+            : "当前范围暂无可估算费用",
         unpriced: "次请求暂无定价",
       }
     : {
@@ -231,10 +310,22 @@ export default function UsageDashboard({
         tokens: "Total tokens",
         cache: "Cache hit rate",
         cacheRead: "Cache read",
-        activeDays: "Active days",
-        peak: "Peak day",
+        active: {
+          day: "Active days",
+          week: "Active weeks",
+          month: "Active months",
+        }[data.granularity],
+        peak: {
+          day: "Peak day",
+          week: "Peak week",
+          month: "Peak month",
+        }[data.granularity],
         topModel: "Top model",
-        average: "Daily average",
+        average: {
+          day: "Active-day average",
+          week: "Active-week average",
+          month: "Active-month average",
+        }[data.granularity],
         analysis: "Analysis",
         bar: "Bars",
         line: "Line",
@@ -246,6 +337,10 @@ export default function UsageDashboard({
         requestCost: "Cost",
         requestCache: "Cache",
         empty: "No request records",
+        emptyChart:
+          metric === "tokens"
+            ? "No token usage in this range"
+            : "No estimated cost in this range",
         unpriced: "requests are not priced",
       };
 
@@ -264,11 +359,11 @@ export default function UsageDashboard({
       `${cacheRate.toFixed(1)}%`,
       `${labels.cacheRead}: ${formatTokens(cacheRead, locale)}`,
     ],
-    [labels.activeDays, String(activeDays.length), ""],
+    [labels.active, String(activeBuckets.length), ""],
     [
       labels.peak,
       peak ? formatTokens(peak.tokens, locale) : "—",
-      peak ? formatDate(peak.bucket, locale) : "",
+      peak ? formatBucketRange(peak, locale) : "",
     ],
     [
       labels.topModel,
@@ -277,7 +372,7 @@ export default function UsageDashboard({
     ],
     [
       labels.average,
-      formatTokens(dailyAverage, locale),
+      formatTokens(activeAverage, locale),
       `${data.kpis.llm_calls} ${labels.requests.toLowerCase()}`,
     ],
   ] as const;
@@ -288,7 +383,7 @@ export default function UsageDashboard({
         <div className="usage-overview-heading">
           <h2>{labels.overview}</h2>
           <p>
-            {activeDays.length} {labels.activeDays.toLowerCase()} /{" "}
+            {activeBuckets.length} {labels.active.toLowerCase()} /{" "}
             {formatTokens(data.kpis.tokens, locale)} Token /{" "}
             {data.kpis.llm_calls} {labels.requests.toLowerCase()}
           </p>
@@ -370,21 +465,46 @@ export default function UsageDashboard({
             </button>
           </div>
         </div>
-        <div className="usage-chart" data-chart={chartType}>
-          {chartType === "bar" ? (
+        <div
+          className="usage-chart"
+          data-chart={chartType}
+          data-granularity={data.granularity}
+        >
+          {chartEmpty ? (
+            <div className="usage-chart-empty-state" role="status">
+              <BarChart3 size={22} strokeWidth={1.8} aria-hidden />
+              <strong>{labels.emptyChart}</strong>
+            </div>
+          ) : chartType === "bar" ? (
             <div className="usage-bars">
-              {data.series.map((point) => (
+              {data.series.map((point, index) => (
                 <div
                   className="usage-bar-column"
                   key={point.bucket}
-                  title={`${formatDate(point.bucket, locale)} · ${formatTokens(metricValue(point, metric), locale)}`}
+                  title={`${formatBucketRange(point, locale)} · ${formatTokens(metricValue(point, metric), locale)}`}
+                  tabIndex={0}
+                  aria-label={`${formatBucketRange(point, locale)} · ${formatTokens(metricValue(point, metric), locale)}`}
                 >
                   <i
                     style={{
                       height: `${Math.max(2, (metricValue(point, metric) / max) * 100)}%`,
                     }}
                   />
-                  <span>{point.bucket.slice(5).replace("-", "/")}</span>
+                  <span aria-hidden>
+                    {shouldShowAxisLabel(
+                      index,
+                      data.series.length,
+                      data.granularity,
+                    )
+                      ? formatAxisLabel(
+                          point,
+                          data.granularity,
+                          locale,
+                          index,
+                          data.series.length,
+                        )
+                      : ""}
+                  </span>
                 </div>
               ))}
             </div>
@@ -395,6 +515,18 @@ export default function UsageDashboard({
               aria-label={zh ? "用量折线图" : "Usage line chart"}
             >
               <polyline points={linePoints} />
+              {lineCoordinates.map(({ point, x, y }) => (
+                <circle
+                  key={point.bucket}
+                  cx={x}
+                  cy={y}
+                  r={5}
+                  tabIndex={0}
+                  aria-label={`${formatBucketRange(point, locale)} · ${formatTokens(metricValue(point, metric), locale)}`}
+                >
+                  <title>{`${formatBucketRange(point, locale)} · ${formatTokens(metricValue(point, metric), locale)}`}</title>
+                </circle>
+              ))}
             </svg>
           )}
         </div>
