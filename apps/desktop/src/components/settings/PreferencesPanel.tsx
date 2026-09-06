@@ -777,6 +777,14 @@ export default function PreferencesPanel({
       label: t("prefs.appearance.glass.liquid"),
     },
   ];
+  const glassLevelIndex = Math.max(
+    0,
+    glassOptions.findIndex(({ id }) => id === glassLevel),
+  );
+  const glassLevelProgress =
+    glassOptions.length > 1
+      ? (glassLevelIndex / (glassOptions.length - 1)) * 100
+      : 0;
 
   const langOptions: {
     id: Locale;
@@ -1062,25 +1070,57 @@ export default function PreferencesPanel({
               <div className="appearance-control-row">
                 <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.glass.title")}</strong>
-                  <span>{t("prefs.appearance.glass.sub")}</span>
+                  <span id="appearance-glass-description">
+                    {t("prefs.appearance.glass.sub")}
+                  </span>
                 </div>
                 <div
-                  className="appearance-segmented appearance-segmented--wide"
-                  role="radiogroup"
-                  aria-label={t("prefs.appearance.glass.title")}
+                  className="appearance-glass-slider"
+                  style={
+                    {
+                      "--glass-range-progress": `${glassLevelProgress}%`,
+                    } as CSSProperties
+                  }
                 >
-                  {glassOptions.map(({ id, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={glassLevel === id}
-                      className={glassLevel === id ? "is-active" : ""}
-                      onClick={() => setGlassLevel(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  <div className="appearance-glass-slider-track">
+                    <span className="appearance-glass-slider-ticks" aria-hidden>
+                      {glassOptions.map(({ id }, index) => (
+                        <i
+                          key={id}
+                          className={
+                            index <= glassLevelIndex ? "is-filled" : ""
+                          }
+                        />
+                      ))}
+                    </span>
+                    <input
+                      id="appearance-glass-intensity"
+                      className="appearance-glass-range"
+                      type="range"
+                      min={0}
+                      max={glassOptions.length - 1}
+                      step={1}
+                      value={glassLevelIndex}
+                      aria-label={t("prefs.appearance.glass.title")}
+                      aria-describedby="appearance-glass-description"
+                      aria-valuetext={glassOptions[glassLevelIndex]?.label}
+                      onChange={(event) => {
+                        const next =
+                          glassOptions[Number(event.currentTarget.value)];
+                        if (next) setGlassLevel(next.id);
+                      }}
+                    />
+                  </div>
+                  <div className="appearance-glass-slider-labels" aria-hidden>
+                    {glassOptions.map(({ id, label }) => (
+                      <span
+                        key={id}
+                        className={glassLevel === id ? "is-active" : ""}
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
