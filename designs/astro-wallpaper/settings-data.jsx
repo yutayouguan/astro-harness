@@ -110,10 +110,10 @@ const INITIAL_SETTINGS = {
   memoryEnabled: true,
   memoryAutoRefresh: true,
   memoryApproval: false,
-  browserRuntime: "managed",
-  browserStartup: "blank",
-  browserDownloads: "ask",
-  viewport: "1440 × 900",
+  browserHomePage: "https://example.com/",
+  browserLoopback: true,
+  browserDownloadsEnabled: true,
+  viewport: "1280 × 800",
 };
 
 Object.assign(window, {

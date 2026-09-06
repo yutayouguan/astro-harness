@@ -418,35 +418,38 @@ function MemoryPage({ tab, settings, patch, notify }) {
 
 function BrowserPage({ tab, settings, patch, notify }) {
   const [sites, setSites] = useStatePages([
-    { host: "github.com", access: "允许登录状态", tone: "success" },
-    { host: "localhost", access: "本地调试", tone: "tone" },
+    { host: "https://github.com", access: "允许会改变站点状态的操作", tone: "success" },
+    { host: "http://localhost:4311", access: "本地调试页面", tone: "tone" },
   ]);
   return (
     <div className="page" data-screen-label="浏览器">
       <PageHeader tab={tab} />
       <div className="page-stack">
         <div className="two-column">
-          <Card icon="◎" title="运行方式" subtitle="可见浏览器适合协作，后台模式适合自动化。">
-            <div className="setting-list">
-              <SettingRow title="默认运行时"><Segmented label="浏览器运行时" value={settings.browserRuntime} options={[{ value: "visible", label: "可见" }, { value: "managed", label: "受管" }, { value: "system", label: "系统" }]} onChange={(browserRuntime) => patch({ browserRuntime })} /></SettingRow>
-              <SettingRow title="视口预设"><SelectControl label="视口预设" value={settings.viewport} options={[{ value: "1280 × 800", label: "1280 × 800" }, { value: "1440 × 900", label: "1440 × 900" }, { value: "1920 × 1080", label: "1920 × 1080" }]} onChange={(viewport) => patch({ viewport })} /></SettingRow>
-            </div>
+          <Card icon="◎" title="浏览器运行时" subtitle="本地浏览器运行时已就绪。" action={<Tag tone="success">可用</Tag>}>
+            <SettingRow title="数据目录" description="Cookie、缓存和标签状态只保存在本机。"><span className="code-field">~/.astro/browser</span></SettingRow>
           </Card>
-          <Card icon="⇱" title="启动与下载" subtitle="为新建标签和下载文件指定默认行为。">
+          <Card icon="▣" title="启动页与视口" subtitle="用统一的初始页和视口尺寸启动新标签。">
             <div className="setting-list">
-              <SettingRow title="新标签页"><SelectControl label="新标签页" value={settings.browserStartup} options={[{ value: "blank", label: "空白页" }, { value: "last", label: "上次页面" }, { value: "workspace", label: "工作区主页" }]} onChange={(browserStartup) => patch({ browserStartup })} /></SettingRow>
-              <SettingRow title="下载文件"><SelectControl label="下载文件" value={settings.browserDownloads} options={[{ value: "ask", label: "每次询问" }, { value: "workspace", label: "工作区 Downloads" }, { value: "system", label: "系统 Downloads" }]} onChange={(browserDownloads) => patch({ browserDownloads })} /></SettingRow>
+              <SettingRow title="主页" description="未带 URL 打开新标签时使用。"><input className="text-input" style={{ width: 220 }} aria-label="浏览器主页" value={settings.browserHomePage} onChange={(event) => patch({ browserHomePage: event.target.value })} /></SettingRow>
+              <SettingRow title="视口预设"><Segmented label="浏览器视口" value={settings.viewport} options={[{ value: "1280 × 800", label: "1280 × 800" }, { value: "1440 × 900", label: "1440 × 900" }, { value: "390 × 844", label: "390 × 844" }]} onChange={(viewport) => patch({ viewport })} /></SettingRow>
             </div>
           </Card>
         </div>
-        <Card icon="◈" title="站点权限" subtitle="按域名管理登录状态、剪贴板和下载权限。" action={<Button onClick={() => setSites((current) => [...current, { host: "example.com", access: "每次询问", tone: "warning" }])}>＋ 添加站点</Button>}>
-          <div className="permission-list">
-            {sites.map((site, index) => (
-              <div className="permission-row" key={`${site.host}-${index}`}><span className="provider-logo">◎</span><span className="row-copy"><span className="row-title">{site.host}</span><span className="row-sub">{site.access}</span></span><Tag tone={site.tone}>{site.tone === "success" ? "已允许" : site.tone === "warning" ? "询问" : "本地"}</Tag><Button variant="ghost" onClick={() => setSites((current) => current.filter((_, itemIndex) => itemIndex !== index))}>移除</Button></div>
-            ))}
+        <Card icon="◈" title="运行权限" subtitle="只开启工作需要的浏览器能力。">
+          <div className="setting-list">
+            <SettingRow title="允许本机回环地址" description="访问 localhost 和精确端口，用于预览本地开发项目。"><Toggle label="允许本机回环地址" checked={settings.browserLoopback} onChange={(browserLoopback) => patch({ browserLoopback })} /></SettingRow>
+            <SettingRow title="允许下载" description="下载仍会遵循工作区路径与权限策略。"><Toggle label="允许下载" checked={settings.browserDownloadsEnabled} onChange={(browserDownloadsEnabled) => patch({ browserDownloadsEnabled })} /></SettingRow>
           </div>
         </Card>
-        <Card compact icon="▣" title="浏览数据" subtitle="Cookie、缓存和标签状态只保存在本机。" action={<Button variant="danger" onClick={() => notify("浏览器本地数据已清理") }>清理数据</Button>} />
+        <Card icon="◇" title="已批准站点" subtitle="站点权限在操作发生时申请，只能在此撤销。">
+          <div className="permission-list">
+            {sites.map((site, index) => (
+              <div className="permission-row" key={`${site.host}-${index}`}><span className="provider-logo">◎</span><span className="row-copy"><span className="row-title">{site.host}</span><span className="row-sub">{site.access}</span></span><Tag tone={site.tone}>{site.tone === "success" ? "state changing" : "local"}</Tag><Button variant="ghost" onClick={() => { setSites((current) => current.filter((_, itemIndex) => itemIndex !== index)); notify(`已撤销 ${site.host} 的浏览器授权`); }}>撤销</Button></div>
+            ))}
+          </div>
+          <p className="card-sub" style={{ marginTop: 11 }}>密码、付款与其他敏感操作不会因站点授权而自动执行。</p>
+        </Card>
       </div>
     </div>
   );

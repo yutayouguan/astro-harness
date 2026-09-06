@@ -24,8 +24,12 @@ function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (!stored || typeof stored !== "object") return { ...INITIAL_SETTINGS };
-    const wallpaper = stored.wallpaper?.src?.startsWith("blob:") ? WALLPAPERS.valley : stored.wallpaper;
-    return { ...INITIAL_SETTINGS, ...stored, wallpaper: wallpaper ?? WALLPAPERS.valley };
+    const merged = { ...INITIAL_SETTINGS };
+    for (const key of Object.keys(INITIAL_SETTINGS)) {
+      if (stored[key] !== undefined) merged[key] = stored[key];
+    }
+    merged.wallpaper = stored.wallpaper?.src?.startsWith("blob:") ? WALLPAPERS.valley : (stored.wallpaper ?? WALLPAPERS.valley);
+    return merged;
   } catch {
     return { ...INITIAL_SETTINGS };
   }
@@ -120,7 +124,6 @@ function App() {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--tone", settings.accent);
-    document.documentElement.style.setProperty("--tone-strong", settings.accent);
   }, [settings.accent]);
 
   useEffect(() => {
@@ -206,7 +209,7 @@ function App() {
           <header className="titlebar">
             <span className="traffic"><i></i><i></i><i></i></span>
             <span className="window-title">Astro · 设置</span>
-            <span className="titlebar-status">{dirty ? "有未保存更改" : "已保存"}</span>
+            <span className="titlebar-status" data-dirty={dirty}>{dirty ? "有未保存更改" : "已保存"}</span>
           </header>
           <aside className="rail" aria-label="主导航">
             <img className="brand" src="assets/astro-app-icon.png" alt="Astro" />
@@ -221,7 +224,7 @@ function App() {
           </aside>
           <section className="content" ref={contentRef}>{pages[activeTab]}</section>
         </div>
-        {dirty ? <div className="save-bar" role="status"><div className="save-copy"><strong>你有未保存的更改</strong><small>可以继续切换页面，草稿不会丢失。</small></div><Button variant="ghost" onClick={reset}>撤销</Button><Button variant="primary" onClick={save}>保存设置</Button></div> : null}
+        {dirty ? <div className="save-bar" role="status" aria-live="polite" aria-atomic="true"><div className="save-copy"><strong>你有未保存的更改</strong><small>可以继续切换页面，草稿不会丢失。</small></div><Button variant="ghost" onClick={reset}>撤销</Button><Button variant="primary" onClick={save}>保存设置</Button></div> : null}
         <GenerateDialog open={generateOpen} onClose={() => setGenerateOpen(false)} onFinish={(wallpaper) => { patch({ wallpaper, backgroundMode: "wallpaper" }); setGenerateOpen(false); notify("AI 壁纸已生成，保存后应用"); }} />
         {toast ? <div className="toast" role="status"><span className="toast-mark">✓</span><span>{toast}</span></div> : null}
       </section>
