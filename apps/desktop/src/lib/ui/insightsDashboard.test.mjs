@@ -10,33 +10,38 @@ const styles = await readFile(
   new URL("../../styles/features/insights.css", import.meta.url),
   "utf8",
 );
+const usageDashboard = await readFile(
+  new URL("../../components/settings/UsageDashboard.tsx", import.meta.url),
+  "utf8",
+);
+const usageStyles = await readFile(
+  new URL("../../styles/features/usage-dashboard.css", import.meta.url),
+  "utf8",
+);
 
-test("overview exposes pricing coverage and the full token breakdown", () => {
-  assert.match(source, /costCoveragePercent/);
-  assert.match(source, /formatEstimatedCost/);
-  assert.match(source, /insights\.kpi\.unpriced/);
-  assert.match(source, /insights\.kpi\.inputTokens/);
-  assert.match(source, /insights\.kpi\.outputTokens/);
-  assert.match(source, /insights\.kpi\.cacheTokens/);
-  assert.match(source, /insights\.kpi\.reasoningTokens/);
-  assert.match(source, /insights\.kpi\.averageTokens/);
+test("overview exposes the usage summary, cache ratio, and recent requests", () => {
+  assert.match(source, /<UsageDashboard data=\{data\}/);
+  assert.match(usageDashboard, /data\.kpis\.cost_usd/);
+  assert.match(usageDashboard, /data\.kpis\.llm_calls/);
+  assert.match(usageDashboard, /data\.kpis\.cache_read_tokens/);
+  assert.match(usageDashboard, /data\.recent_requests/);
+  assert.match(usageDashboard, /usage-request-table/);
 });
 
-test("provider ranking follows the selected metric", () => {
-  assert.match(source, /rankByMetric\(byProvider, metric, 5\)/);
-  assert.match(source, /providerRankTitleKey\(metric\)/);
-  assert.match(source, /rankValue\(r, metric\)/);
+test("overview analysis switches between token and cost charts", () => {
+  assert.match(usageDashboard, /type Metric = "tokens" \| "cost"/);
+  assert.match(usageDashboard, /setMetric\(value\)/);
+  assert.match(usageDashboard, /setChartType\("bar"\)/);
+  assert.match(usageDashboard, /setChartType\("line"\)/);
 });
 
 test("insights layout has responsive KPI grids and accessible fallbacks", () => {
   assert.match(
-    styles,
-    /\.insights-kpis-overview\s*\{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/,
+    usageStyles,
+    /\.usage-kpi-grid\s*\{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/,
   );
-  assert.match(
-    styles,
-    /\.insights-kpis-breakdown\s*\{[\s\S]*?repeat\(5, minmax\(0, 1fr\)\)/,
-  );
+  assert.match(usageStyles, /@media \(max-width: 980px\)/);
+  assert.match(usageStyles, /@media \(max-width: 680px\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(styles, /@media \(prefers-contrast: more\)/);

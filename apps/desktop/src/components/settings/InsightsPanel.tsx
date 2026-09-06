@@ -3,18 +3,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
-  AlertTriangle,
   BarChart3,
   Bot,
   Building2,
   Calendar,
   CalendarDays,
   CalendarRange,
-  Coins,
   Cpu,
-  Database,
-  DollarSign,
-  Gauge,
   GitBranch,
   Layers,
   LayoutDashboard,
@@ -32,15 +27,11 @@ import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import {
   aggregateByProvider,
-  costCoveragePercent,
   DEFAULT_INSIGHTS_VIEW,
   INSIGHTS_VIEW_ORDER,
   needsUsageInsights,
   providerDisplayName,
-  rankByMetric,
-  rankValue,
   usageBucketState,
-  type InsightsMetric,
   type InsightsViewMode,
 } from "../../lib/insights/insightsView";
 import {
@@ -53,9 +44,9 @@ import McpIcon from "../icons/McpIcon";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { ModelBrandIcon, ProviderBrandIcon } from "../icons/ProviderIcons";
 import { SegmentedTabs } from "../ui";
+import UsageDashboard from "./UsageDashboard";
 
-type Period = "month" | "quarter" | "year";
-type Metric = InsightsMetric;
+type Period = "days30" | "days90" | "days365";
 type ViewMode = InsightsViewMode;
 
 type RankItem = {
@@ -76,6 +67,8 @@ export type UsageInsights = {
     input_tokens: number;
     output_tokens: number;
     cache_tokens: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
     reasoning_tokens: number;
   };
   series: { bucket: string; calls: number; tokens: number; cost_usd: number }[];
@@ -84,6 +77,18 @@ export type UsageInsights = {
     by_agent: RankItem[];
     by_model: RankItem[];
   };
+  recent_requests?: Array<{
+    id: string;
+    ts: string;
+    model: string;
+    provider?: string | null;
+    agent_id: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+  }>;
   unpriced_llm_events?: number;
 };
 
@@ -134,15 +139,9 @@ const PERIOD_TABS: {
   labelKey: MessageKey;
   Icon: typeof Calendar;
 }[] = [
-  { id: "month", labelKey: "insights.period.month", Icon: Calendar },
-  { id: "quarter", labelKey: "insights.period.quarter", Icon: CalendarRange },
-  { id: "year", labelKey: "insights.period.year", Icon: CalendarDays },
-];
-
-const METRIC_TABS: { id: Metric; labelKey: MessageKey }[] = [
-  { id: "calls", labelKey: "insights.metric.calls" },
-  { id: "tokens", labelKey: "insights.metric.tokens" },
-  { id: "cost", labelKey: "insights.metric.cost" },
+  { id: "days30", labelKey: "insights.period.days30", Icon: Calendar },
+  { id: "days90", labelKey: "insights.period.days90", Icon: CalendarRange },
+  { id: "days365", labelKey: "insights.period.days365", Icon: CalendarDays },
 ];
 
 const VIEW_TAB_META: Record<
@@ -160,44 +159,6 @@ const VIEW_TABS = INSIGHTS_VIEW_ORDER.map((id) => ({
   ...VIEW_TAB_META[id],
 }));
 
-function seriesValue(
-  s: UsageInsights["series"][number],
-  metric: Metric,
-): number {
-  if (metric === "tokens") return s.tokens;
-  if (metric === "cost") return s.cost_usd;
-  return s.calls;
-}
-
-function formatSeriesTip(
-  s: UsageInsights["series"][number],
-  metric: Metric,
-  period: Period,
-  locale: Locale,
-): string {
-  const label = formatBucketLabel(s.bucket, period, locale);
-  if (metric === "tokens") return `${label}: ${formatTokens(s.tokens)}`;
-  if (metric === "cost") return `${label}: ${formatCost(s.cost_usd)}`;
-  return `${label}: ${s.calls}`;
-}
-
-function formatMetricTotal(total: number, metric: Metric): string {
-  if (metric === "tokens") return formatTokens(total);
-  if (metric === "cost") return formatCost(total);
-  return String(total);
-}
-
-function formatEstimatedCost(usd: number, hasUnpriced: boolean): string {
-  if (usd <= 0 && hasUnpriced) return "—";
-  return formatCost(usd);
-}
-
-function providerRankTitleKey(metric: Metric): MessageKey {
-  if (metric === "calls") return "insights.rank.providerCalls";
-  if (metric === "cost") return "insights.rank.providerCost";
-  return "insights.rank.providerTokens";
-}
-
 function isGenericProvider(name: string): boolean {
   const normalized = name.trim().toLowerCase();
   return normalized === "other" || normalized === "unknown" || !normalized;
@@ -209,15 +170,6 @@ function barHeightPx(value: number, maxVal: number): number {
   if (value <= 0 || maxVal <= 0) return 0;
   const raw = (value / maxVal) * CHART_PLOT_H;
   return Math.max(10, Math.round(raw));
-}
-
-/** 多数桶接近 0 或峰值相对分布极偏时，提示已放大柱高。 */
-function isSparseSeries(values: number[], maxVal: number): boolean {
-  if (maxVal <= 0) return false;
-  const nonzero = values.filter((v) => v > 0);
-  if (nonzero.length === 0) return false;
-  const mean = nonzero.reduce((a, b) => a + b, 0) / nonzero.length;
-  return nonzero.length <= 2 || mean / maxVal < 0.22;
 }
 
 function isTauri(): boolean {
@@ -236,40 +188,18 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-const EN_MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-/** 按 period / locale 格式化桶标签（后端：月=YYYY-MM-DD，季/年=YYYY-MM） */
+/** 按 period / locale 格式化桶标签。滚动周期均由后端返回每日桶。 */
 function formatBucketLabel(
   bucket: string,
   period: Period,
   locale: Locale,
 ): string {
-  if (period === "month") {
+  if (period.startsWith("days")) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bucket);
     if (m) {
       const month = Number(m[2]);
       const day = Number(m[3]);
       return locale === "zh" ? `${day}日` : `${month}/${day}`;
-    }
-  } else {
-    const m = /^(\d{4})-(\d{2})$/.exec(bucket);
-    if (m) {
-      const month = Number(m[2]);
-      if (locale === "zh") return `${month}月`;
-      return EN_MONTHS[month - 1] ?? bucket;
     }
   }
   return bucket;
@@ -318,110 +248,6 @@ function RankIdentityIcon({
   return <KindIcon kind={name} />;
 }
 
-function InsightsTrendChart({
-  title,
-  series,
-  metric,
-  onMetricChange,
-  maxVal,
-  period,
-  locale,
-  emptyMessage,
-  t,
-}: {
-  title: string;
-  series: UsageInsights["series"];
-  metric: Metric;
-  onMetricChange: (m: Metric) => void;
-  maxVal: number;
-  period: Period;
-  locale: Locale;
-  emptyMessage: string;
-  t: (key: MessageKey, vars?: Record<string, string>) => string;
-}) {
-  const values = series.map((s) => seriesValue(s, metric));
-  const total = values.reduce((a, b) => a + b, 0);
-  const hasSignal = total > 0;
-  const sparse = hasSignal && isSparseSeries(values, maxVal);
-  const asOfIso = new Date().toISOString();
-
-  return (
-    <div className="insights-chart-wrap insights-models-chart">
-      <div className="insights-chart-heading">
-        <div className="insights-chart-heading-label">
-          <BarChart3 size={15} strokeWidth={2.25} aria-hidden />
-          <span>{title}</span>
-          {hasSignal && (
-            <span className="insights-chart-total">
-              {t("insights.chart.periodTotal", {
-                v: formatMetricTotal(total, metric),
-              })}
-            </span>
-          )}
-        </div>
-        <SegmentedTabs
-          size="sm"
-          className="insights-metric-tabs"
-          aria-label={`${title} metric`}
-          value={metric}
-          onValueChange={(value) => onMetricChange(value as Metric)}
-          items={METRIC_TABS.map(({ id, labelKey }) => ({
-            value: id,
-            label: t(labelKey),
-            className: "insights-metric-tab",
-          }))}
-        />
-      </div>
-      {series.length > 0 && hasSignal ? (
-        <div className="insights-chart" aria-label={`${metric} trend`}>
-          {sparse && (
-            <p className="insights-chart-sparse-hint">
-              {t("insights.chart.sparse")}
-            </p>
-          )}
-          {series.map((s) => {
-            const v = seriesValue(s, metric);
-            const bucketState = usageBucketState(s.bucket, period, asOfIso);
-            const tip = formatSeriesTip(s, metric, period, locale);
-            return (
-              <div
-                key={s.bucket}
-                className={`insights-bar-col is-${bucketState}`}
-                title={bucketState === "future" ? undefined : tip}
-                aria-label={bucketState === "future" ? undefined : tip}
-                aria-hidden={bucketState === "future" ? true : undefined}
-                tabIndex={bucketState === "future" ? -1 : 0}
-              >
-                <div
-                  className="insights-bar-plot"
-                  style={{ height: CHART_PLOT_H }}
-                >
-                  <div
-                    className={`insights-bar${v > 0 ? "" : " is-empty"}${bucketState === "future" ? " is-future" : ""}`}
-                    style={{ height: barHeightPx(v, maxVal) }}
-                  />
-                </div>
-                <span className="insights-bar-label">
-                  {formatBucketLabel(s.bucket, period, locale)}
-                </span>
-                {bucketState !== "future" && (
-                  <span className="insights-bar-tooltip" role="tooltip">
-                    {tip}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="insights-panel-empty insights-chart-empty">
-          <p>{emptyMessage}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function InsightsPanel({
   active,
   initialData,
@@ -432,9 +258,11 @@ export default function InsightsPanel({
   const { t, locale } = useI18n();
   const { activeAgentId: agentId } = useActiveAgent();
   const [view, setView] = useState<ViewMode>(DEFAULT_INSIGHTS_VIEW);
-  const [period, setPeriod] = useState<Period>("month");
-  const [metric, setMetric] = useState<Metric>("tokens");
+  const [period, setPeriod] = useState<Period>("days30");
   const [data, setData] = useState<UsageInsights | null>(initialData ?? null);
+  const [annualSeries, setAnnualSeries] = useState<UsageInsights["series"]>(
+    initialData?.series ?? [],
+  );
   const [traces, setTraces] = useState<TraceInsights | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>(
@@ -445,21 +273,27 @@ export default function InsightsPanel({
   useEffect(() => {
     if (initialData) {
       setData(initialData);
+      setAnnualSeries(initialData.series);
       return;
     }
     if (!active || !isTauri() || !needsUsageInsights(view)) return;
     let cancelled = false;
     void (async () => {
       try {
-        const res = await invoke<UsageInsights>("get_usage_insights", {
-          args: {
-            period,
-            as_of: null,
-            agent_id: agentId,
-          },
-        });
+        const args = { as_of: null, agent_id: agentId };
+        const [res, annual] = await Promise.all([
+          invoke<UsageInsights>("get_usage_insights", {
+            args: { ...args, period },
+          }),
+          view !== "overview" || period === "days365"
+            ? Promise.resolve(null)
+            : invoke<UsageInsights>("get_usage_insights", {
+                args: { ...args, period: "days365" },
+              }),
+        ]);
         if (!cancelled) {
           setData(res);
+          setAnnualSeries(annual?.series ?? res.series);
           setError(null);
         }
       } catch (e) {
@@ -501,10 +335,6 @@ export default function InsightsPanel({
     };
   }, [active, period, agentId, view]);
 
-  const maxVal = Math.max(
-    1,
-    ...(data?.series.map((s) => seriesValue(s, metric)) ?? [1]),
-  );
   const byProvider = useMemo(
     () => aggregateByProvider(data?.rankings.by_model ?? []),
     [data],
@@ -516,14 +346,6 @@ export default function InsightsPanel({
       agentCount: data?.rankings.by_agent.length ?? 0,
     };
   }, [data]);
-  const overviewProviderTop = useMemo(
-    () => rankByMetric(byProvider, metric, 5),
-    [byProvider, metric],
-  );
-  const overviewProviderMax = Math.max(
-    0,
-    ...overviewProviderTop.map((r) => rankValue(r, metric)),
-  );
   const modelBars = useMemo(() => {
     const items = [...(data?.rankings.by_model ?? [])]
       .sort((a, b) => b.tokens - a.tokens || b.calls - a.calls)
@@ -578,13 +400,6 @@ export default function InsightsPanel({
 
   const modelsEmpty =
     data && data.rankings.by_model.length === 0 && data.kpis.tokens === 0;
-  const hasUnpriced = (data?.unpriced_llm_events ?? 0) > 0;
-  const costCoverage = data
-    ? costCoveragePercent(data.kpis.llm_calls, data.unpriced_llm_events ?? 0)
-    : null;
-  const averageTokensPerCall = data?.kpis.llm_calls
-    ? Math.round(data.kpis.tokens / data.kpis.llm_calls)
-    : 0;
   const providerName = (name: string) =>
     providerDisplayName(
       name,
@@ -637,180 +452,7 @@ export default function InsightsPanel({
         {error && <p className="insights-error">{error}</p>}
 
         {view === "overview" && data && (
-          <>
-            <div className="insights-kpis insights-kpis-overview">
-              <KpiCard
-                emphasis={hasUnpriced ? "warning" : "default"}
-                icon={<DollarSign size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.cost")}
-                value={formatEstimatedCost(data.kpis.cost_usd, hasUnpriced)}
-                detail={
-                  costCoverage == null
-                    ? t("insights.coverage.noCalls")
-                    : hasUnpriced
-                      ? t("insights.coverage.partial", {
-                          v: String(costCoverage),
-                        })
-                      : t("insights.coverage.complete")
-                }
-              />
-              <KpiCard
-                emphasis="primary"
-                icon={<Coins size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.tokens")}
-                value={formatTokens(data.kpis.tokens)}
-              />
-              <KpiCard
-                icon={<Activity size={16} strokeWidth={2.25} aria-hidden />}
-                label={t("insights.kpi.calls")}
-                value={String(data.kpis.calls)}
-              />
-              <KpiCard
-                emphasis={hasUnpriced ? "warning" : "muted"}
-                icon={
-                  <AlertTriangle size={16} strokeWidth={2.25} aria-hidden />
-                }
-                label={t("insights.kpi.unpriced")}
-                value={String(data.unpriced_llm_events ?? 0)}
-                detail={hasUnpriced ? t("insights.unpriced.hint") : undefined}
-                actionLabel={
-                  hasUnpriced ? t("insights.unpriced.action") : undefined
-                }
-                onAction={hasUnpriced ? () => setView("models") : undefined}
-              />
-            </div>
-
-            <div className="insights-overview-grid">
-              <InsightsTrendChart
-                title={t("insights.chart.usageTrend")}
-                series={data.series}
-                metric={metric}
-                onMetricChange={setMetric}
-                maxVal={maxVal}
-                period={period}
-                locale={locale}
-                emptyMessage={t("insights.chart.empty")}
-                t={t}
-              />
-
-              <section className="insights-hbar-panel">
-                <div className="insights-rank-title-row">
-                  <h3 className="insights-rank-title">
-                    <Building2 size={14} strokeWidth={2.25} aria-hidden />
-                    {t(providerRankTitleKey(metric))}
-                  </h3>
-                  <button
-                    type="button"
-                    className="insights-more-btn"
-                    onClick={() => setView("models")}
-                  >
-                    {t("insights.rank.more")}
-                  </button>
-                </div>
-                {overviewProviderTop.length === 0 ||
-                overviewProviderMax <= 0 ? (
-                  <p className="insights-rank-empty">
-                    {metric === "cost"
-                      ? t("insights.rank.costUnavailable")
-                      : t("insights.rank.empty")}
-                  </p>
-                ) : (
-                  <ul className="insights-hbar-list">
-                    {overviewProviderTop.map((r, idx) => {
-                      const val = rankValue(r, metric);
-                      return (
-                        <li
-                          key={r.name}
-                          className={`insights-hbar-item${idx < 3 ? ` rank-${idx + 1}` : ""}`}
-                        >
-                          <span className="insights-hbar-label">
-                            <span className="insights-hbar-rank" aria-hidden>
-                              {idx + 1}
-                            </span>
-                            <span
-                              className="insights-rank-kind-icon"
-                              title="provider"
-                            >
-                              {isGenericProvider(r.name) ? (
-                                <Building2
-                                  size={14}
-                                  strokeWidth={2.1}
-                                  aria-hidden
-                                />
-                              ) : (
-                                <ProviderBrandIcon kind={r.name} size={14} />
-                              )}
-                            </span>
-                            {providerName(r.name)}
-                          </span>
-                          <div className="insights-hbar-track">
-                            <div
-                              className="insights-hbar-fill"
-                              style={{
-                                width: `${(val / overviewProviderMax) * 100}%`,
-                              }}
-                            />
-                          </div>
-                          <span className="insights-hbar-value">
-                            {metric === "cost"
-                              ? formatEstimatedCost(r.cost_usd, hasUnpriced)
-                              : formatMetricTotal(val, metric)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            </div>
-
-            <section className="insights-breakdown-section">
-              <div className="insights-section-heading">
-                <div>
-                  <h3>{t("insights.breakdown.title")}</h3>
-                  <p>{t("insights.breakdown.hint")}</p>
-                </div>
-              </div>
-              <div className="insights-kpis insights-kpis-breakdown">
-                <KpiCard
-                  compact
-                  icon={<Coins size={15} strokeWidth={2.2} aria-hidden />}
-                  label={t("insights.kpi.inputTokens")}
-                  value={formatTokens(data.kpis.input_tokens)}
-                />
-                <KpiCard
-                  compact
-                  icon={<Activity size={15} strokeWidth={2.2} aria-hidden />}
-                  label={t("insights.kpi.outputTokens")}
-                  value={formatTokens(data.kpis.output_tokens)}
-                />
-                <KpiCard
-                  compact
-                  icon={<Database size={15} strokeWidth={2.2} aria-hidden />}
-                  label={t("insights.kpi.cacheTokens")}
-                  value={formatTokens(data.kpis.cache_tokens)}
-                />
-                <KpiCard
-                  compact
-                  icon={<Cpu size={15} strokeWidth={2.2} aria-hidden />}
-                  label={t("insights.kpi.reasoningTokens")}
-                  value={formatTokens(data.kpis.reasoning_tokens)}
-                />
-                <KpiCard
-                  compact
-                  icon={<Gauge size={15} strokeWidth={2.2} aria-hidden />}
-                  label={t("insights.kpi.averageTokens")}
-                  value={formatTokens(averageTokensPerCall)}
-                />
-              </div>
-            </section>
-
-            {data.series.length === 0 && overviewProviderTop.length === 0 && (
-              <p className="insights-panel-hint">
-                {t("insights.empty.overview")}
-              </p>
-            )}
-          </>
+          <UsageDashboard data={data} annualSeries={annualSeries} />
         )}
 
         {view === "models" && data && (

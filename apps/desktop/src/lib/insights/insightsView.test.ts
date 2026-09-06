@@ -68,6 +68,9 @@ test("usageBucketState separates current, past, and future buckets", () => {
   assert.equal(usageBucketState("2026-09-03", "month", asOf), "past");
   assert.equal(usageBucketState("2026-09-04", "month", asOf), "current");
   assert.equal(usageBucketState("2026-09-05", "month", asOf), "future");
+  assert.equal(usageBucketState("2026-09-03", "days30", asOf), "past");
+  assert.equal(usageBucketState("2026-09-04", "days90", asOf), "current");
+  assert.equal(usageBucketState("2026-09-05", "days365", asOf), "future");
   assert.equal(usageBucketState("2026-08", "year", asOf), "past");
   assert.equal(usageBucketState("2026-09", "quarter", asOf), "current");
   assert.equal(usageBucketState("2026-10", "year", asOf), "future");

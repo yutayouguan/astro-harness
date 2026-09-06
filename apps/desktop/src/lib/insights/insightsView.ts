@@ -2,6 +2,13 @@
 export type InsightsViewMode = "overview" | "models" | "tools" | "tracing";
 export type InsightsMetric = "calls" | "tokens" | "cost";
 export type UsageBucketState = "past" | "current" | "future";
+export type UsagePeriod =
+  | "month"
+  | "quarter"
+  | "year"
+  | "days30"
+  | "days90"
+  | "days365";
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewMode = "overview";
 
@@ -61,11 +68,13 @@ export function costCoveragePercent(
 
 export function usageBucketState(
   bucket: string,
-  period: "month" | "quarter" | "year",
+  period: UsagePeriod,
   asOfIso = new Date().toISOString(),
 ): UsageBucketState {
   const currentBucket =
-    period === "month" ? asOfIso.slice(0, 10) : asOfIso.slice(0, 7);
+    period === "month" || period.startsWith("days")
+      ? asOfIso.slice(0, 10)
+      : asOfIso.slice(0, 7);
   if (bucket === currentBucket) return "current";
   return bucket > currentBucket ? "future" : "past";
 }

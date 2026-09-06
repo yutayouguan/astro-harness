@@ -1,5 +1,5 @@
 use anyhow::Context;
-use chrono::{Datelike, SecondsFormat, TimeZone, Utc};
+use chrono::{Datelike, Duration, SecondsFormat, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -77,6 +77,9 @@ pub enum UsagePeriod {
     Month,
     Quarter,
     Year,
+    Days30,
+    Days90,
+    Days365,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +116,8 @@ pub struct UsageKpis {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cache_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
     pub reasoning_tokens: i64,
 }
 
@@ -138,6 +143,20 @@ pub struct UsageRankings {
     pub by_kind: Vec<UsageRankItem>,
     pub by_agent: Vec<UsageRankItem>,
     pub by_model: Vec<UsageRankItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageRequestRow {
+    pub id: String,
+    pub ts: String,
+    pub model: String,
+    pub provider: Option<String>,
+    pub agent_id: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -170,6 +189,7 @@ pub struct UsageInsights {
     pub kpis: UsageKpis,
     pub series: Vec<UsageSeriesPoint>,
     pub rankings: UsageRankings,
+    pub recent_requests: Vec<UsageRequestRow>,
     pub unpriced_llm_events: i64,
 }
 
@@ -200,6 +220,23 @@ fn period_bounds(
     let y = as_of.year();
     let m = as_of.month();
     match period {
+        UsagePeriod::Days30 | UsagePeriod::Days90 | UsagePeriod::Days365 => {
+            let days = match period {
+                UsagePeriod::Days30 => 30,
+                UsagePeriod::Days90 => 90,
+                UsagePeriod::Days365 => 365,
+                _ => unreachable!(),
+            };
+            let today = Utc.from_utc_datetime(
+                &as_of
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .expect("valid day start"),
+            );
+            let end = today + Duration::days(1);
+            let start = end - Duration::days(days);
+            (fmt_utc_bound(start), fmt_utc_bound(end), "%Y-%m-%d")
+        }
         UsagePeriod::Month => {
             let start = Utc
                 .with_ymd_and_hms(y, m, 1, 0, 0, 0)
@@ -426,10 +463,53 @@ impl UsageDb {
                     .query_rank_by_model(&start, &end, agent_id.as_deref())
                     .await?,
             },
+            recent_requests: self
+                .query_recent_requests(&start, &end, agent_id.as_deref())
+                .await?,
             unpriced_llm_events: self
                 .query_unpriced_llm_events(&start, &end, agent_id.as_deref())
                 .await?,
         })
+    }
+
+    async fn query_recent_requests(
+        &self,
+        start: &str,
+        end: &str,
+        agent_id: Option<&str>,
+    ) -> anyhow::Result<Vec<UsageRequestRow>> {
+        let agent_clause = Self::agent_filter_sql(agent_id);
+        let sql = format!(
+            "SELECT id, ts, name, billing_provider, agent_id,
+                    input_tokens, output_tokens, cache_read_tokens,
+                    total_tokens, {COST_SUM_SQL}
+             FROM usage_events
+             WHERE ts >= ?1 AND ts < ?2
+               AND kind = 'llm'
+               {agent_clause}
+             ORDER BY {TS_NORM_SQL} DESC, rowid DESC
+             LIMIT 100"
+        );
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(start).bind(end);
+        if let Some(aid) = agent_id {
+            query = query.bind(aid);
+        }
+        let rows = query.fetch_all(&self.pool).await?;
+        Ok(rows
+            .iter()
+            .map(|row| UsageRequestRow {
+                id: row.get(0),
+                ts: row.get(1),
+                model: row.get(2),
+                provider: row.get(3),
+                agent_id: row.get(4),
+                input_tokens: row.get(5),
+                output_tokens: row.get(6),
+                cache_read_tokens: row.get(7),
+                total_tokens: row.get(8),
+                cost_usd: row.get(9),
+            })
+            .collect())
     }
 
     fn agent_filter_sql(agent_id: Option<&str>) -> &'static str {
@@ -456,6 +536,8 @@ impl UsageDb {
                 COALESCE(SUM(CASE WHEN kind = 'llm' THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN kind = 'llm' THEN input_tokens ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN kind = 'llm' THEN output_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN cache_read_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN kind = 'llm' THEN cache_write_tokens ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN kind = 'llm' THEN cache_read_tokens + cache_write_tokens ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN kind = 'llm' THEN reasoning_tokens ELSE 0 END), 0)
              FROM usage_events
@@ -474,8 +556,10 @@ impl UsageDb {
             llm_calls: row.get(4),
             input_tokens: row.get(5),
             output_tokens: row.get(6),
-            cache_tokens: row.get(7),
-            reasoning_tokens: row.get(8),
+            cache_read_tokens: row.get(7),
+            cache_write_tokens: row.get(8),
+            cache_tokens: row.get(9),
+            reasoning_tokens: row.get(10),
         })
     }
 
@@ -761,6 +845,23 @@ mod tests {
         assert_eq!(fmt, "%Y-%m-%d");
     }
 
+    #[test]
+    fn rolling_period_bounds_include_today_and_use_daily_buckets() {
+        let as_of = chrono::DateTime::parse_from_rfc3339("2026-07-13T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let (start, end, fmt) = period_bounds(UsagePeriod::Days30, &as_of);
+        assert_eq!(start, "2026-06-14T00:00:00Z");
+        assert_eq!(end, "2026-07-14T00:00:00Z");
+        assert_eq!(fmt, "%Y-%m-%d");
+
+        let (start, end, fmt) = period_bounds(UsagePeriod::Days365, &as_of);
+        assert_eq!(start, "2025-07-14T00:00:00Z");
+        assert_eq!(end, "2026-07-14T00:00:00Z");
+        assert_eq!(fmt, "%Y-%m-%d");
+    }
+
     fn zero_event(
         ts: &str,
         kind: &str,
@@ -913,5 +1014,59 @@ mod tests {
         assert_eq!(insights.rankings.by_agent[0].name, "default");
         assert_eq!(insights.rankings.by_agent[0].calls, 1);
         assert_eq!(insights.rankings.by_agent[0].tokens, 15);
+    }
+
+    #[tokio::test]
+    async fn insights_include_recent_llm_requests_and_cache_totals() {
+        let dir = TempDir::new().unwrap();
+        let db = UsageDb::new(dir.path().join("usage.db")).await.unwrap();
+        for (ts, model, provider, cache) in [
+            ("2026-07-12T02:00:00Z", "gpt-old", "openai", 3),
+            ("2026-07-13T02:00:00Z", "gemini-new", "google", 7),
+        ] {
+            db.insert(NewUsageEvent {
+                ts: ts.into(),
+                kind: "llm".into(),
+                name: model.into(),
+                agent_id: "default".into(),
+                session_id: None,
+                turn_id: None,
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: cache,
+                cache_write_tokens: 2,
+                reasoning_tokens: 1,
+                total_tokens: 15 + cache,
+                cost_usd: 0.01,
+                cost_status: Some("estimated".into()),
+                cost_source: None,
+                pricing_version: None,
+                billing_provider: Some(provider.into()),
+                billing_base_url: None,
+                billing_mode: None,
+                meta_json: None,
+            })
+            .await
+            .unwrap();
+        }
+
+        let insights = db
+            .query_insights(UsageInsightsQuery {
+                period: UsagePeriod::Days30,
+                as_of: Some("2026-07-13T12:00:00Z".into()),
+                agent_id: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(insights.kpis.cache_read_tokens, 10);
+        assert_eq!(insights.kpis.cache_write_tokens, 4);
+        assert_eq!(insights.recent_requests.len(), 2);
+        assert_eq!(insights.recent_requests[0].model, "gemini-new");
+        assert_eq!(
+            insights.recent_requests[0].provider.as_deref(),
+            Some("google")
+        );
+        assert_eq!(insights.recent_requests[0].cache_read_tokens, 7);
     }
 }

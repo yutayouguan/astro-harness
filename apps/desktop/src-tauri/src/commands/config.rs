@@ -571,7 +571,7 @@ pub async fn get_agent_usage_stats(
 /// `get_usage_insights` 请求参数。
 #[derive(Debug, Deserialize)]
 pub struct UsageInsightsArgs {
-    /// `month` | `quarter` | `year`
+    /// `month` | `quarter` | `year` | `days30` | `days90` | `days365`
     pub period: String,
     /// 可选截止时间（ISO8601）；默认 now
     pub as_of: Option<String>,
@@ -586,6 +586,9 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
         "month" => usage::UsagePeriod::Month,
         "quarter" => usage::UsagePeriod::Quarter,
         "year" => usage::UsagePeriod::Year,
+        "days30" => usage::UsagePeriod::Days30,
+        "days90" => usage::UsagePeriod::Days90,
+        "days365" => usage::UsagePeriod::Days365,
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
@@ -604,7 +607,7 @@ pub async fn get_usage_insights(args: UsageInsightsArgs) -> Result<usage::UsageI
 /// `get_trace_insights` 请求参数。
 #[derive(Debug, Deserialize)]
 pub struct TraceInsightsArgs {
-    /// `month` | `quarter` | `year`
+    /// `month` | `quarter` | `year` | `days30` | `days90` | `days365`
     pub period: String,
     /// 可选截止时间（ISO8601）；默认 now
     pub as_of: Option<String>,
@@ -619,6 +622,9 @@ pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceI
         "month" => usage::UsagePeriod::Month,
         "quarter" => usage::UsagePeriod::Quarter,
         "year" => usage::UsagePeriod::Year,
+        "days30" => usage::UsagePeriod::Days30,
+        "days90" => usage::UsagePeriod::Days90,
+        "days365" => usage::UsagePeriod::Days365,
         other => return Err(format!("invalid period: {other}")),
     };
     let agent_id = normalize_agent_id(args.agent_id);
