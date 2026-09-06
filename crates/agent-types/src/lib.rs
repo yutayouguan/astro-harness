@@ -27,6 +27,7 @@ pub mod tool_entry;
 pub mod tool_mode;
 pub mod tool_output;
 pub mod tool_spill;
+pub mod ui_style;
 
 pub use auxiliary_target::{AuxiliaryTargetChain, AuxiliaryTask};
 pub use compact_scope::CompactTokenLimitScope;
@@ -60,6 +61,11 @@ pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,
     write_tool_spill, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS, TOOL_LLM_COMPRESS_MARK,
     TOOL_PRUNE_MARK, TOOL_SPILL_MARK,
+};
+pub use ui_style::{
+    active_ui_style_path, notify_ui_style_changed, read_active_ui_style,
+    set_ui_style_change_handler, ui_style_root, UiStyleIconMotion, UiStyleIcons, UiStyleManifest,
+    UiStyleTokens, UiStyleWallpaper, UiStyleWallpaperFit, UI_STYLE_SCHEMA_VERSION,
 };
 
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};

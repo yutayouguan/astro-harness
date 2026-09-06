@@ -43,6 +43,7 @@ export type AgentToolId =
   | "robotics"
   | "audio_analyze"
   | "image_gen"
+  | "ui_style"
   | "video_gen"
   | "video_analyze"
   | "speech_gen"
@@ -231,6 +232,27 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "prompt", type: "string" },
       { name: "aspect_ratio", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "ui_style",
+    titleKey: "agentTools.uiStyle.title",
+    descKey: "agentTools.uiStyle.desc",
+    Icon: IconImageGen,
+    tone: "cyan",
+    params: [
+      { name: "action", type: "string", optional: true },
+      { name: "name", type: "string", optional: true },
+      { name: "id", type: "string", optional: true },
+      { name: "wallpaperPath", type: "string", optional: true },
+      { name: "fit", type: "string", optional: true },
+      { name: "shade", type: "number", optional: true },
+      { name: "blur", type: "number", optional: true },
+      { name: "adaptiveColor", type: "boolean", optional: true },
+      { name: "lightTokens", type: "object", optional: true },
+      { name: "darkTokens", type: "object", optional: true },
+      { name: "iconMotion", type: "string", optional: true },
+      { name: "iconStrokeWidth", type: "number", optional: true },
     ],
   },
   {

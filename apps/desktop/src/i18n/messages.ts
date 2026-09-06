@@ -1001,6 +1001,9 @@ export const zh = {
   "agentTools.imageGen.title": "图像生成",
   "agentTools.imageGen.desc":
     "Gemini Interactions 出图；prompt 须含主体/构图/光影/风格等详细描述；用户要 16:9/2K 等须传 aspect_ratio、image_size；备用 OpenAI",
+  "agentTools.uiStyle.title": "AI 壁纸与主题",
+  "agentTools.uiStyle.desc":
+    "应用、回滚或重置 Astro 的 AI 壁纸、配色与全局图标风格",
   "agentTools.videoGen.title": "视频生成",
   "agentTools.videoGen.desc":
     "Google Veo 原生生成；prompt 须含镜头/动作/场景/风格等详细描述；建议 image_gen 首尾帧，续拍用 extend_video",
@@ -4206,6 +4209,9 @@ export const en: Record<MessageKey, string> = {
   "agentTools.imageGen.title": "Image Generation",
   "agentTools.imageGen.desc":
     "Gemini Interactions; prompt must be a rich scene/style description; MUST set aspect_ratio/image_size when user asks (e.g. 16:9, 2K); OpenAI fallback",
+  "agentTools.uiStyle.title": "AI Wallpaper & Theme",
+  "agentTools.uiStyle.desc":
+    "Apply, roll back, or reset Astro AI wallpapers, palettes, and global icon styling",
   "agentTools.videoGen.title": "Video Generation",
   "agentTools.videoGen.desc":
     "Google Veo native; prompt must be a rich shot description; prefer image_gen frames, extend via extend_video",

@@ -14,6 +14,10 @@ const hook = await readFile(
   new URL("../../hooks/app/useWallpaper.ts", import.meta.url),
   "utf8",
 );
+const activeStyleHook = await readFile(
+  new URL("../../hooks/app/useActiveUiStyle.ts", import.meta.url),
+  "utf8",
+);
 const commands = await readFile(
   new URL("../../../src-tauri/src/lib.rs", import.meta.url),
   "utf8",
@@ -58,6 +62,8 @@ test("wallpaper commands are registered and the settings card calls each source"
   assert.match(commands, /commands::wallpaper::generate_wallpaper/);
   assert.match(commands, /commands::wallpaper::analyze_wallpaper/);
   assert.match(commands, /commands::wallpaper::get_system_wallpaper/);
+  assert.match(commands, /commands::ui_style::get_active_ui_style/);
+  assert.match(commands, /commands::ui_style::reset_active_ui_style/);
   assert.match(hook, /invoke<WallpaperAsset>\("import_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAsset>\("generate_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAnalysis>\("analyze_wallpaper"/);
@@ -72,7 +78,13 @@ test("wallpaper commands are registered and the settings card calls each source"
 
 test("app renders wallpaper behind shell chrome and fails closed on missing files", () => {
   assert.match(app, /className="shell-wallpaper-layer"/);
-  assert.match(app, /onError=\{wallpaper\.markCurrentUnavailable\}/);
+  assert.match(app, /generatedWallpaper[\s\S]*?activeUiStyle\.reset/);
+  assert.match(app, /wallpaper\.markCurrentUnavailable/);
+  assert.match(
+    activeStyleHook,
+    /invoke<ActiveUiStyle \| null>\("get_active_ui_style"\)/,
+  );
+  assert.match(activeStyleHook, /UI_STYLE_RESET_EVENT/);
   assert.match(shellStyles, /\.shell-wallpaper-layer\s*\{/);
   assert.doesNotMatch(
     shellStyles,
@@ -117,7 +129,7 @@ test("wallpaper mode remains independent from color style", () => {
   assert.match(hook, /cycleRecentWallpaper/);
   assert.match(app, /setWallpaperTheme\(recommendedWallpaperTheme\)/);
   assert.match(app, /applyWallpaperPaletteVars/);
-  assert.match(app, /wallpaper\.prefs\.adaptiveColor/);
+  assert.match(app, /wallpaperPresentation\.adaptiveColor/);
   assert.match(app, /data-wallpaper-palette/);
   assert.ok(
     unifiedStyles.lastIndexOf('html[data-wallpaper-palette="true"]') >

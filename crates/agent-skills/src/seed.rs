@@ -20,12 +20,14 @@ pub struct SeedReport {
 const BUNDLED_STORYBOARD_VIDEO_MD: &str = include_str!("../bundled/storyboard-video/SKILL.md");
 const BUNDLED_AIHOT_MD: &str = include_str!("../bundled/aihot/SKILL.md");
 const BUNDLED_CREATIVE_MEDIA_MD: &str = include_str!("../bundled/creative-media/SKILL.md");
+const BUNDLED_UI_STYLE_DESIGNER_MD: &str = include_str!("../bundled/ui-style-designer/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("aihot", BUNDLED_AIHOT_MD),
     ("creative-media", BUNDLED_CREATIVE_MEDIA_MD),
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
+    ("ui-style-designer", BUNDLED_UI_STYLE_DESIGNER_MD),
 ];
 
 /// 已知安装 Skill 与 SkillHub 官方/上游镜像的映射。
@@ -183,27 +185,40 @@ mod tests {
         assert!(r1.installed.contains(&"aihot".to_string()));
         assert!(r1.installed.contains(&"creative-media".to_string()));
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
+        assert!(r1.installed.contains(&"ui-style-designer".to_string()));
         assert!(dir.path().join("skills/aihot/SKILL.md").is_file());
         assert!(dir.path().join("skills/creative-media/SKILL.md").is_file());
         assert!(dir
             .path()
             .join("skills/storyboard-video/SKILL.md")
             .is_file());
+        assert!(dir
+            .path()
+            .join("skills/ui-style-designer/SKILL.md")
+            .is_file());
         let aihot = fs::read_to_string(dir.path().join("skills/aihot/SKILL.md")).unwrap();
         assert!(aihot.contains("aihot.virxact.com"));
         let creative =
             fs::read_to_string(dir.path().join("skills/creative-media/SKILL.md")).unwrap();
         assert!(creative.contains("music_gen"));
-        assert!(creative.contains("ask_user"));
+        assert!(creative.contains("request_user_input_async"));
         assert!(!creative.contains("astro_tools:"));
         let storyboard =
             fs::read_to_string(dir.path().join("skills/storyboard-video/SKILL.md")).unwrap();
         assert!(!storyboard.contains("astro_tools:"));
+        let ui_style =
+            fs::read_to_string(dir.path().join("skills/ui-style-designer/SKILL.md")).unwrap();
+        assert!(ui_style.contains("request_user_input_async"));
+        assert!(ui_style.contains("image_gen"));
+        assert!(ui_style.contains("ui_style"));
+        assert!(ui_style.contains("节日"));
+        assert!(ui_style.contains("astro_tools:"));
         let r2 = seed_bundled_into(dir.path());
         assert!(r2.installed.is_empty());
         assert!(r2.skipped.contains(&"aihot".to_string()));
         assert!(r2.skipped.contains(&"creative-media".to_string()));
         assert!(r2.skipped.contains(&"storyboard-video".to_string()));
+        assert!(r2.skipped.contains(&"ui-style-designer".to_string()));
     }
 
     #[test]

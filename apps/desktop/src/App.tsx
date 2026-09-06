@@ -79,6 +79,7 @@ import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
 import { useTheme } from "./hooks/app/useTheme";
 import { useWallpaper } from "./hooks/app/useWallpaper";
+import { useActiveUiStyle } from "./hooks/app/useActiveUiStyle";
 import { useTransientToast } from "./hooks/ui/useTransientToast";
 import { useDeferredPresence } from "./hooks/ui/useDeferredPresence";
 import { useWindowChrome } from "./hooks/app/useWindowChrome";
@@ -142,6 +143,7 @@ import {
   applyWallpaperPaletteVars,
   clearWallpaperPaletteVars,
 } from "./lib/ui/wallpaper";
+import { resolveWallpaperPresentation } from "./lib/ui/activeUiStyle";
 import {
   applyShellGradientVars,
   clearShellGradientVars,
@@ -174,6 +176,7 @@ export default function App() {
     cancelGradientEdit,
   } = useShellColorStyle();
   const wallpaper = useWallpaper();
+  const activeUiStyle = useActiveUiStyle();
   useBeautifyTips();
   const { t } = useI18n();
   const promptForTitle = usePrompt();
@@ -802,14 +805,22 @@ export default function App() {
     }
     return null;
   }, [colorStyle, gradient, dynamicSeed, nav, resolved]);
-  const wallpaperSrc =
-    wallpaper.prefs.mode === "wallpaper" && wallpaper.prefs.current
-      ? resolveMediaSrc(wallpaper.prefs.current.path)
-      : null;
+  const wallpaperPresentation = resolveWallpaperPresentation(
+    activeUiStyle.style,
+    wallpaper.prefs,
+  );
+  const generatedWallpaper = wallpaperPresentation.generated
+    ? wallpaperPresentation.wallpaper
+    : null;
+  const effectiveWallpaper = wallpaperPresentation.wallpaper;
+  const wallpaperSrc = effectiveWallpaper
+    ? resolveMediaSrc(effectiveWallpaper.path)
+    : null;
   const wallpaperEnabled = Boolean(wallpaperSrc);
+  const wallpaperAdaptiveColor = wallpaperPresentation.adaptiveColor;
   const recommendedWallpaperTheme =
-    wallpaperEnabled && wallpaper.prefs.adaptiveColor
-      ? (wallpaper.prefs.current?.recommendedTheme ?? null)
+    wallpaperEnabled && wallpaperAdaptiveColor
+      ? (effectiveWallpaper?.recommendedTheme ?? null)
       : null;
   useEffect(() => {
     setWallpaperTheme(recommendedWallpaperTheme);
@@ -821,6 +832,10 @@ export default function App() {
     [setWallpaperTheme],
   );
   useEffect(() => {
+    if (generatedWallpaper && !wallpaperSrc) {
+      void activeUiStyle.reset();
+      return;
+    }
     if (
       wallpaper.prefs.mode === "wallpaper" &&
       wallpaper.prefs.current &&
@@ -833,6 +848,8 @@ export default function App() {
     wallpaper.prefs.current,
     wallpaper.markCurrentUnavailable,
     wallpaperSrc,
+    generatedWallpaper,
+    activeUiStyle.reset,
   ]);
   // ── Tone crossfade overlay ─────────────────────────────────────────────
   const prevToneRef = useRef(shellTone);
@@ -871,11 +888,11 @@ export default function App() {
     } else {
       root.removeAttribute("data-wallpaper");
     }
-    const wallpaperAccent = wallpaper.prefs.adaptiveColor
-      ? wallpaper.prefs.current?.accentColor
+    const wallpaperAccent = wallpaperAdaptiveColor
+      ? effectiveWallpaper?.accentColor
       : null;
-    const wallpaperSecondary = wallpaper.prefs.adaptiveColor
-      ? wallpaper.prefs.current?.secondaryColor
+    const wallpaperSecondary = wallpaperAdaptiveColor
+      ? effectiveWallpaper?.secondaryColor
       : null;
     if (wallpaperEnabled && wallpaperAccent && wallpaperSecondary) {
       root.setAttribute("data-wallpaper-palette", "true");
@@ -900,9 +917,9 @@ export default function App() {
     resolved,
     reassert,
     wallpaperEnabled,
-    wallpaper.prefs.adaptiveColor,
-    wallpaper.prefs.current?.accentColor,
-    wallpaper.prefs.current?.secondaryColor,
+    wallpaperAdaptiveColor,
+    effectiveWallpaper?.accentColor,
+    effectiveWallpaper?.secondaryColor,
   ]);
   useEffect(() => {
     void syncWindowUnderlay(resolved, shellTone, activeShellGradient);
@@ -1248,8 +1265,8 @@ export default function App() {
           className="shell-wallpaper-layer"
           style={
             {
-              "--wallpaper-blur": wallpaper.prefs.blur,
-              "--wallpaper-shade": wallpaper.prefs.shade / 100,
+              "--wallpaper-blur": wallpaperPresentation.blur,
+              "--wallpaper-shade": wallpaperPresentation.shade / 100,
             } as CSSProperties
           }
           aria-hidden
@@ -1259,11 +1276,15 @@ export default function App() {
             alt=""
             style={{
               objectFit:
-                wallpaper.prefs.fit === "stretch"
+                wallpaperPresentation.fit === "stretch"
                   ? "fill"
-                  : wallpaper.prefs.fit,
+                  : wallpaperPresentation.fit,
             }}
-            onError={wallpaper.markCurrentUnavailable}
+            onError={
+              generatedWallpaper
+                ? () => void activeUiStyle.reset()
+                : wallpaper.markCurrentUnavailable
+            }
           />
           <span />
         </div>
@@ -2188,8 +2209,8 @@ export default function App() {
                       type="button"
                       className={`header-icon-btn ${activeChatRightDock === "project-files" ? "is-active" : ""}`}
                       onClick={toggleProjectFilesDock}
-                      title="展开项目文件"
-                      aria-label="展开项目文件"
+                      title={t("chat.projectFiles.open")}
+                      aria-label={t("chat.projectFiles.open")}
                       aria-pressed={activeChatRightDock === "project-files"}
                     >
                       <FolderTree width={16} height={16} />

@@ -11,6 +11,7 @@ import {
   type WallpaperMode,
   type WallpaperPrefs,
 } from "../../lib/ui/wallpaper";
+import { UI_STYLE_RESET_EVENT } from "./useActiveUiStyle";
 
 const STORAGE_KEY = "astro-wallpaper-prefs.v1";
 const SYSTEM_WALLPAPER_POLL_MS = 15_000;
@@ -32,6 +33,14 @@ function persist(prefs: WallpaperPrefs) {
   } catch {
     // WebView 存储不可用时仍保留本次运行状态。
   }
+}
+
+function deactivateGeneratedStyle() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(UI_STYLE_RESET_EVENT));
+  void invoke("reset_active_ui_style").catch(() => {
+    // 文件态样式不可用时，仍允许修改当前 WebView 的手动壁纸。
+  });
 }
 
 export type WallpaperController = {
@@ -93,38 +102,55 @@ export function useWallpaper(): WallpaperController {
 
   const setMode = useCallback(
     (mode: WallpaperMode) => {
+      deactivateGeneratedStyle();
       update((current) => ({ ...current, mode }));
     },
     [update],
   );
   const setFit = useCallback(
-    (fit: WallpaperFit) => update((current) => ({ ...current, fit })),
+    (fit: WallpaperFit) => {
+      deactivateGeneratedStyle();
+      update((current) => ({ ...current, fit }));
+    },
     [update],
   );
   const setShade = useCallback(
-    (shade: number) => update((current) => ({ ...current, shade })),
+    (shade: number) => {
+      deactivateGeneratedStyle();
+      update((current) => ({ ...current, shade }));
+    },
     [update],
   );
   const setBlur = useCallback(
-    (blur: number) => update((current) => ({ ...current, blur })),
+    (blur: number) => {
+      deactivateGeneratedStyle();
+      update((current) => ({ ...current, blur }));
+    },
     [update],
   );
   const setAdaptiveColor = useCallback(
-    (adaptiveColor: boolean) =>
-      update((current) => ({ ...current, adaptiveColor })),
+    (adaptiveColor: boolean) => {
+      deactivateGeneratedStyle();
+      update((current) => ({ ...current, adaptiveColor }));
+    },
     [update],
   );
   const setFollowSystemWallpaper = useCallback(
-    (followSystemWallpaper: boolean) =>
+    (followSystemWallpaper: boolean) => {
+      deactivateGeneratedStyle();
       update((current) => ({
         ...current,
         mode: followSystemWallpaper ? "wallpaper" : current.mode,
         followSystemWallpaper,
-      })),
+      }));
+    },
     [update],
   );
   const select = useCallback(
-    (asset: WallpaperAsset) => applyAsset(asset),
+    (asset: WallpaperAsset) => {
+      deactivateGeneratedStyle();
+      applyAsset(asset);
+    },
     [applyAsset],
   );
   const cycleRecent = useCallback(() => {
@@ -140,6 +166,7 @@ export function useWallpaper(): WallpaperController {
         const asset = await invoke<WallpaperAsset>("import_wallpaper", {
           sourcePath,
         });
+        deactivateGeneratedStyle();
         applyAsset(asset);
         return asset;
       } catch (cause) {
@@ -161,6 +188,7 @@ export function useWallpaper(): WallpaperController {
         const asset = await invoke<WallpaperAsset>("generate_wallpaper", {
           prompt,
         });
+        deactivateGeneratedStyle();
         applyAsset(asset);
         return asset;
       } catch (cause) {

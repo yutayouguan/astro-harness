@@ -24,6 +24,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "robotics",
     "audio_analyze",
     "image_gen",
+    "ui_style",
     "video_gen",
     "video_analyze",
     "speech_gen",
@@ -194,6 +195,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "cron" | "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "cron.add" | "cron.list" | "cron.remove" | "cron.enable" | "cron.disable" => "cron",
         "image_gen" => "image_gen",
+        "ui_style" => "ui_style",
         "video_gen" => "video_gen",
         "video_analyze" | "video_understand" => "video_analyze",
         "exec_command" | "write_stdin" | "request_permissions" => "exec_command",
@@ -310,5 +312,11 @@ mod tests {
         assert_eq!(tool_name_to_toolset("workflow__saved-id"), "workflow");
         assert_eq!(tool_name_to_toolset("workflow.weekly_report"), "workflow");
         assert!(KNOWN_TOOLSET_IDS.contains(&"workflow"));
+    }
+
+    #[test]
+    fn ui_style_has_a_dedicated_toolset_gate() {
+        assert_eq!(tool_name_to_toolset("ui_style"), "ui_style");
+        assert!(KNOWN_TOOLSET_IDS.contains(&"ui_style"));
     }
 }

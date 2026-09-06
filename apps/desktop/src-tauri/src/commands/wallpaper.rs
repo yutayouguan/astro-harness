@@ -305,15 +305,22 @@ fn store_wallpaper_at(
     })
 }
 
-fn analyze_wallpaper_at(base: &Path, path: &Path) -> Result<WallpaperAnalysisDto, String> {
-    let root = wallpapers_dir_at(base)
-        .canonicalize()
-        .map_err(|_| "壁纸目录不存在".to_string())?;
+pub(crate) fn analyze_wallpaper_at(
+    base: &Path,
+    path: &Path,
+) -> Result<WallpaperAnalysisDto, String> {
+    let roots = [wallpapers_dir_at(base), base.join("ui").join("style")]
+        .into_iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .collect::<Vec<_>>();
+    if roots.is_empty() {
+        return Err("壁纸目录不存在".to_string());
+    }
     let target = path
         .canonicalize()
         .map_err(|_| "壁纸文件不存在".to_string())?;
-    if !target.starts_with(&root) || !target.is_file() {
-        return Err("只能分析 Astro 壁纸目录中的图片".to_string());
+    if !roots.iter().any(|root| target.starts_with(root)) || !target.is_file() {
+        return Err("只能分析 Astro 管理目录中的壁纸".to_string());
     }
     let metadata = fs::metadata(&target).map_err(|e| format!("无法读取壁纸信息：{e}"))?;
     if metadata.len() > MAX_WALLPAPER_BYTES {

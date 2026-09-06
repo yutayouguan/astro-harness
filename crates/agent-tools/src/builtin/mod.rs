@@ -9,6 +9,7 @@ pub mod media;
 pub mod memory;
 pub mod present;
 pub mod shell;
+pub mod ui_style;
 
 pub use agents::{persona_create, subagent};
 pub use hitl::{ask_user, request_user_input_async, switch_mode};

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 
 /// 向操作系统弹出一条通知（失败仅打日志）。
@@ -26,15 +26,22 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
-    let app = app.clone();
+    let notify_app = app.clone();
     types::set_important_notify_handler(Arc::new(move |notice| {
-        let app2 = app.clone();
+        let app2 = notify_app.clone();
         let title = notice.title;
         let body = notice.body;
-        if let Err(err) = app.run_on_main_thread(move || {
+        if let Err(err) = notify_app.run_on_main_thread(move || {
             show(&app2, &title, &body);
         }) {
             tracing::warn!(error = %err, "schedule notification on main thread failed");
+        }
+    }));
+
+    let style_app = app.clone();
+    types::set_ui_style_change_handler(Arc::new(move || {
+        if let Err(error) = style_app.emit("ui-style-changed", ()) {
+            tracing::warn!(%error, "emit ui-style-changed failed");
         }
     }));
 }

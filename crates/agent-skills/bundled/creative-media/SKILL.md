@@ -1,7 +1,7 @@
 ---
 name: creative-media
-description: 音乐/图片/语音（及单镜头视频）创作工作流：何时 ask_user、如何写详细 prompt、歌词与文件 title、工具调用顺序。用户要写歌、作词作曲、出图、配音、生成一首歌或一张概念图时使用。多镜分镜短片改用 storyboard-video。
-astro_bundled_rev: 4
+description: 音乐/图片/语音（及单镜头视频）创作工作流：何时澄清需求、如何写详细 prompt、歌词与文件 title、工具调用顺序。用户要写歌、作词作曲、出图、配音、生成一首歌或一张概念图时使用。多镜分镜短片改用 storyboard-video。
+astro_bundled_rev: 5
 ---
 
 # 创作媒体（creative-media）
@@ -10,14 +10,14 @@ astro_bundled_rev: 4
 
 ## 总原则
 
-1. **先对齐，再生成**：关键创意方向不明确时，用 `ask_user`（可多题 + 选项）；用户说「你定 / 随便 / 惊喜我」则自行拍板，不再追问。
+1. **先对齐，再生成**：关键创意方向不明确时，用 `request_user_input_async`（可多题 + 选项）；用户说「你定 / 随便 / 惊喜我」则自行拍板，不再追问。
 2. **思考稿要进工具参数**：思考里写好的歌词、详细画面描述、镜头说明，**必须原样传入**对应字段；禁止缩成一两句摘要。
 3. **每次生成都带可读 `title`**（短中文名）：落盘为 `{title}-{时间戳}-{短id}.ext`；不传则退化为「音乐 / 图片 / 视频 / 语音」。
 4. **一次少出几条**：先交付可预览结果，再按反馈迭代；不要一口气盲打十版。
 
-## 何时用 `ask_user`
+## 何时用 `request_user_input_async`
 
-在调用生成工具**之前**，若下列关键项缺失且无法从上下文合理推断，先 `ask_user`（优先给 3～5 个选项 + 允许自定义）：
+在调用生成工具**之前**，若下列关键项缺失且无法从上下文合理推断，先 `request_user_input_async`（优先给 2～3 个互斥选项 + 允许自定义）：
 
 | 类型 | 建议澄清项 |
 |------|------------|
@@ -28,7 +28,7 @@ astro_bundled_rev: 4
 
 **不要澄清**：用户已写清、上下文已定调、或明确授权自由发挥的部分。不要为细枝末节连问多轮。
 
-`ask_user` 示例（多步）：
+`request_user_input_async` 示例（多步）：
 
 ```json
 {
@@ -59,7 +59,7 @@ astro_bundled_rev: 4
 
 ## 工作流：图片（`image_gen`）
 
-1. **收集 / ask_user**：主体、风格、构图、氛围；用户要的画幅/分辨率 → **`aspect_ratio` / `image_size` 字段**（勿只写进 prompt）。
+1. **收集 / request_user_input_async**：主体、风格、构图、氛围；用户要的画幅/分辨率 → **`aspect_ratio` / `image_size` 字段**（勿只写进 prompt）。
 2. **`prompt`**：充实描述——主体与动作、场景、构图景别、光影色彩、材质、风格/媒介、情绪。思考稿原样传入。
 3. **`title`**：短中文名，如「雨后山菌」。
 4. 参考图 / 多轮编辑：`reference_images`、`previous_interaction_id`。

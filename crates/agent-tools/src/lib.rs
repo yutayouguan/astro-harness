@@ -200,6 +200,7 @@ mod inventory_register_tests {
             "memory",
             "music_gen",
             "image_gen",
+            "ui_style",
             "video_gen",
             "speech_gen",
             "ask_user",

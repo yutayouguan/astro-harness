@@ -26,5 +26,6 @@ pub(crate) mod session;
 pub(crate) mod skills;
 pub(crate) mod subagents;
 pub(crate) mod terminal;
+pub(crate) mod ui_style;
 pub(crate) mod updater;
 pub(crate) mod wallpaper;
