@@ -34,17 +34,10 @@ test("settings card overrides load between shared and page-specific styles", () 
 });
 
 test("general preferences expose language and system as separate cards", () => {
+  assert.match(browser, /browser-settings-card--runtime/);
   assert.match(
     surfacesCss,
-    /\.prefs-category-stack--general[\s\S]*?> \.prefs-card--general[\s\S]*?background:\s*transparent;/,
-  );
-  assert.match(
-    surfacesCss,
-    /\.prefs-category-stack--general \.prefs-general-group\s*\{[\s\S]*?border-radius:\s*var\(--settings-panel-radius/,
-  );
-  assert.match(
-    surfacesCss,
-    /\.prefs-category-stack--general \.prefs-general-divider\s*\{[\s\S]*?display:\s*none;/,
+    /\.prefs-page\.is-embedded \.prefs-category-stack > \.prefs-card,[\s\S]*?border-radius:\s*var\(--settings-panel-radius/,
   );
 });
 

@@ -147,6 +147,19 @@ test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(general, /<SidebarVisibleSetting/);
 });
 
+test("general settings use direct peer cards without a legacy wrapper", () => {
+  const general = preferences.slice(
+    preferences.indexOf('hidden={activeCategory !== "general"}'),
+    preferences.indexOf('hidden={activeCategory !== "about"}'),
+  );
+  assert.match(general, /prefs-card--language/);
+  assert.match(general, /prefs-card--system/);
+  assert.doesNotMatch(
+    general,
+    /prefs-card--general(?:"|\s)|prefs-general-group|prefs-general-divider/,
+  );
+});
+
 test("terminal settings use a full-width mode card and balanced detail columns", () => {
   assert.match(
     terminal,

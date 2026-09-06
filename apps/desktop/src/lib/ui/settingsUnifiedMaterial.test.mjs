@@ -40,10 +40,10 @@ test("settings expose one shared inset and selected material contract", () => {
   assert.match(material, /\.prefs-context-stage/);
   assert.match(material, /\.aux-number-input,/);
   assert.match(material, /backdrop-filter:\s*none;/);
-  assert.match(material, /\.prefs-card:not\(\.prefs-card--general\)/);
+  assert.match(material, /> :is\(\.prefs-card, \.prefs-section\)/);
   assert.match(
     material,
-    /\.prefs-card:not\(\.prefs-card--general\), \.prefs-section\),[\s\S]*?background-clip:\s*padding-box;[\s\S]*?backdrop-filter:\s*none;/,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(--glass-rim\);[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.match(
     material,

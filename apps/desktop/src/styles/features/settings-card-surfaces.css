@@ -42,51 +42,9 @@
   border-top: 1px solid var(--settings-panel-border, var(--glass-edge));
 }
 
-/* General contains two functional groups in one legacy wrapper. Present each
-   group as its own card without changing its settings or persistence logic. */
-.prefs-page.is-embedded .prefs-category-stack--general > .prefs-card--general {
-  display: grid;
-  gap: 14px;
-  isolation: auto;
-  overflow: visible;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background-clip: border-box;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.prefs-category-stack--general .prefs-general-group {
-  isolation: isolate;
-  overflow: hidden;
-  padding: 16px;
-  border: 1px solid var(--settings-panel-border, var(--glass-edge));
-  border-radius: var(--settings-panel-radius, 20px);
-  background-clip: padding-box;
-  background: var(--settings-panel-background, var(--glass-fill));
-  box-shadow: var(
-    --settings-panel-shadow,
-    var(--shadow-card),
-    var(--glass-rim)
-  );
-  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --settings-panel-backdrop,
-    var(--backdrop-glass)
-  );
-}
-
-.prefs-category-stack--general .prefs-general-divider {
-  display: none;
-}
-
 @media (prefers-reduced-transparency: reduce) {
   .prefs-page.is-embedded .prefs-category-stack > .prefs-card,
-  .prefs-page.is-embedded .prefs-category-stack > .prefs-section,
-  .prefs-category-stack--general .prefs-general-group {
+  .prefs-page.is-embedded .prefs-category-stack > .prefs-section {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
