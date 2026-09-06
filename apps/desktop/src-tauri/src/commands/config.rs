@@ -3,6 +3,8 @@
 use proto::astro_service_client::AstroServiceClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
 
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 
@@ -629,6 +631,212 @@ pub async fn get_trace_insights(args: TraceInsightsArgs) -> Result<usage::TraceI
     .map_err(|e| e.to_string())
 }
 
+/// 诊断页的实时组件状态。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsStatusDto {
+    pub backend_healthy: bool,
+    pub backend_endpoint: String,
+    pub backend_error: Option<String>,
+    pub provider_enabled: usize,
+    pub provider_total: usize,
+    pub active_provider_id: Option<String>,
+    pub provider_error: Option<String>,
+    pub mcp_connected: usize,
+    pub mcp_total: usize,
+    pub mcp_retrying: usize,
+    pub mcp_error: Option<String>,
+    pub database_healthy: bool,
+    pub database_journal_mode: String,
+    pub database_schema_version: Option<i32>,
+    pub database_error: Option<String>,
+}
+
+/// 读取 Backend / Provider / MCP / Session DB 的诊断概览。
+#[tauri::command]
+pub async fn get_diagnostics_status() -> Result<DiagnosticsStatusDto, String> {
+    let endpoint = endpoint_url(&default_grpc_address());
+    let (provider_enabled, provider_total, active_provider_id, provider_error) =
+        match super::providers::get_providers_state() {
+            Ok(state) => {
+                let total = state
+                    .providers
+                    .iter()
+                    .filter(|provider| provider.supports_responses_api)
+                    .count();
+                let enabled = state
+                    .providers
+                    .iter()
+                    .filter(|provider| provider.enabled && provider.supports_responses_api)
+                    .count();
+                (enabled, total, state.active_provider_id, None)
+            }
+            Err(error) => (0, 0, None, Some(error)),
+        };
+
+    let mcp_result = get_mcp_server_statuses(None).await;
+    let backend_healthy = mcp_result.is_ok();
+    let backend_error = mcp_result.as_ref().err().cloned();
+    let (mcp_connected, mcp_total, mcp_retrying, mcp_error) = match mcp_result {
+        Ok(statuses) => {
+            let connected = statuses
+                .iter()
+                .filter(|status| status.status == "connected")
+                .count();
+            let retrying = statuses
+                .iter()
+                .filter(|status| matches!(status.status.as_str(), "connecting" | "backoff"))
+                .count();
+            (connected, statuses.len(), retrying, None)
+        }
+        Err(error) => (0, 0, 0, Some(error)),
+    };
+
+    let (database_healthy, database_schema_version, database_error) =
+        match super::common::open_sessions().await {
+            Ok(store) => match store.schema_version().await {
+                Ok(version) => (true, Some(version), None),
+                Err(error) => (false, None, Some(error.to_string())),
+            },
+            Err(error) => (false, None, Some(error)),
+        };
+
+    Ok(DiagnosticsStatusDto {
+        backend_healthy,
+        backend_endpoint: endpoint,
+        backend_error,
+        provider_enabled,
+        provider_total,
+        active_provider_id,
+        provider_error,
+        mcp_connected,
+        mcp_total,
+        mcp_retrying,
+        mcp_error,
+        database_healthy,
+        database_journal_mode: if database_healthy { "WAL" } else { "—" }.to_string(),
+        database_schema_version,
+        database_error,
+    })
+}
+
+fn redact_diagnostic_log_line(raw: &str) -> String {
+    fn redact_marker(input: &str, marker: &str) -> String {
+        let mut output = input.to_string();
+        let marker_lower = marker.to_ascii_lowercase();
+        let mut search_from = 0;
+        loop {
+            let lower = output.to_ascii_lowercase();
+            let Some(offset) = lower[search_from..].find(&marker_lower) else {
+                break;
+            };
+            let index = search_from + offset;
+            let start = index + marker.len();
+            let quote = output[start..]
+                .chars()
+                .next()
+                .filter(|character| matches!(character, '"' | '\''));
+            let value_start = start + quote.map_or(0, char::len_utf8);
+            let end = output[value_start..]
+                .find(|character: char| {
+                    quote.map_or_else(
+                        || character.is_whitespace() || matches!(character, ',' | ';'),
+                        |quote| character == quote,
+                    )
+                })
+                .map_or(output.len(), |offset| value_start + offset);
+            if value_start == end || &output[value_start..end] == "[REDACTED]" {
+                search_from = end;
+                continue;
+            }
+            output.replace_range(value_start..end, "[REDACTED]");
+            search_from = value_start + "[REDACTED]".len();
+        }
+        output
+    }
+
+    [
+        "api_key=",
+        "api-key=",
+        "apikey=",
+        "?key=",
+        "&key=",
+        "access_token=",
+        "refresh_token=",
+        "client_secret=",
+        "\"api_key\":\"",
+        "\"api_key\": \"",
+        "\"apiKey\":\"",
+        "\"apiKey\": \"",
+        "bearer ",
+    ]
+    .into_iter()
+    .fold(raw.to_string(), |line, marker| redact_marker(&line, marker))
+}
+
+/// 导出隐私裁剪后的诊断 JSON；不包含 Provider 密钥或完整配置。
+#[tauri::command]
+pub async fn export_diagnostics_bundle(app: AppHandle) -> Result<Option<String>, String> {
+    let file_name = format!(
+        "astro-diagnostics-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
+    let Some(file_path) = app
+        .dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .set_file_name(file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = file_path.into_path().map_err(|error| error.to_string())?;
+    let status = get_diagnostics_status().await?;
+    let logs = home::query_agent_logs(home::AgentLogQuery {
+        logs_dir: home::logs_dir(),
+        session_id: None,
+        turn_id: None,
+        min_level: None,
+        lines: 500,
+        source: home::LogSource::Both,
+    })
+    .map_err(|error| error.to_string())?
+    .into_iter()
+    .map(|line| {
+        serde_json::json!({
+            "source": line.source,
+            "raw": redact_diagnostic_log_line(&line.raw),
+        })
+    })
+    .collect::<Vec<_>>();
+    let bundle = serde_json::json!({
+        "formatVersion": 1,
+        "generatedAt": chrono::Utc::now().to_rfc3339(),
+        "application": {
+            "version": env!("CARGO_PKG_VERSION"),
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+        },
+        "status": {
+            "backendHealthy": status.backend_healthy,
+            "providerEnabled": status.provider_enabled,
+            "providerTotal": status.provider_total,
+            "activeProviderId": status.active_provider_id,
+            "mcpConnected": status.mcp_connected,
+            "mcpTotal": status.mcp_total,
+            "mcpRetrying": status.mcp_retrying,
+            "databaseHealthy": status.database_healthy,
+            "databaseJournalMode": status.database_journal_mode,
+            "databaseSchemaVersion": status.database_schema_version,
+        },
+        "recentLogs": logs,
+    });
+    let encoded = serde_json::to_string_pretty(&bundle).map_err(|error| error.to_string())?;
+    let redacted = redact_diagnostic_log_line(&encoded);
+    std::fs::write(&path, redacted).map_err(|error| error.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// `query_agent_logs` 请求参数。
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -658,6 +866,37 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::Agen
         source,
     };
     home::query_agent_logs(q).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+
+    #[test]
+    fn diagnostic_export_redacts_common_credential_shapes() {
+        let raw = concat!(
+            "api_key=secret-one ",
+            "OPENAI_API_KEY='secret-two' ",
+            "{\"apiKey\":\"secret-three\"} ",
+            "{\"api_key\": \"secret-spaced\"} ",
+            "Authorization: Bearer secret-four ",
+            "https://example.com?key=secret-five&x=1 ",
+            "access_token=secret-six refresh_token=secret-seven ",
+            "client_secret=secret-eight"
+        );
+        let redacted = redact_diagnostic_log_line(raw);
+
+        assert!(!redacted.contains("secret-one"));
+        assert!(!redacted.contains("secret-two"));
+        assert!(!redacted.contains("secret-three"));
+        assert!(!redacted.contains("secret-spaced"));
+        assert!(!redacted.contains("secret-four"));
+        assert!(!redacted.contains("secret-five"));
+        assert!(!redacted.contains("secret-six"));
+        assert!(!redacted.contains("secret-seven"));
+        assert!(!redacted.contains("secret-eight"));
+        assert_eq!(redacted.matches("[REDACTED]").count(), 9);
+    }
 }
 
 #[cfg(test)]

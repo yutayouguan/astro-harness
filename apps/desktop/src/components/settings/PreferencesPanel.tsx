@@ -82,6 +82,24 @@ import WallpaperSettingsCard from "./WallpaperSettingsCard";
 /** 查询返回的单行日志 */
 type AgentLogLine = { raw: string; source: string };
 
+type DiagnosticsStatusDto = {
+  backendHealthy: boolean;
+  backendEndpoint: string;
+  backendError: string | null;
+  providerEnabled: number;
+  providerTotal: number;
+  activeProviderId: string | null;
+  providerError: string | null;
+  mcpConnected: number;
+  mcpTotal: number;
+  mcpRetrying: number;
+  mcpError: string | null;
+  databaseHealthy: boolean;
+  databaseJournalMode: string;
+  databaseSchemaVersion: number | null;
+  databaseError: string | null;
+};
+
 /** 日志来源过滤 */
 type LogSourceFilter = "both" | "agent" | "errors";
 
@@ -93,6 +111,14 @@ type LogLevelFilter = "all" | "issues";
 
 type DiagnosticLogLevel = "error" | "warn" | "info" | "debug" | "unknown";
 
+type DiagnosticStatusCardModel = {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  state: "healthy" | "warning" | "error" | "unknown";
+};
+
 function diagnosticLogLevel(raw: string): DiagnosticLogLevel {
   const upper = raw.toUpperCase();
   if (upper.includes("CRITICAL") || upper.includes("ERROR")) return "error";
@@ -100,6 +126,26 @@ function diagnosticLogLevel(raw: string): DiagnosticLogLevel {
   if (upper.includes("INFO")) return "info";
   if (upper.includes("DEBUG") || upper.includes("TRACE")) return "debug";
   return "unknown";
+}
+
+function DiagnosticStatusCard({
+  label,
+  value,
+  detail,
+  state,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  state: "healthy" | "warning" | "error" | "unknown";
+}) {
+  return (
+    <div className="prefs-diag-status-card" data-status={state}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
 }
 
 type AppUpdateInfo = {
@@ -477,6 +523,12 @@ export default function PreferencesPanel({
   const [logSearch, setLogSearch] = useState("");
   const [logsCopied, setLogsCopied] = useState(false);
   const [rows, setRows] = useState<AgentLogLine[]>([]);
+  const [diagnosticsStatus, setDiagnosticsStatus] =
+    useState<DiagnosticsStatusDto | null>(null);
+  const [diagnosticsStatusError, setDiagnosticsStatusError] = useState("");
+  const [diagnosticsStatusBusy, setDiagnosticsStatusBusy] = useState(false);
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
+  const [diagnosticsExportPath, setDiagnosticsExportPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [queried, setQueried] = useState(false);
@@ -486,15 +538,97 @@ export default function PreferencesPanel({
         `${row.source} ${row.raw}`.toLowerCase().includes(normalizedLogSearch),
       )
     : rows;
-  const diagnosticSummary = {
-    total: rows.length,
-    agent: rows.filter((row) => row.source === "agent").length,
-    errors: rows.filter((row) => row.source === "errors").length,
-    issues: rows.filter((row) => {
-      const severity = diagnosticLogLevel(row.raw);
-      return severity === "warn" || severity === "error";
-    }).length,
-  };
+  const diagnosticCards: DiagnosticStatusCardModel[] = diagnosticsStatus
+    ? [
+        {
+          id: "backend",
+          label: t("prefs.diag.status.backend"),
+          value: t(
+            diagnosticsStatus.backendHealthy
+              ? "prefs.diag.status.healthy"
+              : "prefs.diag.status.unavailable",
+          ),
+          detail: diagnosticsStatus.backendHealthy
+            ? t("prefs.diag.status.backendDetail", {
+                endpoint: diagnosticsStatus.backendEndpoint.replace(
+                  /^https?:\/\//,
+                  "",
+                ),
+              })
+            : t("prefs.diag.status.unavailable"),
+          state: diagnosticsStatus.backendHealthy ? "healthy" : "error",
+        },
+        {
+          id: "provider",
+          label: t("prefs.diag.status.provider"),
+          value: `${diagnosticsStatus.providerEnabled}/${diagnosticsStatus.providerTotal}`,
+          detail: diagnosticsStatus.providerError
+            ? t("prefs.diag.status.unavailable")
+            : diagnosticsStatus.activeProviderId
+              ? t("prefs.diag.status.providerDetail", {
+                  provider: diagnosticsStatus.activeProviderId,
+                })
+              : t("prefs.diag.status.noneActive"),
+          state: diagnosticsStatus.providerError
+            ? "error"
+            : diagnosticsStatus.providerEnabled ===
+                  diagnosticsStatus.providerTotal &&
+                diagnosticsStatus.providerTotal > 0
+              ? "healthy"
+              : "warning",
+        },
+        {
+          id: "mcp",
+          label: t("prefs.diag.status.mcp"),
+          value: `${diagnosticsStatus.mcpConnected}/${diagnosticsStatus.mcpTotal}`,
+          detail: diagnosticsStatus.mcpError
+            ? t("prefs.diag.status.unavailable")
+            : diagnosticsStatus.mcpTotal === 0
+              ? t("prefs.diag.status.mcpNone")
+              : diagnosticsStatus.mcpRetrying > 0
+                ? t("prefs.diag.status.mcpRetrying", {
+                    count: String(diagnosticsStatus.mcpRetrying),
+                  })
+                : diagnosticsStatus.mcpConnected === diagnosticsStatus.mcpTotal
+                  ? t("prefs.diag.status.mcpReady")
+                  : t("prefs.diag.status.mcpDisconnected", {
+                      count: String(
+                        diagnosticsStatus.mcpTotal -
+                          diagnosticsStatus.mcpConnected,
+                      ),
+                    }),
+          state: diagnosticsStatus.mcpError
+            ? "error"
+            : diagnosticsStatus.mcpTotal === 0
+              ? "unknown"
+              : diagnosticsStatus.mcpRetrying > 0 ||
+                  diagnosticsStatus.mcpConnected < diagnosticsStatus.mcpTotal
+                ? "warning"
+                : "healthy",
+        },
+        {
+          id: "database",
+          label: t("prefs.diag.status.database"),
+          value: diagnosticsStatus.databaseJournalMode,
+          detail:
+            diagnosticsStatus.databaseHealthy &&
+            diagnosticsStatus.databaseSchemaVersion != null
+              ? t("prefs.diag.status.databaseDetail", {
+                  version: String(diagnosticsStatus.databaseSchemaVersion),
+                })
+              : t("prefs.diag.status.unavailable"),
+          state: diagnosticsStatus.databaseHealthy ? "healthy" : "error",
+        },
+      ]
+    : (["backend", "provider", "mcp", "database"] as const).map((id) => ({
+        id,
+        label: t(`prefs.diag.status.${id}` as MessageKey),
+        value: diagnosticsStatusBusy ? t("prefs.diag.status.checking") : "—",
+        detail: diagnosticsStatusError
+          ? t("prefs.diag.status.unavailable")
+          : t("prefs.diag.status.waiting"),
+        state: "unknown" as const,
+      }));
 
   const themeOptions: {
     id: ThemeMode;
@@ -726,22 +860,44 @@ export default function PreferencesPanel({
       });
       setRows(result);
       setQueried(true);
-    } catch (e) {
+    } catch (error) {
       setRows([]);
       setQueried(true);
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
   }
   refreshRef.current = refreshLogs;
 
+  const refreshDiagnosticsStatus = useCallback(async () => {
+    setDiagnosticsStatusBusy(true);
+    setDiagnosticsStatusError("");
+    try {
+      setDiagnosticsStatus(
+        await invoke<DiagnosticsStatusDto>("get_diagnostics_status"),
+      );
+    } catch (error) {
+      setDiagnosticsStatus(null);
+      setDiagnosticsStatusError(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setDiagnosticsStatusBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
+    if (activeCategory !== "diagnostics") return;
     const timer = setTimeout(() => {
       void refreshRef.current();
     }, 250);
     return () => clearTimeout(timer);
-  }, [scope, level, lines, source, manualSession, turnId]);
+  }, [activeCategory, scope, level, lines, source, manualSession, turnId]);
+
+  useEffect(() => {
+    if (activeCategory === "diagnostics") void refreshDiagnosticsStatus();
+  }, [activeCategory, refreshDiagnosticsStatus]);
 
   useEffect(() => {
     if (!logsCopied) return;
@@ -756,6 +912,20 @@ export default function PreferencesPanel({
       setLogsCopied(true);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function exportDiagnostics() {
+    if (exportingDiagnostics) return;
+    setExportingDiagnostics(true);
+    setErrorMsg("");
+    try {
+      const path = await invoke<string | null>("export_diagnostics_bundle");
+      if (path) setDiagnosticsExportPath(path);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExportingDiagnostics(false);
     }
   }
 
@@ -1270,41 +1440,52 @@ export default function PreferencesPanel({
           className="prefs-category-stack prefs-category-stack--diagnostics"
           hidden={activeCategory !== "diagnostics"}
         >
+          <div className="prefs-diag-page-head">
+            <p>{t("prefs.diag.pageSub")}</p>
+            <button
+              type="button"
+              className="prefs-diag-btn"
+              disabled={busy || diagnosticsStatusBusy}
+              onClick={() =>
+                void Promise.all([refreshLogs(), refreshDiagnosticsStatus()])
+              }
+            >
+              <RefreshCw
+                size={13}
+                strokeWidth={2.25}
+                className={busy || diagnosticsStatusBusy ? "spin" : undefined}
+                aria-hidden
+              />
+              {busy || diagnosticsStatusBusy
+                ? t("prefs.diag.loading")
+                : t("prefs.diag.refresh")}
+            </button>
+          </div>
+
+          <div className="prefs-diag-status-grid">
+            {diagnosticCards.map((card) => (
+              <DiagnosticStatusCard key={card.id} {...card} />
+            ))}
+          </div>
+
           <section className="prefs-card prefs-card--diagnostics">
             <div className="prefs-card-head">
               <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
                 <ScrollText width={22} height={22} />
               </div>
-              <div>
+              <div className="prefs-diag-card-heading">
                 <h2 className="prefs-card-title">{t("prefs.diag.title")}</h2>
                 <p className="prefs-card-sub">{t("prefs.diag.sub")}</p>
               </div>
-            </div>
-
-            <div
-              className="prefs-diag-summary"
-              aria-label={t("prefs.diag.summary")}
-            >
-              <div className="prefs-diag-summary-item" data-kind="total">
-                <span>{t("prefs.diag.summary.total")}</span>
-                <strong>{diagnosticSummary.total}</strong>
-                <small>{t("prefs.diag.newestFirst")}</small>
-              </div>
-              <div className="prefs-diag-summary-item" data-kind="agent">
-                <span>{t("prefs.diag.summary.agent")}</span>
-                <strong>{diagnosticSummary.agent}</strong>
-                <small>agent.log</small>
-              </div>
-              <div className="prefs-diag-summary-item" data-kind="errors">
-                <span>{t("prefs.diag.summary.errors")}</span>
-                <strong>{diagnosticSummary.errors}</strong>
-                <small>errors.log</small>
-              </div>
-              <div className="prefs-diag-summary-item" data-kind="issues">
-                <span>{t("prefs.diag.summary.issues")}</span>
-                <strong>{diagnosticSummary.issues}</strong>
-                <small>WARN + ERROR</small>
-              </div>
+              <button
+                type="button"
+                className="prefs-diag-btn"
+                data-tone={tone}
+                disabled={busy || visibleLogRows.length === 0}
+                onClick={() => void copyLogs()}
+              >
+                {t(logsCopied ? "prefs.diag.copied" : "prefs.diag.copyVisible")}
+              </button>
             </div>
 
             <div className="prefs-diag-form">
@@ -1439,34 +1620,6 @@ export default function PreferencesPanel({
                 <div className="prefs-diag-actions">
                   <button
                     type="button"
-                    className="prefs-diag-btn primary"
-                    data-tone={tone}
-                    disabled={busy}
-                    onClick={() => void refreshLogs()}
-                  >
-                    <RefreshCw
-                      size={13}
-                      strokeWidth={2.25}
-                      className={busy ? "spin" : undefined}
-                      aria-hidden
-                    />
-                    {busy ? t("prefs.diag.loading") : t("prefs.diag.refresh")}
-                  </button>
-                  <button
-                    type="button"
-                    className="prefs-diag-btn"
-                    data-tone={tone}
-                    disabled={busy || visibleLogRows.length === 0}
-                    onClick={() => void copyLogs()}
-                  >
-                    {t(
-                      logsCopied
-                        ? "prefs.diag.copied"
-                        : "prefs.diag.copyVisible",
-                    )}
-                  </button>
-                  <button
-                    type="button"
                     className="prefs-diag-link"
                     onClick={() => setShowAdvanced((value) => !value)}
                     aria-expanded={showAdvanced}
@@ -1563,6 +1716,37 @@ export default function PreferencesPanel({
                 </div>
               )}
             </div>
+          </section>
+
+          <section className="prefs-card prefs-diag-export-card">
+            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+              <Download size={20} />
+            </div>
+            <div className="prefs-diag-export-copy">
+              <h2 className="prefs-card-title">
+                {t("prefs.diag.export.title")}
+              </h2>
+              <p className="prefs-card-sub">{t("prefs.diag.export.sub")}</p>
+              {diagnosticsExportPath ? (
+                <small>
+                  {t("prefs.diag.export.done", {
+                    path: diagnosticsExportPath,
+                  })}
+                </small>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="prefs-diag-btn primary"
+              disabled={exportingDiagnostics}
+              onClick={() => void exportDiagnostics()}
+            >
+              {t(
+                exportingDiagnostics
+                  ? "prefs.diag.export.exporting"
+                  : "prefs.diag.export.action",
+              )}
+            </button>
           </section>
         </div>
 

@@ -106,7 +106,8 @@ test("automatic compression hides expert controls behind native disclosure", () 
 test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /prefs-category-stack--diagnostics/);
   assert.match(preferences, /prefs-card--diagnostics/);
-  assert.match(preferences, /prefs-diag-summary/);
+  assert.match(preferences, /prefs-diag-status-grid/);
+  assert.match(preferences, /DiagnosticStatusCard/);
   assert.match(preferences, /prefs-diag-filter-grid/);
   assert.match(preferences, /prefs-diag-search/);
   assert.match(preferences, /visibleLogRows/);
@@ -114,6 +115,15 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /prefs-diag-log-list/);
   assert.match(preferences, /const LINE_PRESETS = \[50, 100, 200, 500\]/);
   assert.match(preferences, /logsCopied/);
+  assert.match(
+    preferences,
+    /invoke<DiagnosticsStatusDto>\("get_diagnostics_status"\)/,
+  );
+  assert.match(
+    preferences,
+    /invoke<string \| null>\("export_diagnostics_bundle"\)/,
+  );
+  assert.match(preferences, /prefs-diag-export-card/);
   assert.match(preferences, /prefs-category-stack--about/);
   assert.match(preferences, /prefs-about-version/);
   assert.match(preferences, /getIdentifier/);
@@ -137,8 +147,9 @@ test("diagnostics and about have task-specific layouts", () => {
   );
   assert.match(
     preferencesCss,
-    /\.prefs-diag-summary\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,/,
+    /\.prefs-diag-status-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,/,
   );
+  assert.match(preferencesCss, /\.prefs-diag-export-card\s*\{/);
   assert.match(preferencesCss, /\.prefs-diag-log-row\.is-error/);
   assert.match(
     preferencesCss,

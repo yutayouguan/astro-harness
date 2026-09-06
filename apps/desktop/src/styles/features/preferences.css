@@ -1622,69 +1622,105 @@ html[data-theme="dark"] .prefs-switch-thumb {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-.prefs-diag-summary {
+.prefs-diag-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.prefs-diag-page-head p {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.prefs-diag-page-head .prefs-diag-btn {
+  flex: 0 0 auto;
+}
+
+.prefs-diag-status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 9px;
-  margin: 2px 0 14px;
 }
 
-.prefs-diag-summary-item {
-  --diag-summary-tone: var(--tone);
-  position: relative;
+.prefs-diag-status-card {
   min-width: 0;
-  padding: 12px 13px;
+  padding: 14px 15px;
   overflow: hidden;
-  border: 1px solid
-    color-mix(in srgb, var(--diag-summary-tone) 15%, var(--glass-edge));
-  border-radius: 14px;
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--glass-fill, #fff) 82%, transparent),
-    color-mix(in srgb, var(--diag-summary-tone) 7%, transparent)
-  );
+  border: 1px solid color-mix(in srgb, var(--tone) 10%, var(--glass-edge));
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--glass-fill, #fff) 86%, transparent),
+      color-mix(in srgb, var(--tone-soft) 18%, transparent)
+    ),
+    var(--glass-fill, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 7px 20px color-mix(in srgb, var(--tone) 5%, transparent);
 }
 
-.prefs-diag-summary-item::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--diag-summary-tone);
-  opacity: 0.68;
-}
-
-.prefs-diag-summary-item[data-kind="agent"] {
-  --diag-summary-tone: #3b82f6;
-}
-
-.prefs-diag-summary-item[data-kind="errors"] {
-  --diag-summary-tone: #d15562;
-}
-
-.prefs-diag-summary-item[data-kind="issues"] {
-  --diag-summary-tone: #c8872b;
-}
-
-.prefs-diag-summary-item > span,
-.prefs-diag-summary-item > small {
+.prefs-diag-status-card > span,
+.prefs-diag-status-card > small {
   display: block;
   overflow: hidden;
   color: var(--ink-mute);
-  font-size: 10px;
+  font-size: 10.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.prefs-diag-summary-item > strong {
+.prefs-diag-status-card > strong {
   display: block;
-  margin: 5px 0 2px;
+  margin: 8px 0 5px;
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 720;
+  font-size: 23px;
+  font-weight: 730;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
+}
+
+.prefs-diag-status-card[data-status="healthy"] > small {
+  color: #239462;
+}
+
+.prefs-diag-status-card[data-status="warning"] > small {
+  color: #b7791f;
+}
+
+.prefs-diag-status-card[data-status="error"] > small {
+  color: #c5525d;
+}
+
+.prefs-diag-card-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.prefs-diag-export-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prefs-diag-export-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.prefs-diag-export-copy small {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--tone);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prefs-diag-form {
@@ -2072,7 +2108,7 @@ html[data-theme="dark"] .prefs-switch-thumb {
   white-space: pre-wrap;
 }
 
-html[data-theme="dark"] .prefs-diag-summary-item,
+html[data-theme="dark"] .prefs-diag-status-card,
 html[data-theme="dark"] .prefs-diag-group,
 html[data-theme="dark"] .prefs-diag-search,
 html[data-theme="dark"] .prefs-diag-advanced,
@@ -2097,7 +2133,7 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
 }
 
 @media (max-width: 1120px) {
-  .prefs-diag-summary,
+  .prefs-diag-status-grid,
   .prefs-diag-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2113,10 +2149,15 @@ html[data-theme="dark"] .prefs-diag-log-row:hover {
 }
 
 @media (max-width: 760px) {
-  .prefs-diag-summary,
+  .prefs-diag-status-grid,
   .prefs-diag-filter-grid,
   .prefs-diag-advanced {
     grid-template-columns: 1fr;
+  }
+
+  .prefs-diag-export-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 .prefs-category-stack--about:not([hidden]) {

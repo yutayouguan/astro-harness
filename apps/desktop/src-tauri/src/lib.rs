@@ -418,6 +418,8 @@ pub fn run() {
             commands::config::get_agent_usage_stats,
             commands::config::get_usage_insights,
             commands::config::get_trace_insights,
+            commands::config::get_diagnostics_status,
+            commands::config::export_diagnostics_bundle,
             commands::config::query_agent_logs,
             // — first-class subagent threads —
             commands::subagents::list_subagent_threads,
