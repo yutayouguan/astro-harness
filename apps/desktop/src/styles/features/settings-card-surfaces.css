@@ -17,8 +17,11 @@
 
 .prefs-page.is-embedded .prefs-category-stack > .prefs-card,
 .prefs-page.is-embedded .prefs-category-stack > .prefs-section {
+  isolation: isolate;
+  overflow: hidden;
   border: 1px solid var(--settings-panel-border, var(--glass-edge));
   border-radius: var(--settings-panel-radius, 20px);
+  background-clip: padding-box;
   background: var(--settings-panel-background, var(--glass-fill));
   box-shadow: var(
     --settings-panel-shadow,
@@ -54,9 +57,12 @@
 }
 
 .prefs-category-stack--general .prefs-general-group {
+  isolation: isolate;
+  overflow: hidden;
   padding: 16px;
   border: 1px solid var(--settings-panel-border, var(--glass-edge));
   border-radius: var(--settings-panel-radius, 20px);
+  background-clip: padding-box;
   background: var(--settings-panel-background, var(--glass-fill));
   box-shadow: var(
     --settings-panel-shadow,
