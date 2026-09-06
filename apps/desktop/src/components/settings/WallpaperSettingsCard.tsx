@@ -32,22 +32,20 @@ const STYLE_PROMPTS: Record<string, string> = {
 function WallpaperPreview({
   path,
   name,
-  mode,
   fit,
   shade,
   onError,
 }: {
-  path: string | null;
+  path: string;
   name: string;
-  mode: WallpaperController["prefs"]["mode"];
   fit: WallpaperController["prefs"]["fit"];
   shade: number;
   onError: () => void;
 }) {
   const src = resolveMediaSrc(path);
   return (
-    <div className="wallpaper-preview" data-mode={mode}>
-      {mode === "wallpaper" && src ? (
+    <div className="wallpaper-preview">
+      {src ? (
         <img
           src={src}
           alt=""
@@ -311,7 +309,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
           </button>
         </div>
 
-        <div className="wallpaper-editor">
+        <div className="wallpaper-editor" hidden={prefs.mode !== "wallpaper"}>
           <div className="wallpaper-preview-column">
             <div className="wallpaper-preview-toggles">
               <button
@@ -355,19 +353,10 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                 <i aria-hidden />
               </button>
             </div>
-            {prefs.mode === "color" || prefs.current ? (
+            {prefs.current ? (
               <WallpaperPreview
-                path={
-                  prefs.mode === "wallpaper"
-                    ? (prefs.current?.path ?? null)
-                    : null
-                }
-                name={
-                  prefs.mode === "wallpaper"
-                    ? (prefs.current?.name ?? t("prefs.wallpaper.imageMode"))
-                    : t("prefs.wallpaper.colorMode")
-                }
-                mode={prefs.mode}
+                path={prefs.current.path}
+                name={prefs.current.name}
                 fit={prefs.fit}
                 shade={prefs.shade}
                 onError={controller.markCurrentUnavailable}

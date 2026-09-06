@@ -22,6 +22,24 @@ const shellStyles = await readFile(
   new URL("../../styles/features/shell/shell.css", import.meta.url),
   "utf8",
 );
+const preferencesCss = await readFile(
+  new URL("../../styles/features/preferences.css", import.meta.url),
+  "utf8",
+);
+const prototype = await readFile(
+  new URL(
+    "../../../../../designs/astro-wallpaper/settings-pages.jsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const prototypeCss = await readFile(
+  new URL(
+    "../../../../../designs/astro-wallpaper/settings-prototype.css",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const unifiedStyles = await readFile(
   new URL("../../styles/tokens/unified-color.css", import.meta.url),
   "utf8",
@@ -63,13 +81,24 @@ test("app renders wallpaper behind shell chrome and fails closed on missing file
   );
 });
 
-test("ambient colors and image wallpapers share one expanded editor layout", () => {
-  assert.match(panel, /<div className="wallpaper-editor">/);
-  assert.match(panel, /data-mode=\{mode\}/);
-  assert.match(panel, /prefs\.mode === "color" \|\| prefs\.current/);
-  assert.doesNotMatch(
+test("image wallpaper editor stays hidden in ambient color mode", () => {
+  assert.match(
     panel,
-    /prefs\.mode === "wallpaper" \? \([\s\S]{0,80}<div className="wallpaper-editor">/,
+    /className="wallpaper-editor"[\s\S]{0,80}hidden=\{prefs\.mode !== "wallpaper"\}/,
+  );
+  assert.doesNotMatch(panel, /prefs\.mode === "color" \|\| prefs\.current/);
+  assert.doesNotMatch(panel, /data-mode=\{mode\}/);
+  assert.match(
+    preferencesCss,
+    /\.wallpaper-preview,[\s\S]*?\.wallpaper-empty-preview\s*\{[\s\S]*?height:\s*clamp\(220px, 28vw, 320px\);[\s\S]*?max-height:\s*320px;/,
+  );
+  assert.match(
+    prototype,
+    /settings\.backgroundMode === "wallpaper" \? <div className="wallpaper-editor">/,
+  );
+  assert.match(
+    prototypeCss,
+    /\.wallpaper-preview\s*\{[^}]*height:\s*clamp\(220px, 28vw, 320px\);[^}]*max-height:\s*320px;/,
   );
 });
 

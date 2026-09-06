@@ -118,10 +118,10 @@ function AppearancePage({ tab, settings, patch, notify, onGenerate }) {
             ))}
           </div>
 
-          <div className="wallpaper-editor">
-              <div className="wallpaper-preview" style={{ backgroundImage: settings.backgroundMode === "wallpaper" ? `url('${settings.wallpaper.src}')` : `radial-gradient(circle at 24% 18%, color-mix(in srgb, ${settings.accent} 42%, white), transparent 54%), linear-gradient(145deg, #bfd8e9, #ead2c8)`, backgroundSize: settings.backgroundMode === "wallpaper" && settings.fit === "stretch" ? "100% 100%" : settings.backgroundMode === "wallpaper" ? settings.fit : "cover", "--preview-shade": settings.shade / 100 }}>
+          {settings.backgroundMode === "wallpaper" ? <div className="wallpaper-editor">
+              <div className="wallpaper-preview" style={{ backgroundImage: `url('${settings.wallpaper.src}')`, backgroundSize: settings.fit === "stretch" ? "100% 100%" : settings.fit, "--preview-shade": settings.shade / 100 }}>
                 <div className="mini-shell"><div className="mini-side"></div><div className="mini-main"><div className="mini-line big"></div><div className="mini-line"></div><div className="mini-bubble"></div></div></div>
-                <span className="preview-caption">当前：{settings.backgroundMode === "wallpaper" ? settings.wallpaper.name : "氛围配色"}</span>
+                <span className="preview-caption">当前：{settings.wallpaper.name}</span>
               </div>
               <div className="wallpaper-controls">
                 <div className="action-row">
@@ -141,7 +141,7 @@ function AppearancePage({ tab, settings, patch, notify, onGenerate }) {
                   <button className="recent-item" aria-label="上传新壁纸" onClick={() => uploadRef.current?.click()} style={{ background: "rgba(255,255,255,.42)", color: "var(--tone)", fontSize: 20 }}>＋</button>
                 </div>
               </div>
-            </div>
+            </div> : null}
         </Card>
 
         <Card icon="∿" title="动效与图标" subtitle="调整界面反馈的节奏与图标重量。">
