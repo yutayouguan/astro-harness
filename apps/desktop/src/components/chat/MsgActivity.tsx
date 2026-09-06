@@ -4,6 +4,7 @@ import {
   Activity,
   BookOpenText,
   AudioLines,
+  ExternalLink,
   Globe2,
   Image as ImageIcon,
   Music2,
@@ -33,6 +34,7 @@ import {
 } from "../../lib/media/resolveMediaSrc";
 import type { ChatActivity } from "../../types";
 import {
+  activityLinkPresentation,
   activityTitlePresentation,
   activityVisualKind,
 } from "../../lib/chat/activityPresentation";
@@ -47,6 +49,7 @@ type Props = {
   defaultOpen: boolean;
   showTimestamp: boolean;
   mediaBaseDir?: string | null;
+  onOpenUrl?: (url: string) => void | Promise<void>;
 };
 
 export function ActivityIcon({
@@ -98,6 +101,7 @@ export default function MsgActivity({
   defaultOpen,
   showTimestamp,
   mediaBaseDir,
+  onOpenUrl,
 }: Props) {
   const { t } = useI18n();
   const hasBody = activityHasBody(activity);
@@ -136,6 +140,8 @@ export default function MsgActivity({
   const statusClass = activity.status ? `is-${activity.status}` : "";
   const openClass = open ? "is-open" : "";
   const displayTitle = resolveActivityTitle(activity, t);
+  const link = activityLinkPresentation(activity);
+  const canOpenUrl = Boolean(link && onOpenUrl);
 
   const durationLabel = running
     ? liveSec != null
@@ -173,13 +179,75 @@ export default function MsgActivity({
     </>
   );
 
+  const linkedSummary: ReactNode = link ? (
+    <>
+      <button
+        type="button"
+        className="msg-activity-url-action"
+        title={link.url}
+        aria-label={t("chat.activityOpenInBrowser", {
+          target: link.label,
+        })}
+        onClick={() => void onOpenUrl?.(link.url)}
+      >
+        <span className="msg-activity-kind-icon">
+          <ActivityIcon activity={activity} />
+        </span>
+        <span className="msg-activity-title" title={displayTitle}>
+          {displayTitle}
+        </span>
+        <ExternalLink
+          size={11}
+          strokeWidth={2}
+          className="msg-activity-url-icon"
+          aria-hidden
+        />
+      </button>
+      {metaLabel || durationLabel ? (
+        <span className="msg-activity-meta">
+          {metaLabel}
+          {durationLabel ? (
+            <span className="msg-activity-duration">{durationLabel}</span>
+          ) : null}
+        </span>
+      ) : null}
+    </>
+  ) : null;
+
   return (
     <div
       className={`msg-activity ${statusClass} ${openClass}`.trim()}
       data-kind={activity.kind}
     >
       <div className="msg-activity-body">
-        {canToggle ? (
+        {canOpenUrl ? (
+          <div
+            className={`msg-activity-summary msg-activity-link-row${canToggle ? " is-toggleable" : ""}`}
+          >
+            {linkedSummary}
+            {canToggle ? (
+              <button
+                type="button"
+                className="msg-activity-chevron-button"
+                aria-expanded={open}
+                aria-label={
+                  open ? t("chat.activityCollapse") : t("chat.activityExpand")
+                }
+                onClick={() => setOpen((value) => !value)}
+              >
+                <MorphToggleIcon
+                  active={open}
+                  activeIcon={ChevronUpData}
+                  inactiveIcon={ChevronDownData}
+                  size={14}
+                  strokeWidth={2}
+                  className="msg-activity-chevron"
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+          </div>
+        ) : canToggle ? (
           <button
             type="button"
             className="msg-activity-toggle"

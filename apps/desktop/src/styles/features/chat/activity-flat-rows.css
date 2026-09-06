@@ -59,6 +59,13 @@ html[data-theme="dark"]
   background: var(--activity-flat-hover);
 }
 
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity
+  .msg-activity-link-row:hover {
+  background: var(--activity-flat-hover);
+}
+
 .bubble.assistant .msg-reasoning-toggle:focus-visible,
 .bubble.assistant
   .msg-timeline-body

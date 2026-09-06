@@ -1660,6 +1660,59 @@ html[data-theme="dark"] .msg-activity-detail {
   color: var(--ink-soft, var(--ink));
 }
 
+.msg-activity-url-action {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.msg-activity-url-action:hover .msg-activity-title {
+  color: var(--tone, var(--accent));
+}
+
+.msg-activity-url-action:focus-visible,
+.msg-activity-chevron-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 54%, transparent);
+  outline-offset: 2px;
+}
+
+.msg-activity-url-icon {
+  flex: 0 0 auto;
+  color: var(--tone, var(--accent));
+  opacity: 0.72;
+}
+
+.msg-activity-chevron-button {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.msg-activity-chevron-button:hover {
+  background: color-mix(in srgb, var(--tone, var(--accent)) 8%, transparent);
+}
+
+.msg-activity-chevron-button .msg-activity-chevron {
+  margin-left: 0;
+}
+
 .msg-activity-chevron {
   flex-shrink: 0;
   margin-left: auto;

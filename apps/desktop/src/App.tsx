@@ -139,6 +139,7 @@ import {
 import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
 import { resolveMediaSrc } from "./lib/media/resolveMediaSrc";
+import { normalizeBrowserUrl } from "./lib/browser/browserUrl";
 import {
   applyWallpaperPaletteVars,
   clearWallpaperPaletteVars,
@@ -593,6 +594,31 @@ export default function App() {
     setChatRightOpen,
     sideSessionId,
   ]);
+
+  const openActivityUrlInBrowser = useCallback(
+    async (rawUrl: string) => {
+      const url = normalizeBrowserUrl(rawUrl);
+      if (!/^https?:\/\//i.test(url)) return;
+      projectFiles.setPanelOpen(false);
+      setChatRightOpen(false);
+      setReviewState(null);
+      if (sideSessionId) await closeSideChat();
+      setBrowserDockOpen(true);
+      try {
+        await chat.controlBrowser("open", { url, new_tab: false });
+      } catch (error) {
+        showTransientToast(String(error), { tone: "error" });
+      }
+    },
+    [
+      chat.controlBrowser,
+      closeSideChat,
+      projectFiles.setPanelOpen,
+      setChatRightOpen,
+      showTransientToast,
+      sideSessionId,
+    ],
+  );
 
   const previewProjectFileInBrowser = useCallback(
     async (tab: ProjectFileTab) => {
@@ -2428,6 +2454,7 @@ export default function App() {
                         openChatRightDock("context");
                       }}
                       onOpenFileReview={openFileReview}
+                      onOpenActivityUrl={openActivityUrlInBrowser}
                       onEditUserMessage={editUserMessage}
                       onBranchMessage={(id) => void branchMessage(id)}
                       onSlashAction={handleSlashAction}
@@ -2546,6 +2573,7 @@ export default function App() {
                             }}
                             onOpenContext={() => openChatRightDock("context")}
                             onOpenFileReview={openFileReview}
+                            onOpenActivityUrl={openActivityUrlInBrowser}
                             onClose={closeSideChat}
                           />
                         )}

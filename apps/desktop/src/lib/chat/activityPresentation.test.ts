@@ -5,6 +5,7 @@ import {
   activityGroupProgress,
   activityGroupSummary,
   activityDisplayTarget,
+  activityLinkPresentation,
   activityTitlePresentation,
   activityVisualKind,
   distinctActivityVisualKinds,
@@ -82,6 +83,69 @@ test("extracts compact targets for human-readable rows", () => {
         '{"patch":"*** Begin Patch\\n*** Update File: apps/desktop/src/MsgActivity.tsx\\n*** End Patch"}',
     }),
     "MsgActivity.tsx",
+  );
+});
+
+test("uses browser result metadata when the read call has no input target", () => {
+  const value = {
+    ...activity("browser.snapshot"),
+    status: "done" as const,
+    input: '{"action":"read"}',
+    output: JSON.stringify({
+      astro_browser: true,
+      url: "https://www.bilibili.com/",
+      title: "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili",
+    }),
+  };
+  assert.equal(
+    activityDisplayTarget(value),
+    "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili",
+  );
+  assert.deepEqual(activityLinkPresentation(value), {
+    url: "https://www.bilibili.com/",
+    label: "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili",
+  });
+  assert.deepEqual(activityTitlePresentation(value), {
+    key: "chat.activity.item.done.read",
+    target: "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili",
+  });
+});
+
+test("links only http browser targets and falls back to the active tab", () => {
+  const value = {
+    ...activity("browser.snapshot"),
+    input: "{}",
+    output: JSON.stringify({
+      active_tab_id: "tab-b",
+      tabs: [
+        { id: "tab-a", url: "https://example.com", title: "Example" },
+        {
+          id: "tab-b",
+          url: "https://www.bilibili.com/video/BV1",
+          title: "B站视频",
+          active: true,
+        },
+      ],
+    }),
+  };
+  assert.deepEqual(activityLinkPresentation(value), {
+    url: "https://www.bilibili.com/video/BV1",
+    label: "B站视频",
+  });
+  assert.equal(
+    activityLinkPresentation({
+      ...activity("browser.open"),
+      input: '{"url":"javascript:alert(1)"}',
+    }),
+    null,
+  );
+  assert.equal(
+    activityLinkPresentation({
+      ...activity("read_file"),
+      input: '{"path":"site.json"}',
+      output: '{"title":"Example","url":"https://example.com"}',
+    }),
+    null,
   );
 });
 

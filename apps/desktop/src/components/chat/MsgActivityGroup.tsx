@@ -20,6 +20,7 @@ type Props = {
   forcedOpen?: boolean;
   showTimestamp: boolean;
   mediaBaseDir?: string | null;
+  onOpenUrl?: (url: string) => void | Promise<void>;
 };
 
 export default function MsgActivityGroup({
@@ -28,6 +29,7 @@ export default function MsgActivityGroup({
   forcedOpen,
   showTimestamp,
   mediaBaseDir,
+  onOpenUrl,
 }: Props) {
   const { t } = useI18n();
   const progress = activityGroupProgress(activities);
@@ -150,6 +152,7 @@ export default function MsgActivityGroup({
               }
               showTimestamp={showTimestamp}
               mediaBaseDir={mediaBaseDir}
+              onOpenUrl={onOpenUrl}
             />
           ))}
         </div>

@@ -442,6 +442,8 @@ type Props = {
   /** 当前任务绑定浏览器的悬浮预览。 */
   browserPreview?: BrowserPreview | null;
   onCloseBrowserPreview?: () => void;
+  /** 在 Astro 内置浏览器中打开工具活动的 Web 目标。 */
+  onOpenActivityUrl?: (url: string) => void | Promise<void>;
   /** 定时任务编辑器使用的供应商列表。 */
   cronProviders?: ProviderOpt[];
   cronActiveProviderId?: string | null;
@@ -913,6 +915,7 @@ export default function ChatView({
   realtimeAvailable = false,
   browserPreview = null,
   onCloseBrowserPreview,
+  onOpenActivityUrl,
   cronProviders = [],
   cronActiveProviderId = null,
   modelCapabilities = null,
@@ -2946,6 +2949,7 @@ export default function ChatView({
                                     }
                                     showTimestamp={displayPrefs.showTimestamps}
                                     mediaBaseDir={mediaBaseDir}
+                                    onOpenUrl={onOpenActivityUrl}
                                   />
                                 ),
                               });
@@ -3189,6 +3193,7 @@ export default function ChatView({
                                         displayPrefs.showTimestamps
                                       }
                                       mediaBaseDir={mediaBaseDir}
+                                      onOpenUrl={onOpenActivityUrl}
                                     />
                                   ),
                                 });
@@ -3358,6 +3363,7 @@ export default function ChatView({
                                             displayPrefs.showTimestamps
                                           }
                                           mediaBaseDir={mediaBaseDir}
+                                          onOpenUrl={onOpenActivityUrl}
                                         />
                                       </MsgTimelineStep>
                                     );

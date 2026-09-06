@@ -36,6 +36,11 @@ export type ActivityTitlePresentation = {
   target: string;
 };
 
+export type ActivityLinkPresentation = {
+  url: string;
+  label: string;
+};
+
 const SEARCH_NAMES = /(^|[._-])(search|grep|rg|find|glob|query)([._-]|$)/;
 const READ_NAMES = /(^|[._-])(read|open|list|view|inspect|stat)([._-]|$)/;
 const RUN_NAMES =
@@ -87,9 +92,11 @@ export function activityVisualKind(activity: ChatActivity): ActivityVisualKind {
 export function activityDisplayTarget(activity: ChatActivity): string {
   const input = activityInput(activity.input);
   const patchTarget = activityPatchTarget(activity.input);
+  const kind = activityVisualKind(activity);
+  const link = activityLinkPresentation(activity);
+  if ((kind === "read" || kind === "browse") && link) return link.label;
   if (!input) return patchTarget;
 
-  const kind = activityVisualKind(activity);
   const raw =
     kind === "search"
       ? (input.query ?? input.pattern ?? input.path)
@@ -110,6 +117,40 @@ export function activityDisplayTarget(activity: ChatActivity): string {
       ? pathParts[pathParts.length - 1]!
       : firstLine;
   return compact.length > 72 ? `${compact.slice(0, 69)}…` : compact;
+}
+
+/** Resolve a safe web target without scanning arbitrary tool prose. */
+export function activityLinkPresentation(
+  activity: ChatActivity,
+): ActivityLinkPresentation | null {
+  const kind = activityVisualKind(activity);
+  if (kind !== "read" && kind !== "browse") return null;
+
+  const input = activityInput(activity.input);
+  const output = activityInput(activity.output);
+  const snapshot = activityRecord(output?.snapshot);
+  const activeTab = activityActiveBrowserTab(output);
+  const webTool = BROWSE_NAMES.test(activity.title.trim().toLowerCase());
+  const url = firstHttpUrl(
+    webTool ? output?.url : undefined,
+    webTool ? snapshot?.url : undefined,
+    webTool ? activeTab?.url : undefined,
+    input?.url,
+    input?.href,
+    input?.uri,
+  );
+  if (!url) return null;
+
+  const title = firstString(
+    webTool ? output?.title : undefined,
+    webTool ? snapshot?.title : undefined,
+    webTool ? activeTab?.title : undefined,
+    input?.title,
+  );
+  return {
+    url,
+    label: compactActivityTarget(title || url),
+  };
 }
 
 export function activityTitlePresentation(
@@ -210,6 +251,49 @@ function activityInput(
   } catch {
     return null;
   }
+}
+
+function activityRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function activityActiveBrowserTab(
+  output: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!Array.isArray(output?.tabs)) return null;
+  const activeTabId = firstString(output?.active_tab_id, output?.activeTabId);
+  const tabs = output.tabs.map(activityRecord).filter(Boolean) as Record<
+    string,
+    unknown
+  >[];
+  return (
+    tabs.find((tab) => tab.active === true) ??
+    tabs.find((tab) => firstString(tab.id) === activeTabId) ??
+    null
+  );
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function firstHttpUrl(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const candidate = value.trim();
+    if (/^https?:\/\/[^\s]+$/i.test(candidate)) return candidate;
+  }
+  return "";
+}
+
+function compactActivityTarget(value: string): string {
+  const firstLine = value.trim().split(/\r?\n/, 1)[0] ?? "";
+  return firstLine.length > 72 ? `${firstLine.slice(0, 69)}…` : firstLine;
 }
 
 export function distinctActivityVisualKinds(

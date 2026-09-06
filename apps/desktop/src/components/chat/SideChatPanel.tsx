@@ -45,6 +45,7 @@ type Props = {
   onOpenMcpSettings: () => void;
   onOpenContext: () => void;
   onOpenFileReview: (file: FileChangeItem, files: FileChangeItem[]) => void;
+  onOpenActivityUrl?: (url: string) => void | Promise<void>;
   onClose: () => void | Promise<void>;
 };
 
@@ -72,6 +73,7 @@ export default function SideChatPanel({
   onOpenMcpSettings,
   onOpenContext,
   onOpenFileReview,
+  onOpenActivityUrl,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -220,6 +222,7 @@ export default function SideChatPanel({
           onChatModeChange={setSideMode}
           onOpenContext={onOpenContext}
           onOpenFileReview={onOpenFileReview}
+          onOpenActivityUrl={onOpenActivityUrl}
           onEditUserMessage={chat.editUserMessage}
           contextUsage={chat.contextUsage}
           contextWindow={contextWindow}
