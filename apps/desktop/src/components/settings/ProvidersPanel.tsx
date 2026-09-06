@@ -1973,7 +1973,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                       <div className="providers-fallback-head">
                         <h4 className="providers-block-title">
                           <IconWaypoints />
-                          聊天后备
+                          {t("providers.fallback.title")}
                         </h4>
                         <span className="providers-fallback-count">
                           {fallbackEntries.length}/{MAX_MODEL_FALLBACKS}
@@ -1981,8 +1981,10 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                       </div>
                       <p className="providers-fallback-hint">
                         {fallbackEntries.length === 0
-                          ? `失败时按序切换 · 最多 ${MAX_MODEL_FALLBACKS} 个`
-                          : `失败时按序切换`}
+                          ? t("providers.fallback.hintWithLimit", {
+                              max: String(MAX_MODEL_FALLBACKS),
+                            })
+                          : t("providers.fallback.hint")}
                       </p>
                       {fallbackEntries.length > 0 && (
                         <ul className="providers-fallback-list">
@@ -2040,8 +2042,11 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                                     {
                                       value: "",
                                       label: defaultModel
-                                        ? `默认（${defaultModel}）`
-                                        : "默认模型",
+                                        ? t(
+                                            "providers.fallback.defaultModelValue",
+                                            { model: defaultModel },
+                                          )
+                                        : t("providers.fallback.defaultModel"),
                                     },
                                     ...(orphanSelected
                                       ? [

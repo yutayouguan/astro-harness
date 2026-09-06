@@ -62,6 +62,7 @@ function TreeRow({
   query,
   onContextMenu,
 }: TreeRowProps) {
+  const { t } = useI18n();
   const expanded = workbench.expandedDirectories.has(entry.path);
   const loading = workbench.loadingDirectories.has(entry.path);
   const children = workbench.entriesByDirectory[entry.path] ?? [];
@@ -117,7 +118,10 @@ function TreeRow({
         />
         <span className="project-file-name">{entry.name}</span>
         {loading ? (
-          <span className="project-file-loading" aria-label="加载中" />
+          <span
+            className="project-file-loading"
+            aria-label={t("workspace.loading")}
+          />
         ) : null}
       </button>
       {entry.is_dir && expanded ? (
@@ -137,7 +141,7 @@ function TreeRow({
               className="project-file-empty-row"
               style={{ "--tree-level": level + 1 } as CSSProperties}
             >
-              空目录
+              {t("chat.projectFiles.emptyDirectory")}
             </div>
           ) : null}
         </div>
@@ -377,7 +381,7 @@ export default function ProjectFilesPanel({
       ref={panelRef}
       className={`project-files-panel${open ? " is-open" : ""}`}
       style={{ "--project-files-width": `${width}px` } as CSSProperties}
-      aria-label="项目文件"
+      aria-label={t("chat.projectFiles.title")}
       aria-hidden={!open}
       data-state={open ? "open" : "closed"}
     >
@@ -389,7 +393,7 @@ export default function ProjectFilesPanel({
         aria-valuemin={MIN_WIDTH}
         aria-valuemax={MAX_WIDTH}
         aria-valuenow={width}
-        aria-label="调整项目文件栏宽度"
+        aria-label={t("chat.projectFiles.resize")}
         onDoubleClick={() => updateWidth(DEFAULT_WIDTH, true)}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
@@ -404,7 +408,9 @@ export default function ProjectFilesPanel({
       <header className="project-files-header">
         <div className="project-files-heading">
           <FolderOpen size={15} aria-hidden />
-          <strong>{workbench.project?.name ?? "项目文件"}</strong>
+          <strong>
+            {workbench.project?.name ?? t("chat.projectFiles.title")}
+          </strong>
         </div>
         <div className="project-files-actions">
           <button
@@ -413,16 +419,16 @@ export default function ProjectFilesPanel({
               for (const root of workbench.roots)
                 workbench.refreshDirectory(root.path);
             }}
-            aria-label="刷新项目文件"
-            title="刷新"
+            aria-label={t("chat.projectFiles.refresh")}
+            title={t("chat.projectFiles.refresh")}
           >
             <RefreshCw size={14} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => workbench.setPanelOpen(false)}
-            aria-label="收起项目文件栏"
-            title="收起"
+            aria-label={t("chat.projectFiles.collapse")}
+            title={t("chat.projectFiles.collapse")}
           >
             <PanelRightClose size={15} aria-hidden />
           </button>
@@ -433,11 +439,15 @@ export default function ProjectFilesPanel({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="筛选文件…"
-          aria-label="筛选项目文件"
+          placeholder={t("chat.projectFiles.filterPlaceholder")}
+          aria-label={t("chat.projectFiles.filter")}
         />
       </label>
-      <div className="project-files-tree" role="tree" aria-label="项目目录结构">
+      <div
+        className="project-files-tree"
+        role="tree"
+        aria-label={t("chat.projectFiles.tree")}
+      >
         {workbench.roots.length > 0 ? (
           workbench.roots.map((root) => (
             <TreeRow
@@ -452,7 +462,7 @@ export default function ProjectFilesPanel({
         ) : (
           <div className="project-files-empty">
             <Folder size={20} aria-hidden />
-            <span>当前项目未配置目录</span>
+            <span>{t("chat.projectFiles.noDirectories")}</span>
           </div>
         )}
       </div>

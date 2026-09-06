@@ -2069,6 +2069,7 @@ export default function PreferencesPanel({
 }
 
 function SidebarVisibleSetting({ tone }: { tone?: string }) {
+  const { t } = useI18n();
   const [count, setCount] = useState(() => {
     try {
       const v = localStorage.getItem("astro:sidebar-visible-sessions");
@@ -2086,8 +2087,12 @@ function SidebarVisibleSetting({ tone }: { tone?: string }) {
         <List size={15} strokeWidth={2.25} />
       </span>
       <span className="prefs-toggle-text">
-        <span className="prefs-toggle-label">侧栏默认显示会话数</span>
-        <span className="prefs-toggle-desc">超出部分折叠，点击展开</span>
+        <span className="prefs-toggle-label">
+          {t("prefs.chat.sidebarVisibleSessions")}
+        </span>
+        <span className="prefs-toggle-desc">
+          {t("prefs.chat.sidebarVisibleSessionsDesc")}
+        </span>
       </span>
       <select
         className="prefs-select"
@@ -2103,7 +2108,9 @@ function SidebarVisibleSetting({ tone }: { tone?: string }) {
       >
         {[3, 5, 8, 10, 15, 20].map((n) => (
           <option key={n} value={n}>
-            {n} 条
+            {t("prefs.chat.sidebarVisibleSessionsCount", {
+              count: String(n),
+            })}
           </option>
         ))}
       </select>

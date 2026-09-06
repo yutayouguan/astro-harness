@@ -150,7 +150,7 @@ export default function ChatAgentInfo({
         <span className="chat-agent-state-icon is-loading" aria-hidden>
           <LoaderCircle size={20} strokeWidth={2} />
         </span>
-        <p className="muted">加载 Agent 信息…</p>
+        <p className="muted">{t("chat.rightPanel.agentLoading")}</p>
       </div>
     );
   }
@@ -301,7 +301,7 @@ export default function ChatAgentInfo({
                 ))}
               </div>
             ) : (
-              <p className="muted">暂无已启用技能</p>
+              <p className="muted">{t("chat.rightPanel.noEnabledSkills")}</p>
             )}
             <button
               type="button"
