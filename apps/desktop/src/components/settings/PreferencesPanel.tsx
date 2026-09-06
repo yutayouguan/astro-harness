@@ -9,8 +9,10 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  ArrowUp,
   Brain,
   Clock,
+  Copyright,
   Dices,
   Download,
   Palette,
@@ -178,21 +180,9 @@ const MORPHICON_STROKE_LABEL: Record<MorphiconStrokeWidth, MessageKey> = {
   2.5: "prefs.appearance.motion.stroke.bold",
 };
 
-const ABOUT_FEATURES: MessageKey[] = [
-  "about.feature.chat",
-  "about.feature.memory",
-  "about.feature.workspace",
-  "about.feature.tools",
-  "about.feature.evolution",
-];
-
 const ABOUT_COPY = {
   zh: {
-    channel: "构建渠道",
     development: "开发构建",
-    release: "正式构建",
-    identifier: "应用标识",
-    runtime: "运行时",
     updates: "检查更新",
     updatesPrompt: "从公开发布仓库检查已签名安装包",
     checking: "正在检查…",
@@ -203,19 +193,20 @@ const ABOUT_COPY = {
     progress: "已下载 {{progress}}%",
     retry: "重试",
     updatesUnavailable: "此构建未配置自动更新服务",
-    releaseNotes: "发布说明",
-    releaseNotesUnavailable: "当前安装包未附带更新记录",
     license: "许可证",
     licenseValue: "私有项目，未声明开源许可",
-    support: "支持",
-    supportValue: "在“诊断”页复制日志后提交给维护者",
+    platform: "Universal",
+    stable: "稳定版",
+    updateTitle: "更新",
+    updateSub: "当前使用稳定更新通道。",
+    projectTitle: "项目信息",
+    projectSub: "Astro 及其配置与数据均保存在本机。",
+    view: "查看",
+    collapse: "收起",
+    dataDirectory: "数据目录",
   },
   en: {
-    channel: "Build channel",
     development: "Development build",
-    release: "Release build",
-    identifier: "App identifier",
-    runtime: "Runtime",
     updates: "Check for updates",
     updatesPrompt: "Check the public release repository for a signed build",
     checking: "Checking…",
@@ -226,12 +217,17 @@ const ABOUT_COPY = {
     progress: "Downloaded {{progress}}%",
     retry: "Retry",
     updatesUnavailable: "Automatic updates are not configured for this build",
-    releaseNotes: "Release notes",
-    releaseNotesUnavailable: "No release notes are bundled with this build",
     license: "License",
     licenseValue: "Private project; no open-source license declared",
-    support: "Support",
-    supportValue: "Copy logs from Diagnostics and send them to the maintainer",
+    platform: "Universal",
+    stable: "Stable",
+    updateTitle: "Updates",
+    updateSub: "You are using the stable update channel.",
+    projectTitle: "Project information",
+    projectSub: "Astro, its configuration, and data stay on this device.",
+    view: "View",
+    collapse: "Hide",
+    dataDirectory: "Data directory",
   },
 } as const;
 
@@ -499,6 +495,7 @@ export default function PreferencesPanel({
   const [updatePhase, setUpdatePhase] = useState<AppUpdatePhase>("idle");
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState("");
+  const [licenseExpanded, setLicenseExpanded] = useState(false);
   const [morphPreviewActive, setMorphPreviewActive] = useState(false);
   // 预览靠翻转图标来触发一次形变；任何预设改动都在同一批渲染里带上新参数重播。
   const playMorphPreview = useCallback(() => {
@@ -1909,7 +1906,7 @@ export default function PreferencesPanel({
           className="prefs-category-stack prefs-category-stack--about"
           hidden={activeCategory !== "about"}
         >
-          <section className="prefs-card prefs-card--about">
+          <section className="prefs-card prefs-card--about-hero">
             <div className="prefs-about-hero">
               <div className="prefs-about-icon" aria-hidden>
                 <img
@@ -1921,39 +1918,35 @@ export default function PreferencesPanel({
               </div>
               <h2 className="prefs-about-title">Astro</h2>
               <p className="prefs-about-tagline">{t("about.tagline")}</p>
-              <span className="prefs-about-version">
-                {t("about.version", { v: appMeta.version })}
-              </span>
-            </div>
-            <p className="prefs-about-body">{t("about.body")}</p>
-            <dl className="prefs-about-meta">
-              <div>
-                <dt>{aboutCopy.channel}</dt>
-                <dd>
+              <div className="prefs-about-badges">
+                <span data-tone>{appMeta.version}</span>
+                <span>{aboutCopy.platform}</span>
+                <span data-status="stable">
                   {import.meta.env.DEV
                     ? aboutCopy.development
-                    : aboutCopy.release}
-                </dd>
+                    : aboutCopy.stable}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="prefs-card prefs-card--about-update">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <ArrowUp size={21} />
               </div>
               <div>
-                <dt>{aboutCopy.identifier}</dt>
-                <dd>{appMeta.identifier}</dd>
+                <h2 className="prefs-card-title">{aboutCopy.updateTitle}</h2>
+                <p className="prefs-card-sub">{aboutCopy.updateSub}</p>
               </div>
-              <div>
-                <dt>{aboutCopy.runtime}</dt>
-                <dd>{appMeta.runtime}</dd>
-              </div>
-            </dl>
-            <ul className="prefs-about-features">
-              {ABOUT_FEATURES.map((key) => (
-                <li key={key}>{t(key)}</li>
-              ))}
-            </ul>
-            <div className="prefs-about-resources">
-              <div className="prefs-about-resource">
-                <strong>{aboutCopy.updates}</strong>
-                <span role={updatePhase === "error" ? "alert" : "status"}>
-                  {updateStatus}
+            </div>
+            <div className="prefs-about-setting-list">
+              <div className="prefs-about-setting-row">
+                <span className="prefs-about-setting-copy">
+                  <strong>{t("about.version", { v: appMeta.version })}</strong>
+                  <small>
+                    {appMeta.runtime} · {appMeta.identifier}
+                  </small>
                 </span>
                 <button
                   type="button"
@@ -1980,19 +1973,49 @@ export default function PreferencesPanel({
                       : aboutCopy.updates}
                 </button>
               </div>
+              <p
+                className="prefs-about-update-status"
+                role={updatePhase === "error" ? "alert" : "status"}
+              >
+                {updateStatus}
+              </p>
+              {updateInfo?.notes ? (
+                <p className="prefs-about-update-notes">{updateInfo.notes}</p>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="prefs-card prefs-card--about-project">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <Copyright size={21} />
+              </div>
               <div>
-                <strong>{aboutCopy.releaseNotes}</strong>
-                <span>
-                  {updateInfo?.notes || aboutCopy.releaseNotesUnavailable}
+                <h2 className="prefs-card-title">{aboutCopy.projectTitle}</h2>
+                <p className="prefs-card-sub">{aboutCopy.projectSub}</p>
+              </div>
+            </div>
+            <div className="prefs-about-setting-list">
+              <div className="prefs-about-setting-row">
+                <span className="prefs-about-setting-copy">
+                  <strong>{aboutCopy.license}</strong>
+                  {licenseExpanded ? (
+                    <small>{aboutCopy.licenseValue}</small>
+                  ) : null}
                 </span>
+                <button
+                  type="button"
+                  aria-expanded={licenseExpanded}
+                  onClick={() => setLicenseExpanded((value) => !value)}
+                >
+                  {licenseExpanded ? aboutCopy.collapse : aboutCopy.view}
+                </button>
               </div>
-              <div>
-                <strong>{aboutCopy.license}</strong>
-                <span>{aboutCopy.licenseValue}</span>
-              </div>
-              <div>
-                <strong>{aboutCopy.support}</strong>
-                <span>{aboutCopy.supportValue}</span>
+              <div className="prefs-about-setting-row">
+                <span className="prefs-about-setting-copy">
+                  <strong>{aboutCopy.dataDirectory}</strong>
+                </span>
+                <code>~/.astro</code>
               </div>
             </div>
           </section>

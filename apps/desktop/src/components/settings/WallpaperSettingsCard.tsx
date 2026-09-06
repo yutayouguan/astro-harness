@@ -32,20 +32,22 @@ const STYLE_PROMPTS: Record<string, string> = {
 function WallpaperPreview({
   path,
   name,
+  mode,
   fit,
   shade,
   onError,
 }: {
-  path: string;
+  path: string | null;
   name: string;
+  mode: WallpaperController["prefs"]["mode"];
   fit: WallpaperController["prefs"]["fit"];
   shade: number;
   onError: () => void;
 }) {
   const src = resolveMediaSrc(path);
   return (
-    <div className="wallpaper-preview">
-      {src ? (
+    <div className="wallpaper-preview" data-mode={mode}>
+      {mode === "wallpaper" && src ? (
         <img
           src={src}
           alt=""
@@ -94,7 +96,6 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [dialogOpen, busy]);
 
-  const currentSrc = prefs.current ? resolveMediaSrc(prefs.current.path) : null;
   const generatedPrompt = useMemo(
     () =>
       `${prompt.trim()}\n风格：${STYLE_PROMPTS[style]}。横向桌面壁纸构图，主体避开中央阅读区域，不要文字、标志或水印。`,
@@ -310,198 +311,199 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
           </button>
         </div>
 
-        {prefs.mode === "wallpaper" ? (
-          <>
-            <div className="wallpaper-editor">
-              <div className="wallpaper-preview-column">
-                <div className="wallpaper-preview-toggles">
-                  <button
-                    type="button"
-                    role="switch"
-                    className="wallpaper-preview-toggle"
-                    aria-checked={prefs.followSystemWallpaper}
-                    aria-label={t("prefs.wallpaper.followSystem")}
-                    title={t("prefs.wallpaper.followSystemDesc")}
-                    onClick={() =>
-                      controller.setFollowSystemWallpaper(
-                        !prefs.followSystemWallpaper,
-                      )
-                    }
-                  >
-                    <MonitorUp size={13} aria-hidden />
-                    <span>{t("prefs.wallpaper.followSystem")}</span>
-                    <i aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    role="switch"
-                    className="wallpaper-preview-toggle"
-                    aria-checked={prefs.adaptiveColor}
-                    aria-label={t("prefs.wallpaper.adaptiveColor")}
-                    title={t("prefs.wallpaper.adaptiveColorDesc")}
-                    onClick={() =>
-                      controller.setAdaptiveColor(!prefs.adaptiveColor)
-                    }
-                  >
-                    <span
-                      className="wallpaper-preview-toggle-swatch"
-                      style={{
-                        background: prefs.current?.accentColor
-                          ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
-                          : undefined,
-                      }}
-                      aria-hidden
-                    />
-                    <span>{t("prefs.wallpaper.adaptiveColor")}</span>
-                    <i aria-hidden />
-                  </button>
-                </div>
-                {prefs.current && currentSrc ? (
-                  <WallpaperPreview
-                    path={prefs.current.path}
-                    name={prefs.current.name}
-                    fit={prefs.fit}
-                    shade={prefs.shade}
-                    onError={controller.markCurrentUnavailable}
-                  />
+        <div className="wallpaper-editor">
+          <div className="wallpaper-preview-column">
+            <div className="wallpaper-preview-toggles">
+              <button
+                type="button"
+                role="switch"
+                className="wallpaper-preview-toggle"
+                aria-checked={prefs.followSystemWallpaper}
+                aria-label={t("prefs.wallpaper.followSystem")}
+                title={t("prefs.wallpaper.followSystemDesc")}
+                onClick={() =>
+                  controller.setFollowSystemWallpaper(
+                    !prefs.followSystemWallpaper,
+                  )
+                }
+              >
+                <MonitorUp size={13} aria-hidden />
+                <span>{t("prefs.wallpaper.followSystem")}</span>
+                <i aria-hidden />
+              </button>
+              <button
+                type="button"
+                role="switch"
+                className="wallpaper-preview-toggle"
+                aria-checked={prefs.adaptiveColor}
+                aria-label={t("prefs.wallpaper.adaptiveColor")}
+                title={t("prefs.wallpaper.adaptiveColorDesc")}
+                onClick={() =>
+                  controller.setAdaptiveColor(!prefs.adaptiveColor)
+                }
+              >
+                <span
+                  className="wallpaper-preview-toggle-swatch"
+                  style={{
+                    background: prefs.current?.accentColor
+                      ? `linear-gradient(135deg, ${prefs.current.accentColor}, ${prefs.current.secondaryColor ?? prefs.current.accentColor})`
+                      : undefined,
+                  }}
+                  aria-hidden
+                />
+                <span>{t("prefs.wallpaper.adaptiveColor")}</span>
+                <i aria-hidden />
+              </button>
+            </div>
+            {prefs.mode === "color" || prefs.current ? (
+              <WallpaperPreview
+                path={
+                  prefs.mode === "wallpaper"
+                    ? (prefs.current?.path ?? null)
+                    : null
+                }
+                name={
+                  prefs.mode === "wallpaper"
+                    ? (prefs.current?.name ?? t("prefs.wallpaper.imageMode"))
+                    : t("prefs.wallpaper.colorMode")
+                }
+                mode={prefs.mode}
+                fit={prefs.fit}
+                shade={prefs.shade}
+                onError={controller.markCurrentUnavailable}
+              />
+            ) : (
+              <button
+                type="button"
+                className="wallpaper-empty-preview"
+                onClick={() => void chooseImage()}
+              >
+                <Upload size={22} />
+                <strong>{t("prefs.wallpaper.emptyTitle")}</strong>
+                <span>{t("prefs.wallpaper.emptySub")}</span>
+              </button>
+            )}
+          </div>
+
+          <div className="wallpaper-controls">
+            <div className="wallpaper-action-row">
+              <button
+                type="button"
+                className="wallpaper-secondary-button"
+                disabled={busy !== null}
+                onClick={() => void chooseImage()}
+              >
+                {busy === "upload" ? (
+                  <Loader2 size={15} className="wallpaper-spinner" />
                 ) : (
-                  <button
-                    type="button"
-                    className="wallpaper-empty-preview"
-                    onClick={() => void chooseImage()}
-                  >
-                    <Upload size={22} />
-                    <strong>{t("prefs.wallpaper.emptyTitle")}</strong>
-                    <span>{t("prefs.wallpaper.emptySub")}</span>
-                  </button>
+                  <Upload size={15} />
                 )}
-              </div>
+                {t("prefs.wallpaper.upload")}
+              </button>
+              <button
+                type="button"
+                className="wallpaper-primary-button"
+                disabled={busy !== null}
+                onClick={() => {
+                  controller.clearError();
+                  setDialogOpen(true);
+                }}
+              >
+                <Sparkles size={15} />
+                {t("prefs.wallpaper.aiGenerate")}
+              </button>
+            </div>
 
-              <div className="wallpaper-controls">
-                <div className="wallpaper-action-row">
+            <div className="wallpaper-control-group">
+              <span className="wallpaper-control-label">
+                {t("prefs.wallpaper.fit")}
+              </span>
+              <div className="wallpaper-fit-options">
+                {(["cover", "contain", "stretch"] as const).map((fit) => (
                   <button
+                    key={fit}
                     type="button"
-                    className="wallpaper-secondary-button"
-                    disabled={busy !== null}
-                    onClick={() => void chooseImage()}
+                    className={prefs.fit === fit ? "is-active" : ""}
+                    aria-pressed={prefs.fit === fit}
+                    onClick={() => controller.setFit(fit)}
                   >
-                    {busy === "upload" ? (
-                      <Loader2 size={15} className="wallpaper-spinner" />
-                    ) : (
-                      <Upload size={15} />
-                    )}
-                    {t("prefs.wallpaper.upload")}
+                    {t(`prefs.wallpaper.fit.${fit}` as never)}
                   </button>
-                  <button
-                    type="button"
-                    className="wallpaper-primary-button"
-                    disabled={busy !== null}
-                    onClick={() => {
-                      controller.clearError();
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <Sparkles size={15} />
-                    {t("prefs.wallpaper.aiGenerate")}
-                  </button>
-                </div>
-
-                <div className="wallpaper-control-group">
-                  <span className="wallpaper-control-label">
-                    {t("prefs.wallpaper.fit")}
-                  </span>
-                  <div className="wallpaper-fit-options">
-                    {(["cover", "contain", "stretch"] as const).map((fit) => (
-                      <button
-                        key={fit}
-                        type="button"
-                        className={prefs.fit === fit ? "is-active" : ""}
-                        aria-pressed={prefs.fit === fit}
-                        onClick={() => controller.setFit(fit)}
-                      >
-                        {t(`prefs.wallpaper.fit.${fit}` as never)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="wallpaper-control-group">
-                  <span className="wallpaper-control-label">
-                    <span>{t("prefs.wallpaper.shade")}</span>
-                    <output>{prefs.shade}%</output>
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="55"
-                    value={prefs.shade}
-                    onChange={(event) =>
-                      controller.setShade(Number(event.target.value))
-                    }
-                  />
-                </label>
-
-                <label className="wallpaper-control-group">
-                  <span className="wallpaper-control-label">
-                    <span>{t("prefs.wallpaper.blur")}</span>
-                    <output>
-                      {prefs.blur === 0
-                        ? t("prefs.wallpaper.off")
-                        : `${prefs.blur}px`}
-                    </output>
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="12"
-                    value={prefs.blur}
-                    onChange={(event) =>
-                      controller.setBlur(Number(event.target.value))
-                    }
-                  />
-                </label>
-
-                <div className="wallpaper-control-group wallpaper-recent-group">
-                  <span className="wallpaper-control-label">
-                    {t("prefs.wallpaper.recent")}
-                  </span>
-                  <div className="wallpaper-recent-list">
-                    {prefs.recent.slice(0, 2).map((asset) => {
-                      const src = resolveMediaSrc(asset.path);
-                      return (
-                        <button
-                          key={asset.id}
-                          type="button"
-                          className={
-                            prefs.current?.id === asset.id ? "is-active" : ""
-                          }
-                          aria-label={asset.name}
-                          title={asset.name}
-                          onClick={() => controller.select(asset)}
-                        >
-                          {src ? (
-                            <img src={src} alt="" />
-                          ) : (
-                            <ImageIcon size={17} />
-                          )}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      className="wallpaper-recent-add"
-                      aria-label={t("prefs.wallpaper.upload")}
-                      title={t("prefs.wallpaper.upload")}
-                      onClick={() => void chooseImage()}
-                    >
-                      <Plus size={20} aria-hidden />
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
-          </>
-        ) : null}
+
+            <label className="wallpaper-control-group">
+              <span className="wallpaper-control-label">
+                <span>{t("prefs.wallpaper.shade")}</span>
+                <output>{prefs.shade}%</output>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="55"
+                value={prefs.shade}
+                onChange={(event) =>
+                  controller.setShade(Number(event.target.value))
+                }
+              />
+            </label>
+
+            <label className="wallpaper-control-group">
+              <span className="wallpaper-control-label">
+                <span>{t("prefs.wallpaper.blur")}</span>
+                <output>
+                  {prefs.blur === 0
+                    ? t("prefs.wallpaper.off")
+                    : `${prefs.blur}px`}
+                </output>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                value={prefs.blur}
+                onChange={(event) =>
+                  controller.setBlur(Number(event.target.value))
+                }
+              />
+            </label>
+
+            <div className="wallpaper-control-group wallpaper-recent-group">
+              <span className="wallpaper-control-label">
+                {t("prefs.wallpaper.recent")}
+              </span>
+              <div className="wallpaper-recent-list">
+                {prefs.recent.slice(0, 2).map((asset) => {
+                  const src = resolveMediaSrc(asset.path);
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      className={
+                        prefs.current?.id === asset.id ? "is-active" : ""
+                      }
+                      aria-label={asset.name}
+                      title={asset.name}
+                      onClick={() => controller.select(asset)}
+                    >
+                      {src ? <img src={src} alt="" /> : <ImageIcon size={17} />}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="wallpaper-recent-add"
+                  aria-label={t("prefs.wallpaper.upload")}
+                  title={t("prefs.wallpaper.upload")}
+                  onClick={() => void chooseImage()}
+                >
+                  <Plus size={20} aria-hidden />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {error && !dialogOpen ? (
           <p className="wallpaper-error">{error}</p>

@@ -202,18 +202,20 @@ test("diagnostics and about have task-specific layouts", () => {
   );
   assert.match(preferences, /prefs-diag-export-card/);
   assert.match(preferences, /prefs-category-stack--about/);
-  assert.match(preferences, /prefs-about-version/);
+  assert.match(preferences, /prefs-card--about-hero/);
+  assert.match(preferences, /prefs-card--about-update/);
+  assert.match(preferences, /prefs-card--about-project/);
+  assert.match(preferences, /prefs-about-badges/);
   assert.match(preferences, /getIdentifier/);
   assert.match(preferences, /getTauriVersion/);
-  assert.match(preferences, /prefs-about-meta/);
-  assert.match(preferences, /prefs-about-resources/);
+  assert.match(preferences, /prefs-about-setting-list/);
   assert.match(preferences, /updatesUnavailable/);
   assert.match(preferences, /licenseValue/);
   assert.match(preferences, /invoke<AppUpdateInfo>\("check_app_update"\)/);
   assert.match(preferences, /invoke\("install_app_update"\)/);
   assert.match(updater, /\.download_and_install\(/);
   assert.match(updater, /app\.restart\(\)/);
-  assert.match(preferences, /ABOUT_FEATURES\.map/);
+  assert.doesNotMatch(preferences, /ABOUT_FEATURES\.map/);
   assert.match(
     preferencesCss,
     /\.prefs-card--diagnostics\s*\{[\s\S]*?flex:\s*1;/,
@@ -230,6 +232,10 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferencesCss, /\.prefs-diag-log-row\.is-error/);
   assert.match(
     preferencesCss,
-    /\.prefs-category-stack--about:not\(\[hidden\]\)[\s\S]*?width:\s*min\(100%, 620px\);/,
+    /\.prefs-category-stack--about:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2,[\s\S]*?width:\s*min\(100%, 980px\);/,
+  );
+  assert.match(
+    preferencesCss,
+    /\.prefs-card--about-hero\s*\{[\s\S]*?grid-column:\s*1 \/ -1;/,
   );
 });

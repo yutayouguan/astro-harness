@@ -63,6 +63,16 @@ test("app renders wallpaper behind shell chrome and fails closed on missing file
   );
 });
 
+test("ambient colors and image wallpapers share one expanded editor layout", () => {
+  assert.match(panel, /<div className="wallpaper-editor">/);
+  assert.match(panel, /data-mode=\{mode\}/);
+  assert.match(panel, /prefs\.mode === "color" \|\| prefs\.current/);
+  assert.doesNotMatch(
+    panel,
+    /prefs\.mode === "wallpaper" \? \([\s\S]{0,80}<div className="wallpaper-editor">/,
+  );
+});
+
 test("wallpaper mode remains independent from color style", () => {
   assert.match(app, /const wallpaper = useWallpaper\(\)/);
   assert.match(app, /wallpaper=\{wallpaper\}/);
