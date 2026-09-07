@@ -1,4 +1,4 @@
-/** 亮/暗/跟随系统主题：data-theme 与原生窗主题同步。 */
+/** 外观偏好：同步主题、材质强度与全局界面缩放。 */
 import {
   createContext,
   useCallback,
@@ -21,9 +21,18 @@ import {
   readStoredGlassIntensity,
   type GlassIntensity,
 } from "../../lib/ui/glassIntensity";
+import {
+  applyInterfaceScale,
+  DEFAULT_INTERFACE_SCALE,
+  normalizeInterfaceScale,
+  persistInterfaceScale,
+  readStoredInterfaceScale,
+  type InterfaceScale,
+} from "../../lib/ui/interfaceScale";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type { GlassIntensity } from "../../lib/ui/glassIntensity";
+export type { InterfaceScale } from "../../lib/ui/interfaceScale";
 
 const STORAGE_KEY = "astro-theme-mode";
 
@@ -98,6 +107,8 @@ type ThemeContextValue = {
   resolved: ResolvedTheme;
   glassIntensity: GlassIntensity;
   setGlassIntensity: (intensity: GlassIntensity) => void;
+  interfaceScale: InterfaceScale;
+  setInterfaceScale: (scale: InterfaceScale) => void;
   setWallpaperTheme: (theme: ResolvedTheme | null) => void;
   /** 在切 tab / tone 后重新断言当前主题，防止 data-theme 被冲掉 */
   reassert: () => void;
@@ -117,6 +128,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       typeof window === "undefined"
         ? DEFAULT_GLASS_INTENSITY
         : readStoredGlassIntensity(),
+  );
+  const [interfaceScale, setInterfaceScaleState] = useState<InterfaceScale>(
+    () =>
+      typeof window === "undefined"
+        ? DEFAULT_INTERFACE_SCALE
+        : readStoredInterfaceScale(),
   );
   const [wallpaperTheme, setWallpaperThemeState] =
     useState<ResolvedTheme | null>(null);
@@ -139,7 +156,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     apply(mode, wallpaperTheme);
     applyGlassIntensity(document.documentElement, glassIntensity);
-  }, [mode, apply, glassIntensity, wallpaperTheme]);
+    applyInterfaceScale(document.documentElement, interfaceScale);
+  }, [mode, apply, glassIntensity, interfaceScale, wallpaperTheme]);
 
   useEffect(() => {
     if (mode !== "auto") return;
@@ -162,6 +180,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     persistGlassIntensity(normalized);
   }, []);
 
+  const setInterfaceScale = useCallback((scale: InterfaceScale) => {
+    const normalized = normalizeInterfaceScale(scale);
+    setInterfaceScaleState(normalized);
+    applyInterfaceScale(document.documentElement, normalized);
+    persistInterfaceScale(normalized);
+  }, []);
+
   const setWallpaperTheme = useCallback((theme: ResolvedTheme | null) => {
     setWallpaperThemeState((current) => (current === theme ? current : theme));
   }, []);
@@ -171,7 +196,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolveThemePreference(mode, systemPrefersDark(), wallpaperTheme),
     );
     applyGlassIntensity(document.documentElement, glassIntensity);
-  }, [mode, glassIntensity, wallpaperTheme]);
+    applyInterfaceScale(document.documentElement, interfaceScale);
+  }, [mode, glassIntensity, interfaceScale, wallpaperTheme]);
 
   const value = useMemo(
     () => ({
@@ -180,6 +206,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolved,
       glassIntensity,
       setGlassIntensity,
+      interfaceScale,
+      setInterfaceScale,
       setWallpaperTheme,
       reassert,
     }),
@@ -189,6 +217,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolved,
       glassIntensity,
       setGlassIntensity,
+      interfaceScale,
+      setInterfaceScale,
       setWallpaperTheme,
       reassert,
     ],

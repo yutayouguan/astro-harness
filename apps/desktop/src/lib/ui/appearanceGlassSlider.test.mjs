@@ -21,7 +21,7 @@ const [preferences, styles, theme, intensityRuntime, liquidGlass, main] =
 
 test("glass intensity uses one accessible continuous 0-100 range", () => {
   const control = preferences.slice(
-    preferences.indexOf('className="appearance-glass-slider"'),
+    preferences.indexOf('id="appearance-glass-intensity"'),
     preferences.indexOf("prefs-card--appearance-color"),
   );
 
@@ -44,7 +44,7 @@ test("glass range stays contained and exposes progress, focus, and reduced motio
   assert.equal(
     preferences.match(/appearance-control-row appearance-control-row--split/g)
       ?.length,
-    2,
+    3,
   );
   assert.match(
     styles,
@@ -54,18 +54,18 @@ test("glass range stays contained and exposes progress, focus, and reduced motio
     styles,
     /\.appearance-control-row--split > :last-child\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*380px;[\s\S]*?box-sizing:\s*border-box;/,
   );
-  assert.doesNotMatch(styles, /\.appearance-glass-slider\s*\{[^}]*cqi/);
+  assert.doesNotMatch(styles, /\.appearance-range-slider\s*\{[^}]*cqi/);
   assert.match(
     styles,
-    /\.appearance-glass-range::\-webkit-slider-runnable-track[\s\S]*?--glass-range-progress/,
+    /\.appearance-range-input::\-webkit-slider-runnable-track[\s\S]*?--appearance-range-progress/,
   );
   assert.match(
     styles,
-    /\.appearance-glass-range:focus-visible::\-webkit-slider-thumb/,
+    /\.appearance-range-input:focus-visible::\-webkit-slider-thumb/,
   );
   assert.match(
     styles,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.appearance-glass-range::\-webkit-slider-thumb[\s\S]*?transition:\s*none;/,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.appearance-range-input::\-webkit-slider-thumb[\s\S]*?transition:\s*none;/,
   );
 });
 

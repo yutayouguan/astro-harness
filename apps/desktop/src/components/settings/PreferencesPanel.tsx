@@ -69,6 +69,10 @@ import {
   GLASS_INTENSITY_MIN,
 } from "../../lib/ui/glassIntensity";
 import {
+  INTERFACE_SCALE_MAX,
+  INTERFACE_SCALE_MIN,
+} from "../../lib/ui/interfaceScale";
+import {
   diagnosticLogTimeBounds,
   formatDiagnosticTimestamp,
   presentDiagnosticMessage,
@@ -502,7 +506,12 @@ export default function PreferencesPanel({
   section,
 }: Props) {
   const { locale, setLocale, t } = useI18n();
-  const { glassIntensity, setGlassIntensity } = useTheme();
+  const {
+    glassIntensity,
+    setGlassIntensity,
+    interfaceScale,
+    setInterfaceScale,
+  } = useTheme();
   const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
@@ -1140,23 +1149,69 @@ export default function PreferencesPanel({
 
               <div className="appearance-control-row appearance-control-row--split">
                 <div className="appearance-control-copy">
+                  <strong>{t("prefs.appearance.scale.title")}</strong>
+                  <span id="appearance-scale-description">
+                    {t("prefs.appearance.scale.sub")}
+                  </span>
+                </div>
+                <div
+                  className="appearance-range-slider"
+                  style={
+                    {
+                      "--appearance-range-progress": `${
+                        ((interfaceScale - INTERFACE_SCALE_MIN) /
+                          (INTERFACE_SCALE_MAX - INTERFACE_SCALE_MIN)) *
+                        100
+                      }%`,
+                    } as CSSProperties
+                  }
+                >
+                  <div className="appearance-range-track">
+                    <input
+                      id="appearance-interface-scale"
+                      className="appearance-range-input"
+                      type="range"
+                      min={INTERFACE_SCALE_MIN}
+                      max={INTERFACE_SCALE_MAX}
+                      step={1}
+                      value={interfaceScale}
+                      aria-label={t("prefs.appearance.scale.title")}
+                      aria-describedby="appearance-scale-description"
+                      aria-valuetext={`${interfaceScale}%`}
+                      onChange={(event) =>
+                        setInterfaceScale(Number(event.currentTarget.value))
+                      }
+                    />
+                  </div>
+                  <output
+                    className="appearance-range-value"
+                    htmlFor="appearance-interface-scale"
+                    aria-live="off"
+                  >
+                    {interfaceScale}%
+                  </output>
+                </div>
+              </div>
+
+              <div className="appearance-control-row appearance-control-row--split">
+                <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.glass.title")}</strong>
                   <span id="appearance-glass-description">
                     {t("prefs.appearance.glass.sub")}
                   </span>
                 </div>
                 <div
-                  className="appearance-glass-slider"
+                  className="appearance-range-slider"
                   style={
                     {
-                      "--glass-range-progress": `${glassIntensity}%`,
+                      "--appearance-range-progress": `${glassIntensity}%`,
                     } as CSSProperties
                   }
                 >
-                  <div className="appearance-glass-slider-track">
+                  <div className="appearance-range-track">
                     <input
                       id="appearance-glass-intensity"
-                      className="appearance-glass-range"
+                      className="appearance-range-input"
                       type="range"
                       min={GLASS_INTENSITY_MIN}
                       max={GLASS_INTENSITY_MAX}
@@ -1171,7 +1226,7 @@ export default function PreferencesPanel({
                     />
                   </div>
                   <output
-                    className="appearance-glass-slider-value"
+                    className="appearance-range-value"
                     htmlFor="appearance-glass-intensity"
                     aria-live="off"
                   >

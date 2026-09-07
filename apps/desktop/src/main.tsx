@@ -13,6 +13,11 @@ import {
   DEFAULT_GLASS_INTENSITY,
   readStoredGlassIntensity,
 } from "./lib/ui/glassIntensity";
+import {
+  applyInterfaceScale,
+  DEFAULT_INTERFACE_SCALE,
+  readStoredInterfaceScale,
+} from "./lib/ui/interfaceScale";
 import "./styles/index.css";
 import "./styles/features/settings-material-unified.css";
 
@@ -35,9 +40,14 @@ installContextMenuGuard();
       document.documentElement,
       readStoredGlassIntensity(window.localStorage),
     );
+    applyInterfaceScale(
+      document.documentElement,
+      readStoredInterfaceScale(window.localStorage),
+    );
   } catch {
     document.documentElement.dataset.theme = "dark";
     applyGlassIntensity(document.documentElement, DEFAULT_GLASS_INTENSITY);
+    applyInterfaceScale(document.documentElement, DEFAULT_INTERFACE_SCALE);
   }
 })();
 

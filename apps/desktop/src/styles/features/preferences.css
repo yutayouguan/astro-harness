@@ -652,7 +652,7 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   outline-offset: 1px;
 }
 
-.appearance-glass-slider {
+.appearance-range-slider {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
   align-items: center;
@@ -660,12 +660,12 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   padding: 5px 6px 5px 10px;
 }
 
-.appearance-glass-slider-track {
+.appearance-range-track {
   position: relative;
   height: 26px;
 }
 
-.appearance-glass-range {
+.appearance-range-input {
   position: relative;
   z-index: 2;
   width: 100%;
@@ -677,21 +677,21 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   cursor: pointer;
 }
 
-.appearance-glass-range::-webkit-slider-runnable-track {
+.appearance-range-input::-webkit-slider-runnable-track {
   height: 5px;
   border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   border-radius: 999px;
   background: linear-gradient(
     to right,
     color-mix(in srgb, var(--tone) 66%, var(--ink)) 0
-      var(--glass-range-progress),
+      var(--appearance-range-progress),
     var(--settings-inset-background-strong, rgba(255, 255, 255, 0.42))
-      var(--glass-range-progress) 100%
+      var(--appearance-range-progress) 100%
   );
   box-shadow: inset 0 1px 2px rgba(var(--shadow-ink), 0.06);
 }
 
-.appearance-glass-range::-webkit-slider-thumb {
+.appearance-range-input::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   margin-top: -7px;
@@ -707,7 +707,7 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
     box-shadow 120ms ease-out;
 }
 
-.appearance-glass-range::-moz-range-track {
+.appearance-range-input::-moz-range-track {
   height: 5px;
   border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   border-radius: 999px;
@@ -718,13 +718,13 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
   box-shadow: inset 0 1px 2px rgba(var(--shadow-ink), 0.06);
 }
 
-.appearance-glass-range::-moz-range-progress {
+.appearance-range-input::-moz-range-progress {
   height: 5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--tone) 66%, var(--ink));
 }
 
-.appearance-glass-range::-moz-range-thumb {
+.appearance-range-input::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border: 2px solid color-mix(in srgb, #fff 72%, var(--tone));
@@ -738,31 +738,31 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
     box-shadow 120ms ease-out;
 }
 
-.appearance-glass-range:active::-webkit-slider-thumb {
+.appearance-range-input:active::-webkit-slider-thumb {
   transform: scale(1.12);
 }
 
-.appearance-glass-range:active::-moz-range-thumb {
+.appearance-range-input:active::-moz-range-thumb {
   transform: scale(1.12);
 }
 
-.appearance-glass-range:focus-visible {
+.appearance-range-input:focus-visible {
   outline: none;
 }
 
-.appearance-glass-range:focus-visible::-webkit-slider-thumb {
+.appearance-range-input:focus-visible::-webkit-slider-thumb {
   box-shadow:
     0 2px 7px color-mix(in srgb, var(--tone) 30%, transparent),
     0 0 0 4px color-mix(in srgb, var(--tone) 20%, transparent);
 }
 
-.appearance-glass-range:focus-visible::-moz-range-thumb {
+.appearance-range-input:focus-visible::-moz-range-thumb {
   box-shadow:
     0 2px 7px color-mix(in srgb, var(--tone) 30%, transparent),
     0 0 0 4px color-mix(in srgb, var(--tone) 20%, transparent);
 }
 
-.appearance-glass-slider-value {
+.appearance-range-value {
   min-width: 0;
   padding: 5px 6px;
   border: 1px solid var(--settings-inset-border, var(--glass-edge));
@@ -3700,7 +3700,7 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 
   .appearance-segmented,
-  .appearance-glass-slider,
+  .appearance-range-slider,
   .morphicon-segmented {
     width: 100%;
   }
@@ -3845,11 +3845,11 @@ html[data-theme="dark"] .prefs-context-budget-ico {
     transition: none;
   }
 
-  .appearance-glass-range::-webkit-slider-thumb {
+  .appearance-range-input::-webkit-slider-thumb {
     transition: none;
   }
 
-  .appearance-glass-range::-moz-range-thumb {
+  .appearance-range-input::-moz-range-thumb {
     transition: none;
   }
 
@@ -3858,11 +3858,11 @@ html[data-theme="dark"] .prefs-context-budget-ico {
     transform: none;
   }
 
-  .appearance-glass-range:active::-webkit-slider-thumb {
+  .appearance-range-input:active::-webkit-slider-thumb {
     transform: none;
   }
 
-  .appearance-glass-range:active::-moz-range-thumb {
+  .appearance-range-input:active::-moz-range-thumb {
     transform: none;
   }
 

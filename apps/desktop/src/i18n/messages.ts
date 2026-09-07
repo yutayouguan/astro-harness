@@ -2297,6 +2297,8 @@ export const zh = {
   "prefs.appearance.theme.light": "浅色",
   "prefs.appearance.theme.system": "系统",
   "prefs.appearance.theme.dark": "深色",
+  "prefs.appearance.scale.title": "界面大小",
+  "prefs.appearance.scale.sub": "按当前比例缩小文字、图标与控件。",
   "prefs.appearance.glass.title": "玻璃强度",
   "prefs.appearance.glass.sub": "影响卡片的透明、柔化与景深。",
   "prefs.appearance.glass.minimal": "最简",
@@ -5627,6 +5629,9 @@ export const en: Record<MessageKey, string> = {
   "prefs.appearance.theme.light": "Light",
   "prefs.appearance.theme.system": "System",
   "prefs.appearance.theme.dark": "Dark",
+  "prefs.appearance.scale.title": "Interface size",
+  "prefs.appearance.scale.sub":
+    "Scale text, icons, and controls down from their current proportions.",
   "prefs.appearance.glass.title": "Glass intensity",
   "prefs.appearance.glass.sub":
     "Adjust card transparency, softness, and visual depth.",
