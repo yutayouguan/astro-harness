@@ -37,6 +37,17 @@ test("terminal settings provide Nerd Font defaults and bounded display controls"
   assert.match(dock, /terminal\.options\.fontFamily/);
 });
 
+test("terminal execution modes pair system and project labels with semantic icons", () => {
+  assert.match(panel, /mode === "system" \? MonitorCog : FolderCode/);
+  assert.match(panel, /className="terminal-mode-option-icon" aria-hidden/);
+  assert.match(panel, /className="terminal-mode-option-copy"/);
+  assert.match(css, /\.terminal-mode-option-icon\s*\{/);
+  assert.match(
+    css,
+    /\.terminal-mode-option\.is-active \.terminal-mode-option-icon/,
+  );
+});
+
 test("terminal execution mode is explicit across the desktop boundary", () => {
   assert.match(proto, /string execution_mode = 5/);
   assert.match(proto, /bool replace_mode_mismatch = 6/);

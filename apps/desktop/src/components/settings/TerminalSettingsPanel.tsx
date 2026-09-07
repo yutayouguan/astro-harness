@@ -1,4 +1,11 @@
-import { CornerDownLeft, RotateCcw, TerminalSquare, Type } from "lucide-react";
+import {
+  CornerDownLeft,
+  FolderCode,
+  MonitorCog,
+  RotateCcw,
+  TerminalSquare,
+  Type,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { useI18n } from "../../i18n/LocaleContext";
@@ -57,31 +64,39 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
               role="radiogroup"
               aria-label={t("terminal.settings.mode.title")}
             >
-              {(["system", "project"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  role="radio"
-                  className={`terminal-mode-option ${settings.executionMode === mode ? "is-active" : ""}`}
-                  aria-checked={settings.executionMode === mode}
-                  onClick={() => update({ executionMode: mode })}
-                >
-                  <span>
-                    {t(
-                      mode === "system"
-                        ? "terminal.settings.mode.system"
-                        : "terminal.settings.mode.project",
-                    )}
-                  </span>
-                  <small>
-                    {t(
-                      mode === "system"
-                        ? "terminal.settings.mode.systemDesc"
-                        : "terminal.settings.mode.projectDesc",
-                    )}
-                  </small>
-                </button>
-              ))}
+              {(["system", "project"] as const).map((mode) => {
+                const ModeIcon = mode === "system" ? MonitorCog : FolderCode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    className={`terminal-mode-option ${settings.executionMode === mode ? "is-active" : ""}`}
+                    aria-checked={settings.executionMode === mode}
+                    onClick={() => update({ executionMode: mode })}
+                  >
+                    <span className="terminal-mode-option-icon" aria-hidden>
+                      <ModeIcon size={20} strokeWidth={1.9} />
+                    </span>
+                    <span className="terminal-mode-option-copy">
+                      <strong>
+                        {t(
+                          mode === "system"
+                            ? "terminal.settings.mode.system"
+                            : "terminal.settings.mode.project",
+                        )}
+                      </strong>
+                      <small>
+                        {t(
+                          mode === "system"
+                            ? "terminal.settings.mode.systemDesc"
+                            : "terminal.settings.mode.projectDesc",
+                        )}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <p className="terminal-settings-note">
               {t(
