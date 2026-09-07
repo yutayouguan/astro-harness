@@ -56,7 +56,7 @@ test("browser focus tabs clear the native sidebar control", () => {
   );
 });
 
-test("browser titlebar controls receive pointer input above the drag surface", () => {
+test("browser titlebar keeps controls interactive and preserves main window dragging", () => {
   assert.match(
     shellStyles,
     /\.app-shell\.has-browser-surface > \.native-drag-region\s*\{\s*pointer-events:\s*none;/,
@@ -68,6 +68,25 @@ test("browser titlebar controls receive pointer input above the drag surface", (
   assert.match(
     appSource,
     /\$\{browserOwnsTitlebar \? " has-browser-surface" : ""\}/,
+  );
+  assert.match(
+    appSource,
+    /browserOwnsTitlebar \? \([\s\S]*?className="content-window-drag-region"[\s\S]*?onMouseDown=\{\(event\) => void winChrome\.onTitleMouseDown\(event\)\}/,
+  );
+  assert.match(
+    shellStyles,
+    /\.content-window-drag-region\s*\{[\s\S]*?right:\s*var\(--browser-dock-visible-width, 0px\);[\s\S]*?z-index:\s*var\(--z-window-drag\);[\s\S]*?height:\s*var\(--titlebar-h\);/,
+  );
+});
+
+test("sidebar owns a drag handle above its overlay stacking layer", () => {
+  assert.match(
+    appSource,
+    /className="sidebar-window-drag-region"[\s\S]*?onMouseDown=\{\(event\) => void winChrome\.onTitleMouseDown\(event\)\}/,
+  );
+  assert.match(
+    shellStyles,
+    /\.sidebar > \.sidebar-window-drag-region\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;[\s\S]*?z-index:\s*1;[\s\S]*?height:\s*44px;/,
   );
 });
 

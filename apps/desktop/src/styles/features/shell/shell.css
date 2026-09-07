@@ -13,9 +13,22 @@
   cursor: default;
 }
 
-/* 浏览器标题栏提供自己的拖拽层；让出命中测试，避免遮住 Tab 和菜单按钮。 */
+/* 浏览器标题栏提供自己的拖拽层；主内容和侧栏另有局部拖拽层。 */
 .app-shell.has-browser-surface > .native-drag-region {
   pointer-events: none;
+}
+
+/* 浏览器面板接管右侧标题栏时，仍保留左侧主内容的窗口拖动区。
+   BrowserDock 会把实时宽度写到 content-pane，因此这一层不会遮住 Tab 和菜单。 */
+.content-window-drag-region {
+  position: absolute;
+  top: 0;
+  right: var(--browser-dock-visible-width, 0px);
+  left: 0;
+  z-index: var(--z-window-drag);
+  height: var(--titlebar-h);
+  background: transparent;
+  cursor: default;
 }
 
 /* 红绿灯右侧：常驻侧栏固定/隐藏开关（浮在 drag region 之上） */
@@ -895,6 +908,18 @@ html[data-theme="dark"][data-unified-surface="dark-neutral"]:is(
   box-shadow:
     8px 0 32px rgba(15, 23, 42, 0.1),
     inset -1px 0 0 rgba(255, 255, 255, 0.2);
+}
+
+/* 浮层侧栏的层级高于全局拖拽层，必须在它自己的顶部留出拖动区。 */
+.sidebar > .sidebar-window-drag-region {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 44px;
+  background: transparent;
+  cursor: default;
 }
 
 .sidebar.is-labels {

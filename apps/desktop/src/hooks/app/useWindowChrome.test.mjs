@@ -19,4 +19,9 @@ test("native window dragging starts in the initiating mouse-down handler", () =>
     /setTimeout/,
     "startDragging must not be deferred past the initiating mouse-down event",
   );
+  assert.match(
+    handler,
+    /\.catch\(\(error\) => \{\s*console\.warn\("start window dragging failed", error\);/,
+    "native drag failures should remain observable",
+  );
 });

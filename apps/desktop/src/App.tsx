@@ -1453,6 +1453,12 @@ export default function App() {
           }}
           onContextMenu={sidebar.openSidebarContextMenu}
         >
+          <div
+            className="sidebar-window-drag-region"
+            onMouseDown={(event) => void winChrome.onTitleMouseDown(event)}
+            onDoubleClick={(event) => void winChrome.onTitleDoubleClick(event)}
+            aria-hidden
+          />
           {nav === "settings" ? (
             <>
               <button
@@ -2013,6 +2019,16 @@ export default function App() {
         <section
           className={`content-pane${nav === "chat" ? " content-pane--chat" : ""}`}
         >
+          {browserOwnsTitlebar ? (
+            <div
+              className="content-window-drag-region"
+              onMouseDown={(event) => void winChrome.onTitleMouseDown(event)}
+              onDoubleClick={(event) =>
+                void winChrome.onTitleDoubleClick(event)
+              }
+              aria-hidden
+            />
+          ) : null}
           {nav === "settings" ? (
             <>
               <div className="content-header">

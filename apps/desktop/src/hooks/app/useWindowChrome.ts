@@ -69,7 +69,9 @@ export function useWindowChrome() {
     // "Window move completed without beginning" on macOS.
     void getCurrentWindow()
       .startDragging()
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("start window dragging failed", error);
+      });
   };
 
   const onTitleDoubleClick = (e: ReactMouseEvent) => {
