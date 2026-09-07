@@ -118,7 +118,7 @@ AstroThread::submit(Op)
 
 - **`runtime/`** — Session 生命周期、`AstroThread`、`SessionIo`、`submission_loop`、`SessionState`、`SessionServices`、`TurnContext`、`StepContext`、`ToolRouter`、`ToolRuntime`、turn lifecycle、context maintenance、recording、system prompt、`budget`（`IterationBudget` — 每 Agent Thread 独立迭代预算，`code_exec` 可 refund）、`turn_budget`（`TurnState` — 轮次与工具深度计数）
 - **`tasks/`** — 可恢复任务生命周期：`SessionTask`、`ActiveTurn`、`TaskKind`、spawn/cancel/terminal 事件保证
-- **`streaming/`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary
+- **`streaming/`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary、`retry`（采样请求瞬态错误重试与指数退避：流级 5 次 + 连接失败无上限）
 - **`exec/`** — 执行域：`AgentControlDirectory`（根级 AgentControl 进程目录）、`AgentRuntimeManager`（活跃 turn 管理）、subagents（单 turn 运行器）、dispatch（V2 6 工具分发 + 桌面控制面）、cron、background、memory review、title generation
 - **`compression`** — tool 结果压缩（原文保留，压缩视图给 provider）
 - **`control`** — HITL gate、中断状态机、schema 校验、smart approval（含 `SmartApprovalContext` 对话上下文）、`approval_cache`（会话级审批缓存，同命令模式不重复弹窗）、网络审批
@@ -246,6 +246,8 @@ Plugin bus 事件（Codex 对齐命名 + Astro 扩展）：`PreLlmCall`、`PreTo
 8. **单一事件事实链**：`EventMsg` 是 Core 唯一事件格式。SessionStore 为可重建投影；rollout JSONL 为权威历史。
 
 9. **Agent Thread 资源守恒**：每次 spawn 失败释放路径和身份预留；每次 turn 退出释放执行槽位；completed/interrupted/errored 线程保持可寻址。
+
+10. **采样重试（对齐 Codex）**：`run_sampling_request` 失败时按错误分类决定重试策略。瞬态错误（网络/超时/5xx/速率限制）重试上限 5 次，指数退避 200ms×2^n±10% jitter。连接失败（DNS/refused/unreachable）无上限重试，5s→60s 封顶退避。永久错误（鉴权/配额/策略）立即终止。重试期间 Turn 保持 active，通过 `EventMsg::StreamError(error_type="reconnecting")` 通知前端；`CancellationToken` 随时可中断。
 
 ## Test Organization
 
