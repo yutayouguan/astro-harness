@@ -74,7 +74,7 @@ import { useSideChatSession } from "./hooks/chat/useSideChatSession";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { cleanupStaleBrowserLiveWebviews } from "./hooks/chat/useBrowserLiveWebviews";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
-import { usePrompt } from "./hooks/ui/DialogContext";
+import { useConfirm, usePrompt } from "./hooks/ui/DialogContext";
 import { useProviders } from "./hooks/providers/useProviders";
 import { useShellColorStyle } from "./hooks/app/useShellColorStyle";
 import { useSidebar } from "./hooks/app/useSidebar";
@@ -188,6 +188,7 @@ export default function App() {
   const activeUiStyle = useActiveUiStyle();
   useBeautifyTips();
   const { t } = useI18n();
+  const confirm = useConfirm();
   const promptForTitle = usePrompt();
   const {
     prefs: chatDisplayPrefs,
@@ -451,9 +452,23 @@ export default function App() {
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],
   );
+  const confirmProjectFileDiscard = useCallback(
+    (target: { kind: "tab"; name: string } | { kind: "all" }) =>
+      confirm({
+        title: t("dialog.unsavedTitle"),
+        message:
+          target.kind === "tab"
+            ? t("project.fileUnsavedClose", { name: target.name })
+            : t("project.filesUnsavedCloseAll"),
+        confirmLabel: t("dialog.discard"),
+        variant: "danger",
+      }),
+    [confirm, t],
+  );
   const projectFiles = useProjectFileWorkbench(
     activeProject,
     chat.generatingPreview,
+    confirmProjectFileDiscard,
   );
   const [projectMdMode, setProjectMdMode] =
     useState<MdMode>(readWorkspaceMdMode);
@@ -671,23 +686,26 @@ export default function App() {
   ]);
 
   const switchActiveProject = useCallback(
-    (projectId: string) => {
+    async (projectId: string) => {
       if (projectId === activeProjectId) return true;
       const hasDirtyFile = projectFiles.tabs.some(
         (tab) => !tab.readonly && tab.content !== tab.savedContent,
       );
       if (
         hasDirtyFile &&
-        !window.confirm(
-          "当前项目还有未保存文件，切换项目会丢弃这些修改。仍要继续吗？",
-        )
+        !(await confirm({
+          title: t("dialog.unsavedTitle"),
+          message: t("project.unsavedSwitch"),
+          confirmLabel: t("dialog.discard"),
+          variant: "danger",
+        }))
       ) {
         return false;
       }
       setActiveProjectId(projectId);
       return true;
     },
-    [activeProjectId, projectFiles.tabs],
+    [activeProjectId, confirm, projectFiles.tabs, t],
   );
 
   // ── Model context window + capabilities ───────────────────────────────────
@@ -1755,8 +1773,9 @@ export default function App() {
                             <button
                               type="button"
                               className="sidebar-project-action"
-                              onClick={() => {
-                                if (!switchActiveProject(proj.id)) return;
+                              onClick={async () => {
+                                if (!(await switchActiveProject(proj.id)))
+                                  return;
                                 setNav("chat");
                                 startNewChat();
                               }}
@@ -1774,8 +1793,9 @@ export default function App() {
                               query=""
                               listKind={sessionListKind}
                               placement="project"
-                              onOpenSession={(sid) => {
-                                if (!switchActiveProject(proj.id)) return;
+                              onOpenSession={async (sid) => {
+                                if (!(await switchActiveProject(proj.id)))
+                                  return;
                                 void openSessionFromFilespace(sid);
                               }}
                               onPrepareDeleteCurrentSession={
@@ -2715,7 +2735,7 @@ export default function App() {
               const proj = projects.find((p) => p.id === projectMenu.id);
               if (proj) setProjectDialog({ mode: "edit", project: proj });
             } else if (action === "worktree") {
-              window.alert("功能开发中");
+              showTransientToast(t("project.worktreeComingSoon"));
             } else if (action === "archive") {
               void invoke<import("./types").RecentSessionDto[]>(
                 "list_sessions",
@@ -2748,7 +2768,7 @@ export default function App() {
         onClose={() => setProjectDialog(null)}
         onCreated={(created) => {
           setProjects((prev) => [...prev, created]);
-          switchActiveProject(created.id);
+          void switchActiveProject(created.id);
         }}
         onUpdated={(updated) => {
           setProjects((prev) =>

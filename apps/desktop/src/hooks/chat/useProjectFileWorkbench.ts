@@ -47,9 +47,13 @@ export type ProjectFileWorkbench = {
   openActiveExternally: () => Promise<void>;
   updateActiveContent: (content: string) => void;
   saveActive: () => Promise<void>;
-  closeTab: (key: string) => void;
-  closeAll: () => void;
+  closeTab: (key: string) => Promise<void>;
+  closeAll: () => Promise<void>;
 };
+
+export type ConfirmProjectFileDiscard = (
+  target: { kind: "tab"; name: string } | { kind: "all" },
+) => Promise<boolean>;
 
 function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -66,6 +70,7 @@ function dirty(tab: ProjectFileTab): boolean {
 export function useProjectFileWorkbench(
   project: ProjectDto | null,
   generatingPreview: GeneratingPreview | null,
+  confirmDiscard: ConfirmProjectFileDiscard,
 ): ProjectFileWorkbench {
   const [panelOpen, setPanelOpenState] = useState(false);
   const [entriesByDirectory, setEntriesByDirectory] = useState<
@@ -456,12 +461,12 @@ export function useProjectFileWorkbench(
   }, [activeTab?.path, project]);
 
   const closeTab = useCallback(
-    (key: string) => {
+    async (key: string) => {
       const target = tabs.find((tab) => tab.key === key);
       if (
         target &&
         dirty(target) &&
-        !window.confirm(`“${target.name}”尚未保存，仍要关闭吗？`)
+        !(await confirmDiscard({ kind: "tab", name: target.name }))
       ) {
         return;
       }
@@ -476,18 +481,14 @@ export function useProjectFileWorkbench(
         return next;
       });
     },
-    [activeKey, tabs],
+    [activeKey, confirmDiscard, tabs],
   );
 
-  const closeAll = useCallback(() => {
-    if (
-      tabs.some(dirty) &&
-      !window.confirm("仍有未保存文件，确定关闭全部文件吗？")
-    )
-      return;
+  const closeAll = useCallback(async () => {
+    if (tabs.some(dirty) && !(await confirmDiscard({ kind: "all" }))) return;
     setTabs([]);
     setActiveKeyState(null);
-  }, [tabs]);
+  }, [confirmDiscard, tabs]);
 
   return {
     project,

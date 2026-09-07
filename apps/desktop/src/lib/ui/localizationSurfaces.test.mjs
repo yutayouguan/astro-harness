@@ -6,7 +6,15 @@ const source = async (relativePath) =>
   readFile(new URL(`../../${relativePath}`, import.meta.url), "utf8");
 
 test("screenshot surfaces use locale keys instead of hardcoded Chinese copy", async () => {
-  const [providers, preferences, agentInfo, projectFiles, app, messages] =
+  const [
+    providers,
+    preferences,
+    agentInfo,
+    projectFiles,
+    app,
+    messages,
+    settingsMessages,
+  ] =
     await Promise.all([
       source("components/settings/ProvidersPanel.tsx"),
       source("components/settings/PreferencesPanel.tsx"),
@@ -14,7 +22,9 @@ test("screenshot surfaces use locale keys instead of hardcoded Chinese copy", as
       source("components/chat/ProjectFilesPanel.tsx"),
       source("App.tsx"),
       source("i18n/messages.ts"),
+      source("i18n/catalogs/settings.ts"),
     ]);
+  const catalogs = `${messages}\n${settingsMessages}`;
 
   for (const [component, hardcodedCopy] of [
     [providers, />\s*聊天后备\s*<\/h4>/],
@@ -44,7 +54,7 @@ test("screenshot surfaces use locale keys instead of hardcoded Chinese copy", as
     "chat.projectFiles.noDirectories",
   ]) {
     assert.equal(
-      messages.match(new RegExp(`"${key.replaceAll(".", "\\.")}":`, "g"))
+      catalogs.match(new RegExp(`"${key.replaceAll(".", "\\.")}":`, "g"))
         ?.length,
       2,
       `${key} must have zh and en translations`,

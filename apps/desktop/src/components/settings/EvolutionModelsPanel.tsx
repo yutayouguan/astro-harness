@@ -39,6 +39,8 @@ import { useEvolutionAuto } from "../../hooks/settings/useEvolutionAuto";
 import { useSkillCurator } from "../../hooks/settings/useSkillCurator";
 import { useEvolutionSearchProgress } from "../../hooks/settings/useEvolutionSearchProgress";
 import { useI18n } from "../../i18n/LocaleContext";
+import { useConfirm } from "../../hooks/ui/DialogContext";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
 import type {
   EvolutionRouteDto,
@@ -116,6 +118,8 @@ function ensureDefaultModel(models: ModelInfo[], model: string): ModelInfo[] {
 
 export default function EvolutionModelsPanel({ active, tone }: Props) {
   const { t } = useI18n();
+  const confirm = useConfirm();
+  const { showToast, toastHost } = useTransientToast();
   const {
     loading,
     error,
@@ -2285,27 +2289,39 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                                     marginLeft: "auto",
                                     fontSize: "0.75rem",
                                   }}
-                                  title="恢复上一个版本快照"
-                                  onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `回滚 ${row.skillId} 到上一个版本快照？`,
-                                      )
-                                    ) {
-                                      void invoke("restore_skill_snapshot", {
+                                  title={t("evo.curatorRestoreTitle")}
+                                  onClick={async () => {
+                                    const approved = await confirm({
+                                      title: t("evo.curatorRestoreTitle"),
+                                      message: t("evo.curatorRestoreMessage", {
+                                        skill: row.skillId,
+                                      }),
+                                      confirmLabel: t("evo.curatorRestore"),
+                                      variant: "danger",
+                                    });
+                                    if (!approved) return;
+                                    try {
+                                      await invoke("restore_skill_snapshot", {
                                         skillId: row.skillId,
-                                      })
-                                        .then(() => {
-                                          alert(`${row.skillId} 已回滚`);
-                                          void reloadCurator();
-                                        })
-                                        .catch((e: unknown) =>
-                                          alert(`回滚失败：${String(e)}`),
-                                        );
+                                      });
+                                      showToast(
+                                        t("evo.curatorRestoreSuccess", {
+                                          skill: row.skillId,
+                                        }),
+                                        { tone: "success" },
+                                      );
+                                      void reloadCurator();
+                                    } catch (error) {
+                                      showToast(
+                                        t("evo.curatorRestoreFailed", {
+                                          error: String(error),
+                                        }),
+                                        { tone: "error" },
+                                      );
                                     }
                                   }}
                                 >
-                                  ↩ 回滚
+                                  ↩ {t("evo.curatorRestore")}
                                 </button>
                               </div>
                               {row.description && (
@@ -2488,6 +2504,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
       )}
 
       <p className="aux-muted evo-phase-note">{t("evo.phaseNote")}</p>
+      {toastHost}
     </div>
   );
 }
