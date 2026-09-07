@@ -77,3 +77,27 @@ test("selected and accessibility states keep the unified hierarchy", () => {
     /@media \(prefers-contrast: more\)[\s\S]*?--settings-panel-border:\s*var\(--color-border\);[\s\S]*?--settings-panel-backdrop:\s*none;[\s\S]*?--settings-inset-border:\s*var\(--color-border\);/,
   );
 });
+
+test("all settings surface families use the neutral appearance glass plane", () => {
+  for (const selector of [
+    ".providers-pane",
+    ".tools-detail-panel",
+    ".approvals-section",
+    ".tool-card.agent-tool-card",
+    ".mem-card",
+    ".model-market-card",
+    ".mm-rank-surface",
+    ".insights-kpi",
+  ]) {
+    assert.match(material, new RegExp(selector.replaceAll(".", "\\.")));
+  }
+
+  assert.match(
+    material,
+    /\.settings-content-inline[\s\S]*?:is\([\s\S]*?\.providers-pane,[\s\S]*?\.tool-card\.agent-tool-card,[\s\S]*?\.mem-card,[\s\S]*?\.model-market-card,[\s\S]*?\.insights-kpi,[\s\S]*?\)\s*\{[\s\S]*?background:\s*var\(--settings-panel-background\);[\s\S]*?backdrop-filter:\s*none;/,
+  );
+  assert.match(
+    material,
+    /:is\(\.providers-pane, \.mcp-server-card\)::before\s*\{[\s\S]*?content:\s*none;/,
+  );
+});

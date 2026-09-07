@@ -70,6 +70,44 @@
   -webkit-backdrop-filter: none;
 }
 
+/* All settings pages render their primary panels and cards on the same glass
+ * plane as Appearance. Per-card backdrop sampling makes one neutral material
+ * look green, orange, or blue depending on the wallpaper directly behind it. */
+.settings-content-inline
+  :is(
+    .providers-pane,
+    .tools-detail-panel,
+    .approvals-section,
+    .tool-card.agent-tool-card,
+    .mcp-server-card,
+    .mem-card,
+    .model-market-card,
+    .mm-rank-surface,
+    .insights-models-chart,
+    .insights-kpi,
+    .insights-hbar-panel,
+    .insights-rank,
+    .insights-breakdown-section,
+    .insights-collab-list-panel,
+    .insights-collab-steps-panel,
+    .insights-collab-graph-panel,
+    .insights-trace-list-panel,
+    .insights-trace-chain-panel
+  ) {
+  border-color: var(--settings-panel-border);
+  background: var(--settings-panel-background);
+  background-clip: padding-box;
+  box-shadow: var(--settings-panel-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Functional tones belong to icons, status, hover, and selection—not the
+ * neutral glass base. */
+.settings-content-inline :is(.providers-pane, .mcp-server-card)::before {
+  content: none;
+}
+
 /* Quiet inset material: no blur-on-blur and no page-specific white recipe. */
 .prefs-page.is-embedded
 :is(
