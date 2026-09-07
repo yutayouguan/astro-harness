@@ -150,6 +150,7 @@ import { normalizeBrowserUrl } from "./lib/browser/browserUrl";
 import {
   applyWallpaperPaletteVars,
   clearWallpaperPaletteVars,
+  resolveExtractedWallpaperPalette,
   resolveWallpaperPalette,
 } from "./lib/ui/wallpaper";
 import { resolveWallpaperPresentation } from "./lib/ui/activeUiStyle";
@@ -855,13 +856,8 @@ export default function App() {
     ? (effectiveWallpaper?.recommendedTheme ?? null)
     : null;
   const wallpaperPalette = wallpaperPresentation.generated
-    ? wallpaperAdaptiveColor &&
-      effectiveWallpaper?.accentColor &&
-      effectiveWallpaper.secondaryColor
-      ? {
-          themeColor: effectiveWallpaper.accentColor,
-          highlightColor: effectiveWallpaper.secondaryColor,
-        }
+    ? wallpaperAdaptiveColor
+      ? resolveExtractedWallpaperPalette(effectiveWallpaper)
       : null
     : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper);
   const wallpaperThemeColor = wallpaperPalette?.themeColor ?? null;

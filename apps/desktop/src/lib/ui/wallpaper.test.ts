@@ -9,6 +9,7 @@ import {
   applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
+  resolveExtractedWallpaperPalette,
   resolveWallpaperPalette,
   wallpaperBackgroundSize,
   type WallpaperAsset,
@@ -93,10 +94,10 @@ test("wallpaper palette defaults to extracted colors and accepts a manual overri
     accentColor: "#22C55E",
     secondaryColor: "#3B82F6",
   };
-  assert.deepEqual(
-    resolveWallpaperPalette(DEFAULT_WALLPAPER_PREFS, current),
-    { themeColor: "#22c55e", highlightColor: "#3b82f6" },
-  );
+  assert.deepEqual(resolveWallpaperPalette(DEFAULT_WALLPAPER_PREFS, current), {
+    themeColor: "#1ca24d",
+    highlightColor: "#316dce",
+  });
   assert.deepEqual(
     resolveWallpaperPalette(
       {
@@ -120,6 +121,25 @@ test("wallpaper palette defaults to extracted colors and accepts a manual overri
     null,
   );
   assert.match(DEFAULT_WALLPAPER_HIGHLIGHT_COLOR, /^#[0-9a-f]{6}$/);
+});
+
+test("extracted wallpaper colors are capped at a darker visual range", () => {
+  assert.deepEqual(
+    resolveExtractedWallpaperPalette({
+      accentColor: "#f5d90a",
+      secondaryColor: "#8ab4ff",
+      recommendedTheme: "light",
+    }),
+    { themeColor: "#968506", highlightColor: "#4f6792" },
+  );
+  assert.deepEqual(
+    resolveExtractedWallpaperPalette({
+      accentColor: "#194d33",
+      secondaryColor: "#203040",
+      recommendedTheme: "dark",
+    }),
+    { themeColor: "#194d33", highlightColor: "#203040" },
+  );
 });
 
 test("recent wallpapers are deduplicated and bounded", () => {

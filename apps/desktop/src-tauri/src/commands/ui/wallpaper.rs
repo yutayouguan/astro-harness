@@ -18,6 +18,9 @@ const MAX_WALLPAPER_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_SYSTEM_WALLPAPER_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_WALLPAPER_DIMENSION: u32 = 16_384;
 const MAX_DECODE_ALLOC: u64 = 128 * 1024 * 1024;
+const EXTRACTED_COLOR_MAX_LUMA: f32 = 0.5;
+const EXTRACTED_COLOR_LIGHTNESS_DARK: f32 = 0.5;
+const EXTRACTED_COLOR_LIGHTNESS_LIGHT: f32 = 0.44;
 
 #[derive(Clone)]
 struct SystemWallpaperCache {
@@ -149,8 +152,21 @@ fn normalized_accent(rgb: [u8; 3], dark_theme: bool) -> String {
         sample_saturation.clamp(0.5, 0.86)
     };
     let hue = if low_saturation { 215.0 } else { sample_hue };
-    let lightness = if dark_theme { 0.62 } else { 0.48 };
-    let [red, green, blue] = hsl_to_rgb(hue, saturation, lightness);
+    let lightness = if dark_theme {
+        EXTRACTED_COLOR_LIGHTNESS_DARK
+    } else {
+        EXTRACTED_COLOR_LIGHTNESS_LIGHT
+    };
+    let mut normalized = hsl_to_rgb(hue, saturation, lightness);
+    let luma = (0.2126 * f32::from(normalized[0])
+        + 0.7152 * f32::from(normalized[1])
+        + 0.0722 * f32::from(normalized[2]))
+        / 255.0;
+    if luma > EXTRACTED_COLOR_MAX_LUMA {
+        let scale = EXTRACTED_COLOR_MAX_LUMA / luma;
+        normalized = normalized.map(|channel| (f32::from(channel) * scale).round() as u8);
+    }
+    let [red, green, blue] = normalized;
     format!("#{red:02x}{green:02x}{blue:02x}")
 }
 
@@ -808,6 +824,30 @@ mod tests {
         assert!(dark_analysis.accent_color.starts_with('#'));
         assert_eq!(dark_analysis.accent_color.len(), 7);
         assert!(light_analysis.secondary_color.starts_with('#'));
+    }
+
+    #[test]
+    fn extracted_accents_stay_in_a_dark_visual_range() {
+        for dark_theme in [false, true] {
+            let color = normalized_accent([255, 230, 0], dark_theme);
+            let channels = [
+                u8::from_str_radix(&color[1..3], 16).unwrap(),
+                u8::from_str_radix(&color[3..5], 16).unwrap(),
+                u8::from_str_radix(&color[5..7], 16).unwrap(),
+            ];
+            let (_, _, lightness) = rgb_to_hsl(channels);
+            let luma = (0.2126 * f32::from(channels[0])
+                + 0.7152 * f32::from(channels[1])
+                + 0.0722 * f32::from(channels[2]))
+                / 255.0;
+            let max_lightness = if dark_theme {
+                EXTRACTED_COLOR_LIGHTNESS_DARK
+            } else {
+                EXTRACTED_COLOR_LIGHTNESS_LIGHT
+            };
+            assert!(lightness <= max_lightness + 0.005, "{color}");
+            assert!(luma <= 0.505, "{color}");
+        }
     }
 
     #[test]

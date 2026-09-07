@@ -35,9 +35,16 @@ export type WallpaperPalette = {
   highlightColor: string;
 };
 
+type ExtractedWallpaperColors = Pick<
+  WallpaperAsset,
+  "accentColor" | "secondaryColor" | "recommendedTheme"
+>;
+
 export const MAX_RECENT_WALLPAPERS = 6;
 export const DEFAULT_WALLPAPER_THEME_COLOR = "#4f6ef7";
 export const DEFAULT_WALLPAPER_HIGHLIGHT_COLOR = "#22b8a7";
+const EXTRACTED_COLOR_MAX_LUMA = 0.5;
+const EXTRACTED_COLOR_MAX_LIGHTNESS = { light: 0.44, dark: 0.5 } as const;
 
 export const DEFAULT_WALLPAPER_PREFS: WallpaperPrefs = {
   mode: "wallpaper",
@@ -60,6 +67,54 @@ function normalizeHexColor(value: unknown): string | undefined {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
     ? value.toLowerCase()
     : undefined;
+}
+
+function toneDownExtractedColor(
+  value: unknown,
+  recommendedTheme: WallpaperAsset["recommendedTheme"],
+): string | undefined {
+  const color = normalizeHexColor(value);
+  if (!color) return undefined;
+
+  const channels = [1, 3, 5].map((offset) =>
+    Number.parseInt(color.slice(offset, offset + 2), 16),
+  );
+  const max = Math.max(...channels);
+  const min = Math.min(...channels);
+  const lightness = (max + min) / 510;
+  const luma =
+    (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255;
+  // Keep cached palettes on the same darker contract as newly analyzed images.
+  const maxLightness =
+    EXTRACTED_COLOR_MAX_LIGHTNESS[recommendedTheme ?? "dark"];
+  const scale = Math.min(
+    1,
+    lightness > 0 ? maxLightness / lightness : 1,
+    luma > 0 ? EXTRACTED_COLOR_MAX_LUMA / luma : 1,
+  );
+  if (scale >= 1) return color;
+
+  return `#${channels
+    .map((channel) =>
+      Math.round(channel * scale)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+export function resolveExtractedWallpaperPalette(
+  wallpaper: ExtractedWallpaperColors | null,
+): WallpaperPalette | null {
+  const themeColor = toneDownExtractedColor(
+    wallpaper?.accentColor,
+    wallpaper?.recommendedTheme,
+  );
+  const highlightColor = toneDownExtractedColor(
+    wallpaper?.secondaryColor,
+    wallpaper?.recommendedTheme,
+  );
+  return themeColor && highlightColor ? { themeColor, highlightColor } : null;
 }
 
 function normalizeAsset(raw: unknown): WallpaperAsset | null {
@@ -148,14 +203,12 @@ export function resolveWallpaperPalette(
     WallpaperPrefs,
     "adaptiveColor" | "customThemeColor" | "customHighlightColor"
   >,
-  wallpaper: Pick<WallpaperAsset, "accentColor" | "secondaryColor"> | null,
+  wallpaper: ExtractedWallpaperColors | null,
 ): WallpaperPalette | null {
-  const themeColor = prefs.adaptiveColor
-    ? normalizeHexColor(wallpaper?.accentColor)
-    : normalizeHexColor(prefs.customThemeColor);
-  const highlightColor = prefs.adaptiveColor
-    ? normalizeHexColor(wallpaper?.secondaryColor)
-    : normalizeHexColor(prefs.customHighlightColor);
+  if (prefs.adaptiveColor) return resolveExtractedWallpaperPalette(wallpaper);
+
+  const themeColor = normalizeHexColor(prefs.customThemeColor);
+  const highlightColor = normalizeHexColor(prefs.customHighlightColor);
   return themeColor && highlightColor ? { themeColor, highlightColor } : null;
 }
 
