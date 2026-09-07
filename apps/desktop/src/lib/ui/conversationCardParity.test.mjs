@@ -22,6 +22,10 @@ test("user and assistant entries share the top-right tool group material", async
     css,
     /html\[data-theme\] \.bubble\.user:not\(\.is-editing\) \{\s*padding: 10px 14px;\s*\}/,
   );
+  assert.match(
+    css,
+    /html\[data-theme\] \.bubble\.user\.is-editing \{\s*padding: 8px;\s*\}/,
+  );
   assert.doesNotMatch(
     css,
     /html\[data-theme="(?:light|dark)"\] \.bubble:is\(\.assistant, \.user\)/,

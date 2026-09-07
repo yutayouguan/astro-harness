@@ -23,6 +23,10 @@ html[data-theme] .bubble.user:not(.is-editing) {
   padding: 10px 14px;
 }
 
+html[data-theme] .bubble.user.is-editing {
+  padding: 8px;
+}
+
 .bubble:is(.assistant, .user)::before {
   content: none;
 }

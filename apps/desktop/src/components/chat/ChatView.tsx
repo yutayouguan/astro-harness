@@ -815,7 +815,7 @@ function InlineUserMessageEditor({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "0px";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
   }, [value]);
 
   return (

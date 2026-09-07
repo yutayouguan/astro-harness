@@ -51,7 +51,19 @@ test("hover actions exclude deletion and only the latest user question can be ed
     /await sendImmediate\(\{[\s\S]*?truncateTo: idx,[\s\S]*?reuseUserId: userMsg\.id/,
   );
   assert.match(messages, /"chat\.editSubmit": "保存并重新执行"/);
-  assert.match(styles, /\.bubble\.user\.is-editing/);
+  assert.match(
+    styles,
+    /\.bubble\.user\.is-editing\s*\{[\s\S]*?width:\s*clamp\(280px, 48vw, 440px\);[\s\S]*?max-width:\s*min\(100%, calc\(100vw - 72px\)\);/,
+  );
+  assert.match(
+    styles,
+    /\.user-message-editor-input\s*\{[\s\S]*?min-height:\s*48px;[\s\S]*?max-height:\s*180px;[\s\S]*?border:\s*0\.5px solid/,
+  );
+  assert.match(source, /Math\.min\(textarea\.scrollHeight, 180\)/);
+  assert.match(
+    styles,
+    /\.user-message-editor-btn\s*\{[\s\S]*?min-height:\s*28px;[\s\S]*?border:\s*0\.5px solid/,
+  );
   assert.match(styles, /\.msg-row\.user:hover \.msg-actions/);
   assert.match(source, /className="assistant-message-footer"/);
   assert.match(source, /<MessageTokenStats/);

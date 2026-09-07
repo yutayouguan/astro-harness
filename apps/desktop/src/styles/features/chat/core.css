@@ -554,31 +554,32 @@ html[data-theme="light"] .msg-actions {
 }
 
 .bubble.user.is-editing {
-  width: min(620px, calc(100vw - 96px));
-  padding: 12px;
+  box-sizing: border-box;
+  width: clamp(280px, 48vw, 440px);
+  max-width: min(100%, calc(100vw - 72px));
   white-space: normal;
 }
 
 .user-message-editor {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
 .user-message-editor-input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 72px;
-  max-height: 240px;
-  padding: 10px 11px;
+  min-height: 48px;
+  max-height: 180px;
+  padding: 8px 10px;
   resize: none;
   overflow-y: auto;
-  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-  border-radius: 11px;
+  border: 0.5px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 9px;
   background: color-mix(in srgb, var(--assist-fill) 58%, transparent);
   color: inherit;
   font: inherit;
-  line-height: 1.55;
+  line-height: 1.45;
   caret-color: var(--tone, #2563eb);
 }
 
@@ -589,18 +590,18 @@ html[data-theme="light"] .msg-actions {
 .user-message-editor-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 6px;
 }
 
 .user-message-editor-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
-  border-radius: 9px;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 0.5px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 8px;
   background: color-mix(in srgb, currentColor 7%, transparent);
   color: inherit;
   font: inherit;
