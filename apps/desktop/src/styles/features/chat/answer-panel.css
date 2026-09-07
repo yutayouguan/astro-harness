@@ -1,4 +1,4 @@
-/* 用户与 AI 共用同一层消息玻璃；左右位置与内容结构仍由各自消息行负责。 */
+/* 用户与 AI 共用右上角工具组的标题栏玻璃；左右位置与内容结构仍由各自消息行负责。 */
 html[data-theme] .bubble:is(.assistant, .user) {
   --answer-radius: 16px;
   --answer-inset-radius: 13px;
@@ -7,11 +7,11 @@ html[data-theme] .bubble:is(.assistant, .user) {
   overflow: clip;
   padding: 18px 20px 16px;
   border-radius: var(--answer-radius);
-  border: 0.5px solid var(--glass-edge);
-  background: var(--glass-layer, var(--glass-panel));
-  box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: var(--backdrop-glass);
-  -webkit-backdrop-filter: var(--backdrop-glass);
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--header-chip-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   color: var(--ink);
   transition:
     border-color 160ms ease,
@@ -22,23 +22,11 @@ html[data-theme] .bubble:is(.assistant, .user) {
   content: none;
 }
 
-html[data-theme="light"] .bubble:is(.assistant, .user) {
-  background: var(--glass-layer, var(--glass-panel));
-  border-color: var(--glass-edge);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-}
-
-html[data-theme="dark"] .bubble:is(.assistant, .user) {
-  background: var(--glass-layer, var(--glass-panel));
-  border-color: var(--glass-edge);
-  box-shadow: var(--shadow-card), var(--glass-rim);
-}
-
 html[data-theme] .bubble:is(.assistant, .user):focus-within {
   border-color: color-mix(
     in srgb,
     var(--tone, var(--accent)) 22%,
-    var(--glass-edge)
+    var(--titlebar-menu-border)
   );
 }
 
@@ -236,20 +224,12 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  html[data-theme="light"] .bubble:is(.assistant, .user) {
-    background: rgba(248, 250, 253, 0.98);
-  }
-
   html[data-theme="light"] .bubble.assistant .msg-activity-io {
     background: color-mix(
       in srgb,
       var(--tone-soft, transparent) 18%,
       rgba(248, 250, 253, 0.98)
     );
-  }
-
-  html[data-theme="dark"] .bubble:is(.assistant, .user) {
-    background: rgba(10, 10, 18, 0.96);
   }
 
   html[data-theme="dark"] .bubble.assistant .msg-activity-io {

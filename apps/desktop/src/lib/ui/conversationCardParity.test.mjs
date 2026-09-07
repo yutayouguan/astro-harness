@@ -11,20 +11,16 @@ const coreCssUrl = new URL(
   import.meta.url,
 );
 
-test("user and assistant entries share the same outer card surface", async () => {
+test("user and assistant entries share the top-right tool group material", async () => {
   const css = await readFile(cssUrl, "utf8");
 
   assert.match(
     css,
-    /html\[data-theme\] \.bubble:is\(\.assistant, \.user\) \{[\s\S]*?border-radius: var\(--answer-radius\);[\s\S]*?background: var\(--glass-layer, var\(--glass-panel\)\);[\s\S]*?box-shadow: var\(--shadow-card\), var\(--glass-rim\);/,
+    /html\[data-theme\] \.bubble:is\(\.assistant, \.user\) \{[\s\S]*?border-radius: var\(--answer-radius\);[\s\S]*?border: 1px solid var\(--titlebar-menu-border\);[\s\S]*?background: var\(--titlebar-menu-bg\);[\s\S]*?box-shadow: var\(--header-chip-shadow\);[\s\S]*?backdrop-filter: var\(--titlebar-menu-blur\);/,
   );
-  assert.match(
+  assert.doesNotMatch(
     css,
-    /html\[data-theme="light"\] \.bubble:is\(\.assistant, \.user\)/,
-  );
-  assert.match(
-    css,
-    /html\[data-theme="dark"\] \.bubble:is\(\.assistant, \.user\)/,
+    /html\[data-theme="(?:light|dark)"\] \.bubble:is\(\.assistant, \.user\)/,
   );
 });
 
