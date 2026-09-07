@@ -17,7 +17,7 @@
   top: 6px;
 }
 
-/* 对话页标题栏默认只是无形的拖拽与控件层；消息滚到其下方时才增加可读性玻璃。
+/* 对话页标题栏只是无形的拖拽与控件层，滚动时也不覆盖背景。
    标题栏不参与 content-pane 的 flex 高度分配，消息滚动视口因此可以延伸到窗顶；
    空白区域透传滚轮和窗口拖动，只有标题与操作控件恢复命中。 */
 .content-pane--chat {
@@ -30,10 +30,6 @@
 }
 
 .content-header--chat {
-  --chat-header-surface-base: var(--sidebar-bg);
-  --chat-header-surface-sheen: var(--sidebar-chrome-sheen, none);
-  --chat-header-divider: color-mix(in srgb, var(--ink) 8%, transparent);
-  --chat-header-filter: var(--sidebar-chrome-filter);
   position: absolute;
   z-index: var(--z-titlebar);
   top: 0;
@@ -46,24 +42,9 @@
   padding-inline-start: var(--window-chrome-safe-left);
   border: 0;
   border-radius: 0;
-  isolation: isolate;
   background: transparent;
   box-shadow: none;
   pointer-events: none;
-}
-
-.content-header--chat::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-bottom: 0.5px solid var(--chat-header-divider);
-  background: var(--chat-header-surface-sheen), var(--chat-header-surface-base);
-  backdrop-filter: var(--chat-header-filter);
-  -webkit-backdrop-filter: var(--chat-header-filter);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease;
 }
 
 .body-row:has(> .sidebar.is-pinned.is-icons) .content-header--chat {
@@ -74,16 +55,8 @@
   padding-inline-start: 16px;
 }
 
-.content-header--chat.has-content-underlay::before {
-  opacity: 1;
-}
-
 /* Browser drawer owns the right side of the titlebar. Keep the chat title and
-   its scrolling underlay out of that live tab region as the drawer resizes. */
-.content-pane--chat:has(.browser-dock.is-open) .content-header--chat::before {
-  right: var(--browser-dock-visible-width);
-}
-
+   actions out of that live tab region as the drawer resizes. */
 .content-pane--chat:has(.browser-dock.is-open)
   .content-header--chat
   .content-heading {
@@ -99,21 +72,12 @@
   max-width: calc(100% - 30px);
 }
 
-.content-header--chat.is-browser-expanded::before {
-  opacity: 0;
-}
-
 /* 文件编辑态与左侧栏共用同一套玻璃材质。 */
 .content-header--chat.has-project-file {
-  --chat-header-divider: transparent;
   background: var(--sidebar-chrome-background);
   box-shadow: none;
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
-}
-
-.content-header--chat.has-project-file::before {
-  opacity: 0;
 }
 
 .content-header--chat.has-project-file .content-heading {
@@ -210,31 +174,6 @@
   transform: translateY(-50%);
   flex-wrap: nowrap;
   pointer-events: auto;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .content-header--chat.has-content-underlay {
-    --chat-header-surface-base: var(--surface-panel-background);
-    --chat-header-surface-sheen: none;
-    --chat-header-filter: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .content-header--chat::before {
-    transition: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  .content-header--chat.has-content-underlay {
-    --chat-header-surface-base: color-mix(
-      in srgb,
-      var(--surface-panel-background) 94%,
-      transparent
-    );
-    --chat-header-divider: color-mix(in srgb, var(--ink) 28%, transparent);
-  }
 }
 
 /* 只有真正的窄屏才折叠模型文案，普通桌面尺寸仍保留当前模型信息。 */

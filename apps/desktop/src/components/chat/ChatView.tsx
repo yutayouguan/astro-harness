@@ -388,8 +388,6 @@ type Props = {
   onDefaultAnswerLayoutChange?: (layout: ChatAnswerLayout) => void;
   /** 空状态模式：欢迎 / 创建 Agent / 正常 */
   emptyMode: ChatEmptyMode;
-  /** 消息滚入顶部标题栏下方时，切换标题栏的可读性保护层。 */
-  onHeaderUnderlayChange?: (hasUnderlay: boolean) => void;
   /** 需要滚入视口的消息 id（用后应调用 onFocusConsumed） */
   focusMessageId?: string | null;
   /** 焦点滚动完成后由父组件清空 focusMessageId */
@@ -516,8 +514,6 @@ function detectTrigger(text: string, caret: number): TriggerState | null {
 const MAX_ATTACHMENTS = 8;
 /** 图片内联 base64 上限（字节） */
 const MAX_INLINE_BYTES = 4 * 1024 * 1024;
-const HEADER_UNDERLAY_ENTER_SCROLL_TOP = 12;
-const HEADER_UNDERLAY_EXIT_SCROLL_TOP = 2;
 const COMPOSER_LAYOUT_TRANSITION = {
   type: "spring",
   bounce: 0,
@@ -888,7 +884,6 @@ export default function ChatView({
   displayPrefs,
   onDefaultAnswerLayoutChange,
   emptyMode,
-  onHeaderUnderlayChange,
   focusMessageId,
   onFocusConsumed,
   onInputChange,
@@ -979,7 +974,6 @@ export default function ChatView({
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
-  const headerUnderlayRef = useRef(false);
   const composerShellRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typedHintRef = useRef<HTMLSpanElement>(null);
@@ -1876,22 +1870,9 @@ export default function ChatView({
     }
   };
 
-  const notifyHeaderUnderlay = useCallback(
-    (hasUnderlay: boolean) => {
-      if (headerUnderlayRef.current === hasUnderlay) return;
-      headerUnderlayRef.current = hasUnderlay;
-      onHeaderUnderlayChange?.(hasUnderlay);
-    },
-    [onHeaderUnderlayChange],
-  );
-
   const updateConversationScrollState = useCallback(() => {
     const list = messageListRef.current;
     if (!list) return;
-    const hasHeaderUnderlay = headerUnderlayRef.current
-      ? list.scrollTop > HEADER_UNDERLAY_EXIT_SCROLL_TOP
-      : list.scrollTop > HEADER_UNDERLAY_ENTER_SCROLL_TOP;
-    notifyHeaderUnderlay(hasHeaderUnderlay);
     const distanceFromBottom =
       list.scrollHeight - list.scrollTop - list.clientHeight;
     const awayFromBottom = distanceFromBottom > 56;
@@ -1899,7 +1880,7 @@ export default function ChatView({
     setIsScrolledFromBottom((current) =>
       current === awayFromBottom ? current : awayFromBottom,
     );
-  }, [notifyHeaderUnderlay]);
+  }, []);
 
   const scrollConversationToBottom = useCallback(() => {
     followLatestRef.current = true;
@@ -1910,9 +1891,7 @@ export default function ChatView({
   useEffect(() => {
     followLatestRef.current = true;
     setIsScrolledFromBottom(false);
-    headerUnderlayRef.current = false;
-    onHeaderUnderlayChange?.(false);
-  }, [emptyMode, onHeaderUnderlayChange, sessionId]);
+  }, [emptyMode, sessionId]);
 
   useEffect(() => {
     if (focusMessageId) return;

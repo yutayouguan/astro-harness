@@ -402,7 +402,7 @@ function ChatDockLayout({
     >
       <section className="content-pane content-pane--chat">
         <div
-          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file has-content-underlay" : ""}`}
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file" : ""}`}
         >
           <div className="content-heading">
             {kind === "files" ? (
