@@ -70,6 +70,7 @@ import {
 } from "./hooks/chat/useProjectFileWorkbench";
 import { useSessionStatusMap } from "./hooks/chat/useSessionStatusMap";
 import { useSubagentThreads } from "./hooks/chat/useSubagentThreads";
+import { useSideChatSession } from "./hooks/chat/useSideChatSession";
 import { useChatThinkingPrefs } from "./hooks/chat/useChatThinkingPrefs";
 import { cleanupStaleBrowserLiveWebviews } from "./hooks/chat/useBrowserLiveWebviews";
 import { useBeautifyTips } from "./hooks/ui/useBeautifyTips";
@@ -467,15 +468,29 @@ export default function App() {
   const [browserComposerOverlayOpen, setBrowserComposerOverlayOpen] =
     useState(false);
   const [terminalDockOpen, setTerminalDockOpen] = useState(false);
-  const [sideSessionId, setSideSessionId] = useState<string | null>(null);
-  const [sideHostSessionId, setSideHostSessionId] = useState<string | null>(
-    null,
-  );
   const [reviewState, setReviewState] = useState<{
     files: FileChangeItem[];
     selectedPath: string;
   } | null>(null);
   const activeProjectRoot = activeProject?.roots.find(Boolean) ?? null;
+  const prepareSideChatOpen = useCallback(() => {
+    projectFiles.setPanelOpen(false);
+    setBrowserDockOpen(false);
+    setReviewState(null);
+    setChatRightOpen(false);
+  }, [projectFiles.setPanelOpen, setChatRightOpen]);
+  const sideChat = useSideChatSession({
+    hostSessionId: chat.sessionId,
+    messageCount: chat.messages.filter((message) => message.id !== "welcome")
+      .length,
+    disabled: !activeProvider || chat.streaming,
+    onBeforeOpen: prepareSideChatOpen,
+    onError: (message) => showTransientToast(message, { tone: "error" }),
+  });
+  const sideSessionId = sideChat.sessionId;
+  const sideHostSessionId = sideChat.parentSessionId;
+  const closeSideChat = sideChat.close;
+  const startSideChat = sideChat.start;
 
   useEffect(() => {
     void cleanupStaleBrowserLiveWebviews();
@@ -484,18 +499,6 @@ export default function App() {
   useEffect(() => {
     if (nav !== "chat") setBrowserDockOpen(false);
   }, [nav]);
-
-  const closeSideChat = useCallback(async () => {
-    const sideId = sideSessionId;
-    setSideSessionId(null);
-    setSideHostSessionId(null);
-    if (!sideId) return;
-    await invoke("discard_side_session", { sessionId: sideId }).catch(
-      (error) => {
-        console.warn("discard_side_session failed", error);
-      },
-    );
-  }, [sideSessionId]);
 
   const openChatRightDock = useCallback(
     (tab?: ChatRightTab) => {
@@ -543,43 +546,6 @@ export default function App() {
     projectFiles.panelOpen,
     projectFiles.setPanelOpen,
     setChatRightOpen,
-    sideSessionId,
-  ]);
-
-  const startSideChat = useCallback(async () => {
-    if (!chat.sessionId || !activeProvider || chat.streaming || sideSessionId)
-      return;
-    const keepChatBubbles = chat.messages.filter(
-      (message) => message.id !== "welcome",
-    ).length;
-    if (keepChatBubbles === 0) return;
-    try {
-      const id = await invoke<string>("fork_chat_session", {
-        sourceSessionId: chat.sessionId,
-        keepChatBubbles,
-        sourceMessageId: null,
-        boundary: "through_turn",
-        ephemeral: true,
-        excludeTurns: true,
-        newSessionId: null,
-      });
-      projectFiles.setPanelOpen(false);
-      setBrowserDockOpen(false);
-      setReviewState(null);
-      setSideSessionId(id);
-      setSideHostSessionId(chat.sessionId);
-      setChatRightOpen(false);
-    } catch (error) {
-      showTransientToast(String(error), { tone: "error" });
-    }
-  }, [
-    activeProvider,
-    chat.messages,
-    chat.sessionId,
-    chat.streaming,
-    projectFiles.setPanelOpen,
-    setChatRightOpen,
-    showTransientToast,
     sideSessionId,
   ]);
 
@@ -704,15 +670,6 @@ export default function App() {
     sideSessionId,
   ]);
 
-  useEffect(() => {
-    if (
-      sideSessionId &&
-      sideHostSessionId &&
-      chat.sessionId !== sideHostSessionId
-    ) {
-      void closeSideChat();
-    }
-  }, [chat.sessionId, closeSideChat, sideHostSessionId, sideSessionId]);
   const switchActiveProject = useCallback(
     (projectId: string) => {
       if (projectId === activeProjectId) return true;
@@ -2685,10 +2642,7 @@ export default function App() {
                           openSessionFromFilespace(sessionId)
                         }
                         onOpenSideSession={(sessionId) => {
-                          projectFiles.setPanelOpen(false);
-                          setSideSessionId(sessionId);
-                          setSideHostSessionId(chat.sessionId);
-                          setChatRightOpen(false);
+                          sideChat.openExisting(sessionId, chat.sessionId);
                         }}
                         onPrefillInput={setInput}
                         onOpenMemory={() => openSettingsTab("memory")}

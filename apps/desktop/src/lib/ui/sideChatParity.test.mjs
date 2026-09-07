@@ -28,18 +28,18 @@ test("side chat mounts the complete main chat surface", async () => {
 });
 
 test("side chat keeps backend context but never overwrites the primary client snapshot", async () => {
-  const [app, panel, sessionHook] = await Promise.all([
-    source("App.tsx"),
+  const [sideChatHook, panel, sessionHook] = await Promise.all([
+    source("hooks/chat/useSideChatSession.ts"),
     source("components/chat/SideChatPanel.tsx"),
     source("hooks/chat/useChatSession.ts"),
   ]);
 
   assert.match(
-    app,
+    sideChatHook,
     /invoke<string>\("fork_chat_session", \{[\s\S]*?ephemeral: true,[\s\S]*?excludeTurns: true,/,
   );
   assert.match(
-    app,
+    sideChatHook,
     /invoke\("discard_side_session", \{ sessionId: sideId \}\)/,
   );
   assert.match(panel, /persistClientState: false/);
