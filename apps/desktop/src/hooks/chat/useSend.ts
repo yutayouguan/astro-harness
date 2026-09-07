@@ -5,7 +5,6 @@ import type {
   RefObject,
   SetStateAction,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   applyActivityUpsert,
@@ -65,6 +64,7 @@ import type { BrowserPreviewApi } from "./useBrowserPreview";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
+import { chatCommands } from "../../lib/tauri/chatCommands";
 
 type TFn = (key: MessageKey, vars?: Record<string, string>) => string;
 type ShowToastFn = (msg: string, opts?: ShowToastOptions) => void;
@@ -319,12 +319,10 @@ export function useSend(deps: UseSendDeps) {
       try {
         if (text && !resumeJson) {
           try {
-            const skillList = await invoke<
-              { id: string; name: string; enabled?: boolean }[]
-            >("list_installed_skills").catch(() => []);
-            const mcpList = await invoke<
-              { id: string; name: string; enabled?: boolean }[]
-            >("get_mcp_servers").catch(() => []);
+            const skillList = await chatCommands
+              .listInstalledSkills()
+              .catch(() => []);
+            const mcpList = await chatCommands.getMcpServers().catch(() => []);
 
             const resolved = await resolveComposerTurn(text, {
               agents: [],
@@ -346,20 +344,12 @@ export function useSend(deps: UseSendDeps) {
 
             if (resolved.enableMcpIds.length > 0) {
               try {
-                const servers =
-                  await invoke<
-                    {
-                      id: string;
-                      name: string;
-                      enabled: boolean;
-                      [k: string]: unknown;
-                    }[]
-                  >("get_mcp_servers");
+                const servers = await chatCommands.getMcpServers();
                 const want = new Set(resolved.enableMcpIds);
                 const next = (servers ?? []).map((s) =>
                   want.has(s.id) ? { ...s, enabled: true } : s,
                 );
-                await invoke("set_mcp_servers", { servers: next });
+                await chatCommands.setMcpServers(next);
                 showTransientToast(
                   t("chat.mentionMcpEnabled", {
                     names: resolved.enableMcpNames.join(", "),
@@ -999,15 +989,12 @@ export function useSend(deps: UseSendDeps) {
             .filter((a) => !!a.dataBase64)
             .map(async (a) => {
               try {
-                const saved = await invoke<{ path: string }>(
-                  "save_chat_upload",
-                  {
-                    sessionId: sid,
-                    fileName: a.name,
-                    dataBase64: a.dataBase64,
-                    messageId: userId,
-                  },
-                );
+                const saved = await chatCommands.saveUpload({
+                  sessionId: sid,
+                  fileName: a.name,
+                  dataBase64: a.dataBase64!,
+                  messageId: userId,
+                });
                 uploadedPaths.set(a.id, saved.path);
               } catch (e) {
                 console.warn("save_chat_upload failed", e);
@@ -1052,30 +1039,28 @@ export function useSend(deps: UseSendDeps) {
 
         const keepChatBubbles = pendingKeepChatBubblesRef.current;
 
-        await invoke<string>("start_chat", {
-          request: {
-            content: contentForModel,
-            provider: chatProvider.backend_id,
-            providerId: chatProvider.id,
-            model: chatModel,
-            sessionId: sid,
-            useMemory: true,
-            thinkingEnabled: modelApi.thinkingEnabled,
-            reasoningEffort: modelApi.reasoningEffort,
-            resumeJson: resumeJson || undefined,
-            keepChatBubbles:
-              keepChatBubbles != null ? keepChatBubbles : undefined,
-            interactionMode: effectiveMode,
-            projectId,
-            attachments: pending.map((a) => ({
-              name: a.name,
-              mime: a.mime,
-              kind: a.kind,
-              size: a.size,
-              dataBase64: a.dataBase64 ?? null,
-              localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
-            })),
-          },
+        await chatCommands.start({
+          content: contentForModel,
+          provider: chatProvider.backend_id,
+          providerId: chatProvider.id,
+          model: chatModel,
+          sessionId: sid,
+          useMemory: true,
+          thinkingEnabled: modelApi.thinkingEnabled,
+          reasoningEffort: modelApi.reasoningEffort,
+          resumeJson: resumeJson || undefined,
+          keepChatBubbles:
+            keepChatBubbles != null ? keepChatBubbles : undefined,
+          interactionMode: effectiveMode,
+          projectId,
+          attachments: pending.map((a) => ({
+            name: a.name,
+            mime: a.mime,
+            kind: a.kind,
+            size: a.size,
+            dataBase64: a.dataBase64 ?? null,
+            localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
+          })),
         });
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");
