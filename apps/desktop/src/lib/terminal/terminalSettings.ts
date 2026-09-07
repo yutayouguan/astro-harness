@@ -119,36 +119,19 @@ export function normalizeTerminalSettings(value: unknown): TerminalSettings {
 }
 
 export function readTerminalSettings(): TerminalSettings {
-  if (typeof window === "undefined") return { ...DEFAULT_TERMINAL_SETTINGS };
-  try {
-    const stored = window.localStorage.getItem(TERMINAL_SETTINGS_STORAGE_KEY);
-    return stored
-      ? normalizeTerminalSettings(JSON.parse(stored))
-      : { ...DEFAULT_TERMINAL_SETTINGS };
-  } catch {
-    return { ...DEFAULT_TERMINAL_SETTINGS };
-  }
+  return readPreference(
+    TERMINAL_SETTINGS_STORAGE_KEY,
+    { ...DEFAULT_TERMINAL_SETTINGS },
+    (stored) => normalizeTerminalSettings(JSON.parse(stored)),
+  );
 }
 
 export function saveTerminalSettings(
   value: TerminalSettings,
 ): TerminalSettings {
   const next = normalizeTerminalSettings(value);
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(
-        TERMINAL_SETTINGS_STORAGE_KEY,
-        JSON.stringify(next),
-      );
-    } catch {
-      // Keep the current UI session usable when WebView storage is unavailable.
-    }
-    window.dispatchEvent(
-      new CustomEvent<TerminalSettings>(TERMINAL_SETTINGS_EVENT, {
-        detail: next,
-      }),
-    );
-  }
+  writePreference(TERMINAL_SETTINGS_STORAGE_KEY, next, JSON.stringify);
+  emitPreferenceChange(TERMINAL_SETTINGS_EVENT, next);
   return next;
 }
 
@@ -162,3 +145,8 @@ export function subscribeTerminalSettings(
   window.addEventListener(TERMINAL_SETTINGS_EVENT, handle);
   return () => window.removeEventListener(TERMINAL_SETTINGS_EVENT, handle);
 }
+import {
+  emitPreferenceChange,
+  readPreference,
+  writePreference,
+} from "../storage/preferenceStore.ts";
