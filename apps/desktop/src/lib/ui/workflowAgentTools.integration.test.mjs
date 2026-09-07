@@ -6,7 +6,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 const loopPanel = read("../../components/loop/LoopPanel.tsx");
 const toolCatalog = read("../../hooks/providers/useAgentTools.ts");
-const tauriConfig = read("../../../src-tauri/src/commands/config.rs");
+const tauriConfig = read("../../../src-tauri/src/commands/providers/config.rs");
 const agentRuntime = read(
   "../../../../../crates/agent-core/src/runtime/mod.rs",
 );

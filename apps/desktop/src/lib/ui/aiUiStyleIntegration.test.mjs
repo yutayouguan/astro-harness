@@ -11,7 +11,7 @@ test("AI wallpaper and theme chain is wired from bundled skill to Desktop", () =
   const tool = read(
     "../../../../../crates/agent-tools/src/builtin/ui_style.rs",
   );
-  const commands = read("../../../src-tauri/src/commands/ui_style.rs");
+  const commands = read("../../../src-tauri/src/commands/ui/ui_style.rs");
   const tauri = read("../../../src-tauri/src/lib.rs");
   const hook = read("../../hooks/app/useActiveUiStyle.ts");
   const app = read("../../App.tsx");

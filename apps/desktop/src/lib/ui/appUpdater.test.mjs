@@ -13,7 +13,7 @@ const [
   publicKey,
 ] = await Promise.all(
   [
-    "../../../src-tauri/src/commands/updater.rs",
+    "../../../src-tauri/src/commands/ui/updater.rs",
     "../../../src-tauri/src/commands/mod.rs",
     "../../../src-tauri/src/lib.rs",
     "../../../src-tauri/tauri.conf.json",
@@ -38,7 +38,7 @@ test("desktop updater pins a public key and only accepts HTTPS manifests", () =>
 });
 
 test("update commands check, verify, install, report progress, and restart", () => {
-  assert.match(commandModule, /pub\(crate\) mod updater;/);
+  assert.match(commandModule, /pub\(crate\) use ui::updater;/);
   assert.match(tauriLib, /commands::updater::check_app_update/);
   assert.match(tauriLib, /commands::updater::install_app_update/);
   assert.match(command, /\.download_and_install\(/);

@@ -10,7 +10,7 @@ const [app, tabs, panel, dock, css, tauriCommands, tauriLib] =
       "../../components/settings/BrowserSettingsPanel.tsx",
       "../../components/chat/BrowserDock.tsx",
       "../../styles/features/browser-settings.css",
-      "../../../src-tauri/src/commands/browser.rs",
+      "../../../src-tauri/src/commands/ui/browser.rs",
       "../../../src-tauri/src/lib.rs",
     ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );

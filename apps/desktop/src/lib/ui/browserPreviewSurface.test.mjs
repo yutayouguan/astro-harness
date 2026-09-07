@@ -142,7 +142,7 @@ test("browser restore keeps the revealed welcome region aligned before rejoining
 test("browser dock uses a Rust-created native child WebView", () => {
   const dock = source("../../components/chat/BrowserDock.tsx");
   const hook = source("../../hooks/chat/useBrowserLiveWebviews.ts");
-  const commands = source("../../../src-tauri/src/commands/browser.rs");
+  const commands = source("../../../src-tauri/src/commands/ui/browser.rs");
   const capabilities = source("../../../src-tauri/capabilities/default.json");
 
   assert.doesNotMatch(hook, /new Webview\(getCurrentWindow\(\), label/);

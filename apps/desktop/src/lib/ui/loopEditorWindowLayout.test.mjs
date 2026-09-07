@@ -15,7 +15,7 @@ const canvas = await readFile(
   "utf8",
 );
 const loopCommands = await readFile(
-  new URL("../../../src-tauri/src/commands/loops.rs", import.meta.url),
+  new URL("../../../src-tauri/src/commands/automation/loops.rs", import.meta.url),
   "utf8",
 );
 const tauri = await readFile(

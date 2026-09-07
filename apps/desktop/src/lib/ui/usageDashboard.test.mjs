@@ -9,7 +9,7 @@ const [panel, dashboard, styles, messages, commands, usageDb] =
       "../../components/settings/UsageDashboard.tsx",
       "../../styles/features/usage-dashboard.css",
       "../../i18n/messages.ts",
-      "../../../src-tauri/src/commands/config.rs",
+      "../../../src-tauri/src/commands/providers/config.rs",
       "../../../../../crates/agent-usage/src/db.rs",
     ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );

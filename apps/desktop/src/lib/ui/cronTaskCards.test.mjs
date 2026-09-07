@@ -28,7 +28,7 @@ const runDetailUrl = new URL(
   import.meta.url,
 );
 const commandUrl = new URL(
-  "../../../src-tauri/src/commands/cron.rs",
+  "../../../src-tauri/src/commands/automation/cron.rs",
   import.meta.url,
 );
 
