@@ -1,6 +1,6 @@
 # 会话 Checkpoint 与恢复
 
-> **Harness 恢复基线（2026-08-29）**：当前权威恢复源是 `agent-rollout` append-only 时间线，不是独立 checkpoint row 或最后一条 message 猜测。Server 以 rollout snapshot + live boundary 投影，SessionStore 是查询/FTS/UI 视图。本文其余“增量 Checkpoint”结构作为历史方案保留。
+> **Harness 恢复基线（2026-09-07）**：当前权威恢复源是 `agent-rollout` append-only 时间线（JSONL），不是独立 checkpoint row 或最后一条 message 猜测。Server 以 rollout snapshot + live boundary 投影，SessionStore 是可重建的查询/FTS/UI 视图。V2 Agent Thread 恢复使用 `subagents-v2.db` 持久状态 + `followup_task` 重新激活。本文其余”增量 Checkpoint”结构作为历史方案保留。
 
 > 文档状态：定稿 | 阶段：系统设计 | 关联：agent-runtime round_loop、崩溃恢复
 
@@ -265,8 +265,8 @@ WHERE agent_state = 'interrupted'
 | `repair_dangling_tool_calls` | 保留，作为崩溃恢复的第一步（修复断裂的工具调用） |
 | `PendingQueue`（内存） | 不恢复（用户重新输入），UI 提示 |
 | `YOLO` 开关 | 不恢复（安全原则，重置为 OFF） |
-| `TokenBudget` | 从 `checkpoint_meta.token_used` 恢复 |
-| 子 Agent 进度 | 通过 `task_traces` 表恢复已完成的结果 |
+| `IterationBudget` / `TurnState` | 不跨进程恢复（安全默认），新 turn 重新初始化 |
+| V2 Agent Thread 进度 | 通过 `subagents-v2.db` 持久状态 + `followup_task` 恢复，不依赖 `task_traces` |
 | `AgentState` 状态机 | 新增 `Interrupted` 状态（区别于 `Paused` 和 `Failed`） |
 
 ---

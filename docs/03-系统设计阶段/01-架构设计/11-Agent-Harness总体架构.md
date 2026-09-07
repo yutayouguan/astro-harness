@@ -178,7 +178,7 @@ Harness 通过 `ToolRegistry` 区分工具是否可执行、是否直接对模�
 
 | 层 | 决策 |
 | --- | --- |
-| 暴露 | tool gate、Skill additive override、Direct/Deferred/Hidden/ModelOnly |
+| 暴露 | tool gate、Skill additive override、`ToolExposure` 五级（Direct/DirectModelOnly/Deferred/DeferredModelOnly/Hidden）+ `ToolMode`（Direct/CodeMode/CodeModeOnly） |
 | 快照 | `StepContext` 拒绝本 step 未暴露的模型调用 |
 | 意图 | interaction mode 和参数 schema 校验 |
 | 授权 | smart approval、MCP approval、HITL、session approval cache |
@@ -197,6 +197,9 @@ reduce state -> persist rollout -> deliver live event
 ```
 
 Server 端每 Thread listener 向 gRPC/Tauri 投影 live stream；重启或订阅恢复时使用 rollout snapshot + live boundary，SessionStore 保存用于查询、FTS 和 UI 的投影。
+通用 assistant/tool/hook `ResponseItem` 写入先追加 rollout，再更新
+SessionStore 投影；mailbox/steer 的 user input 仍使用独立的两阶段准入协议，
+以便在 ack 之前持久化去重 marker。
 
 因此：
 
@@ -237,7 +240,7 @@ checkpoint。resume 读取最后一条 record；fork 不复制父 Thread 的累�
 - `wait_agent`
 - `interrupt_agent`
 
-Graph、mailbox和状态投影持久化到 `{base}/data/subagents-v2.db`，真实对话投影写入 `{base}/data/state.db`，rollout 事件仍位于 `{base}/sessions/rollouts/`。子 Agent 继承父任务权限且只可收窄；不隐式创建 git worktree。
+Graph、mailbox和状态投影持久化到 `{base}/subagents.db`，真实对话投影写入 `{base}/sessions/state.db`，rollout 事件仍位于 `{base}/sessions/rollouts/`。子 Agent 继承父任务权限且只可收窄；不隐式创建 git worktree。
 
 `delegate_task`、`Supervisor`、旧 V1 子任务表和“子 Agent 必然拥有独立 worktree”均不得再被描述为当前运行方案。
 

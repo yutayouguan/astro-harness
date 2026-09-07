@@ -112,6 +112,7 @@ V2 通过 **Agent Thread** 模式解决上述问题：父 Agent 将子任务派�
 // crates/agent-subagents/src/control.rs
 
 /// 根级共享控制器：聚合存储、注册表、活动总线和运行时句柄。
+#[derive(Clone)]
 pub struct AgentControl {
     root_thread_id: String,
     store: AgentGraphStore,              // SQLite 持久化
@@ -121,6 +122,8 @@ pub struct AgentControl {
     runtime_lifecycle: Arc<Mutex<RuntimeLifecycleState>>, // close/spawn 准入状态
     root_service_tier: Arc<Mutex<Option<String>>>,        // 根服务层级
     lifecycle_notify: Arc<Notify>,                        // 准入协调通知
+    #[cfg(test)]
+    before_runtime_insert_hook: Arc<Mutex<Option<BeforeRuntimeInsertHook>>>,
 }
 ```
 
@@ -132,7 +135,9 @@ pub struct AgentControl {
 // crates/agent-subagents/src/store.rs
 
 /// 子 Agent 图的 SQLite 存储句柄（WAL 模式）。
+#[derive(Debug, Clone)]
 pub struct AgentGraphStore {
+    pool: SqlitePool,
     path: PathBuf,  // 默认 ~/.astro/data/subagents-v2.db
 }
 ```
@@ -177,13 +182,17 @@ pub struct AgentRegistry {
 ### 2.4 RuntimeHandleRegistry
 
 ```rust
+// crates/agent-subagents/src/control.rs
+
 /// Agent 运行时句柄，提供中断和终止回调。
+#[derive(Clone)]
 pub struct AgentRuntimeHandle {
     pub interrupt: Arc<dyn Fn() + Send + Sync>,
     pub terminate: Arc<dyn Fn() + Send + Sync>,
 }
 
 /// 线程 ID 到运行时句柄的注册表。
+#[derive(Default)]
 pub struct RuntimeHandleRegistry {
     handles: Mutex<HashMap<String, AgentRuntimeHandle>>,
 }
@@ -301,13 +310,22 @@ pub struct Limits {
 派生前先通过 `AgentRegistry::reserve_spawn()` 预留槽位：
 
 ```rust
+// crates/agent-subagents/src/registry.rs
+
+/// 派生预留令牌，drop 时自动回滚未提交的预留。
 pub struct SpawnReservation<'a> {
-    // 持有 AgentRegistry 的引用，RAII 保证 abort/commit/drop 时释放槽位
+    registry: &'a AgentRegistry,
+    path: AgentPath,
+    thread_id: String,
+    thread: AgentThreadV2,
+    persisted_store: Option<&'a AgentGraphStore>,
+    activity: Option<&'a ActivityBus>,
+    active: bool,
 }
 
 impl SpawnReservation<'_> {
-    pub fn commit(self) -> anyhow::Result<()>;  // 确认派生
-    pub fn abort(self) -> anyhow::Result<()>;   // 取消预留
+    pub async fn commit(self) -> anyhow::Result<()>;  // 确认派生（异步，含持久化校验）
+    pub async fn abort(self) -> anyhow::Result<()>;   // 取消预留（异步，含持久化回滚）
     // Drop 自动 abort
 }
 ```
@@ -315,8 +333,14 @@ impl SpawnReservation<'_> {
 ### 5.3 ExecutionPermit
 
 ```rust
-pub struct ExecutionPermit {
-    // RAII 执行许可，持有期间占用 max_running 配额
+// crates/agent-subagents/src/registry.rs
+
+/// 执行许可令牌，drop 时自动释放并发执行槽位。
+#[derive(Debug)]
+pub struct ExecutionPermit<'a> {
+    registry: &'a AgentRegistry,
+    thread_id: String,
+    active: bool,
 }
 ```
 
@@ -324,17 +348,26 @@ pub struct ExecutionPermit {
 
 ### 5.4 AgentSpawnReservation 层
 
-`AgentControl` 在 `SpawnReservation` 外包装 `AgentSpawnReservation`，增加生命周期租约管理：
+`AgentControl` 在 `SpawnReservation` 外包装 `AgentSpawnReservation`（`control.rs`），增加生命周期租约管理：
 
 ```rust
+// crates/agent-subagents/src/control.rs
+
+/// 派生预留：在提交/中止/丢弃前对桌面递归关闭可见。
 pub struct AgentSpawnReservation<'a> {
     inner: Option<SpawnReservation<'a>>,
     control: &'a AgentControl,
     lease_id: String,
 }
+
+impl AgentSpawnReservation<'_> {
+    pub async fn commit(self) -> anyhow::Result<()>;  // 提交后释放租约
+    pub async fn abort(self) -> anyhow::Result<()>;   // 取消预留后释放租约
+    // Drop 自动回滚 inner 并释放租约
+}
 ```
 
-在提交/中止/丢弃前对桌面递归关闭（`CloseAdmissionGuard`）可见，防止在关闭操作进行中的路径前缀下派生新线程。
+在提交/中止/丢弃前对桌面递归关闭（`CloseAdmissionGuard`）可见，防止在关闭操作进行中的路径前缀下派生新线程。`CloseAdmissionGuard`（`control.rs`）阻止新派生进入关闭中的路径前缀，并等待进行中的派生完成。
 
 ---
 
@@ -359,37 +392,76 @@ V2 使用 **邮箱 + 路径寻址** 通信模型：
 ### 6.2 邮箱系统
 
 ```rust
+// crates/agent-subagents/src/mailbox.rs
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailboxMessage {
-    pub id: String,
-    pub thread_id: String,
+    pub sequence: i64,
+    pub message_id: String,
+    pub sender_thread_id: String,
+    pub recipient_thread_id: String,
     pub kind: MailboxKind,
-    pub content: String,
-    pub created_at: String,
+    pub payload: String,
+    pub trigger_turn: bool,
 }
 
+/// 投递时使用的新消息结构（含幂等键）。
+pub struct NewMailboxMessage {
+    pub message_id: String,
+    pub idempotency_key: String,
+    pub sender_thread_id: String,
+    pub recipient_thread_id: String,
+    pub kind: MailboxKind,
+    pub payload: String,
+    pub trigger_turn: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum MailboxKind {
-    Inbound,   // 父→子
-    Outbound,  // 子→父
+    Message,    // 普通消息
+    Followup,   // 追加任务
+    Steer,      // 主任务转向
+    Result,     // 结果回传
+    Status,     // 状态通知
 }
 ```
 
-邮箱消息持久化在 `AgentGraphStore` 中。`send_message` 投递到目标线程的邮箱；`wait_agent` 通过 `ActivityBus` 监听邮箱活动。
+邮箱消息持久化在 `AgentGraphStore` 中。`send_message` 投递 `MailboxKind::Message` 到目标线程邮箱；`followup_task` 投递 `MailboxKind::Followup` 并设 `trigger_turn = true`；`wait_agent` 通过 `ActivityBus` 监听邮箱活动。
 
 ### 6.3 ActivityBus
 
 ```rust
+// crates/agent-subagents/src/activity.rs
+
+/// 有界环形缓冲活动总线，支持 watch 通知的异步等待。
 pub struct ActivityBus {
-    // 活动事件广播，支持 cursor-based 观察
+    sequence: AtomicU64,
+    tx: watch::Sender<ActivityCursor>,
+    events: Mutex<VecDeque<AgentActivity>>,
 }
 
+/// 活动事件类型：派生、邮箱、状态变更、边关闭、主任务转向。
 pub enum AgentActivityKind {
-    StatusChanged,
-    MailboxReceived,
-    // ...
+    Spawned { thread_id: String },
+    Mailbox { thread_id: String },
+    StatusChanged { thread_id: String },
+    EdgeClosed { thread_id: String },
+    MainSteer,
 }
+
+/// 带序号的活动事件，可选附带线程快照。
+pub struct AgentActivity {
+    pub sequence: u64,
+    pub kind: AgentActivityKind,
+    pub thread: Option<AgentThreadV2>,
+}
+
+/// 单调递增的活动序号游标，用于增量拉取事件。
+pub struct ActivityCursor(pub u64);
 ```
 
-`ActivityBus` 提供带 cursor 的活动观察机制，`wait_agent` 在此等待直到有邮箱活动、被转向或超时。
+`ActivityBus` 提供带 `ActivityCursor` 的增量活动观察机制，内部使用 `watch::channel` 驱动异步等待。`wait_agent` 在此等待直到有邮箱活动（`Mailbox`）、被转向（`MainSteer`）或超时。
 
 ---
 
@@ -400,7 +472,7 @@ pub enum AgentActivityKind {
 ```rust
 // crates/agent-tools/src/builtin/agents/subagent.rs
 
-pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
+pub const V2_AGENT_TOOL_NAMES: [&str; 6] = [
     "spawn_agent",
     "list_agents",
     "send_message",
@@ -505,7 +577,7 @@ pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, Stri
 
 ### 8.2 read_subagent_thread
 
-返回 `AgentThreadDetailV2`，包含线程元数据和完整的 Session 时间线（`Vec<AgentThreadMessageV2>`），保留全部结构化字段（content、compressed_content、tool_calls、reasoning 等）。
+返回 `AgentThreadDetailV2`，包含线程元数据（`AgentThreadV2`）和完整的 Session 时间线（`Vec<AgentThreadMessageV2>`）。每条 `AgentThreadMessageV2` 携带 `item: agent_protocol::ResponseItem`（原生 Responses 协议项）、`timestamp`、`token_count` 和 `finish_reason`。
 
 ### 8.3 close_subagent_thread
 
@@ -629,6 +701,8 @@ config = [
 ### 12.2 参数格式
 
 ```typescript
+// Rust 侧使用 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+
 interface RootSessionArgs {
   rootSessionId: string;
 }
@@ -645,7 +719,7 @@ interface FollowupArgs {
 }
 ```
 
-所有参数结构使用 `deny_unknown_fields`，旧格式（`parentSessionId`、`threadId`、`includeClosed`）被拒绝。
+所有参数结构使用 `deny_unknown_fields` 和 `rename_all = "camelCase"`，旧格式（`parentSessionId`、`threadId`、`includeClosed`）被拒绝。
 
 ---
 

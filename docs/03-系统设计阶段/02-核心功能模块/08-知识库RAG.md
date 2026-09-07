@@ -29,7 +29,7 @@
      检索层（混合检索 + RRF 融合）
          │
          ▼
-   注入上下文（ContextSlot::Pinned）
+   注入上下文（System Prompt knowledge 区域）
 ```
 
 ---

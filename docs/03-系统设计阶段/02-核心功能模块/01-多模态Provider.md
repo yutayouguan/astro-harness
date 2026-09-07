@@ -177,20 +177,19 @@ API 厂商端点 (/models)  →  OpenRouter 模型表  →  已知能力补丁
 
 ## Fallback 链
 
-`ChatTarget` — primary + 最多 3 个备用。首个 chunk 前失败自动切换。
+`model_targets: Vec<ModelTarget>` — primary + 最多 `MAX_MODEL_FALLBACKS`（3）个备用。首个 chunk 前失败自动切换到下一目标。
 
 ```rust
-pub struct ChatTarget {
+pub struct ModelTarget {
     pub provider_id: String,
     pub backend_id: String,      // provider kind（如 "deepseek"）
     pub model: String,
     pub api_key: String,
     pub base_url: String,
-    pub api_mode: String,        // 随链路传播（如 "responses"）
 }
 ```
 
-`api_mode` 从 Tauri UI → ChatTarget → ProviderConfig → dispatch，确保探测和聊天走同一协议。
+`ModelTarget.api_mode` 随链路传播到 `ProviderConfig`，确保探测和聊天走同一协议。辅助任务各有独立目标链，缺省回退到 primary。
 
 ---
 

@@ -1,6 +1,6 @@
 # Prompt 工程指南
 
-> **Harness 边界（2026-09-01）**：Prompt scaffold 是 Harness 交给 Model 的可见工作面，但不等于 Harness。当前契约分为 `PromptContract.base_instructions`、带角色的 dynamic context 和独立 `ResponsesRequest.tools`。旧的单字符串/8 槽位/Tera 伪代码仅作历史方案参考。总体边界见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
+> **Harness 边界（2026-09-07）**：Prompt scaffold 是 Harness 交给 Model 的可见工作面，但不等于 Harness。当前契约分为 `PromptContract.base_instructions`（对应 Responses 的 `instructions`）、用户输入/上下文消息/reasoning/assistant output/tool call/tool output 位于 `ResponsesRequest.input`、工具 schema 位于独立 `tools` 字段。三者不能通过拼接 system 文本互相替代。下方 Tera 模板引擎和 `agent-evals` 框架为历史设计方案，当前实现使用 `agent-core/src/prompt/` 模块和 `agent-evolution` crate。总体边界见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
 
 > 阶段：系统设计 | 状态：定稿 | 说明：Tera 模板引擎、模型差异、反模式、测试方法
 
@@ -472,7 +472,9 @@ prompt = """
 
 ## Prompt 测试方法
 
-使用 `agent-evals` 框架对 Prompt 进行系统评估：
+> **注**：下方 `agent-evals` 命令为历史设计方案。当前评估功能由 `agent-evolution` crate（自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成）和配套 Python 包 `evolution-dspy/` 承载。
+
+使用评估框架对 Prompt 进行系统评估：
 
 ```bash
 # 运行指定 Skill 的评估套件
@@ -524,10 +526,12 @@ cargo run --bin agent-evals -- \
 
 ## Prompt 版本管理
 
+> **注**：下方代码示例为历史设计方案。当前 Prompt 版本管理由 `agent-evolution` crate 承载。
+
 astro-agent 使用 content-addressable 存储管理 Prompt 版本，每次修改自动生成新版本 hash，进化引擎优化时保留完整历史。
 
 ```rust
-// crates/agent-core/src/evolution/prompt_store.rs
+// crates/agent-evolution/src/prompt_store.rs（概念示例）
 
 use sha2::{Sha256, Digest};
 
@@ -600,6 +604,6 @@ evals/
     ├── research_v1.2.json
     └── ab_test_research.json
 
-crates/agent-core/src/evolution/
-└── prompt_store.rs                # Prompt 版本管理（content-addressable）
+crates/agent-evolution/              # 自进化/学习循环
+crates/agent-core/src/prompt/       # 上下文组装、prompt builder、sanitization
 ```

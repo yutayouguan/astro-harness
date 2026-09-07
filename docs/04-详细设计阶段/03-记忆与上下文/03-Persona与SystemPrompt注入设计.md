@@ -1,6 +1,6 @@
 # Agent Persona 与 System Prompt 注入设计
 
-> **Harness 当前基线（2026-09-01）**：当前 scaffold 契约是 `PromptContract { base_instructions, context, context_sections, usage }` + 用户输入 + 独立 `ResponsesRequest.tools`。SOUL/MEMORY/USER/daily/recall/Skills/AGENTS/TOOLS/interaction guidance 作为有来源的 dynamic context 装配。本文其余固定 8 槽位和 `SystemPromptBuilder` 伪代码仅作历史设计。
+> **Harness 当前基线（2026-09-07）**：当前 scaffold 契约是 `PromptContract { base_instructions, context, context_sections, usage }` + 用户输入 + 独立 `ResponsesRequest.tools`。SOUL/MEMORY/USER/daily/recall/Skills/AGENTS/TOOLS/interaction guidance 作为有来源的 dynamic context 装配。文件位置：SOUL.md / MEMORY.md / USER.md 均位于 `~/.astro/agents/{agent_id}/`，配置从 `~/.astro/config.toml` 和 `<project>/.astro/config.toml` 加载。本文其余固定 8 槽位和 `SystemPromptBuilder` 伪代码仅作历史设计。
 
 > 版本：v1.0 | 日期：2026-08-07 | 状态：草稿
 > 对应需求：F-11 Agent 人格配置（Persona）、M-13 Agent 人格配置模块
@@ -34,7 +34,7 @@
 
 | 槽位 | 内容来源 | 最大长度 | 是否必须 |
 | ---- | -------- | -------- | -------- |
-| **[1] SOUL.md** | `~/.astro/SOUL.md` 全文 | 4 000 tokens | 是（缺失时用内置默认） |
+| **[1] SOUL.md** | `~/.astro/agents/{agent_id}/SOUL.md` 全文 | 4 000 tokens | 是（缺失时用内置默认） |
 | **[2] 工作区 Prompt** | `workspace.system_prompt` 字段 | 2 000 tokens | 否 |
 | **[3] 会话级人格** | `/personality` 切换的预设文本 | 500 tokens | 否（默认空） |
 | **[4] 记忆注入** | L2 语义检索 + `MEMORY.md` + `USER.md` 快照 | 2 200 + 1 375 + 800 tokens | 是（空文件则跳过） |
@@ -84,8 +84,10 @@
 ### 3.1 文件位置与生命周期
 
 ```text
-~/.astro/SOUL.md       # 全局，所有工作区共享
-~/.astro/workspaces/<workspace-id>/workspace.yaml   # 工作区级 Prompt 在此配置
+~/.astro/agents/{agent_id}/SOUL.md    # Agent 人格
+~/.astro/agents/{agent_id}/MEMORY.md  # 项目记忆（快照）
+~/.astro/agents/{agent_id}/USER.md    # 用户画像（快照）
+~/.astro/config.toml                  # 全局统一配置（agent 设置 + MCP + custom_providers）
 ```
 
 首次运行时自动生成默认 SOUL.md：
@@ -154,7 +156,7 @@ interface PersonalityChangedPayload {
 ### 4.3 config.yaml 自定义人格
 
 ```yaml
-# ~/.astro/workspaces/<id>/workspace.yaml
+# ~/.astro/config.toml (或 agent 级 config)
 
 personalities:
   rust_reviewer:
@@ -263,7 +265,7 @@ const ADAPTIVE_PLANNING_INSTRUCTION: &str = r#"<planning_rules>
 ### 5.2 SessionContext（会话启动时初始化）
 
 ```rust
-// crates/agent-runtime/src/context.rs
+// crates/agent-core/src/runtime/mod.rs (目标设计；当前上下文由 PromptContract 管理)
 
 pub struct SessionContext {
     pub soul_snapshot: String,          // 启动时读取 SOUL.md 快照（冻结）
@@ -329,7 +331,7 @@ impl SessionContext {
 Persona 相关设置存储在工作区 YAML 配置文件：
 
 ```yaml
-# ~/.astro/workspaces/<id>/workspace.yaml
+# ~/.astro/config.toml (或 agent 级 config)
 
 name: "Rust 后端开发"
 system_prompt: |
@@ -396,4 +398,4 @@ agent:
 - [01-持久化层.md](../../03-系统设计阶段/03-基础设施/01-持久化层.md) — SOUL.md / MEMORY.md / USER.md 文件路径约定
 - [06-安全边界.md](../../03-系统设计阶段/03-基础设施/06-安全边界.md) — Prompt 注入防御、安全扫描实现
 - [05-多工作区隔离.md](../../03-系统设计阶段/06-桌面端/05-多工作区隔离.md) — 工作区级配置文件隔离方案
-- [02-agent-runtime详细设计.md](../01-核心引擎层/02-agent-runtime详细设计.md) — round_loop 中 Skill 指南动态注入时机
+- [02-agent-core详细设计.md](../01-核心引擎层/02-agent-core详细设计.md) — Skill 指南动态注入时机

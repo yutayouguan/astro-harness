@@ -32,14 +32,14 @@ pub struct AppState {
 tauri::Builder::new()
   │
   ├─ plugin::log  初始化（写入 ~/.astro/logs/）
-  ├─ SqlitePool::open(~/.astro/agent.db, passphrase)
-  │      └─ sqlx::migrate!() 执行 0001~0005 迁移
+  ├─ SqlitePool::open(~/.astro/sessions/state.db)
+  │      └─ 迁移执行（schema v22）
   │
-  ├─ load_provider_configs(~/.astro/providers.toml, ~/.astro/secrets/)
-  ├─ ProviderRegistry::build() 注册 8 个专属 Provider 客户端
-  ├─ ToolRegistry::register_builtins() 注册 24 个内置工具
+  ├─ load_provider_configs(~/.astro/config.toml, ~/.astro/providers.json)
+  ├─ ProviderRegistry::build() 注册专属 Provider 客户端
+  ├─ ToolRegistry::register_builtins() 注册内置工具
   ├─ SkillRegistry::load_from_db(&pool) 加载活跃 Skills，构建 BM25 索引
-  ├─ McpClientManager::connect_all(~/.astro/mcp-servers.toml)
+  ├─ McpClientManager::connect_all(~/.astro/config.toml)
   │
   ├─ SessionManager::new(pool, registry)
   ├─ HumanGuard::new(app_handle)
@@ -225,7 +225,7 @@ app.emit("media_task_update", MediaTaskEvent {
 
 ## 7. Provider 密钥管理
 
-密钥存储在 `~/.astro/secrets/<provider>.key`（文件权限 0600），读取逻辑：
+Provider 配置统一存储在 `~/.astro/config.toml`（含自定义 Provider 声明和 `env_keys` 环境变量映射），前端 Provider 配置状态写入 `~/.astro/providers.json`。密钥通过环境变量或 `config.toml` 中的 `env_keys` 字段引用，密钥明文不直接持久化在配置文件中。
 
 ```rust
 #[tauri::command]
@@ -234,13 +234,6 @@ pub async fn save_provider_key(
     key: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let secrets_dir = dirs::home_dir().unwrap().join(".astro/secrets");
-    fs::create_dir_all(&secrets_dir).ok();
-    let key_path = secrets_dir.join(format!("{}.key", provider));
-    fs::write(&key_path, &key).map_err(|e| AppError::Tool(e.to_string()))?;
-    #[cfg(unix)]
-    fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)).ok();
-
     // 热更新 ProviderRegistry，无需重启
     state.provider_registry.write().await.reload_key(&provider, &key);
     Ok(())
@@ -257,8 +250,7 @@ pub async fn save_provider_key(
 
 | 窗口 | 标识符 | 生命周期 | 说明 |
 | --- | --- | --- | --- |
-| 主窗口 | `main` | 常驻 | 会话列表、聊天面板、工具时间线 |
-| 设置窗口 | `settings` | 按需 | 用户点击设置时创建，关闭时销毁 |
+| 主窗口 | `main` | 常驻 | 5 项侧栏导航（chat/cron/loop/skills/settings）、聊天面板、右侧面板 |
 | 快速对话窗口 | `quick-chat` | 按需 | 系统托盘触发，`always_on_top + skip_taskbar` |
 
 主窗口 `visible(false)` 启动，初始化完成后 `window.show()`，避免白屏闪烁（FOUC）。

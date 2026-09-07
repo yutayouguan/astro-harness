@@ -1,6 +1,6 @@
 # 架构决策记录（Architecture Decision Records）
 
-> **现行决策（2026-08-29）**：Agent 按 `Model + Harness` 定义；Thread actor、SessionTask、StepContext、原生工具协议、append-only rollout 和 V2 Agent Threads 是当前基线。以下历史 ADR 可解释决策演进，但其 `Supervisor/delegate_task/Core EventBus/增量 Checkpoint` 等结论已被 [Agent Harness 总体架构](11-Agent-Harness总体架构.md) 取代。
+> **现行决策（2026-08-29）**：Agent 按 `Model + Harness` 定义；Thread actor、SessionTask、StepContext、原生工具协议、append-only rollout 和 V2 Agent Threads 是当前基线。以下历史 ADR 可解释决策演进，但其 `Supervisor/delegate_task/Core EventBus/增量 Checkpoint/7-crate 拆分` 等结论已被 [Agent Harness 总体架构](11-Agent-Harness总体架构.md) 取代（当前为 24 个 crate）。
 
 > 阶段：系统设计 | 状态：定稿 | 说明：记录所有关键架构决策的背景、方案、取舍与后果
 
@@ -26,7 +26,7 @@
 | ADR-010 | 本地优先 + 可选云同步 | 已采纳 |
 | ADR-011 | Agent 执行采用 round_loop 而非 plan-then-execute | 已采纳 |
 | ADR-012 | React + Zustand 前端而非 Svelte/Solid | 已采纳 |
-| ADR-013 | 子 Agent 采用 Supervisor 模式而非 Actor 模型 | 已采纳 |
+| ADR-013 | 子 Agent 采用 Supervisor 模式而非 Actor 模型 | 已替代 |
 | ADR-014 | Checkpoint 增量快照而非全量复制 | 已采纳 |
 | ADR-015 | Provider 故障转移采用熔断器模式 | 已采纳 |
 
@@ -128,6 +128,8 @@ Astro Agent 采用本地优先架构，所有用户数据（对话、记忆、�
 ---
 
 ### ADR-003: Rust Workspace 多 Crate 架构
+
+> **已被后续演进细化**：当前 Workspace 已扩展至 24 个 crate（见 CLAUDE.md Crate Map），依赖方向和分层结构与本文 7 crate 描述不同。核心决策（Cargo Workspace + 依赖单向性）仍然有效。
 
 **状态**：已采纳
 **日期**：2026-06
@@ -539,13 +541,12 @@ Agent 执行模式有两种主流范式：先完整规划再批量执行（plan-
 
 **负面**：
 - 每轮都需 LLM 调用，token 消耗高于一次规划批量执行
-- LLM 可能陷入无效循环，需 `max_tool_rounds`（默认 25）硬限制
+- LLM 可能陷入无效循环，需双重迭代预算硬限制（`TurnState.tool_rounds` 与 `IterationBudget`，默认均为 90）
 - 调试复杂任务时需追踪多轮交互，日志量大
 
 **约束**：
-- 上下文窗口随轮次增长需搭配上下文压缩策略（三级级联：75% 轻量裁剪、85% LLM 摘要、95% 紧急丢弃）
-- 所有级别的压缩都执行 `enforce_tool_pairs()`，保证 tool_call/tool_result 配对不被拆散
-- Token 预算管理（`TokenBudget`）支持树状分配：子 Agent 和 Skill 各自占用父任务配额
+- 上下文窗口随轮次增长需搭配上下文压缩策略（`maintain_tool_context()` 三阶段：prune 截断超大 tool 结果 → LLM 辅模型摘要 `AuxiliaryTask::Compaction` → head/tail fallback）；`compressed_content` 字段存 Provider 视图，`content` 字段永远保留原文
+- 迭代预算管理采用双重机制并行生效：`IterationBudget`（每 Agent Thread 独立预算，`code_exec` 类型轮次可 refund）与 `TurnState`（每条用户消息归零的轮次计数，上限 `config.multi_turn`）
 
 ---
 
@@ -613,7 +614,9 @@ Agent 执行模式有两种主流范式：先完整规划再批量执行（plan-
 
 ### ADR-013: 子 Agent 采用 Supervisor 模式而非 Actor 模型
 
-**状态**：已采纳
+> **已被后续实现取代**：当前子 Agent 系统采用 V2 Agent Threads 模型（`agent-subagents`），使用 6 个模型工具（`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`），资源配额为 `max_threads=32`、`max_depth=8`、`max_running=8`。不再使用本文描述的 `Supervisor`、`delegate_task` 和 `SubAgentResult` 结构。现行契约见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md) §11。
+
+**状态**：已替代
 **日期**：2026-07
 **决策者**：架构组
 

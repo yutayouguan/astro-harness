@@ -1,21 +1,22 @@
 # agent-core 详细设计
 
-> **Agent Harness 当前基线（2026-08-29）**：`agent-core` 是 Harness 编排中心，当前核心对象是 `Session`（`AgentLoop` 为兼容别名）、`AstroThread`、`SessionTask`、`TurnContext` 和 `StepContext`。本文中 `build_chat_request/parse_response/execute_tool_calls` 纯函数式 Agent 及 Repository 归属的旧伪代码不是当前实现。以 [Agent Harness 执行外壳](14-Agent-Harness执行外壳详细设计.md) 和当前源码为准。
+> **当前基线（2026-09-07）**：`agent-core`（package name: `agent`）是 Harness 编排中心，核心对象为 `Session`（`AgentLoop` 为兼容别名）、`AstroThread`、`SessionTask`、`TurnContext` 和 `StepContext`。旧独立 `agent-runtime` crate 已合并到本 crate 的 `runtime/`、`tasks/`、`streaming/` 子模块。入口为 `AstroThread -> submission_loop -> SessionTask::run -> streaming::multi_turn::run_turn`。以 [Agent Harness 执行外壳](14-Agent-Harness执行外壳详细设计.md) 和当前源码为准。
 
-> 阶段：详细设计 | 状态：草稿 | 说明：核心数据类型、run_agent_turn 编排循环、Repository 层、记忆子系统
+> 阶段：详细设计 | 状态：当前实现基线 | 说明：Crate 职责、模块组织、核心对象、事件管线、双重预算
 
 ## 1. Crate 职责边界
 
-`agent-core` 是整个项目的基础库 crate，提供以下能力：
+`agent-core`（package name `agent`）是整个项目的中央运行时 crate，提供以下能力：
 
-- **核心数据类型**：`AgentContext`、`Message`、`ToolCall`、`ConversationMeta` 等，所有 crate 共享
-- **Agent 纯函数**：`build_chat_request` / `parse_response` / `execute_tool_calls` — 供 runtime 循环调用的无状态构建块
-- **存储访问层**：SQLite（via sqlx）的连接池初始化、迁移执行、各表的 CRUD Repository
-- **记忆子系统**：噪声过滤、写入、KNN 自适应检索、软替换更新、Weibull 衰减遗忘
-- **配置加载**：`providers.toml` + `~/.astro/secrets/` 的 `ProviderConfig` 构建
-- **成本追踪**：`TokenUsage` 累加，写入 `cost_records` 并向前端推送 `token_usage` 事件
+- **Agent 运行时核心**（`runtime/`）：`Session` 生命周期、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionState`、`SessionServices`、`TurnContext`/`StepContext` 层级上下文、`ToolRouter`/`ToolRuntime` 工具路由、turn lifecycle、context maintenance、recording、system prompt、`IterationBudget`（per-Thread 独立迭代预算）、`TurnState`（轮次与工具深度计数）
+- **可恢复任务生命周期**（`tasks/`）：`SessionTask`、`ActiveTurn`、`TaskKind`（Regular/Compact/Review/UserShell）、spawn/cancel/terminal 事件保证
+- **流式补全**（`streaming/`）：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary
+- **执行域**（`exec/`）：`AgentControlDirectory`（根级 AgentControl 进程目录）、`AgentRuntimeManager`（活跃 turn 管理）、subagents（单 turn 运行器）、dispatch（V2 6 工具分发 + 桌面控制面）、cron、background、memory review、title generation
+- **工具结果压缩**（`compression`）：原文保留，压缩视图给 provider
+- **控制型运行时**（`control/`）：HITL gate、interrupt 状态机、schema 校验、smart approval（含 `SmartApprovalContext`）、`approval_cache`（会话级审批缓存）、network approval、guardian、trust model
+- **提示词域**（`prompt/`）：上下文组装、hook 集成、消息变换、prompt builder、sanitization、context usage tracking
 
-依赖它的 crate：`agent-providers`（调用 TextClient trait）、`agent-runtime`（并发调度）、Tauri 主进程。
+依赖它的 crate：`agent-server`（gRPC 服务端）、`apps/desktop/src-tauri`（Tauri 桌面 shell）。本 crate 同时依赖 `agent-providers`（多厂商 LLM Provider 层）。
 
 ---
 
@@ -24,395 +25,235 @@
 ```text
 crates/agent-core/
 ├── Cargo.toml
-├── migrations/
-│   ├── 0001_init.sql
-│   ├── 0002_vec_tables.sql
-│   ├── 0003_media_artifacts.sql
-│   ├── 0004_memory_versioning.sql
-│   └── 0005_fts.sql
 └── src/
-    ├── lib.rs                  # pub use 重导出
-    ├── types/
-    │   ├── mod.rs
-    │   ├── message.rs          # Message, Role, ContentPart
-    │   ├── tool_call.rs        # ToolCall, ToolDefinition, ToolResult
-    │   ├── context.rs          # AgentContext
-    │   └── config.rs           # ProviderConfig, WorkspaceConfig
-    ├── storage/
-    │   ├── mod.rs              # open() — 连接池 + 迁移
-    │   ├── conversation.rs     # ConversationRepo
-    │   ├── message.rs          # MessageRepo
-    │   ├── memory.rs           # MemoryRepo（含软替换、版本查询）
-    │   ├── media.rs            # MediaTaskRepo
-    │   └── artifacts.rs        # AiArtifactRepo
-    ├── memory/
-    │   ├── mod.rs
-    │   ├── filter.rs           # 噪声过滤（pre-write gate）
-    │   ├── embed.rs            # 嵌入向量生成与写入 embeddings 表
-    │   ├── retrieve.rs         # 自适应检索（触发词 KNN + FTS5 BM25）
-    │   ├── update.rs           # 软替换更新（superseded_by 链）
-    │   └── forget.rs           # Weibull 衰减、soft_expire
-    ├── agent/
-    │   ├── mod.rs
-    │   ├── helpers.rs          # build_chat_request / parse_response / execute_tool_calls
-    │   └── cost.rs             # CostTracker
-    └── config/
-        ├── mod.rs
-        └── loader.rs           # providers.toml + secrets/ 加载
+    ├── lib.rs                          # pub use 重导出
+    ├── builder.rs                      # AgentBuilder — 声明式构建可运行 Agent
+    ├── compression.rs                  # 工具结果压缩（原文保留 + provider 视图）
+    ├── timeline.rs                     # 助手回合时间线（astro_timeline_v1）
+    ├── runtime/
+    │   ├── mod.rs                      # Session（AgentLoop 别名）、AgentConfig、AgentStatus
+    │   ├── astro_thread.rs             # AstroThread — 提交队列 + 事件接收
+    │   ├── submission_loop.rs          # submission_loop — Op 有序分发
+    │   ├── session.rs                  # Session 创建
+    │   ├── session_io.rs               # SessionIo — 通道绑定
+    │   ├── session_state.rs            # SessionState — 运行时状态
+    │   ├── session_services.rs         # SessionServices — 服务注入
+    │   ├── turn_context.rs             # TurnContext — 每轮上下文
+    │   ├── step_context.rs             # StepContext — 每次 sampling 上下文
+    │   ├── turn_lifecycle.rs           # Turn 生命周期管理
+    │   ├── turn_budget.rs              # TurnState — 轮次/工具深度计数
+    │   ├── budget.rs                   # IterationBudget — per-Thread 迭代预算
+    │   ├── tool_router.rs              # ToolRouter — wire name 到 handler/MCP 路由
+    │   ├── tool_dispatch.rs            # 工具分发执行
+    │   ├── tool_runtime.rs             # ToolRuntime — 工具运行时环境
+    │   ├── context_maintenance.rs      # 上下文维护（压缩触发等）
+    │   ├── compression_state.rs        # 压缩状态追踪
+    │   ├── recording.rs                # Rollout 录制与 tool spill
+    │   ├── system_prompt.rs            # 系统提示词构建
+    │   ├── model_ctx.rs                # 模型上下文
+    │   ├── code_mode.rs                # Code Mode（QuickJS）运行时
+    │   ├── event_dispatch.rs           # 事件分发 guard
+    │   ├── event_identity.rs           # 事件身份标识
+    │   ├── history_control.rs          # 历史控制（rollback 等）
+    │   ├── usage.rs                    # 用量归一化
+    │   └── validate.rs                 # 消息顺序校验
+    ├── tasks/
+    │   ├── mod.rs                      # SessionTask、ActiveTurn、TaskKind
+    │   ├── regular.rs                  # RegularTask — 常规 Responses sampling
+    │   ├── compact.rs                  # CompactTask — 执行 compact
+    │   ├── review.rs                   # ReviewTask — 只读代码审查
+    │   └── user_shell.rs              # UserShellTask — 用户 login-shell 命令
+    ├── streaming/
+    │   ├── mod.rs                      # 流式模块入口
+    │   ├── multi_turn.rs               # run_multi_turn_stream — 多轮 sampling 循环
+    │   ├── lifecycle.rs                # 流式生命周期管理
+    │   ├── maintenance.rs              # 运行中上下文维护
+    │   ├── tools_exec.rs               # 流式工具执行
+    │   ├── provider.rs                 # Provider 流式抽象
+    │   ├── fallback.rs                 # Provider fallback 链
+    │   ├── hitl_bridge.rs              # HITL 桥接
+    │   ├── summary.rs                  # mid-run 摘要
+    │   ├── run_state.rs                # 运行状态追踪
+    │   ├── traits.rs                   # 流式 trait 定义
+    │   └── types.rs                    # 流式类型定义
+    ├── exec/
+    │   ├── mod.rs                      # 执行域入口
+    │   ├── dispatch.rs                 # Codex V2 6 工具分发 + 桌面控制面
+    │   ├── dispatch/                   # 分发子模块
+    │   ├── agent_control_directory.rs  # AgentControlDirectory（根级控制器目录）
+    │   ├── agent_runtime.rs            # AgentRuntimeManager（活跃 turn 管理）
+    │   ├── subagents.rs                # 子 Agent 单 turn 运行器
+    │   ├── background.rs               # 后台任务执行
+    │   ├── cron.rs                      # Cron 调度执行
+    │   ├── memory_review.rs            # 记忆审查
+    │   ├── mid_run_summary.rs          # 运行中摘要生成
+    │   ├── title_generation.rs         # 标题自动生成
+    │   └── tool_llm_compress.rs        # LLM 辅助工具压缩
+    ├── control/
+    │   ├── mod.rs                      # 控制模块入口
+    │   ├── hitl.rs                     # HITL gate（人在回路）
+    │   ├── interrupt.rs                # Interrupt 状态机
+    │   ├── smart_approval.rs           # SmartApproval（含对话上下文）
+    │   ├── approval_cache.rs           # 会话级审批缓存
+    │   ├── guardian.rs                 # Guardian 高风险评估
+    │   ├── network_approval.rs         # 网络审批
+    │   ├── schema_validate.rs          # Schema 校验
+    │   └── trust_model.rs              # 信任模型
+    └── prompt/
+        ├── mod.rs                      # 提示词模块入口
+        ├── prompt_builder.rs           # PromptBuilder
+        ├── contract.rs                 # PromptContract
+        ├── context.rs                  # 上下文组装
+        ├── context_source.rs           # 上下文来源
+        ├── context_state.rs            # 上下文状态
+        ├── context_usage.rs            # 上下文用量追踪
+        ├── hooks.rs                    # Hook 集成
+        ├── response_input.rs           # Response 输入转换
+        └── sanitize.rs                 # Sanitization
 ```
 
 ---
 
-## 3. 核心数据类型
+## 3. 核心对象层级
 
-### 3.1 Message
+Agent 运行分为六层：
 
-```rust
-pub struct Message {
-    pub id: String,                          // UUID
-    pub role: Role,                          // User | Assistant | Tool | System
-    pub content: Vec<ContentPart>,           // 多模态内容块
-    pub reasoning_content: Option<String>,  // DeepSeek / MiniMax 思考内容
-    pub tool_call_id: Option<String>,        // tool 结果消息时关联的调用 ID
-    pub tool_name: Option<String>,
-    pub created_at: i64,                     // Unix ms
-}
-
-/// 统一多模态内容块（定义在 agent-types crate）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ContentPart {
-    Text { text: String },
-    Image(ImageContent),
-    Audio(AudioContent),
-    Video(VideoContent),
-    ToolCall(ToolCallContent),
-    ToolResult(ToolResultContent),
-}
-
-pub struct ImageContent {
-    pub data: MediaData,
-    pub mime_type: Option<String>,
-}
-
-pub struct AudioContent {
-    pub data: MediaData,
-    pub format: Option<String>,    // "mp3", "wav", "opus"
-    pub duration_secs: Option<f32>,
-}
-
-pub struct VideoContent {
-    pub data: MediaData,
-    pub duration_secs: Option<f32>,
-}
-
-pub struct ToolCallContent {
-    pub id: String,
-    pub name: String,
-    pub arguments: Value,
-}
-
-pub struct ToolResultContent {
-    pub call_id: String,
-    pub output: Vec<ToolContent>,  // 复用工具系统的 ToolContent
-    pub is_error: bool,
-}
-
-/// 媒体数据的三种形式
-pub enum MediaData {
-    Url(String),
-    Base64 { data: String, mime_type: String },
-    Path(PathBuf),   // 本地文件延迟读取
-}
+```text
+ThreadManager
+  -> AstroThread
+     -> Session
+        -> SessionTask
+           -> TurnContext
+              -> StepContext
+                 -> tool attempt
 ```
 
-> **统一定义**：此定义是全项目唯一的 `ContentPart` 版本，位于 `agent-types` crate。所有 crate（agent-core/agent-providers/agent-runtime）通过 `use agent_types::ContentPart` 引用。
+| 层级 | 生命周期 | 职责 |
+| --- | --- | --- |
+| Thread | 跨多个 turn | identity、submission queue、event receiver、rollout binding |
+| Session | thread 驻留期 | services、配置、active task、history、event dispatch |
+| Task | 一次可取消工作 | regular / compact / review / user shell、cancel token、join handle |
+| Turn | 一条用户意图 | turn id、权限、交互模式、项目/父子上下文 |
+| Step | 一次 model sampling | model target、工具/MCP 快照、prompt contract |
+| Attempt | 一次工具执行 | approval、sandbox、managed network、hook 和结果 |
 
-### 3.2 AgentSession + TurnContext（原 AgentContext 拆分）
+### 3.1 AstroThread
 
-> **架构决策**：原 `AgentContext` 已拆分为两层，解决 God Object 问题。详见 `03-Crate结构.md`。
+`AstroThread::spawn()` 将 `Session`、`SessionIo` 和 `RolloutRecorder` 绑定一次，并启动长期 `submission_loop`。外部状态变更必须作为 `Op` 顺序提交，不能绕过队列并发修改 Session。
 
-**AgentSession**（长生命周期，位于 agent-runtime）：持有注册表引用，整个会话复用。
+### 3.2 Session
 
-```rust
-pub struct AgentSession {
-    pub session_id: Uuid,
-    pub workspace_id: String,
-    pub tools: Arc<ToolRegistry>,
-    pub skills: Arc<SkillRegistry>,
-    pub providers: Arc<ProviderRegistry>,
-    pub supervisor: Arc<Mutex<Supervisor>>,
-    pub memory: Arc<dyn MemoryStore>,
-    pub budget: Arc<TokenBudget>,
-    pub guard: Arc<HumanGuard>,
-    pub span: tracing::Span,
-}
-```
+`Session`（`AgentLoop` 为兼容别名）保存会话级状态和服务。`SessionServices` 注入 MCP Hub、ToolRegistry、配置等服务引用。`SessionState` 维护运行时可变状态。
 
-**TurnContext**（短生命周期，位于 agent-types）：每轮构建，包含当前轮次的动态数据。
+### 3.3 SessionTask
 
-```rust
-pub struct TurnContext {
-    pub conversation_id: String,
-    pub model: String,
-    pub system_prompt: String,
-    pub messages: Vec<Message>,
-    pub available_tools: Vec<ToolDefinition>,  // BM25 动态筛选后的本轮可用工具
-    pub max_tool_rounds: u32,                   // 默认 25
-    pub depth: u8,                              // 子 Agent 深度（0=主 Agent）
-    pub round: u32,                             // 当前轮次计数
-}
-```
+`SessionTask` 是可恢复任务抽象，当前有四种 `TaskKind`：
 
-`AgentExecutor` 持有 `AgentSession`，每次 `round_loop` 迭代从 session 构建临时 `TurnContext`。
+| Task | 行为 |
+| --- | --- |
+| `RegularTask` | 正常 Responses sampling 与工具循环 |
+| `CompactTask` | 执行 compact、更新 canonical history、发送 compact 生命周期事件 |
+| `ReviewTask` | 在隔离配置中运行只读代码审查，再回传结果并清理资源 |
+| `UserShellTask` | 运行用户明确输入的 login-shell 命令，投影命令事件并参与取消收敛 |
 
-### 3.3 ToolCall / ToolResult
+`ActiveTurn` 最多持有一个 `RunningTask`，保存 task、kind、`CancellationToken`、`TurnContext`、完成信号和 handles。
 
-```rust
-pub struct ToolCall {
-    pub id: String,           // 随机 UUID，唯一标识本次调用
-    pub name: String,
-    pub arguments: Value,     // JSON 参数
-}
+### 3.4 TurnContext / StepContext
 
-/// 工具执行结果（定义在 agent-types crate）
-pub struct ToolResult {
-    pub call_id: String,            // 对应 ToolCall.id
-    pub name: String,               // 工具名称
-    pub output: Vec<ToolContent>,   // 结构化输出（Text/Image/Error 等）
-    pub is_error: bool,
-    pub duration_ms: Option<u64>,
-}
-```
+**TurnContext**：每轮创建一次，包含 turn identity、交互模式、输入准入与事件归属。Fallback 不改变它。
 
-> **统一命名**：`call_id` 统一命名（不使用 `tool_call_id`），`output` 统一使用 `Vec<ToolContent>`（不使用 `String`），与工具系统的 `ToolOutput.contents` 保持一致。
+**StepContext**：每次 Provider sampling 重新创建。冻结本次可见工具、MCP、路由、权限和工作目录；热加载只影响下一 step。
 
 ---
 
-## 4. Agent 执行循环
+## 4. 事件管线（单一事实链）
 
-> **架构决策**：Agent 主循环 `round_loop` 统一定义在 `agent-runtime` crate 的 `AgentExecutor` 中（见 `02-agent-runtime详细设计.md`）。`agent-core` 不包含循环编排逻辑，仅提供以下纯函数供 runtime 调用：
-
-```rust
-/// 构建 LLM 请求（组装 system prompt + message history + tool schemas）
-pub fn build_chat_request(
-    context: &TurnContext,
-    tools: &[ToolDefinition],
-) -> ChatRequest { ... }
-
-### 执行计划提交（submit_plan 工具）
-
-> **架构决策**：放弃 `<agent_plan>` XML 标签的文本解析方案（存在代码块误触发、UTF-8 偏移 panic、嵌套标签等边缘问题），改为通过 `submit_plan` 内置工具提交计划。LLM 使用结构化的 tool_call 提交计划，消除了文本解析的脆弱性。
-
-`submit_plan` 工具定义：
-
-```json
-{
-    "name": "submit_plan",
-    "description": "当任务预计需要 3 步以上工具调用或涉及不可逆操作时，先提交执行计划等待用户确认。",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "plan": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "step": { "type": "integer" },
-                        "action": { "type": "string" },
-                        "tool": { "type": "string" },
-                        "risk": { "type": "string", "enum": ["low", "medium", "high"] }
-                    }
-                }
-            },
-            "reasoning": { "type": "string" }
-        },
-        "required": ["plan"]
-    }
-}
+```text
+AstroThread::submit(Op)
+  → bounded(512) submission channel
+  → Session::submission_loop — 有序 Op 分发
+  → SessionTask::run_turn — 模型/工具循环
+  → EventMsg — Core 单一事件格式
+  → rollout policy + JSONL append（权威历史）
+  → Core event queue（单 receiver）
+  → Server ThreadListener（单 listener per Thread）
+  → ThreadHistoryBuilder（活跃 Turn 快照）
+  → per-connection bounded(128) queues
+  → Tauri ThreadEventsBridge / exec / external Thread clients
 ```
 
-**互斥规则**：`submit_plan` 出现在 tool_calls 中时，round_loop 暂停执行所有其他 tool_calls，等待用户确认计划。确认后在下一轮由 LLM 重新生成实际的 tool_calls。
+### 4.1 持久化先于实时交付
 
-`parse_response` 更新：
-```rust
-pub fn parse_response(response: ChatResponse) -> ParsedResponse {
-    let has_plan = response.tool_calls.iter().any(|tc| tc.name == "submit_plan");
-    ParsedResponse {
-        text: response.text,
-        reasoning: response.reasoning_content,
-        tool_calls: if has_plan {
-            // 仅保留 submit_plan，过滤其他 tool_calls
-            response.tool_calls.into_iter().filter(|tc| tc.name == "submit_plan").collect()
-        } else {
-            response.tool_calls
-        },
-        has_plan,
-    }
-}
-```
+`Session::send_event` 先规范化 event identity，再在串行 `event_dispatch` guard 内按 rollout policy 执行 `RolloutRecorder::record`，最后进入 Core event queue。durable event 先落 rollout，再 live 投递。
 
-```rust
-/// 并发执行一批工具调用（无依赖关系的工具并发，有依赖的串行）
-pub async fn execute_tool_calls(
-    calls: Vec<ToolCall>,
-    registry: &ToolRegistry,
-    guard: &HumanGuard,
-) -> Vec<ToolResult> { ... }
+### 4.2 核心事件类型
 
-pub struct ParsedResponse {
-    pub text: Option<String>,
-    pub reasoning: Option<String>,
-    pub tool_calls: Vec<ToolCall>,
-    pub has_plan: bool,
-}
-```
-
-> 这些函数被 `AgentExecutor::round_loop()` 按顺序调用，形成完整的 Agent 执行循环。循环控制（max_tool_rounds 守卫、暂停感知、Pending 队列注入、自适应规划）由 agent-runtime 负责。
->
-> `run_agent_turn` 是纯编排函数，不包含运行时关注点（审批、预算、规划）。在生产环境中由 `agent-runtime` 的 `AgentExecutor::round_loop()` 调用，后者负责注入运行时上下文。
+稳定生命周期由 `TurnStarted`、`ItemStarted`、`ItemCompleted`、`TurnComplete` 和 `TurnAborted` 表达。消息、reasoning、exec、patch、approval、MCP、Hook、Subagent、usage 和 compaction 都映射到同一 EventMsg/TurnItem 模型。
 
 ---
 
-## 5. 存储层设计
+## 5. 双重迭代预算
 
-### 5.1 连接池初始化
+两套独立机制并行生效：
+
+### 5.1 TurnState.tool_rounds
+
+每条用户消息归零，上限 `config.multi_turn`（默认 `DEFAULT_MAX_ITERATIONS` = 90），`increment_tool_round()` 耗尽时返回 `MaxDepthError`。
+
+### 5.2 IterationBudget
+
+每 Agent Thread 独立预算（默认 90），`code_exec` 类型轮次可通过 `refund()` 退还。
 
 ```rust
-// crates/agent-core/src/storage/mod.rs
-pub async fn open(path: &Path, passphrase: &str) -> anyhow::Result<SqlitePool> {
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .foreign_keys(true);
+pub const DEFAULT_MAX_ITERATIONS: usize = 90;
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .before_acquire(|conn, _| Box::pin(async move {
-            // sqlite-vec C 扩展必须在每条连接上加载
-            unsafe { sqlite3_vec_init(conn.as_raw_handle().as_ptr()); }
-            Ok(true)
-        }))
-        .connect_with(options)
-        .await?;
-
-    // 编译期内嵌 migrations/，按版本号自动升序执行
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
-    Ok(pool)
+pub struct IterationBudget {
+    // 仅在单个 async 任务内顺序访问，使用 Cell 而非 Mutex
 }
-```
 
-### 5.2 Repository 模式
-
-每张表对应一个 Repository struct，持有 `SqlitePool` 引用：
-
-```rust
-pub struct MemoryRepo(SqlitePool);
-
-impl MemoryRepo {
-    /// 写入新记忆，若 key 已有活跃版本则自动软替换
-    pub async fn upsert(&self, entry: &NewMemoryEntry) -> anyhow::Result<String> { ... }
-
-    /// 软删除（设置 valid_to = now()）
-    pub async fn soft_expire(&self, id: &str) -> anyhow::Result<()> { ... }
-
-    /// 查询所有活跃版本（valid_to IS NULL）
-    pub async fn list_active(&self, workspace_id: &str) -> anyhow::Result<Vec<MemoryEntry>> { ... }
-
-    /// 按 workspace + category 批量查 Weibull 分数偏低的条目（遗忘调度器调用）
-    pub async fn scan_for_forgetting(
-        &self, workspace_id: &str, threshold: f64,
-    ) -> anyhow::Result<Vec<MemoryEntry>> { ... }
+impl IterationBudget {
+    pub fn new(max_total: usize) -> Self;
+    pub fn consume(&self) -> bool;     // 消费一次迭代
+    pub fn refund(&self);              // 退还一次（code_exec 等廉价轮次）
+    pub fn remaining(&self) -> usize;
 }
 ```
 
 ---
 
-## 6. 配置加载
+## 6. 工具路由与压缩
 
-### providers.toml 结构
+### 6.1 ToolRouter
 
-```toml
-[providers.anthropic]
-enabled = true
-models = ["claude-sonnet-4-5", "claude-opus-4-5"]
+`ToolRouter` 将 wire name 解析为已注册 handler 或 MCP 工具。`ToolExposure` 六级暴露：Direct / DirectModelOnly / Deferred / DeferredModelOnly / CodeModeOnly / Hidden。Deferred 工具被 `tool_search` 激活后仍需经过授权和沙箱。
 
-[providers.minimax]
-enabled = true
-models = ["MiniMax-Text-01", "MiniMax-M1"]
+### 6.2 工具结果压缩
 
-[providers.openai]
-enabled = false
-models = ["gpt-4o"]
-```
+`maintain_tool_context()` 三阶段：prune（截断超大 tool 结果）→ LLM 辅模型摘要（`AuxiliaryTask::Compaction`）→ head/tail fallback。`compressed_content` 字段存 Provider 视图；`content` 字段永远保留原文。
 
-### 加载逻辑
+### 6.3 Tool spill
 
-```rust
-pub fn load_provider_configs(
-    providers_toml: &Path,
-    secrets_dir: &Path,     // ~/.astro/secrets/
-) -> anyhow::Result<Vec<ProviderConfig>> {
-    let raw: TomlProviders = toml::from_str(&fs::read_to_string(providers_toml)?)?;
-
-    raw.providers.into_iter().map(|(name, cfg)| {
-        let key_path = secrets_dir.join(format!("{}.key", name));
-        ProviderConfig {
-            name,
-            enabled: cfg.enabled,
-            models: cfg.models,
-            has_key: key_path.exists(),   // 只传布尔值给前端，密钥不出进程
-        }
-    }).collect()
-}
-```
-
-密钥读取仅在 `ProviderRegistry::build_client` 时发生，且只在 Rust 进程内完成 HTTP 请求头注入，永不序列化到前端。
+tool 结果 >= `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，provider history 用 stub。
 
 ---
 
-## 7. 成本追踪
+## 7. 关键不变量
 
-```rust
-pub struct CostTracker {
-    pool: SqlitePool,
-    workspace_id: String,
-    conversation_id: String,
-}
-
-impl CostTracker {
-    pub async fn record(&self, model: &str, usage: &TokenUsage) -> anyhow::Result<()> {
-        let cost_usd = calculate_cost(model, usage);
-        sqlx::query!(
-            "INSERT INTO cost_records (id, workspace_id, conversation_id, model,
-             token_input, token_output, cost_usd)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-            uuid(), self.workspace_id, self.conversation_id,
-            model, usage.input_tokens, usage.output_tokens, cost_usd
-        ).execute(&self.pool).await?;
-        Ok(())
-    }
-}
-```
+1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。相邻 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
+2. **streaming 不变量**：每轮 assistant 回复先写入再执行工具；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
+3. **Tool spill**：tool 结果 >= `DEFAULT_SPILL_THRESHOLD_BYTES` 时落盘，provider history 用 stub。
+4. **Skill soft-alias**：模型把 skill 名当工具调用时，自动改写为 `skills(action=load, skill_id=...)`。
+5. **MCP 工具名**：`mcp__{server_id}__{tool_name}` 前缀。
+6. **交互模式**：`interaction_mode` 经 ChatRequest 下传；行为说明只进 system prompt。
+7. **单一事件事实链**：`EventMsg` 是 Core 唯一事件格式。SessionStore 为可重建投影；rollout JSONL 为权威历史。
+8. **Agent Thread 资源守恒**：每次 spawn 失败释放路径和身份预留；每次 turn 退出释放执行槽位；completed/interrupted/errored 线程保持可寻址。
 
 ---
 
-## 8. AgentEvent 枚举
+## 8. 相关文档
 
-`AgentExecutor::round_loop`（agent-runtime）通过 `mpsc::Sender<AgentEvent>` 向 Tauri 层推送事件，Tauri 层再通过 `app_handle.emit` 转为前端 Tauri 事件。以下枚举定义在 agent-core 中供各 crate 共享：
-
-```rust
-pub enum AgentEvent {
-    TokenChunk(String),                  // 正文增量
-    ThinkingDelta(String),               // thinking 增量（DeepSeek/MiniMax）
-    ToolCall(ToolCall),                  // 工具调用开始
-    ToolResult(ToolResult),              // 工具执行完成
-    ApprovalRequest(ApprovalRequest),    // 需要人工确认（L2/L3 风险）
-    TtsChunk(Vec<u8>),                   // TTS 音频块（PCM/MP3 片段）
-    MediaTaskUpdate(MediaTaskEvent),     // 媒体任务状态变更
-    Done,                                // 本轮结束
-    Error(String),                       // 不可恢复错误
-}
-```
+- [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md) — 旧独立 crate 设计（已合并到 agent-core）
+- [07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md) — 完整 Turn/Task/Hook 生命周期
+- [08-Hooks系统详细设计.md](08-Hooks系统详细设计.md) — 三总线 Hook 系统
+- [12-Agent事件与恢复详细设计.md](12-Agent事件与恢复详细设计.md) — EventMsg 单一事实链、恢复协议
+- [14-Agent-Harness执行外壳详细设计.md](14-Agent-Harness执行外壳详细设计.md) — Harness 当前实现基线

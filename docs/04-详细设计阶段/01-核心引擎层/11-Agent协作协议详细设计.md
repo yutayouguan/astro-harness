@@ -1,14 +1,14 @@
 # Agent 协作协议详细设计
 
-> **Harness 当前基线（2026-08-29）**：已落地的协作面是 V2 Agent Graph + durable mailbox + 六个模型工具。Debate/MapReduce/Voting/MessageBus 等高层协议只能在该基础上实现，当前无完整执行路径的部分统一标记为目标设计。
+> **Harness 当前基线（2026-09-07）**：已落地的协作面是 Codex V2 Agent Graph（`AgentControl` + `AgentGraphStore` + `AgentRegistry` + `ActivityBus`，位于 `crates/agent-subagents`）、durable mailbox（`subagents.db`）和六个模型工具（`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`，位于 `crates/agent-core/src/exec/dispatch.rs`）。桌面控制面额外提供 `read_subagent_thread` 和 `close_subagent_thread`。资源配额：`max_threads=32`、`max_depth=8`、`max_running=8`（定义于 `agent_control_directory.rs`）。状态机：`PendingInit → Running → Completed { last_message } / Interrupted / Errored { message } → Shutdown`。Debate/MapReduce/Voting/MessageBus 等高层协议属于**目标设计**，codebase 中无对应实现。
 
-> 版本：v1.0 | 日期：2026-08-12 | 状态：草稿
+> 版本：v1.0 | 日期：2026-08-12 | 状态：**目标设计（未实现）**
 > 对应需求：F-30 子 Agent 派生（扩展）、F-31 多 Agent 协作
 >
 > **前置依赖**：
 >
-> - [Subagent 详细设计](06-Subagent详细设计.md)（Agent Graph / mailbox / 父子 Agent Thread）
-> - [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md)（AgentExecutor / round_loop）
+> - [Subagent 详细设计](06-Subagent详细设计.md)（`AgentControl` / `AgentGraphStore` / mailbox / 父子 Agent Thread）
+> - [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md)（`Session` / `submission_loop` / `SessionTask::run_turn`）
 > - [03-MCP协议详细设计.md](../../04-详细设计阶段/04-工具与扩展生态/03-MCP协议详细设计.md)（MCP 通信层）
 
 ---
@@ -17,7 +17,7 @@
 
 ### 1.1 设计动机
 
-现有子 Agent 派生系统（07 文档）采用严格的**父子树状模型**：父 Agent 派生子 Agent，子 Agent 完成后返回结构化摘要，兄弟节点之间不允许直接通信。这在单向任务委派场景下足够高效，但无法覆盖以下需求：
+现有 Codex V2 Agent Thread 系统（`crates/agent-subagents`）采用**父子树状模型**：父 Agent 通过 `spawn_agent` 派生子 Agent，子 Agent 完成后通过 `AgentGraphStore` mailbox 返回结果，兄弟节点之间可通过 `send_message` 通信。一个 `AgentControl` 共享于整个根会话的所有后代。这在单向任务委派和基本消息传递场景下足够高效，但无法覆盖以下需求：
 
 1. **观点碰撞**：安全审计、代码评审等场景需要多个 Agent 从不同角度审视同一问题，通过辩论达成更全面的结论
 2. **并行分治**：大规模文件重构、多语言翻译等场景需要将任务拆分给专业 Agent 并行处理，再合并结果
@@ -27,30 +27,31 @@
 
 | 模式 | 适用场景 | Agent 关系 | 通信方式 |
 |------|---------|-----------|---------|
-| Hierarchical（层级式） | 简单子任务委派 | 父 → 子，单向 | 现有 Supervisor（07 文档） |
+| Hierarchical（层级式） | 简单子任务委派 | 父 → 子，单向 | 现有 V2 Agent Thread（`AgentControl` + 六工具） |
 | Peer Discussion（对等讨论） | 辩论、评审、头脑风暴 | 平等对话，互相可见 | MessageBus 广播 |
 | Division of Labor（分工协作） | 并行处理、MapReduce、投票 | 编排者 → 工作者，结果汇总 | MessageBus 定向 |
 
-Hierarchical 模式完全复用现有 Supervisor 实现，本文档聚焦 Peer Discussion 和 Division of Labor 两种新模式。
+Hierarchical 模式完全复用现有 V2 Agent Thread 实现，本文档聚焦 Peer Discussion 和 Division of Labor 两种新模式。
 
-### 1.3 与 Supervisor 的关系
+### 1.3 与 V2 Agent Thread 的关系
 
-协作协议**不替代**现有 Supervisor，而是在其之上构建更高级的编排能力。`CollaborationOrchestrator` 内部使用 `Supervisor::spawn_child` 创建参与者 Agent，但额外提供跨 Agent 消息路由和结果合成逻辑：
+协作协议**不替代**现有 V2 Agent Thread 系统，而是在其之上构建更高级的编排能力。`CollaborationOrchestrator`（目标设计）内部使用 `spawn_agent` 工具创建参与者 Agent（底层通过 `AgentRegistry` 预留路径和身份、`AgentGraphStore` 持久化线程图），但额外提供跨 Agent 消息路由和结果合成逻辑：
 
 ```text
-AgentExecutor (depth=0, 发起者)
+Session (depth=0, 发起者)
     │
     ▼
-CollaborationOrchestrator
+CollaborationOrchestrator（目标设计）
     │
     ├─ 创建 CollaborationSession
     │
-    ├─ Supervisor::spawn_child() × N  ← 复用现有派生机制
+    ├─ spawn_agent × N  ← 复用现有 V2 派生机制
     │     ├─ Participant A (depth=1)
     │     ├─ Participant B (depth=1)
     │     └─ Participant C (depth=1)
+    │     （受 AgentRegistry 配额约束：max_threads=32, max_running=8）
     │
-    ├─ MessageBus 路由消息  ← 新增能力
+    ├─ MessageBus 路由消息  ← 新增能力（目标设计）
     │     A ⇄ B ⇄ C（对等讨论模式）
     │     或 Orchestrator → A/B/C → Orchestrator（分工模式）
     │

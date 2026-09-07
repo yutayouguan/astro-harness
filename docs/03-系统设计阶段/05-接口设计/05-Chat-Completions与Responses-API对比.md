@@ -449,7 +449,7 @@ Chat parser 则从 `choices[].delta` 中抽取文本、reasoning 兼容字段、
 
 ### 7.5 当前 Provider 策略
 
-当前 profile 中声明为 Agent Responses-capable 的内置 Provider 是 OpenAI、DeepSeek、Azure OpenAI、百炼、MiniMax 和 Mimo。权威来源始终是 `ProviderProfile.supports_responses`；第三方只提供名义上的 `/responses` endpoint，不足以证明其 reasoning、并行工具、custom tool、tool search、usage 和终态事件都兼容。
+当前 profile 中声明为 Agent Responses-capable 的内置 Provider 是 OpenAI、DeepSeek、Azure OpenAI、OpenRouter、百炼、MiniMax 和 Mimo。权威来源始终是 `ProviderProfile.supports_responses`；第三方只提供名义上的 `/responses` endpoint，不足以证明其 reasoning、并行工具、custom tool、tool search、usage 和终态事件都兼容。
 
 当前注册成功的 custom provider 也会被视为可进入 Agent 路由；这代表配置方声明兼容，不等于 Astro 已验证其行为。生产环境仍应为每个 custom endpoint 单独执行契约测试。
 

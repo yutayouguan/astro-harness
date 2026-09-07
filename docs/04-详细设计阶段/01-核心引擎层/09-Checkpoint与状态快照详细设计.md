@@ -1,8 +1,8 @@
 # Checkpoint 与状态快照详细设计
 
-> **Harness 当前基线（2026-09-01）**：当前恢复使用 `agent-rollout` append-only 事实源、稳定 item identity 和 snapshot + live boundary。SessionStore 是可销毁重建的原生 `ResponseItem` 索引，不再以 `StoredMessage` 作为恢复合同。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
+> **当前基线（2026-09-07）**：当前恢复使用 `agent-rollout`（`crates/agent-rollout`）append-only JSONL 事实源（`RolloutRecorder`、`PersistencePolicy`、`reconstruct`）、稳定 item identity 和 snapshot + live boundary。SessionStore（`crates/agent-session`，`state.db` WAL SQLite，schema v23，FTS5）是可销毁重建的原生 `ResponseItem` 索引。恢复协议：客户端先建立 `SubscribeThreadEvents` live stream → `ResumeThread(include_turns=true)` → Server 在 listener 内串行化 snapshot + 订阅 → 越过 live boundary 处理缓冲事件。`ThreadRollback` 是累计、可回放的 durable 控制事件。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
 
-> 版本：v1.0 | 日期：2026-08-11 | 状态：草稿
+> 版本：v1.0 | 日期：2026-08-11 | 状态：草稿（大部分内容为目标设计）
 > 对应需求：F-12 对话分支、F-01 Agent 核心执行（崩溃恢复/回滚）、F-22 工作流暂停恢复
 > 前置文档：[07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md)（会话持久化与崩溃恢复）、[03-对话分支系统设计.md](../05-桌面端与交互/03-对话分支系统设计.md)（分支数据模型）、[05-工作流DAG执行引擎设计.md](../_v0.3规划/05-工作流DAG执行引擎设计.md)（workflow_runs 暂停恢复）、[01-数据库访问层详细设计.md](../06-安全与基础设施/01-数据库访问层详细设计.md)（Repository 模式、事务管理）
 
@@ -14,7 +14,7 @@
 
 Checkpoint 是某一时刻对话与 Agent 状态的冻结快照。它捕获该时刻的完整上下文——消息历史、系统提示、记忆快照、工具执行状态——使得用户或系统可以在任意未来时刻精确恢复到该状态，如同版本控制系统中的 commit。
 
-与 [07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md) Section 8 的崩溃恢复机制不同，Checkpoint 不仅仅用于故障恢复：它是一个主动的、可寻址的状态标记，支持用户驱动的回滚、状态复现和分支探索。
+与 [07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md) Section 11（事件与持久化）的崩溃恢复机制不同，Checkpoint 不仅仅用于故障恢复：它是一个主动的、可寻址的状态标记，支持用户驱动的回滚、状态复现和分支探索。
 
 ### 1.2 核心用例
 
@@ -40,14 +40,14 @@ Checkpoint 是某一时刻对话与 Agent 状态的冻结快照。它捕获该�
                     ┌────────▼─────┐  ┌──────▼────────┐  ┌─────▼──────────┐
                     │ 崩溃恢复     │  │ 对话分支       │  │ 工作流暂停恢复  │
                     │ (lifecycle   │  │ (branching     │  │ (workflow_runs  │
-                    │  §8)         │  │  系统)         │  │  §7)           │
+                    │  §11)        │  │  系统)         │  │  §7)           │
                     └──────────────┘  └───────────────┘  └────────────────┘
-                    最后可恢复状态      消息级分叉，        ExecutionContext
-                    悬空 tool_call      复制历史消息        序列化快照
-                    注入占位 result
+                    rollout snapshot     消息级分叉，        ExecutionContext
+                    + live boundary     复制历史消息        序列化快照
+                    ResponseItem 恢复
 ```
 
-**崩溃恢复**（Agent 生命周期 Section 8）处理的是应用意外退出时的"尽力而为"恢复，以 `messages` 表为权威日志；**Checkpoint** 是主动创建的精确快照，包含完整的上下文环境（记忆、SystemPrompt 状态等），恢复精度更高。两者互补而非替代。
+**崩溃恢复**（Agent 生命周期 Section 11 事件与持久化）处理的是应用意外退出时的"尽力而为"恢复，以 rollout JSONL 为权威历史、SessionStore（`response_items` 表）为可重建投影；**Checkpoint** 是主动创建的精确快照，包含完整的上下文环境（记忆、SystemPrompt 状态等），恢复精度更高。两者互补而非替代。
 
 **对话分支**（branching 系统）通过复制消息历史创建新对话线；Checkpoint 的 fork-on-restore 模式在分支创建时额外注入完整的记忆和上下文快照，确保分支后的 Agent 状态与原始时刻完全一致。
 
@@ -2196,11 +2196,11 @@ export function CheckpointManagerPanel({
 
 | 文档 | 关联内容 |
 |------|---------|
-| [07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md) | 会话持久化（Section 6）、崩溃恢复（Section 8）、AgentInstance 状态机 |
+| [07-Agent生命周期详细设计.md](07-Agent生命周期详细设计.md) | Compact 与历史控制（Section 6）、事件与持久化（Section 11）、AstroThread / Session 生命周期 |
 | [03-对话分支系统设计.md](../05-桌面端与交互/03-对话分支系统设计.md) | `create_branch` 分支创建逻辑、消息复制策略、分支树查询 |
 | [05-工作流DAG执行引擎设计.md](../_v0.3规划/05-工作流DAG执行引擎设计.md) | `workflow_runs` 暂停/恢复（Section 7）、ExecutionContext 序列化 |
 | [01-数据库访问层详细设计.md](../06-安全与基础设施/01-数据库访问层详细设计.md) | Repository 模式、事务管理规范、TaskTraceRepo |
 | [01-Schema设计.md](../../03-系统设计阶段/04-数据库设计/01-Schema设计.md) | conversations / messages / memory_entries 表 DDL |
-| [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md) | AgentExecutor / round_loop、PendingQueue、HumanGuard 状态 |
+| [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md) | 运行时执行模型（注：代码中 AgentExecutor / round_loop / PendingQueue / HumanGuard 已不存在，当前为 SessionTask / turn_lifecycle / submission_loop） |
 | [03-交互执行模式设计.md](03-交互执行模式设计.md) | RiskLevel 分级、高风险工具列表 |
 | [01-Tauri桌面端详细设计.md](../05-桌面端与交互/01-Tauri桌面端详细设计.md) | AppState 设计、Tauri Command 模式、EventEmitter |

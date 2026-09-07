@@ -116,18 +116,18 @@ Provider 返回的 text、reasoning、usage 和 tool deltas 被规范化为统�
 
 ### 7.1 可见性和可调用性
 
-`ToolExposure` 将两个问题分开：
+`ToolExposure`（定义在 `agent-types`）将两个问题分开：
 
 - schema 是否直接发给模型；
 - handler 是否允许在受信任的嵌套路径执行。
 
-Direct/Deferred/Hidden/ModelOnly 不是权限等级。Deferred 工具被 `tool_search` 激活后仍需经过授权和沙箱。
+五个变体——Direct、DirectModelOnly、Deferred、DeferredModelOnly、Hidden——不是权限等级。Deferred 工具被 `tool_search` 激活后仍需经过授权和沙箱。注意 `CodeModeOnly` 不属于 `ToolExposure`，而是 `ToolMode`（`agent-types`）的独立维度，控制当前采样步骤的工具投影方式。
 
 ### 7.2 执行快照
 
-`StepContext` 同时保存 advertised tools 和 routable tools。
+`StepContext` 持有 `ToolRouter`，后者同时保存 model-visible tools（`model_routes`）和全量 routable tools（`routes`）。
 
-- `ToolInvocationSource::Model` 必须命中 `advertises_tool()`；
+- 模型发起的工具调用必须通过 `ToolRouter::model_can_call()`；
 - 热重载工具和 MCP 不能改变已生成调用的执行边界。
 
 ### 7.3 结果生命周期

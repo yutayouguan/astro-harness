@@ -123,6 +123,7 @@ Usage 归一化规则：
 
 ## 10. 事实源
 
+- `ProviderProfile` 同时持有 `ProviderKind`；内置 Provider 的能力声明与运行时构造均从该 profile 表选择，不得再新建独立的 provider-id 分支表。
 - `crates/agent-providers/src/dispatch.rs`
 - `crates/agent-providers/src/profile.rs`
 - `crates/agent-providers/src/types/request.rs`

@@ -39,7 +39,7 @@
 | 维度 | 记忆系统 | 知识库 RAG | 全局搜索 |
 | ---- | -------- | ---------- | -------- |
 | 数据来源 | Agent 自动从对话中蒸馏 | 用户主动导入文档/URL | 聚合所有索引 |
-| 写入方式 | `memory_manage` 工具 | `knowledge_manage` 工具 / UI 上传 | 只读 |
+| 写入方式 | `memory` 工具 | `knowledge_manage` 工具 / UI 上传 | 只读 |
 | 检索触发 | 回忆触发词 / 自适应 | Agent 每轮自动检索 | 用户 `Cmd+Shift+F` |
 | 注入位置 | `<memory>` 块 | `<knowledge>` 块 | 不注入上下文 |
 | 存储隔离 | 按 `workspace_id` | 按 `workspace_id` | 跨源聚合 |
@@ -1980,7 +1980,7 @@ fn format_single_chunk(index: usize, result: &RetrievalResult) -> String {
 知识库注入的 token 预算从 `ContextManager` 的整体预算中分配：
 
 ```rust
-// crates/agent-runtime/src/context/budget.rs
+// crates/agent-core/src/compression.rs (目标设计)
 
 pub struct TokenBudget {
     pub total: usize,               // 模型窗口 × 0.90
