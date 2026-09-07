@@ -17,7 +17,7 @@ pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
     })
 }
 
-/// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `dispatch_tool` 前构造。
+/// 单次工具调用的共享运行时上下文，由 AgentLoop 在每次 `ToolRegistry::dispatch` 前构造。
 pub struct ToolContext<'a> {
     /// 当前 Agent 的记忆管理器；只在同步 memory/context/persona 操作期间短暂加锁。
     pub memory: &'a RwLock<MemoryManager>,
@@ -172,7 +172,7 @@ impl<'a> ToolContext<'a> {
 ///
 /// terminal、code_exec 与 MCP stdio 共用此入口，避免不同进程启动路径对 profile
 /// 产生不同解释。`workspace_write_grant` 仅供单次已审批的工具调用使用；
-/// `sandbox_policy` 由 orchestrator 为当前 attempt 选择；兼容入口传 `None` 时仍在此解析。
+/// `sandbox_policy` 由 orchestrator 为当前 attempt 选择；未预选策略的调用方传 `None` 时仍在此解析。
 /// 常驻 MCP 连接必须传 `false, None`，不得继承临时授权。
 pub fn build_command_sandbox_policy(
     memory_dir: &Path,

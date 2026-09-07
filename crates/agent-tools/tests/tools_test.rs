@@ -1,6 +1,6 @@
 //! 内置工具注册与分发集成测试。
 
-use tools::{builtin_handler_names, register_all, ToolRegistry};
+use tools::{register_all, ToolRegistry};
 
 #[tokio::test]
 async fn register_all_includes_panel_tools() {
@@ -120,21 +120,20 @@ fn registers_only_v2_agent_tools() {
 }
 
 #[tokio::test]
-async fn metadata_tools_have_handlers_without_legacy_memory_aliases() {
+async fn metadata_tools_have_native_runtimes_without_legacy_memory_aliases() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
-    let handlers = builtin_handler_names();
     for entry in registry.all_tools() {
         assert!(
-            handlers.binary_search(&entry.name.as_str()).is_ok(),
-            "metadata tool `{}` missing handler",
+            registry.runtime(&entry.name).is_some(),
+            "metadata tool `{}` missing native runtime",
             entry.name
         );
     }
     for legacy in ["memory_add", "memory_replace", "memory_remove"] {
         assert!(
-            handlers.binary_search(&legacy).is_err(),
-            "legacy tool name still has handler: {legacy}"
+            registry.get(legacy).is_none() && registry.runtime(legacy).is_none(),
+            "legacy tool name still has metadata or runtime: {legacy}"
         );
     }
 }

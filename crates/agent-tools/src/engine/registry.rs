@@ -14,27 +14,14 @@ use crate::context::ToolContext;
 
 pub use types::tool_entry::ToolEntry;
 
-/// 内置工具统一异步 handler：可包 sync/async、`&mut ToolContext`、按 name 路由。
-///
-/// 不要求 `Send`：`ToolContext`（含 `SessionStore`/`RefCell`）本身非 `Send`，
-/// handler future 会捕获 `&mut ToolContext`。
-pub type BuiltinToolHandler =
-    for<'a, 'b> fn(
-        &'a mut ToolContext<'b>,
-        &'a str,
-        &'a serde_json::Value,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<types::ToolOutput>> + 'a>>;
-
 /// 内置工具自注册钩子：各工具模块通过 `inventory::submit!` / [`crate::submit_builtin_tool!`] 报名。
 ///
-/// 同时携带元数据 `register`、可分发名称列表与统一 [`BuiltinToolHandler`]。
+/// `register` 会原子地注册元数据与宏生成的 [`crate::CoreToolRuntime`]。
 pub struct BuiltinToolRegistrar {
-    /// 向注册表写入本模块工具条目。
+    /// 向注册表写入本模块工具元数据与原生运行时。
     pub register: fn(&mut ToolRegistry),
-    /// 本模块可分发的工具名（应与 metadata 注册名对齐）。
+    /// 本模块可分发的工具名（用于全局重名检查）。
     pub names: &'static [&'static str],
-    /// 统一执行入口（按 `names` 中的 name 查表后调用）。
-    pub handler: BuiltinToolHandler,
 }
 
 inventory::collect!(BuiltinToolRegistrar);
@@ -45,8 +32,8 @@ inventory::collect!(BuiltinToolRegistrar);
 /// 已过滤，不走 `tools-enabled.json`。
 /// 动态工具 handler（MCP 工具等运行时注册的异步调用闭包）。
 ///
-/// 与 `BuiltinToolHandler` 不同，这不需要 `ToolContext` — MCP 工具通过
-/// 捕获的 `Arc<McpHub>` 自行完成调用。
+/// 动态工具不需要 `ToolContext` — MCP 工具通过捕获的
+/// `Arc<McpHub>` 自行完成调用。
 pub type DynToolHandler = Arc<
     dyn Fn(
             &str,
@@ -181,21 +168,6 @@ impl ToolRegistry {
             .insert(runtime.registered_name().to_string(), runtime);
     }
 
-    /// 将 inventory 元数据与其执行器绑定到同一注册表。
-    pub fn bind_builtin_runtime(&mut self, name: &str, handler: BuiltinToolHandler) {
-        let Some(entry) = self.tools.get(name).cloned() else {
-            panic!("builtin tool handler has no registered metadata: {name}");
-        };
-        self.runtimes.insert(
-            name.to_string(),
-            Arc::new(crate::engine::executor::LegacyToolAdapter::new(
-                name.to_string(),
-                entry,
-                handler,
-            )),
-        );
-    }
-
     /// 注册一个原生执行器及其元数据。
     pub fn register_runtime(
         &mut self,
@@ -225,9 +197,11 @@ impl ToolRegistry {
         args: &serde_json::Value,
     ) -> anyhow::Result<types::ToolOutput> {
         let runtime = self.runtime(name);
+        let skill_runtime = (name != "skills").then(|| self.runtime("skills")).flatten();
         crate::dispatch::dispatch_runtime(
             self.is_tool_allowed(name),
             runtime.as_ref(),
+            skill_runtime.as_ref(),
             ctx,
             name,
             args,

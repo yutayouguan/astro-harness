@@ -40,21 +40,17 @@ pub use context::{
     image_gen_targets_from_parts, ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials,
     ToolContext,
 };
-pub use dispatch::{
-    builtin_handler_names, dispatch_runtime, dispatch_tool, tool_requires_in_process_write,
-};
+pub use dispatch::tool_requires_in_process_write;
 pub use engine::code_mode::render_tool_description as render_code_mode_tool_description;
 pub use engine::execution::{
     AgentThreadDispatch, FollowupAgentDispatchRequest, ParentRuntimeMaterial,
     SpawnAgentDispatchRequest,
 };
-pub use engine::executor::{
-    CoreToolRuntime, DynamicToolAdapter, LegacyToolAdapter, ToolExecutor, ToolExecutorFuture,
-};
+pub use engine::executor::{CoreToolRuntime, DynamicToolAdapter, ToolExecutor, ToolExecutorFuture};
 pub use engine::workflow::{register_workflow_tools, WORKFLOW_TOOLSET};
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
-pub use registry::{BuiltinToolHandler, BuiltinToolRegistrar, ToolEntry, ToolRegistry};
+pub use registry::{BuiltinToolRegistrar, ToolEntry, ToolRegistry};
 pub use sandbox::{SandboxAuditKind, SandboxAuditMetadata};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
 pub use terminal_session::{
@@ -72,7 +68,6 @@ pub use types::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 /// - `sync_ctx`：`fn(&ToolContext|&mut ToolContext, &Value)`
 /// - `sync_named`：`fn(&ToolContext|&mut ToolContext, &str, &Value)`
 /// - `async_named`：`async fn(&mut ToolContext, &str, &Value)`
-/// - `custom`：已符合 [`BuiltinToolHandler`] 签名的 fn
 ///
 /// ```ignore
 /// submit_builtin_tool! {
@@ -133,35 +128,72 @@ macro_rules! submit_builtin_tool {
             $d(ctx, name, &typed).map(::types::ToolOutput::from)
         });
     };
-    // ── custom：handler 已符合 BuiltinToolHandler 签名 ───
-    (register: $r:ident, names: [$($n:literal),+ $(,)?], custom: $h:ident $(,)?) => {
-        ::inventory::submit! {
-            $crate::registry::BuiltinToolRegistrar {
-                register: $r,
-                names: &[$($n),+],
-                handler: $h,
+    // ── 内部实现：为每个 inventory 模块生成原生 ToolExecutor ────
+    (@impl $register_fn:ident, [$($name:literal),+], $ctx:ident, $nm:ident, $args:ident, $body:block) => {
+        struct __AstroBuiltinToolExecutor {
+            registered_name: &'static str,
+            entry: ::types::ToolEntry,
+        }
+
+        impl $crate::engine::executor::ToolExecutor for __AstroBuiltinToolExecutor {
+            fn tool_name(&self) -> ::types::ToolName {
+                self.entry.tool_name()
+            }
+
+            fn spec(&self) -> ::types::ToolSpec {
+                $crate::engine::executor::tool_spec_from_entry(&self.entry)
+            }
+
+            fn description(&self) -> &str {
+                &self.entry.description
+            }
+
+            fn toolset(&self) -> &str {
+                &self.entry.toolset
+            }
+
+            fn approval_requirement(&self) -> ::types::ExecApprovalRequirement {
+                self.entry.approval_requirement
+            }
+
+            fn icon(&self) -> &'static str {
+                self.entry.icon
+            }
+
+            fn handle<'a>(
+                &'a self,
+                $ctx: &'a mut $crate::context::ToolContext<'_>,
+                $args: &'a ::serde_json::Value,
+            ) -> $crate::engine::executor::ToolExecutorFuture<'a> {
+                let $nm = self.registered_name;
+                ::std::boxed::Box::pin(async move $body)
             }
         }
-    };
-    // ── 内部实现：统一生成 handler + inventory::submit ────
-    (@impl $register_fn:ident, [$($name:literal),+], $ctx:ident, $nm:ident, $args:ident, $body:block) => {
-        fn __astro_builtin_tool_handler<'a, 'b>(
-            $ctx: &'a mut $crate::context::ToolContext<'b>,
-            $nm: &'a str,
-            $args: &'a ::serde_json::Value,
-        ) -> ::std::pin::Pin<
-            ::std::boxed::Box<
-                dyn ::std::future::Future<Output = ::anyhow::Result<::types::ToolOutput>>
-                    + 'a,
-            >,
-        > {
-            ::std::boxed::Box::pin(async move $body)
+
+        fn __astro_register_builtin_tools(
+            registry: &mut $crate::registry::ToolRegistry,
+        ) {
+            $register_fn(registry);
+            $(
+                let entry = registry
+                    .get($name)
+                    .cloned()
+                    .unwrap_or_else(|| panic!(
+                        "builtin tool metadata missing after registration: {}",
+                        $name,
+                    ));
+                let runtime = ::std::sync::Arc::new(__AstroBuiltinToolExecutor {
+                    registered_name: $name,
+                    entry: entry.clone(),
+                });
+                registry.register_runtime(entry, runtime);
+            )+
         }
+
         ::inventory::submit! {
             $crate::registry::BuiltinToolRegistrar {
-                register: $register_fn,
+                register: __astro_register_builtin_tools,
                 names: &[$($name),+],
-                handler: __astro_builtin_tool_handler,
             }
         }
     };
@@ -175,11 +207,12 @@ macro_rules! submit_builtin_tool {
 /// 注意：工具模块须通过 `pub mod builtin` 编入 crate，否则 submit 不会进入最终二进制。
 /// 通常在应用启动或测试初始化时调用一次。
 pub fn register_all(registry: &mut ToolRegistry) {
+    let mut names = std::collections::HashSet::new();
     for hook in inventory::iter::<BuiltinToolRegistrar> {
-        (hook.register)(registry);
         for name in hook.names {
-            registry.bind_builtin_runtime(name, hook.handler);
+            assert!(names.insert(*name), "duplicate builtin tool name: {name}");
         }
+        (hook.register)(registry);
     }
 }
 
@@ -230,16 +263,10 @@ mod inventory_register_tests {
     }
 
     #[test]
-    fn every_registered_metadata_tool_has_handler() {
+    fn every_registered_metadata_tool_has_native_runtime() {
         let mut registry = ToolRegistry::new();
         register_all(&mut registry);
-        let handlers = builtin_handler_names();
         for entry in registry.all_tools() {
-            assert!(
-                handlers.binary_search(&entry.name.as_str()).is_ok(),
-                "metadata tool `{}` has no dispatch handler",
-                entry.name
-            );
             assert!(
                 registry.runtime(&entry.name).is_some(),
                 "metadata tool `{}` has no CoreToolRuntime",
@@ -259,11 +286,12 @@ mod inventory_register_tests {
 
     #[test]
     fn legacy_memory_tool_names_are_not_registered() {
-        let handlers = builtin_handler_names();
+        let mut registry = ToolRegistry::new();
+        register_all(&mut registry);
         for legacy in ["memory_add", "memory_replace", "memory_remove"] {
             assert!(
-                handlers.binary_search(&legacy).is_err(),
-                "legacy tool name still has handler: {legacy}"
+                registry.get(legacy).is_none() && registry.runtime(legacy).is_none(),
+                "legacy tool name still has metadata or runtime: {legacy}"
             );
         }
     }

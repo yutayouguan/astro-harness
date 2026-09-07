@@ -7,7 +7,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 - 提供 `CoreToolRuntime / ToolExecutor` 类型擦除执行合同，并由 `ToolRegistry` 统一持有内置、MCP 与动态工具的 schema 和 runtime
 - 通过 `inventory` crate 实现工具自注册：新工具只需 `submit_builtin_tool!` 宏即可，无需修改入口
 - `register_all()` 一次性收集并注册全部内置工具
-- Agent 主链统一走 `ToolRegistry::dispatch -> CoreToolRuntime::handle`；`dispatch_tool` 仅保留为兼容入口
+- Agent 主链和独立测试统一走 `ToolRegistry::dispatch -> CoreToolRuntime::handle`，无平行 handler table
 - 命令审批系统：危险命令分类、allowlist 匹配、hardline 阻断
 - 交互模式门禁：按 `InteractionMode`（Agent/Plan）过滤可用工具 schema
 - 工具目录与 schema 清洗：`builtin_catalog` / `sanitize_tool_schema`
@@ -20,13 +20,13 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 |-----------|------|
 | **engine/** | |
 | `engine/registry.rs` | `ToolRegistry` — 工具注册表（内置 + MCP + 动态），持有 schema、`CoreToolRuntime`、toolset 与暴露状态 |
-| `engine/dispatch.rs` | Registry runtime 分发的记账/权限公共逻辑；`dispatch_tool` 是兼容入口 |
+| `engine/dispatch.rs` | Registry runtime 分发的统一记账、权限与 Skill soft-alias 逻辑 |
 | `engine/context.rs` | `ToolContext` — 工具执行上下文（凭证、会话、沙箱策略、项目根） |
 | `engine/catalog.rs` | `builtin_catalog` / `catalog_for_ui` — 工具目录与参数提取 |
 | `engine/schema.rs` | `sanitize_tool_schema` — schema 清洗（移除厂商扩展、修复 hazards） |
 | `engine/path_safe.rs` | `resolve_safe` — 路径安全解析，防止路径穿越 |
 | `engine/execution.rs` | `AgentThreadDispatch` trait — 子 Agent 线程分发接口 |
-| `engine/executor.rs` | `CoreToolRuntime / ToolExecutor` — 类型擦除执行合同与 Legacy/Dynamic adapter |
+| `engine/executor.rs` | `CoreToolRuntime / ToolExecutor` — 类型擦除执行合同与动态工具运行时 |
 | `engine/network.rs` | `InProcessNetworkGrant` — 进程内网络访问授权 |
 | **builtin/shell/** | |
 | `builtin/shell/terminal.rs` | `terminal` 工具 — 沙箱化 shell 命令执行 |
@@ -71,7 +71,7 @@ Astro Agent 全部内置工具的实现、注册表、分发引擎与审批逻�
 - `ToolContext` — 工具执行上下文：凭证、会话 ID、沙箱策略、项目根、MCP Hub
 - `register_all(registry)` — 一次性注册全部内置工具（通过 `inventory` 自动收集）
 - `ToolRegistry::dispatch(ctx, name, args)` — Agent 规范分发入口
-- `submit_builtin_tool!` — 宏：声明工具 handler 并自注册到 `inventory`
+- `submit_builtin_tool!` — 宏：为内置工具生成原生 `ToolExecutor`，并将元数据与 runtime 一起注册到 `inventory`
 - `AgentThreadDispatch` — trait：子 Agent 线程分发（spawn/followup/interrupt/wait）
 - `CoreToolRuntime / ToolExecutor` — trait：Registry 持有的执行运行时与工具实现合同
 - `classify_dangerous_command(cmd)` — 危险命令分类

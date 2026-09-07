@@ -1,6 +1,4 @@
-//! 工具执行器 trait——新工具的推荐实现方式。
-//!
-//! 现有 inventory 内置工具通过 [`LegacyToolAdapter`] 自动适配。
+//! 工具执行器 trait。inventory 内置工具由注册宏直接生成该 trait 的实现。
 
 use std::future::Future;
 use std::pin::Pin;
@@ -15,8 +13,8 @@ pub type ToolExecutorFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<Too
 
 /// 工具执行器 trait。
 ///
-/// 新工具应实现此 trait 而非使用 `BuiltinToolHandler` 函数指针。
-/// 现有工具通过 [`LegacyToolAdapter`] 自动桥接。
+/// 手写运行时直接实现此 trait；inventory 内置工具由
+/// [`crate::submit_builtin_tool!`] 生成对应的原生实现。
 pub trait ToolExecutor: Send + Sync + 'static {
     /// 工具的规范名（支持命名空间）。
     fn tool_name(&self) -> ToolName;
@@ -57,7 +55,8 @@ pub trait CoreToolRuntime: ToolExecutor {}
 
 impl<T> CoreToolRuntime for T where T: ToolExecutor {}
 
-fn tool_spec_from_entry(entry: &types::ToolEntry) -> ToolSpec {
+#[doc(hidden)]
+pub fn tool_spec_from_entry(entry: &types::ToolEntry) -> ToolSpec {
     if let Some(format) = &entry.freeform_format {
         return ToolSpec::Freeform {
             grammar: format.definition.clone(),
@@ -78,64 +77,6 @@ fn tool_spec_from_entry(entry: &types::ToolEntry) -> ToolSpec {
             description: entry.description.clone(),
             schema: entry.schema.clone(),
         }],
-    }
-}
-
-/// 将现有 `BuiltinToolHandler` 函数指针适配为 `ToolExecutor`。
-///
-/// `register_all()` 为每个 `BuiltinToolRegistrar` 自动创建此适配器，
-/// 现有 inventory 工具无需修改即可进入新运行时链。
-pub struct LegacyToolAdapter {
-    name: String,
-    entry: types::ToolEntry,
-    handler: super::registry::BuiltinToolHandler,
-}
-
-impl LegacyToolAdapter {
-    pub fn new(
-        name: String,
-        entry: types::ToolEntry,
-        handler: super::registry::BuiltinToolHandler,
-    ) -> Self {
-        Self {
-            name,
-            entry,
-            handler,
-        }
-    }
-}
-
-impl ToolExecutor for LegacyToolAdapter {
-    fn tool_name(&self) -> ToolName {
-        self.entry.tool_name()
-    }
-
-    fn spec(&self) -> ToolSpec {
-        tool_spec_from_entry(&self.entry)
-    }
-
-    fn description(&self) -> &str {
-        &self.entry.description
-    }
-
-    fn toolset(&self) -> &str {
-        &self.entry.toolset
-    }
-
-    fn approval_requirement(&self) -> ExecApprovalRequirement {
-        self.entry.approval_requirement
-    }
-
-    fn icon(&self) -> &'static str {
-        self.entry.icon
-    }
-
-    fn handle<'a>(
-        &'a self,
-        ctx: &'a mut ToolContext<'_>,
-        args: &'a serde_json::Value,
-    ) -> ToolExecutorFuture<'a> {
-        (self.handler)(ctx, &self.name, args)
     }
 }
 
@@ -235,38 +176,6 @@ mod tests {
                 Ok(ToolOutput::Text(text.to_string()))
             })
         }
-    }
-
-    #[test]
-    fn legacy_adapter_preserves_entry_metadata() {
-        let entry = types::ToolEntry {
-            name: "test_tool".into(),
-            toolset: "test".into(),
-            description: "A test tool".into(),
-            icon: "beaker",
-            approval_requirement: ExecApprovalRequirement::NeedsApproval,
-            ..types::ToolEntry::lifecycle_defaults()
-        };
-
-        fn noop_handler<'a, 'b>(
-            _ctx: &'a mut ToolContext<'b>,
-            _name: &'a str,
-            _args: &'a serde_json::Value,
-        ) -> ToolExecutorFuture<'a> {
-            Box::pin(async { Ok(ToolOutput::Text("ok".into())) })
-        }
-
-        let adapter = LegacyToolAdapter::new("test_tool".into(), entry, noop_handler);
-
-        assert_eq!(adapter.tool_name(), ToolName::plain("test_tool"));
-        assert_eq!(adapter.description(), "A test tool");
-        assert_eq!(adapter.toolset(), "test");
-        assert_eq!(adapter.icon(), "beaker");
-        assert_eq!(
-            adapter.approval_requirement(),
-            ExecApprovalRequirement::NeedsApproval
-        );
-        assert!(matches!(adapter.spec(), ToolSpec::Function { .. }));
     }
 
     #[test]
