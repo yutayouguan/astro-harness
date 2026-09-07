@@ -60,11 +60,23 @@ test("full schemas remain in the materialized detail panel", () => {
   assert.match(detailBody, /border:\s*0;/);
 });
 
-test("approval content keeps one explicit surface after removing the grid shell", () => {
+test("approval settings split the structural grid into independent surfaces", () => {
   const approvals = rule(styles, ".approvals-section");
-  assert.ok(approvals, "missing approvals surface rule");
-  assert.match(approvals, /width:\s*min\(100%, 760px\);/);
+  assert.ok(approvals, "missing approvals layout rule");
+  assert.match(approvals, /grid-template-columns:\s*repeat\(2,/);
+  assert.match(approvals, /width:\s*min\(100%, 920px\);/);
   assert.match(approvals, /margin:\s*0 auto;/);
-  assert.match(approvals, /background:\s*var\(--settings-panel-background/);
-  assert.match(approvals, /backdrop-filter:\s*var\(--settings-panel-backdrop/);
+  assert.match(approvals, /border:\s*0;/);
+  assert.match(approvals, /background:\s*transparent;/);
+  assert.match(approvals, /box-shadow:\s*none;/);
+
+  const panels = rule(styles, ".approvals-section > .tools-detail-section");
+  assert.ok(panels, "missing independent approval panel rule");
+  assert.match(panels, /border:\s*var\(--settings-panel-border-width/);
+  assert.match(panels, /background:\s*var\(--settings-panel-background/);
+  assert.match(panels, /box-shadow:\s*var\(\s*--settings-panel-shadow/);
+
+  assert.match(panel, /approvals-mode-card/);
+  assert.equal(panel.match(/approvals-scope-card/g)?.length, 2);
+  assert.match(panel, /approvals-allowlist-card/);
 });

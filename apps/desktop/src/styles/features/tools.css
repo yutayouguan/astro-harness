@@ -2114,35 +2114,70 @@ html[data-theme="dark"] .tool-lucide-inline {
 
 /* ── 命令审批 Tab ───────────────────────────────────────── */
 .approvals-section {
-  display: flex;
-  width: min(100%, 760px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, 920px);
   box-sizing: border-box;
-  flex-direction: column;
-  gap: 20px;
-  padding: 20px 24px 32px;
+  gap: 12px;
+  padding: 6px 8px 32px;
   margin: 0 auto;
   overflow: auto;
-  border: 1px solid var(--settings-panel-border, var(--glass-edge));
-  border-radius: var(--settings-panel-radius, 20px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.approvals-section > .tools-detail-section {
+  min-width: 0;
+  padding: 17px 18px;
+  border: var(--settings-panel-border-width, 0.5px) solid
+    var(--settings-panel-border, var(--glass-edge));
+  border-radius: 16px;
   background: var(--settings-panel-background, var(--glass-fill));
+  background-clip: padding-box;
   box-shadow: var(
     --settings-panel-shadow,
     var(--shadow-card),
     var(--glass-rim)
   );
-  backdrop-filter: var(--settings-panel-backdrop, var(--backdrop-glass));
-  -webkit-backdrop-filter: var(
-    --settings-panel-backdrop,
-    var(--backdrop-glass)
-  );
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.approvals-mode-card,
+.approvals-allowlist-card,
+.approvals-hardline,
+.approvals-section > .security-audit-section {
+  grid-column: 1 / -1;
+}
+
+.approvals-mode-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: center;
+}
+
+.approvals-mode-card > .tools-detail-label,
+.approvals-mode-card > .tools-detail-body.is-error {
+  grid-column: 1 / -1;
 }
 
 .approvals-section .tools-detail-section {
   gap: 10px;
 }
 
-.approvals-section .tools-detail-body {
-  margin-top: 2px;
+.approvals-section > .tools-detail-section > .tools-detail-body,
+.approvals-section .security-audit-head .tools-detail-body {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .approvals-mode-select {
@@ -2236,22 +2271,43 @@ html[data-theme="dark"] .approvals-add-row input {
 }
 
 /* hardline：危险色描边，强调不可越过 */
-.approvals-hardline .tools-detail-body {
-  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--danger) 10%, rgba(255, 255, 255, 0.54)),
-    rgba(255, 255, 255, 0.27)
+.approvals-section > .approvals-hardline {
+  padding: 14px 18px 16px;
+  border-color: color-mix(in srgb, var(--danger) 22%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--danger) 4%,
+    var(--settings-panel-background, var(--glass-fill))
   );
+}
+
+.approvals-section > .approvals-hardline > .tools-detail-body {
+  padding: 0;
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+  background: transparent;
 }
 
 .approvals-hardline .tools-detail-label {
   color: var(--danger);
 }
 
-html[data-theme="dark"] .approvals-hardline .tools-detail-body {
-  background: color-mix(in srgb, var(--danger) 12%, rgba(0, 0, 0, 0.28));
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+html[data-theme="dark"] .approvals-section > .approvals-hardline {
+  background: color-mix(
+    in srgb,
+    var(--danger) 6%,
+    var(--settings-panel-background, rgba(0, 0, 0, 0.28))
+  );
+}
+
+@media (max-width: 860px) {
+  .approvals-section {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 2px;
+  }
+
+  .approvals-mode-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .agent-tool-param-req {

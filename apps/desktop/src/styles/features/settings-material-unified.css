@@ -83,7 +83,6 @@
 :is(
   .providers-pane,
   .tools-detail-panel,
-  .approvals-section,
   .tool-card.agent-tool-card,
   .mcp-server-card,
   .mem-card,
@@ -105,6 +104,17 @@
   background: var(--settings-panel-background);
   background-clip: padding-box;
   box-shadow: var(--settings-panel-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Command approvals use a grid of smaller decision surfaces. Keep its outer
+ * layout node material-free so it does not read as one oversized card. */
+.settings-content-inline .approvals-section {
+  border-width: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }

@@ -170,7 +170,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
 
   return (
     <div className="approvals-section">
-      <section className="tools-detail-section">
+      <section className="tools-detail-section approvals-mode-card">
         <h4 className="tools-detail-label">
           <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.mode.label")}
@@ -189,7 +189,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
         {error ? <p className="tools-detail-body is-error">{error}</p> : null}
       </section>
 
-      <section className="tools-detail-section">
+      <section className="tools-detail-section approvals-scope-card">
         <h4 className="tools-detail-label">
           <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.browser.label")}
@@ -229,7 +229,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
         )}
       </section>
 
-      <section className="tools-detail-section">
+      <section className="tools-detail-section approvals-scope-card">
         <h4 className="tools-detail-label">
           <ShieldCheck size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.typeAllowlist.label")}
@@ -269,7 +269,7 @@ function ApprovalsSection({ active }: { active: boolean }) {
         )}
       </section>
 
-      <section className="tools-detail-section">
+      <section className="tools-detail-section approvals-allowlist-card">
         <h4 className="tools-detail-label">
           <Terminal size={15} strokeWidth={2.25} aria-hidden />
           {t("approvals.allowlist.label")}
