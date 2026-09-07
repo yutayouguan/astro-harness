@@ -118,6 +118,6 @@ test("composite settings controls do not create nested glass shells", () => {
   );
   assert.match(
     material,
-    /\.browser-permission-toggles[\s\S]*?> \.prefs-toggle-row\s*\{[\s\S]*?border-top:\s*1px solid var\(--settings-divider\);[\s\S]*?border-radius:\s*0;/,
+    /\.browser-permission-toggles[\s\S]*?> \.prefs-toggle-row:hover,[\s\S]*?> \.prefs-toggle-row:focus-within\s*\{[\s\S]*?border-top:\s*1px solid var\(--settings-divider\);[\s\S]*?border-radius:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/,
   );
 });
