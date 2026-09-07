@@ -1713,6 +1713,104 @@ enum ToolCallOrigin {
     CodeMode,
 }
 
+struct AuthorizedToolCall {
+    workspace_write_grant: bool,
+    permission_audits: Vec<PermissionAuditReceipt>,
+}
+
+enum ToolAuthorization {
+    Authorized(AuthorizedToolCall),
+    Denied(types::ToolOutput),
+}
+
+fn call_is_routable(
+    step_context: &StepContext,
+    call: &types::ParsedToolCall,
+    origin: ToolCallOrigin,
+) -> bool {
+    match origin {
+        ToolCallOrigin::Model => step_context
+            .tool_router
+            .model_can_call(call.namespace.as_deref(), &call.name),
+        ToolCallOrigin::CodeMode => step_context.routes_tool(&call.name),
+    }
+}
+
+/// Run the shared declarative authorization stages for one invocation.
+///
+/// Ordering is part of the security contract: workflow scope, browser side
+/// effects, MCP approval, then filesystem mutation. Dangerous shell command
+/// classification remains the next, command-specific stage.
+async fn authorize_tool_call(
+    session: &Arc<AgentLoop>,
+    step_context: &Arc<StepContext>,
+    call: &types::ParsedToolCall,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<ToolAuthorization> {
+    let mut authorization = AuthorizedToolCall {
+        workspace_write_grant: false,
+        permission_audits: Vec::new(),
+    };
+    if call.args_parse_error {
+        return Some(ToolAuthorization::Authorized(authorization));
+    }
+
+    match preflight_workflow_tool(session, step_context, call, turn_context, hitl_gate).await? {
+        PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Granted(audit) => {
+            authorization.workspace_write_grant = true;
+            authorization.permission_audits.push(*audit);
+        }
+        PermissionPreflight::Denied(message) => {
+            return Some(ToolAuthorization::Denied(
+                format!(
+                    "{message}. Do not retry the same workflow without explicit authorization."
+                )
+                .into(),
+            ));
+        }
+    }
+    match preflight_browser_action(session, step_context, call, turn_context, hitl_gate).await? {
+        PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Granted(audit) => authorization.permission_audits.push(*audit),
+        PermissionPreflight::Denied(message) => {
+            return Some(ToolAuthorization::Denied(
+                format!("{message}. Do not retry the same action without explicit authorization.")
+                    .into(),
+            ));
+        }
+    }
+    match preflight_mcp_tool_approval(session, step_context, call, turn_context, hitl_gate).await? {
+        PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Granted(audit) => authorization.permission_audits.push(*audit),
+        PermissionPreflight::Denied(message) => {
+            return Some(ToolAuthorization::Denied(
+                format!(
+                    "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                )
+                .into(),
+            ));
+        }
+    }
+    match preflight_read_only_write(session, step_context, call, turn_context, hitl_gate).await? {
+        PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Granted(audit) => {
+            authorization.workspace_write_grant = true;
+            authorization.permission_audits.push(*audit);
+        }
+        PermissionPreflight::Denied(message) => {
+            return Some(ToolAuthorization::Denied(
+                format!(
+                    "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
+                )
+                .into(),
+            ));
+        }
+    }
+    Some(ToolAuthorization::Authorized(authorization))
+}
+
 async fn execute_tools_serial_inner(
     session: &Arc<AgentLoop>,
     step_context: Arc<StepContext>,
@@ -1730,13 +1828,7 @@ async fn execute_tools_serial_inner(
         if !pause.wait_if_paused().await {
             return None;
         }
-        let can_route = match origin {
-            ToolCallOrigin::Model => step_context
-                .tool_router
-                .model_can_call(call.namespace.as_deref(), &call.name),
-            ToolCallOrigin::CodeMode => step_context.routes_tool(&call.name),
-        };
-        if !can_route {
+        if !call_is_routable(&step_context, call, origin) {
             out.push(
                 format!(
                     "工具 `{}` 未在本次 StepContext 注册，无法执行。",
@@ -1747,65 +1839,17 @@ async fn execute_tools_serial_inner(
             continue;
         }
 
-        let mut workspace_write_grant = false;
-        let mut permission_audits = Vec::new();
-        if !call.args_parse_error {
-            match preflight_workflow_tool(session, &step_context, call, turn_context, hitl_gate)
-                .await?
-            {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => {
-                    workspace_write_grant = true;
-                    permission_audits.push(*audit);
-                }
-                PermissionPreflight::Denied(message) => {
-                    out.push(
-                        format!(
-                        "{message}. Do not retry the same workflow without explicit authorization."
-                    )
-                        .into(),
-                    );
-                    continue;
-                }
+        let AuthorizedToolCall {
+            workspace_write_grant,
+            mut permission_audits,
+        } = match authorize_tool_call(session, &step_context, call, turn_context, hitl_gate).await?
+        {
+            ToolAuthorization::Authorized(authorization) => authorization,
+            ToolAuthorization::Denied(output) => {
+                out.push(output);
+                continue;
             }
-            match preflight_browser_action(session, &step_context, call, turn_context, hitl_gate)
-                .await?
-            {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!("{message}. Do not retry the same action without explicit authorization.").into());
-                    continue;
-                }
-            }
-            match preflight_mcp_tool_approval(session, &step_context, call, turn_context, hitl_gate)
-                .await?
-            {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => permission_audits.push(*audit),
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-            match preflight_read_only_write(session, &step_context, call, turn_context, hitl_gate)
-                .await?
-            {
-                PermissionPreflight::NotRequired => {}
-                PermissionPreflight::Granted(audit) => {
-                    workspace_write_grant = true;
-                    permission_audits.push(*audit);
-                }
-                PermissionPreflight::Denied(message) => {
-                    out.push(format!(
-                        "{message}. Do not retry the same action or attempt a workaround without explicit authorization."
-                    ).into());
-                    continue;
-                }
-            }
-        }
+        };
 
         // 危险 terminal：deny / auto / ask
         if call.name == "exec_command" && !call.args_parse_error {

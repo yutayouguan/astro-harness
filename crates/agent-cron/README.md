@@ -62,7 +62,7 @@
 |---|---|
 | `home` (`agent-home`) | 路径约定（`default_memory_dir`、`ensure_default_workspace_dirs`、`DEFAULT_AGENT_ID`、`normalize_agent_id`） |
 | `types` (`agent-types`) | SQLite 辅助（`open_wal`、`SqliteStore` trait、`truncate_utf8`） |
-| `agent` (`agent-core`) | `exec::cron` 模块调用 `tick_default` 获取到期任务，然后通过 `AgentLoop::run_turn` + `run_headless_multi_turn` 执行 |
+| `agent` (`agent-core`) | `exec::cron` 模块调用 `tick_default` 获取到期任务，然后通过 `run_background_multi_turn` 适配到统一 `SessionTask` 事件循环 |
 | `server` (`agent-server`) | Cron ticker 在 side thread 以 `current_thread` runtime 运行，每 30s 调用 `tick_default`；gRPC 层提供任务管理 API |
 | `usage` (`agent-usage`) | 执行时写入 `kind=cron` 用量事件 |
 

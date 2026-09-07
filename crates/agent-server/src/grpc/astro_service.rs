@@ -110,19 +110,6 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
     }
 }
 
-fn require_realtime_session_id(session_id: &str) -> Result<&str, Status> {
-    let session_id = session_id.trim();
-    if session_id.is_empty() {
-        Err(Status::invalid_argument("session_id is required"))
-    } else {
-        Ok(session_id)
-    }
-}
-
-fn nonempty(value: String) -> Option<String> {
-    (!value.trim().is_empty()).then_some(value)
-}
-
 fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessionResponse {
     TerminalSessionResponse {
         id: info.id,
@@ -133,58 +120,6 @@ fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessio
         base_cursor: info.base_cursor,
         end_cursor: info.end_cursor,
     }
-}
-
-async fn submit_realtime_op(
-    service: &AstroServiceImpl,
-    session_id: &str,
-    op: agent_protocol::Op,
-) -> Result<Response<RealtimeOperationResponse>, Status> {
-    let managed = service
-        .threads
-        .get(session_id)
-        .await
-        .ok_or_else(|| Status::failed_precondition("realtime conversation is not loaded"))?;
-    let submission_id = managed
-        .runtime
-        .submit(op)
-        .await
-        .map_err(|error| Status::internal(error.to_string()))?;
-    Ok(Response::new(RealtimeOperationResponse { submission_id }))
-}
-
-/// 将 ChatRequest 下传的辅助目标按 `task` 分组、按 `order` 排序后写入 Session。
-///
-/// 未知 `task` 字符串静默跳过（旧客户端/脏数据不阻塞主聊）；API key 仅存内存。
-fn parse_auxiliary_targets(
-    items: Vec<proto::AuxiliaryModelTarget>,
-) -> HashMap<types::AuxiliaryTask, Vec<types::ModelTarget>> {
-    let mut grouped: HashMap<types::AuxiliaryTask, Vec<(u32, types::ModelTarget)>> = HashMap::new();
-    for item in items {
-        let Some(task) = types::AuxiliaryTask::parse(item.task.trim()) else {
-            continue;
-        };
-        if !providers::dispatch::supports_agent_responses(&item.backend_id) {
-            continue;
-        }
-        grouped.entry(task).or_default().push((
-            item.order,
-            types::ModelTarget {
-                provider_id: item.provider_id,
-                backend_id: item.backend_id,
-                model: item.model,
-                api_key: item.api_key,
-                base_url: item.base_url,
-            },
-        ));
-    }
-    grouped
-        .into_iter()
-        .map(|(task, mut ordered)| {
-            ordered.sort_by_key(|(order, _)| *order);
-            (task, ordered.into_iter().map(|(_, t)| t).collect())
-        })
-        .collect()
 }
 
 fn agent_thread_projection(
@@ -1256,113 +1191,8 @@ impl AstroServiceImpl {
         req: &proto::ChatRequest,
         hook_runtime: Arc<::hooks::HookRuntime>,
     ) -> Result<agent_protocol::ThreadSettingsOverrides, Status> {
-        // Validate the complete request before mutating the reusable session. Invalid legacy
-        // modes or malformed provider parameters must not partially reconfigure a live thread.
-        let interaction_mode =
-            types::InteractionMode::parse(&req.interaction_mode).ok_or_else(|| {
-                Status::invalid_argument(format!(
-                    "unsupported interaction_mode: {}",
-                    req.interaction_mode.trim().to_ascii_lowercase()
-                ))
-            })?;
-        if let Some(temperature) = req.temperature {
-            if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature) {
-                return Err(Status::invalid_argument(
-                    "temperature must be between 0 and 2",
-                ));
-            }
-        }
-        let mut additional_params = if req.additional_params_json.trim().is_empty() {
-            None
-        } else {
-            let params: serde_json::Value = serde_json::from_str(&req.additional_params_json)
-                .map_err(|error| {
-                    Status::invalid_argument(format!("invalid additional_params_json: {error}"))
-                })?;
-            if !params.is_object() {
-                return Err(Status::invalid_argument(
-                    "additional_params_json must be an object",
-                ));
-            }
-            Some(params)
-        };
-
-        let provider = if req.provider.trim().is_empty() {
-            "openai"
-        } else {
-            req.provider.trim()
-        };
-        if !providers::dispatch::supports_agent_responses(provider) {
-            return Err(Status::invalid_argument(format!(
-                "provider `{provider}` does not support the Responses API"
-            )));
-        }
-        let persistent_instructions = req.persistent_instructions.trim();
-        if req.reasoning_effort.trim() == "persistent" {
-            if provider != "openai" {
-                return Err(Status::invalid_argument(format!(
-                    "provider `{provider}` does not support persistent reasoning"
-                )));
-            }
-            if persistent_instructions.is_empty() {
-                return Err(Status::invalid_argument(
-                    "persistent reasoning requires persistent_instructions",
-                ));
-            }
-        }
-        if provider == "openai" && !persistent_instructions.is_empty() {
-            additional_params
-                .get_or_insert_with(|| serde_json::json!({}))
-                .as_object_mut()
-                .expect("validated additional params object")
-                .insert(
-                    "astro_persistent_instructions".into(),
-                    persistent_instructions.into(),
-                );
-        }
-        let model = if req.model.trim().is_empty() {
-            providers::dispatch::default_model(provider).to_string()
-        } else {
-            req.model.trim().to_string()
-        };
-        let api_key = if req.api_key.trim().is_empty() {
-            providers::read_env_api_key(provider).unwrap_or_default()
-        } else {
-            req.api_key.trim().to_string()
-        };
-        let base_url = req.base_url.trim().to_string();
-        let model_tool_mode = if req.tool_mode.trim().is_empty() {
-            None
-        } else {
-            Some(types::ToolMode::parse(&req.tool_mode).ok_or_else(|| {
-                Status::invalid_argument(format!("unsupported tool_mode: {}", req.tool_mode))
-            })?)
-        };
-        let model_profile = if req.model_profile_json.trim().is_empty() {
-            types::ModelProfile::default()
-        } else {
-            serde_json::from_str(&req.model_profile_json).map_err(|error| {
-                Status::invalid_argument(format!("invalid model_profile_json: {error}"))
-            })?
-        };
-        let mut targets = vec![types::ModelTarget {
-            provider_id: String::new(),
-            backend_id: provider.into(),
-            model: model.clone(),
-            api_key: api_key.clone(),
-            base_url: base_url.clone(),
-        }];
-        targets.extend(req.chat_fallbacks.iter().filter_map(|fallback| {
-            providers::dispatch::supports_agent_responses(&fallback.provider).then(|| {
-                types::ModelTarget {
-                    provider_id: fallback.provider_id.clone(),
-                    backend_id: fallback.provider.clone(),
-                    model: fallback.model.clone(),
-                    api_key: fallback.api_key.clone(),
-                    base_url: fallback.base_url.clone(),
-                }
-            })
-        }));
+        let settings =
+            super::thread_settings::from_chat_request(req).map_err(Status::invalid_argument)?;
         let session = thread.session();
         session.set_hook_runtime(hook_runtime);
         let (_, hitl_gate, _) = session.ensure_thread_controls();
@@ -1376,62 +1206,7 @@ impl AstroServiceImpl {
                 replaced.cancel_all().await;
             }
         }
-        Ok(agent_protocol::ThreadSettingsOverrides {
-            model_targets: Some(targets),
-            model_spec: Some(types::ModelSpec {
-                provider_id: provider.into(),
-                model_id: model,
-                temperature: req.temperature,
-                max_tokens: (req.max_output_tokens > 0).then_some(req.max_output_tokens),
-                tool_mode: model_tool_mode,
-                profile: model_profile,
-            }),
-            auxiliary_targets: Some(parse_auxiliary_targets(req.auxiliary_targets.clone())),
-            image_gen_targets: Some(tools::image_gen_targets_from_parts(tools::ImageGenParts {
-                provider: &req.image_gen_provider,
-                model: &req.image_gen_model,
-                api_key: &req.image_gen_api_key,
-                base_url: &req.image_gen_base_url,
-                fb_provider: &req.image_gen_fallback_provider,
-                fb_model: &req.image_gen_fallback_model,
-                fb_api_key: &req.image_gen_fallback_api_key,
-                fb_base_url: &req.image_gen_fallback_base_url,
-                video_model: &req.image_gen_video_model,
-                music_model: &req.image_gen_music_model,
-                tts_model: &req.image_gen_tts_model,
-                fb_video_model: &req.image_gen_fallback_video_model,
-                fb_music_model: &req.image_gen_fallback_music_model,
-                fb_tts_model: &req.image_gen_fallback_tts_model,
-                vision_model: &req.image_gen_vision_model,
-                fb_vision_model: &req.image_gen_fallback_vision_model,
-            })),
-            context_window: (req.context_window > 0).then_some(req.context_window),
-            interaction_mode: Some(interaction_mode),
-            project_root: Some(
-                (!req.project_root.trim().is_empty())
-                    .then(|| PathBuf::from(req.project_root.trim())),
-            ),
-            workspace_roots: Some(
-                req.workspace_roots
-                    .iter()
-                    .map(|root| PathBuf::from(root.trim()))
-                    .filter(|root| !root.as_os_str().is_empty())
-                    .collect(),
-            ),
-            temperature: req.temperature,
-            additional_params,
-            thinking_enabled: Some(req.thinking_enabled),
-            reasoning_effort: Some(if req.reasoning_effort.trim().is_empty() {
-                "high".into()
-            } else {
-                req.reasoning_effort.trim().into()
-            }),
-            max_tokens: Some(if req.max_output_tokens > 0 {
-                req.max_output_tokens
-            } else {
-                8192
-            }),
-        })
+        Ok(settings)
     }
 
     fn spawn_idle_unload(&self, thread_id: String, managed: Arc<ManagedThread>) {
@@ -2265,266 +2040,42 @@ impl AstroService for AstroServiceImpl {
         &self,
         request: Request<RealtimeConversationStartRequest>,
     ) -> Result<Response<RealtimeOperationResponse>, Status> {
-        let req = request.into_inner();
-        let session_id = require_realtime_session_id(&req.session_id)?;
-        if req.api_key.trim().is_empty() {
-            return Err(Status::invalid_argument("realtime api_key is required"));
-        }
-        let model = if req.model.trim().is_empty() {
-            agent_protocol::DEFAULT_REALTIME_MODEL.to_string()
-        } else {
-            req.model.trim().to_string()
-        };
-        let output_modality = match req.output_modality.as_str() {
-            "" | "audio" => agent_protocol::RealtimeOutputModality::Audio,
-            "text" => agent_protocol::RealtimeOutputModality::Text,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime output_modality {value}"
-                )))
-            }
-        };
-        let turn_detection = match req.turn_detection.as_str() {
-            "" | "server_vad" => agent_protocol::RealtimeTurnDetection::ServerVad,
-            "semantic_vad" => agent_protocol::RealtimeTurnDetection::SemanticVad,
-            "disabled" => agent_protocol::RealtimeTurnDetection::Disabled,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime turn_detection {value}"
-                )))
-            }
-        };
-        let noise_reduction = match req.noise_reduction.as_str() {
-            "" => None,
-            "near_field" => Some(agent_protocol::RealtimeNoiseReduction::NearField),
-            "far_field" => Some(agent_protocol::RealtimeNoiseReduction::FarField),
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime noise_reduction {value}"
-                )))
-            }
-        };
-        let version = match req.version.as_str() {
-            "" | "v2" => agent_protocol::RealtimeConversationVersion::V2,
-            "v3" => agent_protocol::RealtimeConversationVersion::V3,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime version {value}"
-                )))
-            }
-        };
-        let transport = match req.transport.as_str() {
-            "" | "websocket" => agent_protocol::ConversationStartTransport::Websocket,
-            "webrtc" if !req.sdp.trim().is_empty() => {
-                agent_protocol::ConversationStartTransport::Webrtc {
-                    sdp: req.sdp.clone(),
-                }
-            }
-            "webrtc" => return Err(Status::invalid_argument("WebRTC requires an SDP offer")),
-            "existing_call" if !req.call_id.trim().is_empty() => {
-                agent_protocol::ConversationStartTransport::ExistingCall {
-                    call_id: req.call_id.clone(),
-                }
-            }
-            "existing_call" => {
-                return Err(Status::invalid_argument("existing_call requires a call id"))
-            }
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime transport {value}"
-                )))
-            }
-        };
-        let handoff_mode = match req.handoff_mode.as_str() {
-            "" | "thinking" => agent_protocol::CodexResponseHandoffMode::Thinking,
-            "commentary" => agent_protocol::CodexResponseHandoffMode::Commentary,
-            "bem_tags" => agent_protocol::CodexResponseHandoffMode::BemTags,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime handoff mode {value}"
-                )))
-            }
-        };
-        let handoff_channel_prefixes = if req.handoff_channel_prefixes_json.trim().is_empty() {
-            None
-        } else {
-            Some(
-                serde_json::from_str(&req.handoff_channel_prefixes_json).map_err(|error| {
-                    Status::invalid_argument(format!(
-                        "invalid realtime handoff channel prefixes: {error}"
-                    ))
-                })?,
-            )
-        };
-        let include_startup_context = req.include_startup_context.unwrap_or(!matches!(
-            &transport,
-            agent_protocol::ConversationStartTransport::ExistingCall { .. }
-        ));
-        let managed = self.get_or_create_thread(session_id).await?;
-        let subscription = self
-            .connections
-            .current_generation_key(req.connection_id.trim())
-            .await
-            .ok_or_else(|| Status::failed_precondition("connection is not subscribed"))?;
-        super::thread_service::resume(&managed, subscription, false).await?;
-        let target = types::ModelTarget {
-            provider_id: req.provider.clone(),
-            backend_id: req.provider,
-            model: model.clone(),
-            api_key: req.api_key,
-            base_url: req.base_url,
-        };
-        let (reply, result) = tokio::sync::oneshot::channel();
-        let submission_id = managed
-            .runtime
-            .submit(agent_protocol::Op::RealtimeConversationStart {
-                params: agent_protocol::ConversationStartParams {
-                    model: Some(model),
-                    output_modality,
-                    voice: nonempty(req.voice),
-                    instructions: nonempty(req.instructions),
-                    include_startup_context,
-                    initial_items: Vec::new(),
-                    turn_detection,
-                    noise_reduction,
-                    transport,
-                    version,
-                    client_managed_handoffs: req.client_managed_handoffs,
-                    codex_response_handoff_mode: handoff_mode,
-                    codex_response_handoff_channel_prefixes: handoff_channel_prefixes,
-                    flush_transcript_tail_on_session_end: req.flush_transcript_tail_on_session_end,
-                    ..agent_protocol::ConversationStartParams::default()
-                },
-                target,
-                reply,
-            })
-            .await
-            .map_err(|error| Status::internal(error.to_string()))?;
-        result
-            .await
-            .map_err(|_| Status::internal("realtime start reply channel closed"))?
-            .map_err(Status::failed_precondition)?;
-        Ok(Response::new(RealtimeOperationResponse { submission_id }))
+        super::realtime_service::start(self, request.into_inner()).await
     }
 
     async fn realtime_conversation_audio(
         &self,
         request: Request<RealtimeConversationAudioRequest>,
     ) -> Result<Response<RealtimeOperationResponse>, Status> {
-        let req = request.into_inner();
-        let format = match req.format.as_str() {
-            "" | "pcm16" => agent_protocol::RealtimeAudioFormat::Pcm16,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime audio format {value}"
-                )))
-            }
-        };
-        let frame = agent_protocol::RealtimeAudioFrame {
-            data: req.data,
-            sample_rate: if req.sample_rate == 0 {
-                agent_protocol::DEFAULT_REALTIME_SAMPLE_RATE
-            } else {
-                req.sample_rate
-            },
-            num_channels: if req.num_channels == 0 {
-                1
-            } else {
-                u16::try_from(req.num_channels)
-                    .map_err(|_| Status::invalid_argument("num_channels exceeds u16"))?
-            },
-            format,
-        };
-        submit_realtime_op(
-            self,
-            require_realtime_session_id(&req.session_id)?,
-            agent_protocol::Op::RealtimeConversationAudio(
-                agent_protocol::ConversationAudioParams { frame },
-            ),
-        )
-        .await
+        super::realtime_service::audio(self, request.into_inner()).await
     }
 
     async fn realtime_conversation_text(
         &self,
         request: Request<RealtimeConversationTextRequest>,
     ) -> Result<Response<RealtimeOperationResponse>, Status> {
-        let req = request.into_inner();
-        if req.text.trim().is_empty() {
-            return Err(Status::invalid_argument("realtime text is required"));
-        }
-        let role = match req.role.as_str() {
-            "" | "user" => agent_protocol::ConversationTextRole::User,
-            "developer" => agent_protocol::ConversationTextRole::Developer,
-            "assistant" => agent_protocol::ConversationTextRole::Assistant,
-            value => {
-                return Err(Status::invalid_argument(format!(
-                    "unsupported realtime text role {value}"
-                )))
-            }
-        };
-        submit_realtime_op(
-            self,
-            require_realtime_session_id(&req.session_id)?,
-            agent_protocol::Op::RealtimeConversationText(agent_protocol::ConversationTextParams {
-                text: req.text,
-                role,
-            }),
-        )
-        .await
+        super::realtime_service::text(self, request.into_inner()).await
     }
 
     async fn realtime_conversation_speech(
         &self,
         request: Request<RealtimeConversationSpeechRequest>,
     ) -> Result<Response<RealtimeOperationResponse>, Status> {
-        let req = request.into_inner();
-        if req.text.trim().is_empty() {
-            return Err(Status::invalid_argument("realtime speech text is required"));
-        }
-        submit_realtime_op(
-            self,
-            require_realtime_session_id(&req.session_id)?,
-            agent_protocol::Op::RealtimeConversationSpeech(
-                agent_protocol::ConversationSpeechParams { text: req.text },
-            ),
-        )
-        .await
+        super::realtime_service::speech(self, request.into_inner()).await
     }
 
     async fn realtime_conversation_close(
         &self,
         request: Request<RealtimeConversationRequest>,
     ) -> Result<Response<RealtimeOperationResponse>, Status> {
-        let req = request.into_inner();
-        submit_realtime_op(
-            self,
-            require_realtime_session_id(&req.session_id)?,
-            agent_protocol::Op::RealtimeConversationClose,
-        )
-        .await
+        super::realtime_service::close(self, request.into_inner()).await
     }
 
     async fn realtime_conversation_list_voices(
         &self,
         request: Request<RealtimeConversationRequest>,
     ) -> Result<Response<RealtimeVoicesResponse>, Status> {
-        let req = request.into_inner();
-        let session_id = require_realtime_session_id(&req.session_id)?;
-        let voices = agent_protocol::RealtimeVoicesList::builtin(
-            agent_protocol::RealtimeConversationVersion::V2,
-        );
-        if let Some(managed) = self.threads.get(session_id).await {
-            managed
-                .runtime
-                .submit(agent_protocol::Op::RealtimeConversationListVoices)
-                .await
-                .map_err(|error| Status::internal(error.to_string()))?;
-        }
-        Ok(Response::new(RealtimeVoicesResponse {
-            voices: voices.voices,
-            default_voice: voices.default_voice,
-        }))
+        super::realtime_service::list_voices(self, request.into_inner()).await
     }
 
     async fn resume_thread(
@@ -5321,7 +4872,7 @@ mod tests {
 
     #[test]
     fn parse_auxiliary_targets_groups_by_task_and_sorts_by_order() {
-        let map = parse_auxiliary_targets(vec![
+        let map = crate::grpc::thread_settings::parse_auxiliary_targets(vec![
             proto::AuxiliaryModelTarget {
                 task: "compaction".into(),
                 provider_id: "p-fb".into(),

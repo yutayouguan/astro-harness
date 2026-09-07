@@ -41,6 +41,8 @@ fn patch_item_metadata(
 pub(crate) type TurnInputDbWriteHook = Arc<dyn Fn() -> anyhow::Result<()> + Send + Sync>;
 #[cfg(test)]
 pub(crate) type TurnInputMemoryWriteHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
+pub(crate) type ResponseProjectionWriteHook = Arc<dyn Fn() -> anyhow::Result<()> + Send + Sync>;
 
 /// Session 级共享依赖：会话存储、压缩策略、记忆、工具注册表等。
 pub(crate) struct SessionServices {
@@ -57,6 +59,8 @@ pub(crate) struct SessionServices {
     pub(crate) turn_input_after_db_write: Mutex<Option<TurnInputDbWriteHook>>,
     #[cfg(test)]
     pub(crate) turn_input_after_memory_write: Mutex<Option<TurnInputMemoryWriteHook>>,
+    #[cfg(test)]
+    pub(crate) response_projection_write: Mutex<Option<ResponseProjectionWriteHook>>,
 }
 
 impl SessionServices {
@@ -81,6 +85,8 @@ impl SessionServices {
             turn_input_after_db_write: Mutex::new(None),
             #[cfg(test)]
             turn_input_after_memory_write: Mutex::new(None),
+            #[cfg(test)]
+            response_projection_write: Mutex::new(None),
         }
     }
 }

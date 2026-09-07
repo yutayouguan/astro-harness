@@ -3,6 +3,8 @@
 mod astro_service;
 mod files;
 mod interrupt_store;
+mod realtime_service;
 mod thread_service;
+mod thread_settings;
 
 pub use astro_service::AstroServiceImpl;

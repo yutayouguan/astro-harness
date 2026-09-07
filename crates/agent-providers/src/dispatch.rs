@@ -758,83 +758,106 @@ fn register_provider(reg: &mut crate::registry::Registry, provider: &str, config
     let model = &config.model;
     let responses = use_responses(provider, config);
 
-    // 1) 正常注册（Chat Completions + 全部媒体能力）
-    match provider {
-        "anthropic" | "claude" => reg.register_anthropic(key, base, model),
-        "google" => reg.register_google(key, base, model),
-        "openai" => reg.register_openai(key, base, model),
-        "deepseek" => register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model),
-        "azure" => reg.register_azure(key, base, model),
-        "zhipu" => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
-        "moonshot" => register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model),
-        "ollama" => register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model),
-        "nvidia" => register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model),
-        "bailian" => register_media::<crate::impls::bailian::Bailian>(reg, key, base, model),
-        "volcengine" => {
+    let Some(profile) = crate::profile::resolve(provider) else {
+        if let Some(custom_cfg) = lookup_custom_provider(provider) {
+            reg.register_custom(provider, &custom_cfg, key, model);
+        } else {
+            register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model);
+        }
+        return;
+    };
+
+    use crate::profile::ProviderKind;
+    // Chat/media registration and Responses attachment are both selected from
+    // the same profile descriptor. This prevents provider-id tables drifting.
+    match profile.kind {
+        ProviderKind::Anthropic => reg.register_anthropic(key, base, model),
+        ProviderKind::Google => reg.register_google(key, base, model),
+        ProviderKind::OpenAi => reg.register_openai(key, base, model),
+        ProviderKind::DeepSeek => {
+            register_compat::<crate::impls::deepseek::DeepSeek>(reg, key, base, model)
+        }
+        ProviderKind::Azure => reg.register_azure(key, base, model),
+        ProviderKind::Zhipu => register_media::<crate::impls::zhipu::Zhipu>(reg, key, base, model),
+        ProviderKind::Moonshot => {
+            register_compat::<crate::impls::moonshot::Moonshot>(reg, key, base, model)
+        }
+        ProviderKind::Ollama => {
+            register_compat::<crate::impls::ollama::Ollama>(reg, key, base, model)
+        }
+        ProviderKind::Nvidia => {
+            register_compat::<crate::impls::nvidia::Nvidia>(reg, key, base, model)
+        }
+        ProviderKind::Bailian => {
+            register_media::<crate::impls::bailian::Bailian>(reg, key, base, model)
+        }
+        ProviderKind::Volcengine => {
             register_media::<crate::impls::volcengine::Volcengine>(reg, key, base, model)
         }
-        "openrouter" => {
+        ProviderKind::OpenRouter => {
             register_embedding::<crate::impls::openrouter::OpenRouter>(reg, key, base, model)
         }
-        "minimax" => reg.register_minimax(key, base, model),
-        "minimax-anthropic" => {
+        ProviderKind::MiniMax => reg.register_minimax(key, base, model),
+        ProviderKind::MiniMaxAnthropic => {
             reg.register_anthropic(key, base, model);
             reg.register_alias("minimax-anthropic", "anthropic");
         }
-        "hunyuan" => register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model),
-        "mimo" => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
-        "gemini-native" => reg.register_gemini_native(key, base, model),
-        other => {
-            if let Some(custom_cfg) = lookup_custom_provider(other) {
-                reg.register_custom(other, &custom_cfg, key, model);
-            } else {
-                register_compat::<crate::impls::openai::OpenAI>(reg, key, base, model);
-            }
+        ProviderKind::Hunyuan => {
+            register_media::<crate::impls::hunyuan::Hunyuan>(reg, key, base, model)
         }
+        ProviderKind::Mimo => register_compat::<crate::impls::mimo::Mimo>(reg, key, base, model),
+        ProviderKind::GeminiNative => reg.register_gemini_native(key, base, model),
     }
 
     // 2) Responses 模式：独立挂载 Agent Responses 模型，保留 Chat/media 能力。
     //    默认由 profile.api_mode 决定；用户可显式覆盖协议模式。
     if responses {
-        match provider {
-            "openai" => {
+        match profile.kind {
+            ProviderKind::OpenAi => {
                 reg.attach_responses::<crate::impls::openai::OpenAI>(provider, key, base, model)
             }
-            "deepseek" => {
+            ProviderKind::DeepSeek => {
                 reg.attach_responses::<crate::impls::deepseek::DeepSeek>(provider, key, base, model)
             }
-            "azure" => {
+            ProviderKind::Azure => {
                 reg.attach_responses::<crate::impls::azure::Azure>(provider, key, base, model)
             }
-            "bailian" => {
+            ProviderKind::Bailian => {
                 reg.attach_responses::<crate::impls::bailian::Bailian>(provider, key, base, model)
             }
-            "minimax" => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
+            ProviderKind::MiniMax => reg.attach_responses::<crate::impls::minimax_chat::MiniMax>(
                 "minimax", key, base, model,
             ),
-            "mimo" => reg.attach_responses::<crate::impls::mimo::Mimo>(provider, key, base, model),
-            "ollama" => {
+            ProviderKind::Mimo => {
+                reg.attach_responses::<crate::impls::mimo::Mimo>(provider, key, base, model)
+            }
+            ProviderKind::Ollama => {
                 reg.attach_responses::<crate::impls::ollama::Ollama>(provider, key, base, model)
             }
-            "openrouter" => reg.attach_responses::<crate::impls::openrouter::OpenRouter>(
-                provider, key, base, model,
-            ),
-            "zhipu" => {
+            ProviderKind::OpenRouter => reg
+                .attach_responses::<crate::impls::openrouter::OpenRouter>(
+                    provider, key, base, model,
+                ),
+            ProviderKind::Zhipu => {
                 reg.attach_responses::<crate::impls::zhipu::Zhipu>(provider, key, base, model)
             }
-            "moonshot" => {
+            ProviderKind::Moonshot => {
                 reg.attach_responses::<crate::impls::moonshot::Moonshot>(provider, key, base, model)
             }
-            "nvidia" => {
+            ProviderKind::Nvidia => {
                 reg.attach_responses::<crate::impls::nvidia::Nvidia>(provider, key, base, model)
             }
-            "volcengine" => reg.attach_responses::<crate::impls::volcengine::Volcengine>(
-                provider, key, base, model,
-            ),
-            "hunyuan" => {
+            ProviderKind::Volcengine => reg
+                .attach_responses::<crate::impls::volcengine::Volcengine>(
+                    provider, key, base, model,
+                ),
+            ProviderKind::Hunyuan => {
                 reg.attach_responses::<crate::impls::hunyuan::Hunyuan>(provider, key, base, model)
             }
-            _ => {}
+            ProviderKind::Anthropic
+            | ProviderKind::Google
+            | ProviderKind::MiniMaxAnthropic
+            | ProviderKind::GeminiNative => {}
         }
     }
 }
@@ -943,6 +966,30 @@ mod tests {
                 registered.responses_model().is_some()
                     || registered.chat_completion_model().is_some(),
                 "provider {id} should have a Responses or compatibility model"
+            );
+        }
+    }
+
+    #[test]
+    fn profile_descriptor_and_runtime_registration_do_not_drift() {
+        let config = ProviderConfig::default();
+        for profile in crate::profile::PROFILES {
+            let mut registry = crate::registry::Registry::new();
+            register_provider(&mut registry, profile.id, &config);
+            let registered = registry
+                .get(profile.id)
+                .unwrap_or_else(|| panic!("provider {} was not registered", profile.id));
+            assert!(
+                registered.chat_completion_model().is_some()
+                    || registered.responses_model().is_some(),
+                "provider {} has no language model runtime",
+                profile.id
+            );
+            assert_eq!(
+                registered.responses_model().is_some(),
+                profile.supports_responses,
+                "provider {} Responses capability disagrees with its runtime",
+                profile.id
             );
         }
     }

@@ -121,6 +121,36 @@ struct RuntimeState {
     close_intents: HashSet<String>,
 }
 
+impl RuntimeState {
+    fn claim_running(
+        &mut self,
+        thread_id: &str,
+        start_token: Option<&str>,
+        turn: ActiveAgentTurn,
+    ) -> anyhow::Result<()> {
+        if self.close_intents.contains(thread_id) {
+            anyhow::bail!("agent thread {thread_id:?} has a pending close intent");
+        }
+        match (self.slots.entry(thread_id.to_string()), start_token) {
+            (std::collections::hash_map::Entry::Vacant(entry), None) => {
+                entry.insert(RuntimeSlot::Running(Box::new(turn)));
+                Ok(())
+            }
+            (std::collections::hash_map::Entry::Occupied(mut entry), Some(token)) if matches!(entry.get(), RuntimeSlot::Starting(slot) if slot.token == token) =>
+            {
+                entry.insert(RuntimeSlot::Running(Box::new(turn)));
+                Ok(())
+            }
+            (_, Some(token)) => anyhow::bail!(
+                "follow-up starting reservation {token:?} no longer owns agent thread {thread_id:?}"
+            ),
+            (_, None) => {
+                anyhow::bail!("agent thread {thread_id:?} already has an active runtime turn")
+            }
+        }
+    }
+}
+
 impl Deref for RuntimeState {
     type Target = HashMap<String, RuntimeSlot>;
 
@@ -483,41 +513,16 @@ impl AgentRuntimeManager {
             .last()
             .is_some_and(|event| matches!(event.event, RunnerEvent::TurnInterrupted { .. }));
 
-        let claim_result = {
-            let mut active = self.lock_active()?;
-            let running = || {
-                RuntimeSlot::Running(Box::new(ActiveAgentTurn {
-                    turn_id: turn_id.clone(),
-                    interrupt: Arc::clone(&interrupt),
-                    terminated: terminated_rx,
-                    pending_followup: None,
-                }))
-            };
-            if active.close_intents.contains(&thread_id) {
-                Err(anyhow::anyhow!(
-                    "agent thread {thread_id:?} has a pending close intent"
-                ))
-            } else {
-                match (active.entry(thread_id.clone()), request.start_token.as_deref()) {
-                (std::collections::hash_map::Entry::Vacant(entry), None) => {
-                    entry.insert(running());
-                    Ok(())
-                }
-                (std::collections::hash_map::Entry::Occupied(mut entry), Some(token))
-                    if matches!(entry.get(), RuntimeSlot::Starting(slot) if slot.token == token) =>
-                {
-                    entry.insert(running());
-                    Ok(())
-                }
-                (_, Some(token)) => Err(anyhow::anyhow!(
-                    "follow-up starting reservation {token:?} no longer owns agent thread {thread_id:?}"
-                )),
-                (_, None) => Err(anyhow::anyhow!(
-                    "agent thread {thread_id:?} already has an active runtime turn"
-                )),
-                }
-            }
-        };
+        let claim_result = self.lock_active()?.claim_running(
+            &thread_id,
+            request.start_token.as_deref(),
+            ActiveAgentTurn {
+                turn_id: turn_id.clone(),
+                interrupt: Arc::clone(&interrupt),
+                terminated: terminated_rx,
+                pending_followup: None,
+            },
+        );
         if claim_result.is_ok() {
             self.active_changed.notify_one();
         }

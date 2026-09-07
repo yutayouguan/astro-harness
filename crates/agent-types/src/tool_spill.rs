@@ -3,7 +3,7 @@
 //! 不变量：
 //! - `ResponseItem` / DB `item_json` 始终保留全文（审计、FTS、UI）
 //! - `compressed_content` 可改为 spill / prune 视图，供 Provider 读取
-//! - 落盘路径：`{memory_dir}/sessions/tool_spills/{session_id}/{message_id}.txt`
+//! - 落盘路径：`{memory_dir}/data/tool_spills/{session_id}/{item_key}.txt`
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,34 @@ pub fn write_tool_spill(
     content: &str,
 ) -> anyhow::Result<PathBuf> {
     let path = spill_file_path(memory_dir, session_id, message_id);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, content)?;
+    Ok(path)
+}
+
+/// Write a tool spill using a stable per-item key rather than a SQLite row id.
+/// This allows the canonical rollout to be committed before its SQLite
+/// projection without changing the recovery reference.
+pub fn write_tool_spill_with_key(
+    memory_dir: &Path,
+    session_id: &str,
+    item_key: &str,
+    content: &str,
+) -> anyhow::Result<PathBuf> {
+    anyhow::ensure!(
+        !item_key.is_empty()
+            && item_key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')),
+        "invalid tool spill item key"
+    );
+    let path = memory_dir
+        .join("data")
+        .join("tool_spills")
+        .join(session_id)
+        .join(format!("{item_key}.txt"));
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -108,6 +136,20 @@ mod tests {
         let view = make_spill_view(Some("exec_command"), &rel, 11, "hello world");
         assert!(view.contains(TOOL_SPILL_MARK));
         assert!(view.contains("exec_command"));
+    }
+
+    #[test]
+    fn stable_item_key_spill_rejects_path_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(write_tool_spill_with_key(dir.path(), "sess-1", "../escape", "secret").is_err());
+        let path = write_tool_spill_with_key(
+            dir.path(),
+            "sess-1",
+            "tool_output_019abc-def",
+            "hello world",
+        )
+        .unwrap();
+        assert!(path.ends_with("tool_output_019abc-def.txt"));
     }
 
     #[test]

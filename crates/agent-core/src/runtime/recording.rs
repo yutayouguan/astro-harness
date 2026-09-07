@@ -4,7 +4,7 @@ use agent_protocol::{
     build_hook_prompt_message, parse_hook_prompt_message, ContentItem, HookPromptFragment,
     HookPromptItem, ResponseItem, ToolStatus,
 };
-use session::{ConversationStore, NewResponseItem};
+use session::ConversationStore;
 
 use super::AgentLoop;
 
@@ -13,17 +13,19 @@ impl AgentLoop {
         &self,
         items: &[agent_protocol::ResponseItem],
     ) -> anyhow::Result<Vec<i64>> {
-        self.services
-            .sessions
-            .ensure_session(&self.session_id, "tauri")
-            .await?;
-        let ids = self
+        let rollout = self.runtime_io.get().map(|bindings| &bindings.rollout);
+        super::response_journal::append_canonical(rollout, items).await?;
+        #[cfg(test)]
+        if let Some(hook) = self
             .services
-            .sessions
-            .append_response_items(&self.session_id, items)
-            .await?;
-        self.persist_rollout_items(items).await?;
-        Ok(ids)
+            .response_projection_write
+            .lock()
+            .expect("response projection hook mutex poisoned")
+            .as_ref()
+        {
+            hook()?;
+        }
+        super::response_journal::project(&self.services.sessions, &self.session_id, items).await
     }
 
     pub(crate) async fn persist_rollout_items(
@@ -340,10 +342,6 @@ impl AgentLoop {
                 media.push(asset.clone());
             }
         }
-        self.services
-            .sessions
-            .ensure_session(&self.session_id, "tauri")
-            .await?;
         let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
         let metadata = (!media.is_empty() || !file_changes.is_empty() || tool_status.is_some())
             .then(|| {
@@ -370,6 +368,7 @@ impl AgentLoop {
             });
         let namespace = tool_name.and_then(types::ToolName::namespace);
         let name = tool_name.map(types::ToolName::name);
+        let spill_key = agent_protocol::ResponseItemId::new("tool_output");
         let mut item = match (namespace, name) {
             (None, Some("tool_search")) => ResponseItem::ToolSearchOutput {
                 id: None,
@@ -399,21 +398,16 @@ impl AgentLoop {
                 internal_chat_message_metadata_passthrough: metadata,
             },
         };
-        let item_id = self
-            .services
-            .sessions
-            .append_response_item(NewResponseItem::new(&self.session_id, &item))
-            .await?;
-        self.register_media_artifacts(&media, item_id).await;
         if content.len() >= types::DEFAULT_SPILL_THRESHOLD_BYTES {
-            match types::write_tool_spill(self.memory_dir(), &self.session_id, item_id, content) {
+            match types::write_tool_spill_with_key(
+                self.memory_dir(),
+                &self.session_id,
+                spill_key.as_str(),
+                content,
+            ) {
                 Ok(path) => {
                     let rel = types::spill_path_for_prompt(self.memory_dir(), &path);
                     let view = types::make_spill_view(name, &rel, content.len(), content);
-                    self.services
-                        .sessions
-                        .update_response_item_compressed_content(item_id, Some(&view))
-                        .await?;
                     attach_response_item_metadata(
                         &mut item,
                         "astro_compressed_output",
@@ -425,8 +419,12 @@ impl AgentLoop {
                 }
             }
         }
-        self.persist_rollout_items(std::slice::from_ref(&item))
+        let ids = self
+            .persist_response_items(std::slice::from_ref(&item))
             .await?;
+        if let Some(message_id) = ids.first().copied() {
+            self.register_media_artifacts(&media, message_id).await;
+        }
         self.record_response_items_unlocked(vec![item]);
         Ok(())
     }

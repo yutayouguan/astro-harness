@@ -131,8 +131,8 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
       ├─ build_system_prompt()  // soul + MEMORY + USER + daily + recalled + skills + interactionMode guidance + TOOL_GUIDANCE
       └─ → TurnResult::Continue { system_prompt }
 
-  → run_multi_turn_stream() (streaming 路径)
-  → run_headless_multi_turn() (cron/无流式路径)
+  → install_multi_turn_task() / run_multi_turn_events() (统一事件驱动路径)
+      └─ run_background_multi_turn() (cron/子任务适配器)
       ├─ loop: maintain_tool_context → reload → LLM stream → accumulate
       ├─ ToolCallAccumulator: 仅累积原生 tool_call_deltas（自由文本不参与工具识别）
       ├─ record_assistant_message_with_tools()
@@ -186,7 +186,7 @@ macOS managed sandbox 在存在 proxy lease 时自动允许 DNS，不要求用�
 - **`builder`** — 声明式 `AgentBuilder` / `BuiltAgentSpec`
 - **`compression`** — tool 结果压缩（原文保留，压缩视图给 provider）
 - **`control`** — HITL gate、中断状态机、schema 校验、smart approval
-- **`exec`** — 执行域：cron 执行、delegate、dispatch、headless 多轮、记忆 review、mid-run summary、多 agent、编排、标题生成、tool LLM 压缩
+- **`exec`** — 执行域：cron 执行、background adapter、delegate、dispatch、记忆 review、mid-run summary、多 agent、编排、标题生成、tool LLM 压缩
 - **`prompt`** — prompt 域：上下文组装（context/context_source/context_usage）、hook 集成、消息变换、prompt builder、sanitization
 - **`runtime`** — 核心运行时：`AgentLoop`、`AgentConfig`、budget 管理、压缩状态、模型上下文、session 管理、turn budget、usage 追踪、校验
 - **`streaming`** — 流式补全：fallback 处理、HITL bridge、多轮 streaming、provider 抽象、run state、summary、tool 执行
@@ -245,6 +245,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 ## Key Invariants
 
 1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
+通用 assistant/tool/hook item 先写 canonical rollout，再写 SQLite 查询投影；mailbox/steer user input 使用带 durable marker 的两阶段准入。
 
 2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零（`begin_user_turn`）；单条用户消息内上限 `multi_turn`（默认 90，对齐 Hermes）。`increment_tool_round()` 在耗尽时返回 `MaxDepthError`。
 
@@ -260,11 +261,13 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 
-## Data Flow: cron.rs → headless.rs
+## Data Flow: cron.rs → background.rs
 
 定时任务入口：`execute_job` → `execute_job_with_roots_local` → `run_agent_job`。
-`run_agent_job` 调用 `AgentLoop::run_turn` 完成初始化（记录用户消息、构建 system prompt），
-然后将控制权交给 `exec::headless::run_headless_multi_turn`，后者与 `run_multi_turn_stream_inner` 共享核心逻辑（tool_call_deltas 累积、IterationBudget、maintain_tool_context、provider_history、inject_context）。
+`run_agent_job` 构造 Session 与模型目标，然后交给
+`exec::background::run_background_multi_turn`。Background adapter 通过
+`streaming::install_multi_turn_task` 进入与前台相同的 `SessionTask` / 事件执行链，
+不再维护独立的 headless 循环。
 
 ## Test Organization
 

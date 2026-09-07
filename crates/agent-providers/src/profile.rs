@@ -28,6 +28,31 @@ pub enum ImageGenMode {
     MiniMax,
 }
 
+/// Built-in provider construction strategy.
+///
+/// Keeping this beside [`ProviderProfile`] makes the profile table the single
+/// source of truth for both advertised capabilities and runtime wiring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderKind {
+    OpenAi,
+    Anthropic,
+    Google,
+    DeepSeek,
+    Azure,
+    Zhipu,
+    Moonshot,
+    Ollama,
+    Nvidia,
+    Bailian,
+    Volcengine,
+    OpenRouter,
+    MiniMax,
+    MiniMaxAnthropic,
+    Hunyuan,
+    Mimo,
+    GeminiNative,
+}
+
 /// 单个供应商的静态配置。
 ///
 /// 新增纯聊天厂商：加一行 PROFILES + 一行 vendor type alias。
@@ -35,6 +60,7 @@ pub enum ImageGenMode {
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderProfile {
     pub id: &'static str,
+    pub kind: ProviderKind,
     pub api_mode: ApiMode,
     pub default_base_url: &'static str,
     pub auth: AuthKind,
@@ -106,6 +132,7 @@ impl AuthKind {
 pub static PROFILES: &[ProviderProfile] = &[
     ProviderProfile {
         id: "openai",
+        kind: ProviderKind::OpenAi,
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.openai.com/v1",
         auth: AuthKind::Bearer,
@@ -127,6 +154,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "claude",
+        kind: ProviderKind::Anthropic,
         api_mode: ApiMode::AnthropicMessages,
         default_base_url: "https://api.anthropic.com",
         auth: AuthKind::AnthropicKey,
@@ -148,6 +176,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "deepseek",
+        kind: ProviderKind::DeepSeek,
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.deepseek.com/v1",
         auth: AuthKind::Bearer,
@@ -169,6 +198,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "google",
+        kind: ProviderKind::Google,
         api_mode: ApiMode::Interactions,
         default_base_url: "https://generativelanguage.googleapis.com",
         auth: AuthKind::GoogleApiKey,
@@ -190,6 +220,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "ollama",
+        kind: ProviderKind::Ollama,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "http://localhost:11434/v1",
         auth: AuthKind::None,
@@ -211,6 +242,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "azure",
+        kind: ProviderKind::Azure,
         api_mode: ApiMode::Responses,
         default_base_url: "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1",
         auth: AuthKind::Bearer,
@@ -232,6 +264,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "zhipu",
+        kind: ProviderKind::Zhipu,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "https://open.bigmodel.cn/api/paas/v4",
         auth: AuthKind::Bearer,
@@ -253,6 +286,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "openrouter",
+        kind: ProviderKind::OpenRouter,
         api_mode: ApiMode::Responses,
         default_base_url: "https://openrouter.ai/api/v1",
         auth: AuthKind::Bearer,
@@ -274,6 +308,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "bailian",
+        kind: ProviderKind::Bailian,
         api_mode: ApiMode::Responses,
         default_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         auth: AuthKind::Bearer,
@@ -295,6 +330,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "nvidia",
+        kind: ProviderKind::Nvidia,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "https://integrate.api.nvidia.com/v1",
         auth: AuthKind::Bearer,
@@ -316,6 +352,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "moonshot",
+        kind: ProviderKind::Moonshot,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "https://api.moonshot.cn/v1",
         auth: AuthKind::Bearer,
@@ -337,6 +374,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "volcengine",
+        kind: ProviderKind::Volcengine,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "https://ark.cn-beijing.volces.com/api/v3",
         auth: AuthKind::Bearer,
@@ -358,6 +396,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "minimax",
+        kind: ProviderKind::MiniMax,
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.minimaxi.com/v1",
         auth: AuthKind::Bearer,
@@ -379,6 +418,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "hunyuan",
+        kind: ProviderKind::Hunyuan,
         api_mode: ApiMode::ChatCompletions,
         default_base_url: "https://api.hunyuan.cloud.tencent.com/v1",
         auth: AuthKind::Bearer,
@@ -400,6 +440,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "minimax-anthropic",
+        kind: ProviderKind::MiniMaxAnthropic,
         api_mode: ApiMode::AnthropicMessages,
         default_base_url: "https://api.minimaxi.com/anthropic",
         auth: AuthKind::Bearer,
@@ -421,6 +462,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "mimo",
+        kind: ProviderKind::Mimo,
         api_mode: ApiMode::Responses,
         default_base_url: "https://api.xiaomimimo.com/v1",
         auth: AuthKind::Bearer,
@@ -442,6 +484,7 @@ pub static PROFILES: &[ProviderProfile] = &[
     },
     ProviderProfile {
         id: "gemini-native",
+        kind: ProviderKind::GeminiNative,
         api_mode: ApiMode::GeminiNative,
         default_base_url: "https://generativelanguage.googleapis.com",
         auth: AuthKind::GoogleApiKey,
@@ -486,6 +529,7 @@ pub fn effective_api_mode(provider_id: &str, api_mode: &str) -> ApiMode {
 /// custom / 未知 id 的回退 profile（不在 PROFILES 中单独注册）。
 static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     id: "openai",
+    kind: ProviderKind::OpenAi,
     api_mode: ApiMode::ChatCompletions,
     default_base_url: "https://api.openai.com/v1",
     auth: AuthKind::Bearer,

@@ -89,10 +89,12 @@ pub mod budget;
 pub(crate) mod code_mode;
 pub(crate) mod compression_state;
 mod context_maintenance;
+mod event_dispatch;
 pub(crate) mod event_identity;
 mod history_control;
 pub(crate) mod model_ctx;
 mod recording;
+mod response_journal;
 mod session;
 pub(crate) mod session_io;
 pub(crate) mod session_services;
@@ -815,143 +817,6 @@ impl Session {
 
     pub fn thread_provider_options(&self) -> ThreadProviderOptions {
         self.lock_state().thread_provider_options.clone()
-    }
-
-    pub(crate) fn close_event_stream(&self) {
-        self.hook_runtime()
-            .remove_run_observer(self.session_id.as_str());
-        if let Some(bindings) = self.runtime_io.get() {
-            bindings.event_tx.close();
-        }
-    }
-
-    /// 按 rollout 策略持久化一个统一事件，然后使其生效。
-    pub async fn send_event(&self, turn_id: &str, mut msg: EventMsg) {
-        let event_id = event_identity::normalize_event_msg(&mut msg, turn_id);
-        let event = Event { id: event_id, msg };
-        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, async {})
-            .await;
-    }
-
-    /// 发送已规范化的事件，同时按原始内部 turn id 路由精确轮次监听。
-    /// 供需要在分发前测量最终协议信封的有界事件构建器使用。
-    pub(crate) async fn send_prepared_event(&self, raw_turn_id: &str, msg: EventMsg) {
-        let event = Event {
-            id: event_identity::event_turn_id(raw_turn_id),
-            msg,
-        };
-        self.send_event_raw_with_persistence_and_hook(event, raw_turn_id, true, async {})
-            .await;
-    }
-
-    /// 为一个精确轮次注册无损进程内接收器。
-    pub(crate) async fn subscribe_turn_events(
-        &self,
-        turn_id: &str,
-    ) -> async_channel::Receiver<Event> {
-        let (tx, rx) = async_channel::unbounded();
-        self.turn_event_taps
-            .lock()
-            .await
-            .entry(turn_id.to_string())
-            .or_default()
-            .push(tx);
-        rx
-    }
-
-    pub(crate) async fn remove_turn_event_taps(&self, turn_id: &str) {
-        self.turn_event_taps.lock().await.remove(turn_id);
-    }
-
-    pub(crate) async fn send_event_raw_with_persistence(&self, event: Event, persist: bool) {
-        let route_id = event.id.clone();
-        self.send_event_raw_with_persistence_and_hook(event, &route_id, persist, async {})
-            .await;
-    }
-
-    async fn send_event_raw_with_persistence_and_hook<F>(
-        &self,
-        event: Event,
-        route_id: &str,
-        persist: bool,
-        after_persist: F,
-    ) where
-        F: std::future::Future<Output = ()>,
-    {
-        let _dispatch = self.event_dispatch.lock().await;
-        if persist {
-            if let Some(bindings) = self.runtime_io.get() {
-                if let Err(error) = bindings
-                    .rollout
-                    .record(vec![RolloutItem::EventMsg(event.msg.clone())])
-                    .await
-                {
-                    tracing::warn!(%error, event_id = %event.id, "failed to persist event");
-                }
-            }
-        }
-        after_persist.await;
-        self.deliver_event_raw_inner(event, route_id).await;
-    }
-
-    #[cfg(test)]
-    async fn send_event_with_after_persist_hook<F>(
-        &self,
-        turn_id: &str,
-        msg: EventMsg,
-        after_persist: F,
-    ) where
-        F: std::future::Future<Output = ()>,
-    {
-        let mut msg = msg;
-        let event = Event {
-            id: event_identity::normalize_event_msg(&mut msg, turn_id),
-            msg,
-        };
-        self.send_event_raw_with_persistence_and_hook(event, turn_id, true, after_persist)
-            .await;
-    }
-
-    pub(crate) async fn deliver_event_raw(&self, event: Event) {
-        let route_id = event.id.clone();
-        let _dispatch = self.event_dispatch.lock().await;
-        self.deliver_event_raw_inner(event, &route_id).await;
-    }
-
-    async fn deliver_event_raw_inner(&self, event: Event, route_id: &str) {
-        if let Some(bindings) = self.runtime_io.get() {
-            match &event.msg {
-                EventMsg::TurnStarted(started) => {
-                    let _ = bindings.status_tx.send(AgentStatus::Running {
-                        turn_id: started.turn_id.clone(),
-                    });
-                }
-                EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_) => {
-                    let _ = bindings.status_tx.send(AgentStatus::Idle);
-                }
-                EventMsg::ShutdownComplete => {
-                    let _ = bindings.status_tx.send(AgentStatus::Shutdown);
-                }
-                _ => {}
-            }
-            let _ = bindings.event_tx.send(event.clone()).await;
-        }
-        let exact_turn_senders = {
-            let mut taps = self.turn_event_taps.lock().await;
-            if event.msg.is_terminal() {
-                taps.remove(route_id).unwrap_or_default()
-            } else {
-                taps.get_mut(route_id)
-                    .map(|senders| {
-                        senders.retain(|sender| !sender.is_closed());
-                        senders.clone()
-                    })
-                    .unwrap_or_default()
-            }
-        };
-        for sender in exact_turn_senders {
-            let _ = sender.send(event.clone()).await;
-        }
     }
 
     pub(crate) fn begin_runtime_shutdown(&self) -> bool {
@@ -2723,6 +2588,69 @@ mod tests {
 
         assert_eq!(session.clone_response_history().await, vec![native]);
         recorder.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn response_items_reach_canonical_rollout_before_sqlite_projection() {
+        let dir = TempDir::new().unwrap();
+        let rollout_root = dir.path().join("sessions").join("rollouts");
+        let path = agent_rollout::new_rollout_path(
+            &rollout_root,
+            "canonical-first",
+            chrono::Utc::now(),
+        );
+        let session = Arc::new(
+            Session::with_session_id(test_config(&dir), "canonical-first".into())
+                .await
+                .unwrap(),
+        );
+        let thread = AstroThread::spawn(
+            Arc::clone(&session),
+            RolloutRecorder::open(path.clone()).await.unwrap(),
+        )
+        .unwrap();
+        *session
+            .services
+            .response_projection_write
+            .lock()
+            .expect("projection hook") = Some(Arc::new(|| anyhow::bail!("projection failed")));
+
+        let error = session
+            .record_user_message("durable canonical item")
+            .await
+            .expect_err("projection failure must be reported");
+        assert!(error.to_string().contains("projection failed"));
+        thread.flush_rollout().await.unwrap();
+
+        let rollout_items = agent_rollout::read_rollout(&path).await.unwrap();
+        assert!(rollout_items.iter().any(|item| matches!(
+            item,
+            RolloutItem::ResponseItem(agent_protocol::ResponseItem::Message { role, content, .. })
+                if role == "user" && content.iter().any(|part| matches!(
+                    part,
+                    agent_protocol::ContentItem::InputText { text }
+                        if text == "durable canonical item"
+                ))
+        )));
+        assert!(session
+            .services
+            .sessions
+            .get_response_items("canonical-first")
+            .await
+            .unwrap()
+            .is_empty());
+
+        thread.submit(agent_protocol::Op::Shutdown).await.unwrap();
+        thread.wait_terminated().await;
+
+        let restored = Session::with_session_id(test_config(&dir), "canonical-first".into())
+            .await
+            .unwrap();
+        assert_eq!(restored.clone_response_history().await.len(), 1);
+        assert_eq!(
+            restored.clone_response_history().await[0].content_str(),
+            "durable canonical item"
+        );
     }
 
     #[tokio::test]

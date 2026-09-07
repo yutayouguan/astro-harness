@@ -59,8 +59,8 @@ pub use sqlite::{AstroDb, DbSpec, SqlitePool, SqliteStore};
 pub use title::sanitize_title;
 pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,
-    write_tool_spill, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS, TOOL_LLM_COMPRESS_MARK,
-    TOOL_PRUNE_MARK, TOOL_SPILL_MARK,
+    write_tool_spill, write_tool_spill_with_key, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS,
+    TOOL_LLM_COMPRESS_MARK, TOOL_PRUNE_MARK, TOOL_SPILL_MARK,
 };
 pub use ui_style::{
     active_ui_style_path, notify_ui_style_changed, read_active_ui_style,
