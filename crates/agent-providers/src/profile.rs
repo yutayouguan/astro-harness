@@ -61,6 +61,30 @@ pub enum ProviderKind {
     GeminiNative,
 }
 
+impl ProviderKind {
+    pub const fn supports_agent_responses(self) -> bool {
+        match self {
+            Self::OpenAi
+            | Self::DeepSeek
+            | Self::Azure
+            | Self::OpenRouter
+            | Self::Bailian
+            | Self::MiniMax
+            | Self::Mimo => true,
+            Self::Anthropic
+            | Self::Google
+            | Self::Zhipu
+            | Self::Moonshot
+            | Self::Ollama
+            | Self::Nvidia
+            | Self::Volcengine
+            | Self::MiniMaxAnthropic
+            | Self::Hunyuan
+            | Self::GeminiNative => false,
+        }
+    }
+}
+
 /// 单个供应商的静态配置。
 ///
 /// 新增纯聊天厂商：加一行 PROFILES + 一行 vendor type alias。
@@ -97,8 +121,6 @@ pub struct ProviderProfile {
     pub default_asr_model: &'static str,
     /// 嵌入模型默认名（空 = 不支持或用通用 fallback）。
     pub default_embedding_model: &'static str,
-    /// 是否支持 Responses API 协议切换。
-    pub supports_responses: bool,
 }
 
 impl ProviderProfile {
@@ -108,6 +130,10 @@ impl ProviderProfile {
 
     pub fn supports_embedding(&self) -> bool {
         self.embedding_mode.is_some()
+    }
+
+    pub const fn supports_agent_responses(&self) -> bool {
+        self.kind.supports_agent_responses()
     }
 
     pub fn supports_asr(&self) -> bool {
@@ -164,7 +190,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "whisper-v3-turbo",
         default_embedding_model: "text-embedding-4-large",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "claude",
@@ -185,7 +210,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "deepseek",
@@ -206,7 +230,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "google",
@@ -227,7 +250,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "lyria-3-pro",
         default_asr_model: "google-stt-v2-live",
         default_embedding_model: "gemini-embedding-v3",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "ollama",
@@ -248,7 +270,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "azure",
@@ -269,7 +290,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "text-embedding-3-small",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "zhipu",
@@ -290,7 +310,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "cogmusic-v1.1",
         default_asr_model: "glm-asr-v1.2",
         default_embedding_model: "cogembedding-v2",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "openrouter",
@@ -311,7 +330,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "bailian",
@@ -332,7 +350,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "qwen-asr-v2.5",
         default_embedding_model: "qwen-embedding-v3",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "nvidia",
@@ -353,7 +370,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "moonshot",
@@ -374,7 +390,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "volcengine",
@@ -395,7 +410,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "bytedance-music-v2.1",
         default_asr_model: "seed-asr-2.1",
         default_embedding_model: "doubao-embedding-vision-v2",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "minimax",
@@ -416,7 +430,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "music-3.0",
         default_asr_model: "speech-asr-v2.2",
         default_embedding_model: "minimax-embedding-v3",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "hunyuan",
@@ -437,7 +450,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "hunyuan-music-v2",
         default_asr_model: "hunyuan-asr-v2.1",
         default_embedding_model: "hunyuan-embedding-v3",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "minimax-anthropic",
@@ -458,7 +470,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
     ProviderProfile {
         id: "mimo",
@@ -479,7 +490,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: true,
     },
     ProviderProfile {
         id: "gemini-native",
@@ -500,7 +510,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_music_model: "",
         default_asr_model: "",
         default_embedding_model: "",
-        supports_responses: false,
     },
 ];
 
@@ -544,7 +553,6 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     default_music_model: "",
     default_asr_model: "",
     default_embedding_model: "",
-    supports_responses: false,
 };
 
 /// 将常见别名规范化为表内 id。
@@ -800,15 +808,18 @@ mod tests {
             "openrouter",
         ] {
             let profile = resolve(id).unwrap();
-            assert!(profile.supports_responses, "{id} should support Responses");
+            assert!(
+                profile.supports_agent_responses(),
+                "{id} should support Responses"
+            );
             assert_eq!(
                 profile.api_mode,
                 ApiMode::Responses,
                 "{id} should default to Responses"
             );
         }
-        assert!(!resolve("claude").unwrap().supports_responses);
-        assert!(!resolve("google").unwrap().supports_responses);
+        assert!(!resolve("claude").unwrap().supports_agent_responses());
+        assert!(!resolve("google").unwrap().supports_agent_responses());
     }
 
     #[test]

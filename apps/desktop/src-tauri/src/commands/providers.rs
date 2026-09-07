@@ -822,7 +822,8 @@ pub(crate) fn resolve_api_key(
 
 /// 支持 Responses API 切换的厂商（表驱动）。
 fn supports_responses_toggle(kind: ProviderKind) -> bool {
-    providers::profile::resolve(kind.backend_id()).is_some_and(|p| p.supports_responses)
+    providers::profile::resolve(kind.backend_id())
+        .is_some_and(providers::profile::ProviderProfile::supports_agent_responses)
 }
 
 /// TOML 自定义 provider 用 TOML key 作为 backend_id（dispatch 需要此 ID 命中 custom provider）。

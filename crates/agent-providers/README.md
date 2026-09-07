@@ -16,7 +16,7 @@
 
 ## 核心职责
 
-- 检查 `ProviderProfile.supports_responses`，阻止不支持 Responses 的 Provider 进入 Agent target/fallback chain；
+- 检查 `ProviderProfile::supports_agent_responses()`，阻止不支持 Responses 的 Provider 进入 Agent target/fallback chain；
 - 将 `ResponseItem`、原生工具定义和 instructions 发送到 `/responses`；
 - OpenAI 模型目录提供非空 `persistent_instructions` 时开放 `persistent` 推理档位；本地保持该名称，wire effort 映射为 `disabled`，指令作为 developer instructions 合并，内部元数据不会透传；
 - Namespace 工具在 Responses 路径保留原生容器；非 Agent Function-only adapter 会省略不支持的 namespace，不再展平为伪 Function 名；
@@ -57,7 +57,7 @@ agent_responses_stream(
 
 1. Agent 入口只接受 `Vec<ResponseItem>`，不接受 `ChatCompletionMessage`，不回退到 Chat Completions。
 2. `ResponseItem` 的 call id、item type、顺序和 call/output 配对不得丢失。
-3. `supports_responses` 是 Agent 可路由能力；`api_mode` 只是通用 adapter 选择，不能越过 capability gate。
+3. `ProviderKind::supports_agent_responses()` 是 Agent 可路由能力；`api_mode` 只是通用 adapter 选择，不能越过 capability gate。
 4. fallback 只在首个可见 chunk 前切换，并且候选目标也必须支持 Responses。
 5. Provider usage 统一归一化，但保留 reported 状态；reasoning 是 output 子集，cached input 是 input 子集。
 6. `ResponsesModel`、`DynResponsesModel` 和 registry 的 `responses_model` 与 Chat compatibility model 分开声明。

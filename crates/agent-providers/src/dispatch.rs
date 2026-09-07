@@ -157,7 +157,8 @@ pub async fn agent_responses_prompt(
 /// Whether a provider may participate in the Agent target/fallback chain.
 pub fn supports_agent_responses(provider: &str) -> bool {
     let provider = normalize_provider_id(provider);
-    crate::profile::resolve(provider).is_some_and(|profile| profile.supports_responses)
+    crate::profile::resolve(provider)
+        .is_some_and(crate::profile::ProviderProfile::supports_agent_responses)
         || lookup_custom_provider(provider).is_some()
 }
 
@@ -988,7 +989,7 @@ mod tests {
             );
             assert_eq!(
                 registered.responses_model().is_some(),
-                profile.supports_responses,
+                profile.supports_agent_responses(),
                 "provider {} Responses capability disagrees with its runtime",
                 profile.id
             );
