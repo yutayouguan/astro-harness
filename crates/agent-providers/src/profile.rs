@@ -83,6 +83,28 @@ impl ProviderKind {
             | Self::GeminiNative => false,
         }
     }
+
+    pub const fn supports_stream_usage(self) -> bool {
+        match self {
+            Self::OpenAi
+            | Self::DeepSeek
+            | Self::Ollama
+            | Self::Azure
+            | Self::OpenRouter
+            | Self::Nvidia
+            | Self::Moonshot
+            | Self::MiniMax
+            | Self::Hunyuan
+            | Self::Mimo => true,
+            Self::Anthropic
+            | Self::Google
+            | Self::Zhipu
+            | Self::Bailian
+            | Self::Volcengine
+            | Self::MiniMaxAnthropic
+            | Self::GeminiNative => false,
+        }
+    }
 }
 
 /// 单个供应商的静态配置。
@@ -109,8 +131,6 @@ pub struct ProviderProfile {
     pub default_image_model: &'static str,
     /// 视觉理解默认模型名（空 = 不支持独立视觉模型）。
     pub default_vision_model: &'static str,
-    /// 是否支持 `stream_options.include_usage`（部分 OpenAI 兼容网关不支持）。
-    pub supports_stream_usage: bool,
     /// TTS 默认模型名（空 = 不支持）。
     pub default_tts_model: &'static str,
     /// 视频生成默认模型名（空 = 不支持）。
@@ -134,6 +154,10 @@ impl ProviderProfile {
 
     pub const fn supports_agent_responses(&self) -> bool {
         self.kind.supports_agent_responses()
+    }
+
+    pub const fn supports_stream_usage(&self) -> bool {
+        self.kind.supports_stream_usage()
     }
 
     pub fn supports_asr(&self) -> bool {
@@ -184,7 +208,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "gpt-image-2",
         default_vision_model: "gpt-4o",
-        supports_stream_usage: true,
         default_tts_model: "openai-tts-v3",
         default_video_model: "",
         default_music_model: "",
@@ -204,7 +227,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: false,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -224,7 +246,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -244,7 +265,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::GoogleInteractions),
         default_image_model: "gemini-3.6-flash",
         default_vision_model: "gemini-3.6-flash",
-        supports_stream_usage: false,
         default_tts_model: "gemini-3.1-flash-tts",
         default_video_model: "veo-3.1",
         default_music_model: "lyria-3-pro",
@@ -264,7 +284,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -284,7 +303,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::AzureOpenAiV1),
         default_image_model: "gpt-image-2",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -304,7 +322,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "cogview-4",
         default_vision_model: "glm-5.2",
-        supports_stream_usage: false,
         default_tts_model: "glm-tts-v1.2",
         default_video_model: "cogvideox-v1.5",
         default_music_model: "cogmusic-v1.1",
@@ -324,7 +341,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -344,7 +360,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "wanimage-2.7",
         default_vision_model: "qwen3.8-max",
-        supports_stream_usage: false,
         default_tts_model: "qwen-tts-v2.5",
         default_video_model: "wan-2.7",
         default_music_model: "",
@@ -364,7 +379,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -384,7 +398,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -404,7 +417,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "seedream-5.0-pro",
         default_vision_model: "doubao-seed-evolving",
-        supports_stream_usage: false,
         default_tts_model: "seed-tts-2.1",
         default_video_model: "seedance-2.5",
         default_music_model: "bytedance-music-v2.1",
@@ -424,7 +436,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::MiniMax),
         default_image_model: "image-01",
         default_vision_model: "MiniMax-M3",
-        supports_stream_usage: true,
         default_tts_model: "speech-2.8-hd",
         default_video_model: "MiniMax-H3",
         default_music_model: "music-3.0",
@@ -444,7 +455,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "hunyuan-image-v2.1",
         default_vision_model: "hy3",
-        supports_stream_usage: true,
         default_tts_model: "hunyuan-tts-v2.1",
         default_video_model: "hunyuan-video-v1.5",
         default_music_model: "hunyuan-music-v2",
@@ -464,7 +474,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: false,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -484,7 +493,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: true,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -504,7 +512,6 @@ pub static PROFILES: &[ProviderProfile] = &[
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
-        supports_stream_usage: false,
         default_tts_model: "",
         default_video_model: "",
         default_music_model: "",
@@ -547,7 +554,6 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     image_mode: None,
     default_image_model: "",
     default_vision_model: "",
-    supports_stream_usage: false,
     default_tts_model: "",
     default_video_model: "",
     default_music_model: "",
@@ -839,7 +845,7 @@ mod tests {
     fn media_capabilities_table_driven() {
         let openai = resolve("openai").unwrap();
         assert_eq!(openai.image_mode, Some(ImageGenMode::OpenAi));
-        assert!(openai.supports_stream_usage);
+        assert!(openai.supports_stream_usage());
         assert!(openai.supports_tts());
         assert!(!openai.supports_video());
 
@@ -857,10 +863,10 @@ mod tests {
 
         let deepseek = resolve("deepseek").unwrap();
         assert_eq!(deepseek.image_mode, None);
-        assert!(deepseek.supports_stream_usage);
+        assert!(deepseek.supports_stream_usage());
         assert!(!deepseek.supports_tts());
 
         let zhipu = resolve("zhipu").unwrap();
-        assert!(!zhipu.supports_stream_usage);
+        assert!(!zhipu.supports_stream_usage());
     }
 }
