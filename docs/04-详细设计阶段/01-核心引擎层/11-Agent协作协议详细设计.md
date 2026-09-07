@@ -7,7 +7,7 @@
 >
 > **前置依赖**：
 >
-> - [06-子Agent派生详细设计.md](06-子Agent派生详细设计.md)（Supervisor / 父子模型）
+> - [Subagent 详细设计](06-Subagent详细设计.md)（Agent Graph / mailbox / 父子 Agent Thread）
 > - [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md)（AgentExecutor / round_loop）
 > - [03-MCP协议详细设计.md](../../04-详细设计阶段/04-工具与扩展生态/03-MCP协议详细设计.md)（MCP 通信层）
 
@@ -1403,7 +1403,7 @@ function phaseLabel(phase: string): string {
 
 ## 10. 相关文档
 
-- [06-子Agent派生详细设计.md](06-子Agent派生详细设计.md) -- Supervisor、SpawnConfig、SubAgentResult、权限交集
+- [Subagent 详细设计](06-Subagent详细设计.md) -- AgentControl、AgentGraphStore、mailbox、运行时恢复与权限收窄
 - [02-agent-runtime详细设计.md](02-agent-runtime详细设计.md) -- AgentExecutor / round_loop / SessionManager
 - [03-MCP协议详细设计.md](../../04-详细设计阶段/04-工具与扩展生态/03-MCP协议详细设计.md) -- MCP 客户端/服务端，跨进程工具通信
 - [01-agent-core详细设计.md](01-agent-core详细设计.md) -- AgentContext / ToolRegistry / Permission

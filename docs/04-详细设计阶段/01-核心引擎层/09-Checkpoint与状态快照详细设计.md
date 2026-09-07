@@ -472,8 +472,8 @@ Checkpoint 按 `CheckpointDataType` 分片捕获以下状态，每种类型独�
 | 进行中的 LLM 流式响应 | 流式响应是瞬态数据，未完成前不具备一致性 |
 | Provider 连接状态 | 网络连接不可序列化，恢复时重新建立 |
 | CancellationToken 状态 | 运行时信号，恢复时创建新的 token |
-| 子 Agent 执行状态 | 子 Agent 是短生命周期，不独立持久化（见 Agent 生命周期 Section 1.3） |
-| Supervisor 内部队列 | 恢复时由父 Agent 编排逻辑重新 spawn |
+| Subagent 的活跃 tokio task / cancellation handle | 运行时资源不进入本 Checkpoint；Agent Graph、mailbox、状态事件和 runtime descriptor 由 `subagents-v2.db` 独立持久化 |
+| Subagent Session 时间线 | 不重复写入本 Checkpoint；真实 `ResponseItem` 由 `state.db` 持久化，并通过 `AgentThreadV2.session_id` 关联 |
 
 ### 5.3 状态捕获实现
 

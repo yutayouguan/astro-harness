@@ -207,26 +207,22 @@ pub async fn resume_session(
 
 ---
 
-## 五、子 Agent Checkpoint
+## 五、Subagent 持久化与恢复
 
-### 5.1 子 Agent 进度持久化
+### 5.1 职责库
 
-子 Agent 的执行进度通过 `task_traces` 表持久化：
+Subagent 不使用 `task_traces` 或 `SubAgentResult` 作为恢复契约。它的持久状态分为两部分：
 
-```sql
--- task_traces 已有字段足以支撑子 Agent 恢复
--- id, conversation_id, parent_task_id, depth, status, input_json, output_json, started_at, ended_at
-```
+- `{base}/data/subagents-v2.db`：Agent Graph、mailbox、状态事件和非机密的运行时描述符；
+- `{base}/data/state.db`：每个 Agent Thread 对应 Session 的真实 `ResponseItem` 时间线。
 
-每个子 Agent 完成时 `output_json` 写入 `SubAgentResult`。崩溃时 `status = 'running'` 的子 Agent 被标记为 `failed`，其已完成的部分结果注入父 Agent 上下文。
+两者通过 `AgentThreadV2.session_id` 关联。线程状态是持久状态，不是父 Agent 上下文中的一次性工具结果。
 
 ### 5.2 恢复策略
 
-子 Agent 不支持断点续跑（上下文独立、短生命周期），崩溃后的处理：
+进程重启后不恢复已丢失的 tokio task 或 `CancellationToken`，但保留 Agent Tree、mailbox、最后状态和 Session 历史。根线程或目标线程的祖先可以发起 `followup_task`；冷恢复路径使用已持久的 runtime descriptor，再从当前父运行时材料重建模型、Skill、MCP、sandbox 和服务层级约束。恢复只能保持或收窄权限，不得借重启扩权。
 
-1. 已完成的子 Agent：`output_json` 已持久化，直接复用
-2. 未完成的子 Agent：标记为 `failed`，注入父 Agent 上下文："子任务 '{goal}' 因中断未完成，请决定是否重新委派"
-3. 父 Agent 收到恢复提示后，LLM 自行决定是否重新 `delegate_task`
+详见 [Subagent 系统设计](05-Subagent系统设计.md) 和 [Subagent 详细设计](../../04-详细设计阶段/01-核心引擎层/06-Subagent详细设计.md)。
 
 ---
 

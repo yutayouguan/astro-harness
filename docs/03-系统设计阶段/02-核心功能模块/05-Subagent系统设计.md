@@ -1,13 +1,22 @@
-# 子 Agent 派生
+# Subagent（Codex V2 Agent Threads）系统设计
 
-> **Harness 定位（2026-08-29）**：子 Agent 是 Harness 的 Orchestrator 子系统。当前唯一实现是 Codex V2 Agent Threads：`spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`，Graph/mailbox/status 位于 `{base}/data/subagents-v2.db`，真实对话投影位于 `{base}/data/state.db`。旧 `delegate_task/Supervisor/DelegateRunner` 仅作迁移背景。
+> **术语与 Harness 定位（2026-09-07）**：本文统一使用 **Subagent** 表示产品能力，使用 **Agent Thread** 表示其运行时抽象。Subagent 是 Harness 的 Orchestrator 子系统。当前唯一实现是 Codex V2 Agent Threads：`spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`，Graph/mailbox/status 位于 `{base}/data/subagents-v2.db`，真实对话位于 `{base}/data/state.db`。旧 `delegate_task/Supervisor/DelegateRunner` 仅作迁移背景。
 
-> 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
+> 文档状态：定稿 | 阶段：系统设计 | 对应需求：F-30 Subagent
 > 架构版本：Codex V2 Agent Thread（替代原 Supervisor/DelegateRunner 设计）
 
 ---
 
-## 一、设计哲学
+## 一、系统边界
+
+Subagent 是持久的父子 Agent Thread 协作机制，不是 Skill 的别名，也不是桌面端显式创建 git worktree 的多任务功能。它的责任边界是：
+
+- 建立并持久化 Agent Tree、mailbox 与状态转移；
+- 为每个子线程创建独立 Session，并按 `fork_turns` 复制父历史；
+- 在父权限上限内解析子 Agent 的模型、推理强度、Skill 和 sandbox 配置；
+- 通过六个模型工具和桌面控制面支持派生、通信、追问、等待、中断与关闭。
+
+## 二、设计哲学
 
 子 Agent 是一个独立的 **Agent Thread**，拥有自己的会话上下文、模型调用、工具循环和持久化状态。父 Agent 通过 `spawn_agent` 派生线程，通过 `send_message` / `followup_task` 追加交互，通过 `wait_agent` / `interrupt_agent` 管理生命周期。子 Agent 只把精简摘要回传给父 Agent，不把中间日志灌入父上下文，以此保持 Token 高效。
 
@@ -21,9 +30,9 @@
 
 ---
 
-## 二、模型工具接口
+## 三、模型工具接口
 
-V2 提供 **6 个模型工具**（LLM 可直接调用）和 **2 个桌面控制面工具**：
+V2 提供 **6 个模型工具**（LLM 可直接调用）和 **6 个桌面控制面命令**：
 
 ### 模型工具（crate: `agent-tools`）
 
@@ -40,8 +49,12 @@ V2 提供 **6 个模型工具**（LLM 可直接调用）和 **2 个桌面控制�
 
 | 命令 | 用途 |
 |------|------|
+| `list_subagent_threads` | 读取根 Session 对应的 Agent Tree 快照 |
 | `read_subagent_thread` | 读取子 Agent 线程的完整 Session 时间线 |
+| `send_subagent_message` | 以 follow-up 语义追加消息并触发或排队新 turn |
+| `interrupt_subagent_thread` | 中断子 Agent 的当前 turn |
 | `close_subagent_thread` | 关闭子 Agent 子树（级联终止） |
+| `list_subagent_definitions` | 列出当前可用的自定义 Agent 定义 |
 
 ### spawn_agent 请求结构
 
@@ -60,7 +73,7 @@ pub struct SpawnAgentV2Request {
 
 ---
 
-## 三、AgentControl 根级控制器
+## 四、AgentControl 根级控制器
 
 ```rust
 pub struct AgentControl {
@@ -69,24 +82,25 @@ pub struct AgentControl {
     registry: Arc<AgentRegistry>,    // RAII 内存注册表
     activity: Arc<ActivityBus>,      // 活动事件总线
     runtimes: Arc<RuntimeHandleRegistry>, // 运行时句柄（中断/终止回调）
+    runtime_lifecycle: Arc<Mutex<RuntimeLifecycleState>>, // close/spawn 准入
+    root_service_tier: Arc<Mutex<Option<String>>>,        // 根任务服务层级
+    lifecycle_notify: Arc<Notify>,                        // 生命周期协调
 }
 ```
 
-`AgentControl` 是根级共享控制器，聚合存储、注册表、活动总线和运行时句柄。每个根 Agent 对应一个 `AgentControl` 实例。
+`AgentControl` 是根级共享控制器，聚合存储、注册表、活动总线、运行时句柄、close/spawn 准入与根服务层级。每个根 Agent 对应一个 `AgentControl` 实例。
 
 ---
 
-## 四、线程状态机
+## 五、线程状态机
 
 ```text
 PendingInit → Running → Completed
-                │         ↑
                 ├────→ Interrupted
-                │         ↑
                 └────→ Errored
-                          │
-                          ▼
-                       Shutdown
+
+Completed / Interrupted / Errored ──followup_task──→ Running
+PendingInit / Running / 终态 ──RuntimeTerminated──→ Shutdown
 ```
 
 ```rust
@@ -102,7 +116,7 @@ pub enum AgentStatusV2 {
 
 ---
 
-## 五、派生规则
+## 六、派生规则
 
 - 子 Agent 默认共享当前项目工作区，不隐式创建 git worktree
 - 并行写任务必须由父 Agent 规划文件所有权
@@ -113,7 +127,7 @@ pub enum AgentStatusV2 {
 
 ---
 
-## 六、运行方式与权限解耦
+## 七、运行方式与权限解耦
 
 | 维度 | 可选值 | 职责 |
 | --- | --- | --- |
@@ -126,7 +140,7 @@ pub enum AgentStatusV2 {
 
 ---
 
-## 七、子 Agent 生命周期
+## 八、Subagent 生命周期
 
 ```text
 父 Agent 调用 spawn_agent
@@ -158,7 +172,7 @@ RunnerEvent 驱动状态投影
 
 ---
 
-## 八、统一运行内核
+## 九、统一运行内核
 
 foreground 与 background 共享同一个多轮 round engine：Provider fallback、context maintenance、hooks、tool execution、iteration budget、usage 和 cancellation 只实现一次。差异仅由适配器表达：
 
@@ -169,11 +183,11 @@ AgentThread
        └─ BackgroundAdapter  -> summary/status/non-interactive result
 ```
 
-Cron 和 SubAgent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAdapter`。
+Cron 和 Subagent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAdapter`。
 
 ---
 
-## 九、持久化
+## 十、持久化与恢复
 
 `AgentGraphStore`（`subagents-v2.db`，WAL 模式 SQLite）管理：
 
@@ -186,7 +200,7 @@ Cron 和 SubAgent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAda
 
 ---
 
-## 十、`spawn_agent` vs `execute_code` 决策原则
+## 十一、`spawn_agent` vs `execute_code` 决策原则
 
 | 场景 | 选择 | 原因 |
 | ---- | ---- | ---- |
@@ -199,4 +213,4 @@ Cron 和 SubAgent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAda
 
 - [03-MCP集成.md](03-MCP集成.md) — MCP 集成设计
 - [04-Skills系统.md](04-Skills系统.md) — Skills 系统设计
-- `04-详细设计阶段/01-核心引擎层/06-子Agent派生详细设计.md` — V2 Agent Thread 详细实现
+- [Subagent 详细设计](../../04-详细设计阶段/01-核心引擎层/06-Subagent详细设计.md) — V2 Agent Thread 代码级契约

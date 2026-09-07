@@ -9,7 +9,7 @@
 ```text
 03-系统设计阶段/
 ├── 01-架构设计/           # 架构总览、Crate 结构、系统分层、模块依赖、数据流、部署、端到端追踪、ADR
-├── 02-核心功能模块/       # Provider、MCP/Skills/子Agent、进化引擎、上下文、RAG
+├── 02-核心功能模块/       # Provider、MCP/Skills/Subagent、进化引擎、上下文、RAG
 ├── 03-基础设施/           # 持久化、可观测性、错误处理、安全、隐私、成本
 ├── 04-数据库设计/         # Schema、ER 图、索引、迁移策略
 ├── 05-接口设计/           # Tauri Commands、DTO、MCP 协议、Provider 接口
@@ -46,7 +46,7 @@
 | [02-OpenRouter模型目录.md](02-核心功能模块/02-OpenRouter模型目录.md) | OpenRouter 模型目录：价格、能力、模态，实时数据同步方案 |
 | [03-MCP集成.md](02-核心功能模块/03-MCP集成.md) | MCP Client/Server、工具风险等级配置、Transport（stdio/Streamable HTTP）、懒连接 |
 | [04-Skills系统.md](02-核心功能模块/04-Skills系统.md) | Skill Trait、SKILL.md 格式、BM25 按需披露（tantivy）、热加载 |
-| [05-子Agent派生.md](02-核心功能模块/05-子Agent派生.md) | Codex V2 Agent Threads：六工具控制面、Graph/mailbox/status 持久化与权限收窄 |
+| [05-Subagent系统设计.md](02-核心功能模块/05-Subagent系统设计.md) | Subagent / Codex V2 Agent Threads：六工具控制面、Graph/mailbox/status 持久化、恢复与权限收窄 |
 | [06-自我进化引擎.md](02-核心功能模块/06-自我进化引擎.md) | 自我进化引擎：TaskTrace、反思引擎、Skill 合成、Prompt 优化流程 |
 | [07-上下文管理.md](02-核心功能模块/07-上下文管理.md) | PromptContract、动态上下文、工具结果压缩、token 预算与用量分段 |
 | [08-知识库RAG.md](02-核心功能模块/08-知识库RAG.md) | 知识库 RAG：文档摄入管线、混合检索（BM25 + sqlite-vec）、工作区独立知识库 |

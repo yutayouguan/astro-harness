@@ -1,11 +1,11 @@
-# 子 Agent 派生详细设计
+# Subagent（Codex V2 Agent Threads）详细设计
 
-> **Harness 当前基线（2026-08-29）**：本文仅以 Codex V2 Agent Threads 章节为现行契约。模型工具只有 `spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`；Graph/mailbox/status 使用 `{base}/data/subagents-v2.db`，对话投影使用 `{base}/data/state.db`，不隐式创建 worktree。旧 Supervisor/DelegateRunner 内容属迁移参考。
+> **Harness 当前基线（2026-09-07）**：本文是 Subagent 子系统的现行代码级契约。模型工具只有 `spawn_agent/list_agents/send_message/followup_task/wait_agent/interrupt_agent`；Graph/mailbox/status 使用 `{base}/data/subagents-v2.db`，真实 Session 时间线使用 `{base}/data/state.db`，不隐式创建 worktree。旧 Supervisor/DelegateRunner 内容仅是迁移背景，不构成兼容接口。
 
 > 版本：v2.0 | 日期：2026-08-20 | 状态：已落地
-> 对应需求：F-30 子 Agent 派生、F-04 Skills 系统、M-08 安全边界
+> 对应需求：F-30 Subagent、F-04 Skills 系统、M-08 安全边界
 > 架构版本：Codex V2 Agent Thread（替代原 Supervisor/DelegateRunner/spawn_depth 设计）
-> 补充文档：[05-子Agent派生.md](../../03-系统设计阶段/02-核心功能模块/05-子Agent派生.md)（系统设计层概览）
+> 上游文档：[Subagent 系统设计](../../03-系统设计阶段/02-核心功能模块/05-Subagent系统设计.md)
 
 ---
 
@@ -41,7 +41,7 @@ AgentThread
        └─ BackgroundAdapter  -> summary/status/non-interactive result
 ```
 
-Cron 和 SubAgent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAdapter`。旧 `headless` 术语废弃，避免与 sandbox / approval 语义混淆。
+Cron 和 Subagent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAdapter`。旧 `headless` 术语废弃，避免与 sandbox / approval 语义混淆。
 
 当前实现以 `streaming::run_multi_turn_stream` 作为统一 round engine，
 `exec::background` 仅消费事件并返回最终文本与 usage；它不再包含独立的 Provider、预算或工具执行循环。
@@ -118,10 +118,13 @@ pub struct AgentControl {
     registry: Arc<AgentRegistry>,        // RAII 内存注册表
     activity: Arc<ActivityBus>,          // 活动事件总线
     runtimes: Arc<RuntimeHandleRegistry>, // 运行时句柄注册
+    runtime_lifecycle: Arc<Mutex<RuntimeLifecycleState>>, // close/spawn 准入状态
+    root_service_tier: Arc<Mutex<Option<String>>>,        // 根服务层级
+    lifecycle_notify: Arc<Notify>,                        // 准入协调通知
 }
 ```
 
-`AgentControl` 在 `open()` 时确保根线程存在、清理残留预留、从 `AgentGraphStore` 重建 `AgentRegistry`。每个根 Agent（主对话）对应一个 `AgentControl` 实例。
+`AgentControl::open()` 确保根线程存在，并从 `AgentGraphStore` 快照重建 `AgentRegistry`。如果快照中仍有非根 `PendingInit` 预留，它会拒绝打开，要求先走独占恢复，而不是静默清理。每个根 Agent（主对话）对应一个 `AgentControl` 实例。
 
 ### 2.2 AgentGraphStore 持久化
 
@@ -215,7 +218,7 @@ PendingInit ──────→ Running
                       │    Running  ← 可重新进入
                       │
                       ├──→ Interrupted
-                      │      ↓ (send_message / followup_task)
+                      │      ↓ (followup_task)
                       │    Running  ← 可恢复
                       │
                       └──→ Errored { message }
@@ -424,11 +427,11 @@ pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
 
 1. 解析 `agent_type`，从 `AgentCatalog` 加载自定义定义
 2. `AgentControl` 检查 `CloseAdmissionGuard`（是否有正在关闭的前缀）
-3. `AgentRegistry::reserve_spawn()` 预留槽位
-4. `AgentGraphStore` 持久化 `ThreadReservation`
-5. 构建 `SpawnRuntimeV2Request`（含父线程凭证、上下文快照、MCP 配置等）
-6. 启动子 Agent 运行时，注册 `AgentRuntimeHandle`
-7. `SpawnReservation::commit()` 确认派生
+3. `AgentControl::reserve_spawn_typed()` 预留槽位并持久化 `ThreadReservation`
+4. 构建 `SpawnRuntimeV2Request`，持久化非机密 `AgentRuntimeDescriptorV2`
+5. 按 `fork_turns` 创建子 Session，校验运行时材料，登记可恢复请求
+6. `AgentSpawnReservation::commit()` 提交图身份
+7. `AgentRuntimeManager::start_turn()` 异步启动，等待 `TurnStarted` 和运行时句柄完成准入确认
 8. 返回 `SpawnAgentV2Result { thread }`
 
 ### 7.3 list_agents
@@ -452,7 +455,7 @@ pub const CODEX_V2_AGENT_TOOL_NAMES: [&str; 6] = [
 
 ### 7.5 followup_task
 
-与 `send_message` 类似，但语义不同：`followup_task` 在已完成或已中断的线程上触发新 turn，使其重新进入 Running 状态。
+与 `send_message` 类似，但语义不同：`followup_task` 持久化一条会触发 turn 的邮箱消息。目标无活跃 turn 时立即启动；目标正在运行时原子排队，由当前 turn 交接给下一 turn；冷恢复时先从 runtime descriptor 和父运行时材料重建请求。
 
 ### 7.6 wait_agent
 
@@ -531,54 +534,36 @@ pub async fn list_subagent_definitions() -> Result<Vec<AgentDefinitionDto>, Stri
 ### 9.1 完整序列
 
 ```text
-    父 AgentLoop        AgentControl      AgentRegistry      AgentGraphStore     子 AgentThread
-         │                  │                  │                  │                  │
-         │  LLM 返回:       │                  │                  │                  │
-         │  spawn_agent     │                  │                  │                  │
-         │                  │                  │                  │                  │
-         ├──[1] dispatch ──►│                  │                  │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[2] check ──────►│                  │                  │
-         │                  │  admission guard │                  │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[3] reserve ────►│                  │                  │
-         │                  │  spawn slot      │                  │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[4] persist ──────────────────────►│                  │
-         │                  │  ThreadReservation│                  │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[5] build SpawnRuntimeV2Request    │                  │
-         │                  │  (凭证、上下文快照、MCP 等)         │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[6] launch ──────────────────────────────────────────►│
-         │                  │  子 Agent 运行时  │                  │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[7] register runtime handle       │                  │
-         │                  │                  │                  │                  │
-         │                  ├─[8] commit reservation            │                  │
-         │                  │                  │                  │                  │
-         │◄─[9] result ────┤                  │                  │                  │
-         │  SpawnAgentV2Result                 │                  │                  │
-         │                  │                  │                  │                  │
-         │                  │                  │                  ├◄─[10] events ───┤
-         │                  │                  │                  │  RunnerEvent     │
-         │                  │                  │                  │                  │
-         │  wait_agent      │                  │                  │                  │
-         ├──[11] wait ─────►│                  │                  │                  │
-         │  via ActivityBus │                  │                  │                  │
-         │                  │                  │                  │                  │
-         │◄─[12] wakeup ──►│                  │                  │                  │
-         │  MailboxActivity │                  │                  │                  │
+父 AgentLoop
+  │
+  ├─[1] spawn_agent
+  ▼
+AgentControl / AgentRegistry
+  ├─[2] close admission + quota check
+  ├─[3] persist ThreadReservation + runtime descriptor
+  ├─[4] fork child Session + validate runtime material
+  ├─[5] commit Agent Graph identity
+  ▼
+AgentRuntimeManager
+  ├─[6] start child tokio task
+  ├─[7] persist TurnStarted + register runtime handle
+  └─[8] acknowledge startup
+  ▼
+父 AgentLoop receives SpawnAgentV2Result
+  │
+  ├─[9] wait_agent
+  ▼
+ActivityBus / AgentGraphStore
+  └─[10] mailbox activity / terminal status / steer / timeout
 ```
 
 ### 9.2 关键步骤说明
 
-1. **[1-4] 预检与预留**：`AgentControl` 检查准入屏障和注册表限制，持久化线程预留
-2. **[5] 运行时物料构建**：`SpawnRuntimeV2Request` 携带父线程凭证、Provider fallback 链、MCP 配置、Skills 配置等
-3. **[6-7] 异步启动**：子 Agent 在独立的 tokio task 中运行，注册中断/终止句柄
-4. **[8-9] 确认派生**：`SpawnReservation::commit()` 后返回结果给父 Agent
-5. **[10] 事件驱动**：`RunnerEvent` 持久化到 `AgentGraphStore`，更新状态投影
-6. **[11-12] 等待感知**：父 Agent 通过 `wait_agent` 在 `ActivityBus` 上等待
+1. **[1-3] 预检与预留**：`AgentControl` 检查 close 准入屏障和注册表限制，持久化线程预留和非机密 runtime descriptor。
+2. **[4] 运行时物料与 Session**：按 `fork_turns` 创建子 Session，并校验 Provider fallback、MCP、Skills、sandbox 等物料。
+3. **[5] 提交身份**：启动前提交 `AgentSpawnReservation`；启动失败时 cleanup guard 同时回滚 Agent Graph 身份和子 Session。
+4. **[6-8] 启动准入**：`AgentRuntimeManager` 启动独立 tokio task，只有 `TurnStarted` 已持久化且运行时句柄已注册后，才向父 Agent 返回成功。
+5. **[9-10] 等待与事件投影**：后续 `RunnerEvent` 持久化到 `AgentGraphStore`；父 Agent 通过 `wait_agent` 等待对其可见的 mailbox、子线程终态、steer 或超时。
 
 ---
 
@@ -706,6 +691,6 @@ INVARIANT 5: SpawnReservation 的 commit/abort/drop 保证槽位释放
 
 ## 14. 相关文档
 
-- [05-子Agent派生.md](../../03-系统设计阶段/02-核心功能模块/05-子Agent派生.md) -- 子 Agent 派生的系统设计层概览
+- [Subagent 系统设计](../../03-系统设计阶段/02-核心功能模块/05-Subagent系统设计.md) -- 系统边界、控制面与生命周期概览
 - [01-agent-core详细设计.md](01-agent-core详细设计.md) -- AgentLoop 运行时、工具分发
 - [12-Agent事件与恢复详细设计.md](12-Agent事件与恢复详细设计.md) -- EventMsg 单一事实链、恢复协议

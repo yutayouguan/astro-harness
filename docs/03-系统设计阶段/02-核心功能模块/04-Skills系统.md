@@ -310,6 +310,6 @@ pub async fn load_from_dir(dir: &Path) -> Result<SkillRegistry>;
 ## 相关文档
 
 - [03-MCP集成.md](03-MCP集成.md) — MCP 集成设计
-- [05-子Agent派生.md](05-子Agent派生.md) — 子 Agent 派生设计
+- [Subagent 系统设计](05-Subagent系统设计.md) — Codex V2 Agent Threads 设计
 - `04-详细设计阶段/03-记忆与上下文/02-Skills系统详细设计.md` — Skills 详细设计
 - `04-详细设计阶段/04-工具与扩展生态/05-Skill全生命周期设计.md` — Skill 生命周期

@@ -1083,7 +1083,7 @@ Skill Loader 解析 SKILL.md
     |
     v
 (3) Supervisor::spawn_child(config, parent_ctx)
-    |   （详见 06-子Agent派生详细设计.md）
+    |   （详见 06-Subagent详细设计.md）
     |
     v
 (4) 子 Agent 独立执行 round_loop
@@ -2899,7 +2899,7 @@ export function SkillStore({ workspaceId }: { workspaceId: string }) {
 | [04-Skills系统.md](../../03-系统设计阶段/02-核心功能模块/04-Skills系统.md) | SKILL.md 基础格式、BM25 按需披露、调用机制 |
 | [06-自我进化引擎.md](../../03-系统设计阶段/02-核心功能模块/06-自我进化引擎.md) | 进化触发条件、候选生成策略、evolution_log |
 | [05-自我进化引擎详细设计.md](../_v0.3规划/05-自我进化引擎详细设计.md) | EvolutionEngine 完整实现、Create/Refine/Retire 策略、A/B 测试 |
-| [06-子Agent派生详细设计.md](../01-核心引擎层/06-子Agent派生详细设计.md) | Supervisor、SpawnConfig、context:fork 执行路径 |
+| [Subagent 详细设计](../01-核心引擎层/06-Subagent详细设计.md) | Agent Threads 六工具控制面、持久化和权限收窄 |
 | [08-Hooks系统详细设计.md](../01-核心引擎层/08-Hooks系统详细设计.md) | HookRegistry、ShellHook、优先级分段 |
 | [04-工作流编辑器.md](../../03-系统设计阶段/06-桌面端/04-工作流编辑器.md) | 工作流编辑器生成 Skill（创建方式 B） |
 | [02-Agent市场.md](../../03-系统设计阶段/09-生态扩展/02-Agent市场.md) | `.skill.zip` 包格式、市场安装流程 |

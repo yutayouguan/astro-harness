@@ -13,7 +13,7 @@
 | [03-交互执行模式设计.md](01-核心引擎层/03-交互执行模式设计.md) | F-39/M-38 交互执行模式：自适应规划、Pending 消息队列、YOLO 开关、MultiTask |
 | [04-多执行后端系统设计.md](01-核心引擎层/04-多执行后端系统设计.md) | 本地子进程、跨平台 sandbox、managed network、Browser/MCP 运行环境与规划边界 |
 | [05-成本预算控制详细设计.md](01-核心引擎层/05-成本预算控制详细设计.md) | BudgetManager：三级预算模型、Token 计费、check_before_call 拦截、渐进降级、YOLO 强制关闭、费用统计报表 |
-| [06-子Agent派生详细设计.md](01-核心引擎层/06-子Agent派生详细设计.md) | Codex V2 Agent Threads：六工具控制面、持久 Agent Graph/mailbox/status、真实 Session 时间线 |
+| [06-Subagent详细设计.md](01-核心引擎层/06-Subagent详细设计.md) | Subagent / Codex V2 Agent Threads：六工具分发、运行时派生与恢复、持久 Agent Graph/mailbox/status、真实 Session 时间线 |
 | [07-Agent生命周期详细设计.md](01-核心引擎层/07-Agent生命周期详细设计.md) | Thread/Session/Task/Turn/Step/Attempt 六级生命周期，以及完整 Realtime、Elicitation、TurnSettings、Guardian retry 和用户 Shell 控制边界 |
 | [08-Hooks系统详细设计.md](01-核心引擎层/08-Hooks系统详细设计.md) | Plugin、Command/MCP、Gateway、Shell 的 typed lifecycle、信任、异步运行与事件专属结果契约 |
 | [09-Checkpoint与状态快照详细设计.md](01-核心引擎层/09-Checkpoint与状态快照详细设计.md) | rollout append-only 事实源、snapshot + live boundary 与 SessionStore 可重建投影 |

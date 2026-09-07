@@ -2,7 +2,7 @@
 
 Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。
 
-Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口见 [Agent Harness 总体架构](03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，Responses-only 与原生历史契约见 [Responses 原生 Agent 运行时架构](03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
+Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口见 [Agent Harness 总体架构](03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，Responses-only 与原生历史契约见 [Responses 原生 Agent 运行时架构](03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。Subagent 的两阶段入口分别是 [Subagent 系统设计](03-系统设计阶段/02-核心功能模块/05-Subagent系统设计.md) 和 [Subagent 详细设计](04-详细设计阶段/01-核心引擎层/06-Subagent详细设计.md)。
 
 最新生命周期能力与兼容性变更见 [2026-09-01 Codex 生命周期对齐更新说明](更新说明/2026-09-01-Codex生命周期对齐.md)，包含 Realtime、`ResolveElicitation`、`TurnSettings`、Guardian retry 和独立用户 Shell；Realtime 运输、版本、handoff 与恢复契约见 [Realtime 子系统](realtime-subsystem.md)，上游协议快照见 [OpenAI Realtime API 参考](openai/realtime/README.md)与 [Azure OpenAI Realtime 参考](azure/realtime/README.md)。
 
@@ -48,7 +48,7 @@ Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口
 | 子目录 | 文件数 | 内容覆盖 |
 | ---- | ---- | ---- |
 | `01-架构设计/` | 12 | 架构总览、Crate 结构、Prompt 工程、系统分层、模块依赖、数据流、部署架构、端到端追踪、ADR、Agent Harness、Responses 原生运行时 |
-| `02-核心功能模块/` | 9 | Provider 系统（含 ImageClient/MusicClient）、MCP/Skills/子 Agent、自我进化、上下文管理、知识库 RAG、会话 Checkpoint |
+| `02-核心功能模块/` | 9 | Provider 系统（含 ImageClient/MusicClient）、MCP/Skills/Subagent（Agent Threads）、自我进化、上下文管理、知识库 RAG、会话 Checkpoint |
 | `03-基础设施/` | 8 | 持久化、可观测性、错误处理、人工接管、工具系统、安全（PermissionSet）、隐私合规、成本预算 |
 | `04-数据库设计/` | 4 | Schema（21 表 + 3 虚拟表 + 1 视图）、ER 图、索引（含 unicode61 分词）、迁移策略 |
 | `05-接口设计/` | 4 | Tauri Commands API、前后端 DTO、MCP 协议、Provider 接口规范 |
