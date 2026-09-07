@@ -68,6 +68,8 @@ html[data-theme="dark"] {
  * on :root: local panel tones and portal-provided tones must remain effective.
  */
 :is(
+  .settings-content-inline [role="tablist"],
+  .settings-content-inline [role="tab"],
   .skills-page,
   .cron-page,
   .loop-panel,

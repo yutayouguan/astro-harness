@@ -408,6 +408,75 @@
   background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
 }
 
+/* ── 设置区语义 Tab：统一采用“模型服务”的分段玻璃材质 ──────────── */
+
+.settings-content-inline [role="tablist"] {
+  box-sizing: border-box;
+  border: 1px solid var(--seg-shell-border);
+  border-radius: var(--seg-shell-radius);
+  background: var(--seg-shell-bg);
+  box-shadow: var(--seg-shell-shadow);
+  backdrop-filter: var(--seg-shell-blur);
+  -webkit-backdrop-filter: var(--seg-shell-blur);
+}
+
+.settings-content-inline [role="tablist"] > [role="tab"] {
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--seg-item-radius);
+  color: var(--seg-item-color);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    background 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    color 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.12s ease-out;
+}
+
+.settings-content-inline
+  [role="tablist"]
+  > [role="tab"]:not([aria-selected="true"]):not(.active):not(
+    .is-active
+  ):not(:disabled):hover {
+  color: var(--seg-item-color-hover);
+  background: var(--seg-item-bg-hover);
+}
+
+.settings-content-inline
+  [role="tablist"]
+  > [role="tab"]:is([aria-selected="true"], .active, .is-active) {
+  color: var(--seg-item-color-active);
+  background: var(--seg-item-bg-active);
+  box-shadow: var(--seg-item-shadow-active);
+  backdrop-filter: var(--seg-item-blur-active);
+  -webkit-backdrop-filter: var(--seg-item-blur-active);
+}
+
+.settings-content-inline
+  [role="tablist"]
+  > [role="tab"]:is([aria-selected="true"], .active, .is-active)
+  > svg {
+  color: var(--tone);
+  opacity: 1;
+}
+
+.settings-content-inline [role="tablist"] > [role="tab"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tone) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-content-inline [role="tablist"] > [role="tab"]:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* 旧的下划线提示会和统一的选中浮片形成双重强调。 */
+.settings-content-inline .plugins-personal-tab--underline::after {
+  content: none;
+}
+
 .skills-page .plugins-personal-tab.is-import {
   margin-left: 4px;
   border: 1px solid
@@ -485,6 +554,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .settings-content-inline [role="tablist"] > [role="tab"] {
+    transition:
+      background 0.12s ease,
+      color 0.12s ease;
+  }
+
+  .settings-content-inline
+    [role="tablist"]
+    > [role="tab"]:active:not(:disabled) {
+    transform: none;
+  }
+
   .plugins-public-category {
     transition:
       color 0.12s ease,
