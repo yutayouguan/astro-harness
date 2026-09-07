@@ -260,6 +260,7 @@ pub fn run() {
             commands::chat::generate_image,
             commands::wallpaper::import_wallpaper,
             commands::wallpaper::generate_wallpaper,
+            commands::wallpaper::cancel_wallpaper_generation,
             commands::wallpaper::analyze_wallpaper,
             commands::wallpaper::get_system_wallpaper,
             commands::ui_style::get_active_ui_style,

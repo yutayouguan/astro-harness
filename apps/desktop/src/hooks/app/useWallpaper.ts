@@ -60,6 +60,7 @@ export type WallpaperController = {
   cycleRecent: () => void;
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
   generate: (prompt: string) => Promise<WallpaperAsset>;
+  cancelGeneration: () => Promise<boolean>;
   clearError: () => void;
   markCurrentUnavailable: () => void;
 };
@@ -81,6 +82,8 @@ export function useWallpaper(): WallpaperController {
   const [error, setError] = useState<string | null>(null);
   const analysisRequests = useRef(new Set<string>());
   const systemSyncInFlight = useRef(false);
+  const generationRequest = useRef<string | null>(null);
+  const cancelledGenerationRequests = useRef(new Set<string>());
 
   const update = useCallback(
     (recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
@@ -208,25 +211,56 @@ export function useWallpaper(): WallpaperController {
 
   const generate = useCallback(
     async (prompt: string) => {
+      const requestId = `wallpaper-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      generationRequest.current = requestId;
       setBusy("generate");
       setError(null);
       try {
         const asset = await invoke<WallpaperAsset>("generate_wallpaper", {
           prompt,
+          requestId,
         });
+        if (cancelledGenerationRequests.current.has(requestId)) {
+          throw new Error("壁纸生成已取消");
+        }
         deactivateGeneratedStyle();
         applyAsset(asset);
         return asset;
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        setError(message);
+        const cancelled = cancelledGenerationRequests.current.delete(requestId);
+        if (!cancelled) {
+          const message =
+            cause instanceof Error ? cause.message : String(cause);
+          setError(message);
+        }
         throw cause;
       } finally {
-        setBusy(null);
+        if (generationRequest.current === requestId) {
+          generationRequest.current = null;
+          setBusy(null);
+        }
       }
     },
     [applyAsset],
   );
+
+  const cancelGeneration = useCallback(async () => {
+    const requestId = generationRequest.current;
+    if (!requestId) return false;
+    cancelledGenerationRequests.current.add(requestId);
+    try {
+      const cancelled = await invoke<boolean>("cancel_wallpaper_generation", {
+        requestId,
+      });
+      if (!cancelled) cancelledGenerationRequests.current.delete(requestId);
+      return cancelled;
+    } catch (cause) {
+      cancelledGenerationRequests.current.delete(requestId);
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      throw cause;
+    }
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
   const markCurrentUnavailable = useCallback(() => {
@@ -345,6 +379,7 @@ export function useWallpaper(): WallpaperController {
     cycleRecent,
     importImage,
     generate,
+    cancelGeneration,
     clearError,
     markCurrentUnavailable,
   };

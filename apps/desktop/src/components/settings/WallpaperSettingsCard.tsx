@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Images,
   Loader2,
+  Minimize2,
   MonitorUp,
   Palette,
   Plus,
@@ -83,6 +84,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("natural");
   const [applied, setApplied] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const automaticPalette = resolveWallpaperPalette(
     { ...prefs, adaptiveColor: true },
     prefs.current,
@@ -154,6 +156,19 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
     }
   }
 
+  async function cancelGeneration() {
+    if (busy !== "generate" || canceling) return;
+    setCanceling(true);
+    try {
+      await controller.cancelGeneration();
+      setDialogOpen(false);
+    } catch {
+      // controller 持有可展示的取消失败原因。
+    } finally {
+      setCanceling(false);
+    }
+  }
+
   const dialog = dialogOpen
     ? createPortal(
         <div
@@ -173,9 +188,9 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
             data-tone={tone}
           >
             {busy === "generate" ? (
-              <div className="wallpaper-generating" role="status">
+              <div className="wallpaper-generating">
                 <Loader2 size={34} className="wallpaper-spinner" />
-                <div>
+                <div role="status" aria-live="polite">
                   <h2 id="wallpaper-dialog-title">
                     {t("prefs.wallpaper.generating")}
                   </h2>
@@ -184,6 +199,31 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                 <span className="wallpaper-progress" aria-hidden>
                   <i />
                 </span>
+                {error ? <p className="wallpaper-error">{error}</p> : null}
+                <footer className="wallpaper-generating-actions">
+                  <button
+                    type="button"
+                    className="wallpaper-secondary-button"
+                    disabled={canceling}
+                    onClick={() => void cancelGeneration()}
+                  >
+                    {canceling ? (
+                      <Loader2 size={15} className="wallpaper-spinner" />
+                    ) : (
+                      <X size={15} />
+                    )}
+                    {t("prefs.wallpaper.cancelGeneration")}
+                  </button>
+                  <button
+                    type="button"
+                    className="wallpaper-primary-button"
+                    disabled={canceling}
+                    onClick={() => setDialogOpen(false)}
+                  >
+                    <Minimize2 size={15} />
+                    {t("prefs.wallpaper.generateInBackground")}
+                  </button>
+                </footer>
               </div>
             ) : (
               <>
@@ -409,14 +449,22 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
               <button
                 type="button"
                 className="wallpaper-primary-button"
-                disabled={busy !== null}
+                disabled={busy === "upload"}
                 onClick={() => {
-                  controller.clearError();
+                  if (busy !== "generate") controller.clearError();
                   setDialogOpen(true);
                 }}
               >
-                <Sparkles size={15} />
-                {t("prefs.wallpaper.aiGenerate")}
+                {busy === "generate" ? (
+                  <Loader2 size={15} className="wallpaper-spinner" />
+                ) : (
+                  <Sparkles size={15} />
+                )}
+                {t(
+                  busy === "generate"
+                    ? "prefs.wallpaper.generatingInBackground"
+                    : "prefs.wallpaper.aiGenerate",
+                )}
               </button>
             </div>
 

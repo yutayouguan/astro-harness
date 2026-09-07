@@ -60,16 +60,21 @@ const accessibilityStyles = await readFile(
 test("wallpaper commands are registered and the settings card calls each source", () => {
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
   assert.match(commands, /commands::wallpaper::generate_wallpaper/);
+  assert.match(commands, /commands::wallpaper::cancel_wallpaper_generation/);
   assert.match(commands, /commands::wallpaper::analyze_wallpaper/);
   assert.match(commands, /commands::wallpaper::get_system_wallpaper/);
   assert.match(commands, /commands::ui_style::get_active_ui_style/);
   assert.match(commands, /commands::ui_style::reset_active_ui_style/);
   assert.match(hook, /invoke<WallpaperAsset>\("import_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAsset>\("generate_wallpaper"/);
+  assert.match(hook, /invoke<boolean>\("cancel_wallpaper_generation"/);
   assert.match(hook, /invoke<WallpaperAnalysis>\("analyze_wallpaper"/);
   assert.match(hook, /invoke<WallpaperAsset>\("get_system_wallpaper"/);
   assert.match(panel, /controller\.importImage\(path\)/);
   assert.match(panel, /controller\.generate\(generatedPrompt\)/);
+  assert.match(panel, /controller\.cancelGeneration\(\)/);
+  assert.match(panel, /prefs\.wallpaper\.generateInBackground/);
+  assert.match(panel, /prefs\.wallpaper\.generatingInBackground/);
   assert.match(panel, /controller\.setFollowSystemWallpaper/);
   assert.match(panel, /controller\.setPalette/);
   assert.match(panel, /type="color"/);

@@ -1517,6 +1517,13 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   animation: wallpaper-progress 1.35s ease-in-out infinite alternate;
 }
 
+.wallpaper-generating-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 @keyframes wallpaper-spin {
   to {
     transform: rotate(360deg);

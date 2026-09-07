@@ -108,6 +108,9 @@ export const settingsMessages = {
     "prefs.wallpaper.generating": "正在生成壁纸",
     "prefs.wallpaper.generatingHint":
       "当前壁纸会一直保留，生成成功后再自动替换",
+    "prefs.wallpaper.cancelGeneration": "取消生成",
+    "prefs.wallpaper.generateInBackground": "后台生成",
+    "prefs.wallpaper.generatingInBackground": "后台生成中",
     "prefs.wallpaper.applied": "壁纸已应用",
 
     "prefs.colorStyle.title": "色彩风格",
@@ -466,6 +469,9 @@ export const settingsMessages = {
     "prefs.wallpaper.generating": "Generating wallpaper",
     "prefs.wallpaper.generatingHint":
       "The current wallpaper stays visible until generation succeeds",
+    "prefs.wallpaper.cancelGeneration": "Cancel generation",
+    "prefs.wallpaper.generateInBackground": "Generate in background",
+    "prefs.wallpaper.generatingInBackground": "Generating in background",
     "prefs.wallpaper.applied": "Wallpaper applied",
 
     "prefs.colorStyle.title": "Color style",

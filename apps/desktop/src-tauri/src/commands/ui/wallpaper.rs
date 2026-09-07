@@ -12,6 +12,7 @@ use std::time::UNIX_EPOCH;
 
 use image::{DynamicImage, ImageFormat, ImageReader};
 use serde::Serialize;
+use tokio::sync::oneshot;
 
 const MAX_WALLPAPER_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_SYSTEM_WALLPAPER_BYTES: u64 = 100 * 1024 * 1024;
@@ -25,6 +26,18 @@ struct SystemWallpaperCache {
 }
 
 static SYSTEM_WALLPAPER_CACHE: OnceLock<Mutex<Option<SystemWallpaperCache>>> = OnceLock::new();
+static WALLPAPER_GENERATION_CANCELLATIONS: OnceLock<Mutex<HashMap<String, oneshot::Sender<()>>>> =
+    OnceLock::new();
+
+const WALLPAPER_GENERATION_CANCELLED: &str = "壁纸生成已取消";
+
+struct GenerationCancellationGuard(String);
+
+impl Drop for GenerationCancellationGuard {
+    fn drop(&mut self) {
+        clear_generation_cancellation(&self.0);
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -616,6 +629,50 @@ fn validate_prompt(prompt: &str) -> Result<&str, String> {
     Ok(prompt)
 }
 
+fn validate_generation_request_id(request_id: &str) -> Result<&str, String> {
+    let request_id = request_id.trim();
+    if request_id.is_empty()
+        || request_id.len() > 128
+        || !request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err("无效的壁纸生成请求".to_string());
+    }
+    Ok(request_id)
+}
+
+fn register_generation_cancellation(request_id: &str) -> Result<oneshot::Receiver<()>, String> {
+    let (sender, receiver) = oneshot::channel();
+    let mut cancellations = WALLPAPER_GENERATION_CANCELLATIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|_| "壁纸生成取消状态不可用".to_string())?;
+    if cancellations.contains_key(request_id) {
+        return Err("壁纸生成请求已存在".to_string());
+    }
+    cancellations.insert(request_id.to_string(), sender);
+    Ok(receiver)
+}
+
+fn clear_generation_cancellation(request_id: &str) {
+    if let Ok(mut cancellations) = WALLPAPER_GENERATION_CANCELLATIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        cancellations.remove(request_id);
+    }
+}
+
+fn cancel_generation(request_id: &str) -> Result<bool, String> {
+    let sender = WALLPAPER_GENERATION_CANCELLATIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|_| "壁纸生成取消状态不可用".to_string())?
+        .remove(request_id);
+    Ok(sender.is_some_and(|sender| sender.send(()).is_ok()))
+}
+
 #[tauri::command]
 pub async fn import_wallpaper(source_path: String) -> Result<WallpaperAssetDto, String> {
     let source = PathBuf::from(source_path.trim());
@@ -643,9 +700,20 @@ pub async fn import_wallpaper(source_path: String) -> Result<WallpaperAssetDto, 
 }
 
 #[tauri::command]
-pub async fn generate_wallpaper(prompt: String) -> Result<WallpaperAssetDto, String> {
+pub async fn generate_wallpaper(
+    prompt: String,
+    request_id: String,
+) -> Result<WallpaperAssetDto, String> {
     let prompt = validate_prompt(&prompt)?;
-    let generated = crate::commands::chat::generate_image_data(prompt, 1536, 1024).await?;
+    let request_id = validate_generation_request_id(&request_id)?.to_string();
+    let mut cancellation = register_generation_cancellation(&request_id)?;
+    let _cancellation_guard = GenerationCancellationGuard(request_id.clone());
+    let generated = tokio::select! {
+        biased;
+        _ = &mut cancellation => Err(WALLPAPER_GENERATION_CANCELLED.to_string()),
+        result = crate::commands::chat::generate_image_data(prompt, 1536, 1024) => result,
+    };
+    let generated = generated?;
     let name = format!("AI 壁纸 {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
     store_wallpaper_at(
         &home::default_memory_dir(),
@@ -655,6 +723,12 @@ pub async fn generate_wallpaper(prompt: String) -> Result<WallpaperAssetDto, Str
         Some(generated.provider),
         Some(generated.model),
     )
+}
+
+#[tauri::command]
+pub fn cancel_wallpaper_generation(request_id: String) -> Result<bool, String> {
+    let request_id = validate_generation_request_id(&request_id)?;
+    cancel_generation(request_id)
 }
 
 #[cfg(test)]
@@ -667,6 +741,17 @@ mod tests {
         let mut bytes = Cursor::new(Vec::new());
         image.write_to(&mut bytes, ImageFormat::Png).unwrap();
         bytes.into_inner()
+    }
+
+    #[tokio::test]
+    async fn cancels_only_the_matching_wallpaper_generation() {
+        let request_id = "wallpaper-test-cancel";
+        let cancellation = register_generation_cancellation(request_id).unwrap();
+
+        assert!(!cancel_generation("wallpaper-test-other").unwrap());
+        assert!(cancel_generation(request_id).unwrap());
+        cancellation.await.unwrap();
+        assert!(!cancel_generation(request_id).unwrap());
     }
 
     #[test]

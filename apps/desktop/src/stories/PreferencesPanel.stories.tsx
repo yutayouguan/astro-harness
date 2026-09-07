@@ -74,6 +74,7 @@ const meta = {
       generate: async () => {
         throw new Error("not available in Storybook");
       },
+      cancelGeneration: async () => false,
       clearError: () => {},
       markCurrentUnavailable: () => {},
     },
