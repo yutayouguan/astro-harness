@@ -116,7 +116,7 @@ AstroThread::submit(Op)
 
 `agent` crate（`crates/agent-core`）是中央运行时，主要子模块：
 
-- **`runtime/`** — Session 生命周期、`AstroThread`、`SessionIo`、`submission_loop`、`SessionState`、`SessionServices`、`TurnContext`、`StepContext`、`ToolRouter`、`ToolRuntime`、turn lifecycle、context maintenance、recording、system prompt
+- **`runtime/`** — Session 生命周期、`AstroThread`、`SessionIo`、`submission_loop`、`SessionState`、`SessionServices`、`TurnContext`、`StepContext`、`ToolRouter`、`ToolRuntime`、turn lifecycle、context maintenance、recording、system prompt、`budget`（`IterationBudget` — 每 Agent Thread 独立迭代预算，`code_exec` 可 refund）、`turn_budget`（`TurnState` — 轮次与工具深度计数）
 - **`tasks/`** — 可恢复任务生命周期：`SessionTask`、`ActiveTurn`、`TaskKind`、spawn/cancel/terminal 事件保证
 - **`streaming/`** — 流式补全：fallback、HITL bridge、多轮 streaming、provider 抽象、tool 执行、summary
 - **`exec/`** — 执行域：`AgentControlDirectory`（根级 AgentControl 进程目录）、`AgentRuntimeManager`（活跃 turn 管理）、subagents（单 turn 运行器）、dispatch（V2 6 工具分发 + 桌面控制面）、cron、background、memory review、title generation
@@ -131,6 +131,14 @@ AstroThread::submit(Op)
 与 Codex 原版差异：Codex V2 有 8 个工具（额外 `resume_agent`、`close_agent`）。Astro 精简为 6 个——`resume_agent` 的功能被 `followup_task` 吸收（可向已完成 agent 发后续任务并重新激活）；`close_agent` 从模型工具降级为桌面控制面操作（关闭 agent 是用户决策而非模型决策）。
 
 架构：一个 `AgentControl` per 根会话，所有后代共享。`subagents.db` 拥有线程图、邮箱、状态事件和迁移元数据；`SessionStore` 保持会话/工具时间线。
+
+资源配额（`AgentRegistry::Limits`，定义在 `agent_control_directory.rs`）：
+
+| 参数 | 默认值 | 含义 |
+|---|---|---|
+| `max_threads` | 32 | 单根会话可派生的线程总数（含已完成的） |
+| `max_depth` | 8 | Agent 树最大嵌套深度 |
+| `max_running` | 8 | 同时活跃执行的子 Agent 并发数 |
 
 状态：`PendingInit` → `Running` → `Completed { last_message }` / `Interrupted` / `Errored { message }` → `Shutdown`。
 
@@ -223,7 +231,7 @@ Plugin bus 事件（Codex 对齐命名 + Astro 扩展）：`PreLlmCall`、`PreTo
 
 1. **原生历史**：Agent、rollout、SQLite 和 Desktop history RPC 都使用 `ResponseItem`。其中相邻的 user/assistant message item 不得重复角色，由 `validate_message_order()` 强制。
 
-2. **工具深度**：`tool_rounds` 在每条用户消息开始时归零；单条用户消息内上限 `multi_turn`（默认 90）。`increment_tool_round()` 耗尽时返回 `MaxDepthError`。
+2. **工具深度（双重预算）**：两套独立机制并行生效。① `TurnState.tool_rounds`：每条用户消息归零，上限 `config.multi_turn`（默认 `DEFAULT_MAX_ITERATIONS` = 90），`increment_tool_round()` 耗尽时返回 `MaxDepthError`。② `IterationBudget`：每 Agent Thread 独立预算（默认 90），`code_exec` 类型轮次可 `refund` 退还。
 
 3. **streaming 不变量**：每轮 assistant 回复先写入再执行工具；usage 覆盖式累加（兼容 Google 累计式 usageMetadata）。
 
