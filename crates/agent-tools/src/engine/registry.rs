@@ -43,6 +43,14 @@ pub type DynToolHandler = Arc<
         + Sync,
 >;
 
+/// Read-only capability exposed to tools that need deferred-tool discovery.
+///
+/// `ToolContext` depends on this narrow view instead of the mutable registry,
+/// so a tool cannot widen the active registry or bypass the frozen Step router.
+pub trait ToolRegistryView: Send + Sync {
+    fn searchable_deferred_entries(&self) -> anyhow::Result<Vec<ToolEntry>>;
+}
+
 #[derive(Clone)]
 pub struct ToolRegistry {
     /// 已注册的全部工具条目。
@@ -490,6 +498,25 @@ impl ToolRegistry {
             }
         }
         Ok((api_specs(direct), api_specs(discovered), api_specs(nested)))
+    }
+}
+
+impl ToolRegistryView for ToolRegistry {
+    fn searchable_deferred_entries(&self) -> anyhow::Result<Vec<ToolEntry>> {
+        Ok(self
+            .searchable_deferred_tools()
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+}
+
+impl ToolRegistryView for std::sync::RwLock<ToolRegistry> {
+    fn searchable_deferred_entries(&self) -> anyhow::Result<Vec<ToolEntry>> {
+        let registry = self
+            .read()
+            .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
+        registry.searchable_deferred_entries()
     }
 }
 

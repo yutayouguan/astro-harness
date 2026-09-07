@@ -28,6 +28,14 @@ pub enum ImageGenMode {
     MiniMax,
 }
 
+/// Embedding protocol routing. Capability is derived from the presence of a
+/// route, including providers such as OpenRouter that require an explicit
+/// model and therefore have no default embedding model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmbeddingMode {
+    OpenAiCompatible,
+}
+
 /// Built-in provider construction strategy.
 ///
 /// Keeping this beside [`ProviderProfile`] makes the profile table the single
@@ -68,8 +76,7 @@ pub struct ProviderProfile {
     pub azure_deployment_style: bool,
     /// 默认模型名（**离线 fallback**；运行时优先从缓存选最新模型）。
     pub default_model: &'static str,
-    pub supports_image_gen: bool,
-    pub supports_embedding: bool,
+    pub embedding_mode: Option<EmbeddingMode>,
 
     // ── 媒体能力（表驱动，消除 provider-id 硬编码） ──
     /// 图片生成协议模式。`None` = 不支持。
@@ -95,6 +102,14 @@ pub struct ProviderProfile {
 }
 
 impl ProviderProfile {
+    pub fn supports_image_gen(&self) -> bool {
+        self.image_mode.is_some()
+    }
+
+    pub fn supports_embedding(&self) -> bool {
+        self.embedding_mode.is_some()
+    }
+
     pub fn supports_asr(&self) -> bool {
         !self.default_asr_model.is_empty()
     }
@@ -139,8 +154,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["OPENAI_API_KEY"],
         azure_deployment_style: false,
         default_model: "gpt-5.6-sol",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "gpt-image-2",
         default_vision_model: "gpt-4o",
@@ -161,8 +175,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
         azure_deployment_style: false,
         default_model: "claude-opus-4-8",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -183,8 +196,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["DEEPSEEK_API_KEY"],
         azure_deployment_style: false,
         default_model: "deepseek-v4-flash",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -205,8 +217,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
         azure_deployment_style: false,
         default_model: "gemini-3.6-flash",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::GoogleInteractions),
         default_image_model: "gemini-3.6-flash",
         default_vision_model: "gemini-3.6-flash",
@@ -227,8 +238,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &[],
         azure_deployment_style: false,
         default_model: "llama3.3",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -249,8 +259,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["AZURE_OPENAI_API_KEY", "AZURE_API_KEY"],
         azure_deployment_style: false,
         default_model: "gpt-5.6-sol",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::AzureOpenAiV1),
         default_image_model: "gpt-image-2",
         default_vision_model: "",
@@ -271,8 +280,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["ZHIPU_API_KEY", "BIGMODEL_API_KEY"],
         azure_deployment_style: false,
         default_model: "glm-5.2",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "cogview-4",
         default_vision_model: "glm-5.2",
@@ -293,8 +301,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["OPENROUTER_API_KEY"],
         azure_deployment_style: false,
         default_model: "openai/gpt-5.6",
-        supports_image_gen: false,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -315,8 +322,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["DASHSCOPE_API_KEY", "BAILIAN_API_KEY"],
         azure_deployment_style: false,
         default_model: "qwen3.8-max",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "wanimage-2.7",
         default_vision_model: "qwen3.8-max",
@@ -337,8 +343,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["NVIDIA_API_KEY"],
         azure_deployment_style: false,
         default_model: "meta/llama-3.3-70b-instruct",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -359,8 +364,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["MOONSHOT_API_KEY", "KIMI_API_KEY"],
         azure_deployment_style: false,
         default_model: "kimi-k3",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -381,8 +385,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["ARK_API_KEY", "VOLCENGINE_API_KEY"],
         azure_deployment_style: false,
         default_model: "doubao-seed-evolving",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "seedream-5.0-pro",
         default_vision_model: "doubao-seed-evolving",
@@ -403,8 +406,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::MiniMax),
         default_image_model: "image-01",
         default_vision_model: "MiniMax-M3",
@@ -425,8 +427,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["HUNYUAN_API_KEY", "TENCENT_API_KEY"],
         azure_deployment_style: false,
         default_model: "hy3",
-        supports_image_gen: true,
-        supports_embedding: true,
+        embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
         default_image_model: "hunyuan-image-v2.1",
         default_vision_model: "hy3",
@@ -447,8 +448,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["MINIMAX_API_KEY"],
         azure_deployment_style: false,
         default_model: "MiniMax-M3",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -469,8 +469,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["MIMO_API_KEY"],
         azure_deployment_style: false,
         default_model: "mimo-v2.5",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -491,8 +490,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         env_keys: &["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
         azure_deployment_style: false,
         default_model: "gemini-3.6-flash",
-        supports_image_gen: false,
-        supports_embedding: false,
+        embedding_mode: None,
         image_mode: None,
         default_image_model: "",
         default_vision_model: "",
@@ -536,8 +534,7 @@ static OPENAI_COMPAT_FALLBACK: ProviderProfile = ProviderProfile {
     env_keys: &["OPENAI_API_KEY"],
     azure_deployment_style: false,
     default_model: "gpt-5.6-sol",
-    supports_image_gen: false,
-    supports_embedding: false,
+    embedding_mode: None,
     image_mode: None,
     default_image_model: "",
     default_vision_model: "",
@@ -777,8 +774,8 @@ mod tests {
             "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1"
         );
         assert_eq!(p.default_model, "gpt-5.6-sol");
-        assert!(p.supports_image_gen);
-        assert!(p.supports_embedding);
+        assert!(p.supports_image_gen());
+        assert!(p.supports_embedding());
         assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
         assert_eq!(p.default_image_model, "gpt-image-2");
         assert_eq!(p.default_embedding_model, "text-embedding-3-small");

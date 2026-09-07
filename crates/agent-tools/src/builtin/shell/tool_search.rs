@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::context::ToolContext;
-use crate::registry::{ToolEntry, ToolRegistry};
+use crate::registry::{ToolEntry, ToolRegistry, ToolRegistryView};
 use crate::schema::schema_for_args;
 
 fn default_limit() -> usize {
@@ -75,16 +75,18 @@ impl ToolSearchEntry {
     }
 }
 
-fn searchable_entries(registry: &ToolRegistry) -> Vec<ToolSearchEntry> {
-    let mut entries: Vec<ToolSearchEntry> = registry
-        .searchable_deferred_tools()
+fn searchable_entries(entries: Vec<ToolEntry>) -> Vec<ToolSearchEntry> {
+    let mut entries: Vec<ToolSearchEntry> = entries
         .into_iter()
-        .map(|entry| ToolSearchEntry {
-            registered_name: entry.name.clone(),
-            tool_name: entry.tool_name(),
-            toolset: entry.toolset.clone(),
-            description: entry.description.clone(),
-            parameters: crate::schema::sanitize_tool_schema(entry.schema.clone()),
+        .map(|entry| {
+            let tool_name = entry.tool_name();
+            ToolSearchEntry {
+                registered_name: entry.name,
+                tool_name,
+                toolset: entry.toolset,
+                description: entry.description,
+                parameters: crate::schema::sanitize_tool_schema(entry.schema),
+            }
         })
         .collect();
     entries.sort_by(|a, b| a.registered_name.cmp(&b.registered_name));
@@ -164,10 +166,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::R
 
     let limit = args.limit.min(50);
     if let Some(registry) = ctx.tool_registry {
-        let registry = registry
-            .read()
-            .map_err(|_| anyhow::anyhow!("tool registry lock poisoned"))?;
-        let matches = search(&searchable_entries(&registry), query, limit);
+        let matches = search(
+            &searchable_entries(registry.searchable_deferred_entries()?),
+            query,
+            limit,
+        );
         let specs = coalesce_loadable_specs(matches);
         return Ok(serde_json::to_string_pretty(&specs)?);
     }
@@ -175,7 +178,11 @@ pub async fn dispatch(ctx: &ToolContext<'_>, args: &ToolSearchArgs) -> anyhow::R
     // 独立工具测试/调用没有 Session 注册表时，仍以全量内置工具构建一次性索引。
     let mut registry = ToolRegistry::new();
     crate::register_all(&mut registry);
-    let specs = coalesce_loadable_specs(search(&searchable_entries(&registry), query, limit));
+    let specs = coalesce_loadable_specs(search(
+        &searchable_entries(registry.searchable_deferred_entries()?),
+        query,
+        limit,
+    ));
     Ok(serde_json::to_string_pretty(&specs)?)
 }
 
@@ -187,7 +194,11 @@ mod tests {
     fn searchable_entries_include_full_deferred_schema() {
         let mut registry = ToolRegistry::new();
         crate::register_all(&mut registry);
-        let entries = searchable_entries(&registry);
+        let entries = searchable_entries(
+            registry
+                .searchable_deferred_entries()
+                .expect("deferred tool view"),
+        );
 
         let web_search = entries
             .iter()
@@ -204,7 +215,11 @@ mod tests {
     fn search_ranks_deferred_web_tools_and_returns_loadable_specs() {
         let mut registry = ToolRegistry::new();
         crate::register_all(&mut registry);
-        let entries = searchable_entries(&registry);
+        let entries = searchable_entries(
+            registry
+                .searchable_deferred_entries()
+                .expect("deferred tool view"),
+        );
         let matches = search(&entries, "search the web", 5);
         let (_, spec) = matches
             .iter()
@@ -238,11 +253,15 @@ mod tests {
     fn media_generation_search_entries_share_one_namespace() {
         let mut registry = ToolRegistry::new();
         crate::register_all(&mut registry);
-        let matches = searchable_entries(&registry)
-            .into_iter()
-            .filter(|entry| entry.tool_name.namespace() == Some("media"))
-            .map(|entry| (entry.registered_name.clone(), entry.loadable_spec()))
-            .collect();
+        let matches = searchable_entries(
+            registry
+                .searchable_deferred_entries()
+                .expect("deferred tool view"),
+        )
+        .into_iter()
+        .filter(|entry| entry.tool_name.namespace() == Some("media"))
+        .map(|entry| (entry.registered_name.clone(), entry.loadable_spec()))
+        .collect();
         let specs = coalesce_loadable_specs(matches);
 
         assert_eq!(specs.len(), 1);

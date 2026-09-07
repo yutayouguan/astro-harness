@@ -29,7 +29,7 @@
 | 路径 | 职责 |
 | --- | --- |
 | `src/dispatch.rs` | Agent Responses 入口及通用 provider/media 分发 |
-| `src/profile.rs` | `ProviderProfile`、`ApiMode`、Responses capability |
+| `src/profile.rs` | `ProviderProfile`、`ProviderKind`、`ApiMode` 与能力路由；图像/Embedding 能力由具体 mode 派生 |
 | `src/types/request.rs` | `ResponsesRequest` 与 `ChatCompletionRequest` 两条请求边界 |
 | `src/types/request_content.rs` | 非 Agent `ChatCompletionMessage`、请求内容块与工具定义 |
 | `src/types/stream.rs` | `CompletionStream`、`StreamChunk`、`Usage` |

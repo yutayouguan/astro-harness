@@ -50,7 +50,7 @@ pub use engine::executor::{CoreToolRuntime, DynamicToolAdapter, ToolExecutor, To
 pub use engine::workflow::{register_workflow_tools, WORKFLOW_TOOLSET};
 pub use path_safe::resolve_safe;
 pub use registry::DynToolHandler;
-pub use registry::{BuiltinToolRegistrar, ToolEntry, ToolRegistry};
+pub use registry::{BuiltinToolRegistrar, ToolEntry, ToolRegistry, ToolRegistryView};
 pub use sandbox::{SandboxAuditKind, SandboxAuditMetadata};
 pub use schema::{sanitize_tool_schema, schema_for_args, schema_has_vendor_hazards};
 pub use terminal_session::{

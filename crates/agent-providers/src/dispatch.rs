@@ -686,7 +686,7 @@ pub async fn embed(
 ) -> ProviderResult<Vec<Vec<f32>>> {
     let provider = normalize_provider_id(provider);
     let profile = crate::profile::resolve_or_openai_compat(provider);
-    if !profile.supports_embedding {
+    if !profile.supports_embedding() {
         return Err(ProviderError::UnsupportedCapability {
             provider: provider.to_string(),
             capability: "文本嵌入".to_string(),
@@ -729,7 +729,8 @@ pub fn default_model(provider: &str) -> String {
 
 /// 查询 provider 是否支持图片生成。
 pub fn supports_image_gen(provider: &str) -> bool {
-    crate::profile::resolve(provider).is_some_and(|p| p.supports_image_gen)
+    crate::profile::resolve(provider)
+        .is_some_and(crate::profile::ProviderProfile::supports_image_gen)
 }
 
 fn shared_http_client() -> reqwest::Client {
@@ -1001,9 +1002,8 @@ mod tests {
         let provider = registry.get("openrouter").unwrap();
         assert!(provider.embedding_model().is_some());
         assert!(provider.responses_model().is_some());
-        assert!(
-            crate::profile::resolve("openrouter").is_some_and(|profile| profile.supports_embedding)
-        );
+        assert!(crate::profile::resolve("openrouter")
+            .is_some_and(crate::profile::ProviderProfile::supports_embedding));
     }
 
     #[test]

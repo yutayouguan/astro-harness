@@ -883,12 +883,12 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         } else {
             p.embedding_model.clone()
         },
-        supports_image: profile.supports_image_gen,
+        supports_image: profile.supports_image_gen(),
         supports_video: profile.supports_video(),
         supports_tts: profile.supports_tts(),
         supports_music: profile.supports_music(),
         supports_asr: profile.supports_asr(),
-        supports_embedding: profile.supports_embedding,
+        supports_embedding: profile.supports_embedding(),
         supports_responses_api: supports_responses_toggle(p.kind) || p.id.starts_with("toml:"),
         config_source: if p.id.starts_with("toml:") {
             "toml".to_string()
