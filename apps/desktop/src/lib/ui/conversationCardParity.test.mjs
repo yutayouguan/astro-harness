@@ -16,7 +16,11 @@ test("user and assistant entries share the top-right tool group material", async
 
   assert.match(
     css,
-    /html\[data-theme\] \.bubble:is\(\.assistant, \.user\) \{[\s\S]*?border-radius: var\(--answer-radius\);[\s\S]*?border: 1px solid var\(--titlebar-menu-border\);[\s\S]*?background: var\(--titlebar-menu-bg\);[\s\S]*?box-shadow: var\(--header-chip-shadow\);[\s\S]*?backdrop-filter: var\(--titlebar-menu-blur\);/,
+    /html\[data-theme\] \.bubble:is\(\.assistant, \.user\) \{[\s\S]*?border-radius: var\(--answer-radius\);[\s\S]*?border: 0\.5px solid var\(--titlebar-menu-border\);[\s\S]*?background: var\(--titlebar-menu-bg\);[\s\S]*?box-shadow: var\(--header-chip-shadow\);[\s\S]*?backdrop-filter: var\(--titlebar-menu-blur\);/,
+  );
+  assert.match(
+    css,
+    /html\[data-theme\] \.bubble\.user:not\(\.is-editing\) \{\s*padding: 10px 14px;\s*\}/,
   );
   assert.doesNotMatch(
     css,

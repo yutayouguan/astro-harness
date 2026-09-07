@@ -7,7 +7,7 @@ html[data-theme] .bubble:is(.assistant, .user) {
   overflow: clip;
   padding: 18px 20px 16px;
   border-radius: var(--answer-radius);
-  border: 1px solid var(--titlebar-menu-border);
+  border: 0.5px solid var(--titlebar-menu-border);
   background: var(--titlebar-menu-bg);
   box-shadow: var(--header-chip-shadow);
   backdrop-filter: var(--titlebar-menu-blur);
@@ -16,6 +16,11 @@ html[data-theme] .bubble:is(.assistant, .user) {
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
+}
+
+/* 用户消息只承载已发送内容，不需要助手回答面板的宽松内边距。 */
+html[data-theme] .bubble.user:not(.is-editing) {
+  padding: 10px 14px;
 }
 
 .bubble:is(.assistant, .user)::before {
@@ -95,7 +100,7 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
   min-height: 0;
   padding: 1px 2px 8px;
   border: 0;
-  border-bottom: 1px solid
+  border-bottom: 0.5px solid
     color-mix(
       in srgb,
       var(--tone, var(--accent)) 9%,
@@ -128,7 +133,7 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
 }
 
 .bubble.assistant .msg-activity-io-block + .msg-activity-io-block {
-  border-top: 1px solid
+  border-top: 0.5px solid
     color-mix(
       in srgb,
       var(--tone, var(--accent)) 10%,
@@ -137,7 +142,7 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
 }
 
 html[data-theme="light"] .bubble.assistant .msg-activity-io {
-  border: 1px solid
+  border: 0.5px solid
     color-mix(in srgb, var(--tone, var(--accent)) 12%, rgba(71, 85, 105, 0.18));
   background:
     linear-gradient(180deg, rgba(71, 85, 105, 0.052), rgba(255, 255, 255, 0.18)),
@@ -156,7 +161,7 @@ html[data-theme="light"] .bubble.assistant .msg-activity-io {
 }
 
 html[data-theme="dark"] .bubble.assistant .msg-activity-io {
-  border: 1px solid
+  border: 0.5px solid
     color-mix(in srgb, var(--tone, #60a5fa) 18%, rgba(255, 255, 255, 0.14));
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.02)),
@@ -263,6 +268,10 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
   html[data-theme] .bubble:is(.assistant, .user) {
     padding: 13px 13px 12px;
     border-radius: 14px;
+  }
+
+  html[data-theme] .bubble.user:not(.is-editing) {
+    padding: 9px 12px;
   }
 
   .bubble.assistant .msg-timeline-step {
