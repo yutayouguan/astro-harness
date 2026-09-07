@@ -75,6 +75,8 @@ export interface SendOpts {
   allowEmpty?: boolean;
   /** 覆盖当前 UI 模式（例如刚批准 Plan→Agent 时） */
   interactionMode?: ChatInteractionMode;
+  /** Agent 忙碌时的投递模式（queue / steer / interrupt） */
+  sendMode?: "queue" | "steer" | "interrupt";
 }
 
 export interface UseSendDeps {

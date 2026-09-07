@@ -18,6 +18,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  CircleStop,
   CornerDownRight,
   ArrowDown,
   ArrowUp,
@@ -29,10 +30,12 @@ import {
   Hand,
   Image,
   Infinity as InfinityIcon,
+  ListEnd,
   ListX,
   ListTree,
   Mic,
   Music2,
+  Navigation,
   Pencil,
   Plus,
   RefreshCw,
@@ -70,8 +73,12 @@ import {
 } from "../../lib/agent/agentCreateTemplate";
 import {
   CHAT_MODES,
+  CHAT_SEND_MODES,
+  type ChatSendMode,
   type ChatWorkMode,
   type ModeSwitchRequest,
+  loadChatSendMode,
+  saveChatSendMode,
 } from "../../lib/chat/chatMode";
 import {
   findPromptTemplateSlotAt,
@@ -390,7 +397,7 @@ type Props = {
   onInputChange: (v: string) => void;
   onAttachmentsChange: (next: ChatAttachment[]) => void;
   /** 发送当前输入 */
-  onSend: (opts?: { text?: string }) => void;
+  onSend: (opts?: { text?: string; sendMode?: ChatSendMode }) => void;
   /** Agent/Plan 流式中的 follow-up 队列 */
   queuedFollowUps?: QueuedFollowUp[];
   onRemoveQueuedFollowUp?: (id: string) => void;
@@ -985,6 +992,10 @@ export default function ChatView({
   const contextWrapRef = useRef<HTMLDivElement>(null);
   const contextCloseTimerRef = useRef<number | null>(null);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const sendModeWrapRef = useRef<HTMLDivElement>(null);
+  const sendModePanelRef = useRef<HTMLDivElement>(null);
+  const [sendMode, setSendMode] = useState<ChatSendMode>(loadChatSendMode);
+  const [sendModeOpen, setSendModeOpen] = useState(false);
   const [isScrolledFromBottom, setIsScrolledFromBottom] = useState(false);
   const [approvalMode, setApprovalMode] =
     useState<PermissionPreset>("ask_for_approval");
@@ -1260,6 +1271,7 @@ export default function ChatView({
   const openContextPopover = useCallback(() => {
     cancelContextPopoverClose();
     setModeMenuOpen(false);
+    setSendModeOpen(false);
     setPlusOpen(false);
     setPaletteKind(null);
     setContextPopoverOpen(true);
@@ -1412,6 +1424,18 @@ export default function ChatView({
   }, [modeMenuOpen, refreshApprovalMode]);
 
   useEffect(() => {
+    if (!sendModeOpen) return;
+    const onDoc = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (sendModeWrapRef.current?.contains(target)) return;
+      if (sendModePanelRef.current?.contains(target)) return;
+      setSendModeOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [sendModeOpen]);
+
+  useEffect(() => {
     if (!queueMenuId) return;
     const onPointerDown = (event: MouseEvent) => {
       if (queueMenuRef.current?.contains(event.target as Node)) return;
@@ -1440,6 +1464,40 @@ export default function ChatView({
     minMaxHeight: 96,
     sizeKey: `${chatMode}:${approvalMode}`,
   });
+
+  const sendModeStyle = useClampPopover({
+    open: sendModeOpen,
+    anchorRef: sendModeWrapRef,
+    popoverRef: sendModePanelRef,
+    mode: "fixed",
+    preferAlign: "end",
+    placement: "above",
+    gap: 8,
+    maxHeightCap: 280,
+    minMaxHeight: 96,
+    sizeKey: sendMode,
+  });
+
+  const sendModeMeta = useMemo(
+    () => ({
+      queue: {
+        label: t("chat.sendMode.queue"),
+        desc: t("chat.sendMode.queue.desc"),
+        Icon: ListEnd,
+      },
+      steer: {
+        label: t("chat.sendMode.steer"),
+        desc: t("chat.sendMode.steer.desc"),
+        Icon: Navigation,
+      },
+      interrupt: {
+        label: t("chat.sendMode.interrupt"),
+        desc: t("chat.sendMode.interrupt.desc"),
+        Icon: CircleStop,
+      },
+    }),
+    [t],
+  );
 
   const modeMeta = useMemo(() => {
     const map: Record<
@@ -2416,8 +2474,12 @@ export default function ChatView({
     }
   }, [input, welcomeTemplateActive]);
 
+  const effectiveSendMode: ChatSendMode | undefined =
+    showStopControl ? sendMode : undefined;
+
   const trySubmitComposer = () => {
     if (!canSend) return;
+    const modeOpt = effectiveSendMode;
     if (emptyMode === "agent") {
       const prep = prepareAgentCreateSend(input);
       if (!prep.ok) {
@@ -2435,6 +2497,7 @@ export default function ChatView({
       setAgentCreateMissing([]);
       onSend({
         text: serializeComposerContext(composerContexts, prep.sanitized),
+        sendMode: modeOpt,
       });
       onInputChange("");
       setComposerContexts([]);
@@ -2459,6 +2522,7 @@ export default function ChatView({
       setWelcomeTemplateMissing([]);
       onSend({
         text: serializeComposerContext(composerContexts, prep.sanitized),
+        sendMode: modeOpt,
       });
       onInputChange("");
       setComposerContexts([]);
@@ -2466,10 +2530,13 @@ export default function ChatView({
       return;
     }
     if (composerContexts.length > 0) {
-      onSend({ text: serializeComposerContext(composerContexts, input) });
+      onSend({
+        text: serializeComposerContext(composerContexts, input),
+        sendMode: modeOpt,
+      });
       onInputChange("");
     } else {
-      onSend();
+      onSend({ sendMode: modeOpt });
     }
     setComposerContexts([]);
     setPreviewTarget(null);
@@ -2523,7 +2590,11 @@ export default function ChatView({
 
   const composerPlaceholder =
     streaming || turnInFlight
-      ? t("chat.placeholderStreaming")
+      ? sendMode === "steer"
+        ? t("chat.placeholderSteer")
+        : sendMode === "interrupt"
+          ? t("chat.placeholderInterrupt")
+          : t("chat.placeholderStreaming")
       : sendBlocked && sendBlockedReason
         ? sendBlockedReason
         : emptyMode === "chat"
@@ -4090,6 +4161,7 @@ export default function ChatView({
                     title={`${modeMeta[chatMode].label} · ${approvalMeta[approvalMode].label}`}
                     onClick={() => {
                       setPlusOpen(false);
+                      setSendModeOpen(false);
                       setContextPopoverOpen(false);
                       setPaletteKind(null);
                       setModeMenuOpen((o) => !o);
@@ -4249,6 +4321,7 @@ export default function ChatView({
                     aria-expanded={plusOpen}
                     onClick={() => {
                       setModeMenuOpen(false);
+                      setSendModeOpen(false);
                       setPaletteKind(null);
                       setContextPopoverOpen(false);
                       setPlusOpen((value) => !value);
@@ -4388,6 +4461,91 @@ export default function ChatView({
                 </div>
                 {showStopControl ? (
                   <>
+                    <div
+                      className="composer-send-mode"
+                      ref={sendModeWrapRef}
+                    >
+                      <button
+                        type="button"
+                        className={`composer-mode-pill composer-send-mode-pill ${sendModeOpen ? "is-open" : ""}`}
+                        aria-haspopup="menu"
+                        aria-expanded={sendModeOpen}
+                        aria-label={t("chat.sendMode.menu")}
+                        title={sendModeMeta[sendMode].label}
+                        onClick={() => {
+                          setModeMenuOpen(false);
+                          setPlusOpen(false);
+                          setContextPopoverOpen(false);
+                          setSendModeOpen((o) => !o);
+                        }}
+                      >
+                        {(() => {
+                          const Meta = sendModeMeta[sendMode];
+                          return (
+                            <>
+                              <span className="composer-mode-pill-label">
+                                {Meta.label}
+                              </span>
+                              <ChevronDown
+                                className="composer-mode-chevron"
+                                size={14}
+                                strokeWidth={2}
+                                aria-hidden
+                              />
+                            </>
+                          );
+                        })()}
+                      </button>
+                      {sendModeOpen && typeof document !== "undefined"
+                        ? createPortal(
+                            <div
+                              ref={sendModePanelRef}
+                              className="composer-mode-menu composer-send-mode-menu"
+                              role="menu"
+                              style={
+                                sendModeStyle ?? { visibility: "hidden" }
+                              }
+                            >
+                              {CHAT_SEND_MODES.map((mode) => {
+                                const Meta = sendModeMeta[mode];
+                                const Icon = Meta.Icon;
+                                const selected = mode === sendMode;
+                                return (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={selected}
+                                    className={`composer-mode-item ${selected ? "is-selected" : ""}`}
+                                    onClick={() => {
+                                      setSendMode(mode);
+                                      saveChatSendMode(mode);
+                                      setSendModeOpen(false);
+                                    }}
+                                  >
+                                    <Icon size={16} strokeWidth={2} />
+                                    <span className="composer-mode-item-text">
+                                      <span className="composer-mode-item-label">
+                                        {Meta.label}
+                                      </span>
+                                      <span className="composer-mode-item-desc">
+                                        {Meta.desc}
+                                      </span>
+                                    </span>
+                                    {selected ? (
+                                      <Check
+                                        size={14}
+                                        strokeWidth={2.4}
+                                      />
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>,
+                            document.body,
+                          )
+                        : null}
+                    </div>
                     {showPauseResume ? (
                       <button
                         type="button"
@@ -4424,6 +4582,16 @@ export default function ChatView({
                     >
                       <Square size={14} strokeWidth={2.4} fill="currentColor" />
                     </button>
+                    {canSend ? (
+                      <button
+                        className="send-btn send-btn--round"
+                        type="submit"
+                        aria-label={t("chat.send")}
+                        title={`${sendModeMeta[sendMode].label}: ${sendModeMeta[sendMode].desc}`}
+                      >
+                        <SendHorizontal size={17} strokeWidth={2.2} />
+                      </button>
+                    ) : null}
                   </>
                 ) : null}
                 {showSendButton ? (

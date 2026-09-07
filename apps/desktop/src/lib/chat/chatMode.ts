@@ -1,6 +1,31 @@
 /** 用户直接选择的工作模式。问答由 Agent 自动判断，不再单列 Ask 模式。 */
 export type ChatWorkMode = "agent" | "plan";
 
+/** Agent 忙碌时用户发送消息的投递模式。 */
+export type ChatSendMode = "queue" | "steer" | "interrupt";
+
+const SEND_MODE_KEY = "astro.chat.sendMode";
+
+export const CHAT_SEND_MODES: ChatSendMode[] = ["queue", "steer", "interrupt"];
+
+export function loadChatSendMode(): ChatSendMode {
+  try {
+    const v = localStorage.getItem(SEND_MODE_KEY);
+    if (v === "queue" || v === "steer" || v === "interrupt") return v;
+  } catch {
+    /* ignore */
+  }
+  return "steer";
+}
+
+export function saveChatSendMode(mode: ChatSendMode) {
+  try {
+    localStorage.setItem(SEND_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 发给后端的交互模式；独立任务调度与工作模式正交。 */
 export type ChatInteractionMode = ChatWorkMode;
 

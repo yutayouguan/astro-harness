@@ -184,6 +184,7 @@ export function useChatSession({
     headSha: string;
   } | null>(null);
   const steeringQueueIdsRef = useRef(new Set<string>());
+  const stopStreamRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<TurnTokenUsage | null>(null);
@@ -527,7 +528,7 @@ export function useChatSession({
     void approveModeSwitch();
   }, [approveModeSwitch, modeSwitchPrompt]);
 
-  /** 当前任务忙时入队；空闲时立即发送。 */
+  /** 当前任务忙时根据 sendMode 投递；空闲时立即发送。 */
   const send = useCallback(
     async (opts?: SendOpts) => {
       // 同一次点击尚在解析 Skill/MCP 时，忽略再次提交；真正进入 turn 后才允许入队。
@@ -551,6 +552,58 @@ export function useChatSession({
           );
           return;
         }
+        const mode = opts?.sendMode ?? "queue";
+
+        if (mode === "steer") {
+          const turnId = currentTurnId;
+          if (!sessionId || !turnId || !turnInFlightRef.current) {
+            showTransientToast(t("chat.queue.steerUnavailable"), {
+              tone: "warning",
+            });
+            return;
+          }
+          const clientId = newQueuedFollowUpId();
+          try {
+            const accepted = await invoke<boolean>("steer_chat", {
+              sessionId,
+              expectedTurnId: turnId,
+              clientMessageId: clientId,
+              content: text,
+              attachments: (pending ?? []).map((a) => ({
+                name: a.name,
+                mime: a.mime,
+                kind: a.kind,
+                size: a.size,
+                dataBase64: a.dataBase64 ?? null,
+                localPath: a.localPath ?? null,
+              })),
+            });
+            if (!accepted) {
+              showTransientToast(t("chat.queue.steerUnavailable"), {
+                tone: "warning",
+              });
+              return;
+            }
+            showTransientToast(t("chat.queue.steerSent"), { tone: "info" });
+          } catch (error) {
+            showTransientToast(
+              t("chat.queue.steerFailed", { error: String(error) }),
+              { tone: "error" },
+            );
+            return;
+          }
+          if (opts?.text == null) setInput("");
+          if (opts?.attachments == null) setAttachments([]);
+          return;
+        }
+
+        if (mode === "interrupt") {
+          await stopStreamRef.current();
+          await sendImmediate(opts);
+          return;
+        }
+
+        // mode === "queue"
         let overflow = false;
         setQueuedFollowUps((prev) => {
           if (prev.length >= MAX_QUEUED_FOLLOWUPS) {
@@ -591,6 +644,8 @@ export function useChatSession({
       sessionReadOnly,
       isCompacting,
       sessionEndReason,
+      sessionId,
+      currentTurnId,
       sendImmediate,
       showTransientToast,
       t,
@@ -1427,6 +1482,8 @@ export function useChatSession({
     firstTokenRef,
     streamStartRef,
   ]);
+
+  stopStreamRef.current = stopStream;
 
   /** 长任务空闲巡检：无 token/tool 活动超阈值且有排队时，暂停当前回合以出队 */
   const QUEUE_CHECKPOINT_IDLE_MS = 60_000;

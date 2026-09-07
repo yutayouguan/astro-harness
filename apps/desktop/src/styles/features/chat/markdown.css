@@ -1186,6 +1186,20 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   font-weight: 650;
 }
 
+.composer-send-mode {
+  position: relative;
+}
+
+.composer-send-mode-pill {
+  height: 28px;
+  padding: 0 0.5rem 0 0.55rem;
+  font-size: 0.72rem;
+}
+
+.composer-send-mode-menu {
+  width: min(260px, calc(100vw - 24px));
+}
+
 .composer-context-btn {
   width: 34px;
   min-width: 34px;
