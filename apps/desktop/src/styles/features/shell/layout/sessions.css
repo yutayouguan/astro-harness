@@ -92,9 +92,9 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 7px 66px 7px 8px;
+  padding: 7px 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -106,6 +106,10 @@
   overflow: hidden;
 }
 
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-main {
+  padding-right: 66px;
+}
+
 .sidebar-session-item.is-active .sidebar-session-main {
   font-weight: 550;
 }
@@ -113,6 +117,11 @@
 .sidebar-session-main svg {
   flex-shrink: 0;
   opacity: 0.5;
+}
+
+.sidebar-session-main .sidebar-session-pin-mark,
+.sidebar-session-main .session-status-icon {
+  align-self: center;
 }
 
 .sidebar-session-item.is-active .sidebar-session-main svg {
@@ -125,7 +134,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  margin-right: 2px;
+  margin-right: 0;
 }
 
 .sidebar-session-title {
@@ -202,13 +211,16 @@
 }
 
 .sidebar-session-time {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  align-self: baseline;
   font-size: 10px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   color: var(--ink-mute);
-  opacity: 0.6;
-  margin-right: 2px;
+  opacity: 0.52;
+  margin-left: 4px;
+  margin-right: 0;
 }
 
 /* hover/focus 时次要信息真正让出布局空间，避免只把文字变透明却继续挤压标题 */
@@ -297,6 +309,10 @@
 }
 
 @media (hover: none) {
+  .sidebar-session-item .sidebar-session-main {
+    padding-right: 38px;
+  }
+
   .sidebar-session-action-btn.is-pin {
     display: none;
   }

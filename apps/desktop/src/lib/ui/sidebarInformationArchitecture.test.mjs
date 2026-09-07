@@ -358,6 +358,7 @@ test("session activity preserves title space and progressively reveals tools", (
     '.sidebar-session-item:is(:hover, :focus-within)\n  .sidebar-session-title[data-scrollable="true"]',
   );
   const titleMeasure = rule(sessionStyles, ".sidebar-session-title-measure");
+  const sessionTime = rule(sessionStyles, ".sidebar-session-time");
 
   assert.match(sessionList, /const showUnread = unread && status === "idle";/);
   assert.match(
@@ -376,11 +377,17 @@ test("session activity preserves title space and progressively reveals tools", (
   assert.match(actions, /pointer-events:\s*auto;/);
   assert.doesNotMatch(actions, /backdrop-filter:/);
   assert.ok(sessionMain, "session title needs a reserved action gutter");
-  assert.match(sessionMain, /padding:\s*7px 66px 7px 8px;/);
+  assert.match(sessionMain, /align-items:\s*baseline;/);
+  assert.match(sessionMain, /padding:\s*7px 8px;/);
+  assert.match(
+    sessionStyles,
+    /\.sidebar-session-item:is\(:hover, :focus-within\) \.sidebar-session-main\s*\{[\s\S]*?padding-right:\s*66px;/,
+    "the action gutter should only occupy title space while actions are visible",
+  );
   assert.match(
     sidebarPolishStyles,
-    /\.sidebar-session-main\s*\{[\s\S]*?padding:\s*8px 66px 8px 9px;/,
-    "the final sidebar polish layer must keep the action gutter",
+    /\.sidebar-session-main\s*\{[\s\S]*?padding:\s*8px 9px;/,
+    "the final sidebar polish layer must preserve the full idle title width",
   );
   assert.ok(pinAction, "pin action needs progressive disclosure styles");
   assert.match(pinAction, /opacity:\s*0;/);
@@ -452,6 +459,12 @@ test("session activity preserves title space and progressively reveals tools", (
     /\.sidebar-session-item:is\(:hover, :focus-within\) \.sidebar-session-time,[\s\S]*?\.session-status-icon\s*\{[\s\S]*?display:\s*none;/,
     "secondary metadata must release layout width while title actions are visible",
   );
+  assert.ok(sessionTime, "session time should keep a compact trailing slot");
+  assert.match(sessionTime, /flex:\s*0 0 auto;/);
+  assert.match(sessionTime, /align-self:\s*baseline;/);
+  assert.match(sessionTime, /font-weight:\s*500;/);
+  assert.match(sessionTime, /opacity:\s*0\.52;/);
+  assert.match(sessionTime, /margin-left:\s*4px;/);
 });
 
 test("session action menu stays inside the app viewport", () => {

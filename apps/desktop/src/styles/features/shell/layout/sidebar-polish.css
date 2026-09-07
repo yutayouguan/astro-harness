@@ -442,7 +442,7 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 .sidebar-session-main {
   gap: 8px;
   min-height: 38px;
-  padding: 8px 66px 8px 9px;
+  padding: 8px 9px;
   font-size: 13.5px;
   font-weight: 450;
   line-height: 1.3;
@@ -455,7 +455,8 @@ html[data-theme="dark"] .sidebar-global-search .expandable-search-field {
 .sidebar-session-time {
   flex: 0 0 auto;
   font-size: 10.5px;
-  opacity: 0.58;
+  font-weight: 500;
+  opacity: 0.52;
 }
 
 .sidebar-session-expand {
