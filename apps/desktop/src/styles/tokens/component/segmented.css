@@ -106,7 +106,7 @@ html[data-theme="dark"] {
   .loop-config-tab
 ) {
   --seg-shell-border: var(
-    --immersive-glass-border,
+    --immersive-reference-border,
     color-mix(
       in srgb,
       var(--tone) var(--seg-border-tone-amt),
@@ -114,7 +114,7 @@ html[data-theme="dark"] {
     )
   );
   --seg-shell-bg: var(
-    --immersive-glass-background,
+    --immersive-reference-background,
     linear-gradient(155deg, var(--seg-shell-sheen-a), var(--seg-shell-sheen-b)),
     color-mix(
       in srgb,
@@ -123,7 +123,7 @@ html[data-theme="dark"] {
     )
   );
   --seg-shell-shadow: var(
-    --immersive-glass-shadow,
+    --immersive-reference-shadow,
     var(--seg-shell-drop-geo)
       color-mix(
         in srgb,

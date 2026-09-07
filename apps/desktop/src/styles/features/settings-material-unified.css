@@ -9,19 +9,19 @@
   /* Settings surfaces bind directly to the global immersive-light recipe. This
    * prevents feature-local aliases from breaking the intensity control. */
   --settings-panel-border: var(
-    --immersive-glass-border,
+    --immersive-reference-border,
     var(--content-card-border)
   );
   --settings-panel-background: var(
-    --immersive-glass-background,
+    --immersive-reference-background,
     var(--content-card-background)
   );
   --settings-panel-shadow: var(
-    --immersive-glass-shadow,
+    --immersive-reference-shadow,
     var(--content-card-shadow)
   );
   --settings-panel-backdrop: var(
-    --immersive-glass-backdrop,
+    --immersive-reference-backdrop,
     var(--content-card-backdrop)
   );
   --settings-divider: color-mix(in srgb, var(--ink) 8%, transparent);

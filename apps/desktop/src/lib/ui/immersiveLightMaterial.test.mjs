@@ -18,13 +18,17 @@ test("immersive light is the only active material recipe", () => {
   assert.doesNotMatch(index, /liquid-glass\.css|glass-intensity\.css/);
   assert.match(
     tokens,
-    /--content-card-background:\s*var\(--immersive-glass-background\)/,
+    /--content-card-background:\s*var\(--immersive-reference-background\)/,
   );
   assert.match(
     tokens,
-    /--menu-overlay-bg:\s*var\(--immersive-overlay-background\)/,
+    /--menu-overlay-bg:\s*var\(--immersive-reference-background\)/,
   );
   assert.doesNotMatch(tokens, /--liquid-glass-|--global-liquid-glass-/);
+  assert.doesNotMatch(
+    tokens,
+    /--immersive-glass-background|--immersive-glass-light-field/,
+  );
 });
 
 test("environment color follows wallpaper, unified color, then active tone", () => {

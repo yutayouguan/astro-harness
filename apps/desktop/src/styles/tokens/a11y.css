@@ -3,10 +3,14 @@
   /* 写死的 backdrop-filter 只受这两个旋钮控制，必须与 --backdrop-glass: none 同步归零 */
   html[data-theme] {
     --immersive-glass-color: var(--surface-panel-background);
-    --immersive-glass-background: var(--surface-panel-background);
     --immersive-glass-border: var(--color-border);
     --immersive-glass-shadow: var(--shadow-card);
     --immersive-glass-backdrop: none;
+    --immersive-reference-color: var(--surface-panel-background);
+    --immersive-reference-background: var(--surface-panel-background);
+    --immersive-reference-border: var(--color-border);
+    --immersive-reference-shadow: var(--shadow-card);
+    --immersive-reference-backdrop: none;
     --glass-blur-scale: 0;
     --glass-saturate: 1;
     --content-card-background: var(--surface-panel-background);
@@ -124,6 +128,9 @@
     --immersive-glass-border: var(--color-border);
     --immersive-glass-shadow: var(--shadow-card);
     --immersive-glass-backdrop: none;
+    --immersive-reference-border: var(--color-border);
+    --immersive-reference-shadow: var(--shadow-card);
+    --immersive-reference-backdrop: none;
     --content-card-background: var(--surface-panel-background);
     --content-card-border: var(--color-border);
     --content-card-backdrop: none;

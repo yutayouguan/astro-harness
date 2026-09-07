@@ -97,16 +97,19 @@ test("workspace content cards follow continuous immersive light intensity", () =
   );
   assert.match(
     block,
-    /--content-card-border:\s*var\(--immersive-glass-border\);/,
+    /--content-card-border:\s*var\(--immersive-reference-border\);/,
   );
   assert.match(
     block,
-    /--content-card-background:\s*var\(--immersive-glass-background\);/,
+    /--content-card-background:\s*var\(--immersive-reference-background\);/,
   );
-  assert.match(block, /--content-card-shadow:[\s\S]*?--immersive-glass-shadow/);
   assert.match(
     block,
-    /--content-card-backdrop:\s*var\(--immersive-glass-backdrop\);/,
+    /--content-card-shadow:\s*var\(--immersive-reference-shadow\);/,
+  );
+  assert.match(
+    block,
+    /--content-card-backdrop:\s*var\(--immersive-reference-backdrop\);/,
   );
   assert.doesNotMatch(immersiveLight, /data-glass="/);
 });

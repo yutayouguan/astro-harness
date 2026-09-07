@@ -30,8 +30,8 @@ test("settings expose one shared inset and selected material contract", () => {
   ]) {
     assert.match(
       material,
-      new RegExp(`${token}: var\\(\\s*--immersive-glass-`),
-      `${token} must bind directly to immersive glass`,
+      new RegExp(`${token}: var\\(\\s*--immersive-reference-`),
+      `${token} must bind directly to the header reference material`,
     );
   }
 

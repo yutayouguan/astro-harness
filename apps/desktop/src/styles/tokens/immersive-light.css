@@ -48,29 +48,6 @@ html[data-theme="dark"] {
     var(--immersive-neutral) 91%,
     var(--immersive-env-primary) 9%
   );
-  --immersive-light-primary: color-mix(
-    in srgb,
-    var(--immersive-env-primary) 12%,
-    transparent
-  );
-  --immersive-light-secondary: color-mix(
-    in srgb,
-    var(--immersive-env-secondary) 8%,
-    transparent
-  );
-  --immersive-glass-light-field:
-    radial-gradient(
-      circle at 12% -18%,
-      var(--immersive-light-primary),
-      transparent 48%
-    ),
-    radial-gradient(
-      circle at 92% 18%,
-      var(--immersive-light-secondary),
-      transparent 46%
-    );
-  --immersive-glass-background:
-    var(--immersive-glass-light-field), var(--immersive-glass-color);
   --immersive-edge-base: rgba(
     255,
     255,
@@ -110,73 +87,75 @@ html[data-theme="dark"] {
     var(--immersive-glass-color) 88%,
     var(--immersive-neutral) 12%
   );
-  --immersive-overlay-background:
-    radial-gradient(
+  --immersive-overlay-light-field: radial-gradient(
       circle at 16% 0%,
       color-mix(in srgb, var(--immersive-env-primary) 14%, transparent),
       transparent 48%
-    ),
+    );
+  --immersive-overlay-background:
+    var(--immersive-overlay-light-field),
     var(--immersive-overlay-color);
+  /* The top-right model picker and tool group are the visual source of truth
+   * for every global glass surface. */
+  --immersive-reference-color: var(--immersive-overlay-color);
+  --immersive-reference-background: var(--immersive-overlay-background);
+  --immersive-reference-border: var(--immersive-glass-border);
+  --immersive-reference-shadow:
+    var(--immersive-glass-shadow), var(--immersive-glass-rim);
+  --immersive-reference-backdrop: var(--immersive-glass-backdrop);
   --immersive-field-opacity: calc(0.32 * var(--glass-intensity, 0.64));
   --immersive-particle-opacity: calc(0.24 * var(--glass-intensity, 0.64));
 
   /* Canonical aliases consumed across shell, cards, controls and panels. */
   --glass-saturate: calc(1 + (0.34 * var(--glass-intensity, 0.64)));
   --glass-blur-scale: calc(1.4 * var(--glass-intensity, 0.64));
-  --backdrop-glass: var(--immersive-glass-backdrop);
+  --backdrop-glass: var(--immersive-reference-backdrop);
   --glass-rim: var(--immersive-glass-rim);
-  --glass-edge: var(--immersive-glass-border);
-  --glass-border: var(--immersive-glass-border);
+  --glass-edge: var(--immersive-reference-border);
+  --glass-border: var(--immersive-reference-border);
   --glass-inner: var(--immersive-glass-inner);
-  --glass: var(--immersive-glass-color);
-  --glass-strong: var(--immersive-glass-color);
-  --glass-fill: var(--immersive-glass-color);
-  --glass-fill-soft: var(--immersive-glass-color);
-  --glass-card: var(--immersive-glass-background);
-  --chip-bg: var(--immersive-glass-color);
-  --chip-border: var(--immersive-glass-border);
-  --surface-panel-background: var(--immersive-glass-color);
+  --glass: var(--immersive-reference-color);
+  --glass-strong: var(--immersive-reference-color);
+  --glass-fill: var(--immersive-reference-color);
+  --glass-fill-soft: var(--immersive-reference-color);
+  --glass-card: var(--immersive-reference-background);
+  --chip-bg: var(--immersive-reference-color);
+  --chip-border: var(--immersive-reference-border);
+  --surface-panel-background: var(--immersive-reference-color);
   --surface-panel-hover: color-mix(
     in srgb,
-    var(--immersive-glass-color) 82%,
+    var(--immersive-reference-color) 82%,
     var(--immersive-glass-inner)
   );
-  --surface-panel-border: var(--immersive-glass-border);
+  --surface-panel-border: var(--immersive-reference-border);
   --glass-panel: var(--surface-panel-background);
-  --sidebar-bg: var(--immersive-glass-color);
-  --sidebar-pinned-bg: var(--immersive-glass-color);
-  --composer-bg: var(--immersive-glass-color);
-  --menu-glass-bg: var(--immersive-glass-color);
-  --menu-glass-border: var(--immersive-glass-border);
-  --menu-glass-shadow:
-    var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --menu-glass-blur: var(--immersive-glass-backdrop);
-
-  /* Elevated surfaces share the same algorithm on a slightly denser plane. */
-  --menu-overlay-bg: var(--immersive-overlay-background);
-  --menu-overlay-border: var(--immersive-glass-border);
-  --menu-overlay-shadow:
-    var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --menu-overlay-blur: var(--immersive-glass-backdrop);
-  --titlebar-menu-bg: var(--immersive-overlay-background);
-  --titlebar-menu-border: var(--immersive-glass-border);
-  --titlebar-menu-shadow:
-    var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --titlebar-menu-blur: var(--immersive-glass-backdrop);
-  --header-chip-bg: var(--immersive-glass-color);
-  --header-chip-border: var(--immersive-glass-border);
-  --header-chip-shadow:
-    var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --lens-bg: var(--immersive-overlay-background);
-  --lens-border: var(--immersive-glass-border);
-  --lens-shadow: var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --badge-bg: var(--immersive-overlay-background);
-  --badge-border: var(--immersive-glass-border);
-  --badge-shadow: var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --content-card-border: var(--immersive-glass-border);
-  --content-card-background: var(--immersive-glass-background);
-  --content-card-shadow:
-    var(--immersive-glass-shadow), var(--immersive-glass-rim);
-  --content-card-backdrop: var(--immersive-glass-backdrop);
-  --seg-shell-blur: var(--immersive-glass-backdrop);
+  --sidebar-bg: var(--immersive-reference-color);
+  --sidebar-pinned-bg: var(--immersive-reference-color);
+  --composer-bg: var(--immersive-reference-color);
+  --menu-glass-bg: var(--immersive-reference-color);
+  --menu-glass-border: var(--immersive-reference-border);
+  --menu-glass-shadow: var(--immersive-reference-shadow);
+  --menu-glass-blur: var(--immersive-reference-backdrop);
+  --menu-overlay-bg: var(--immersive-reference-background);
+  --menu-overlay-border: var(--immersive-reference-border);
+  --menu-overlay-shadow: var(--immersive-reference-shadow);
+  --menu-overlay-blur: var(--immersive-reference-backdrop);
+  --titlebar-menu-bg: var(--immersive-reference-background);
+  --titlebar-menu-border: var(--immersive-reference-border);
+  --titlebar-menu-shadow: var(--immersive-reference-shadow);
+  --titlebar-menu-blur: var(--immersive-reference-backdrop);
+  --header-chip-bg: var(--immersive-reference-color);
+  --header-chip-border: var(--immersive-reference-border);
+  --header-chip-shadow: var(--immersive-reference-shadow);
+  --lens-bg: var(--immersive-reference-background);
+  --lens-border: var(--immersive-reference-border);
+  --lens-shadow: var(--immersive-reference-shadow);
+  --badge-bg: var(--immersive-reference-background);
+  --badge-border: var(--immersive-reference-border);
+  --badge-shadow: var(--immersive-reference-shadow);
+  --content-card-border: var(--immersive-reference-border);
+  --content-card-background: var(--immersive-reference-background);
+  --content-card-shadow: var(--immersive-reference-shadow);
+  --content-card-backdrop: var(--immersive-reference-backdrop);
+  --seg-shell-blur: var(--immersive-reference-backdrop);
 }

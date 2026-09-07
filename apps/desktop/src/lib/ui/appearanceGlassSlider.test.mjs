@@ -115,7 +115,7 @@ test("glass intensity normalization clamps input and rejects the removed presets
 test("continuous immersive recipe drives color, blur, rim, and shadow", () => {
   for (const token of [
     "--immersive-glass-color",
-    "--immersive-glass-background",
+    "--immersive-reference-background",
     "--immersive-glass-backdrop",
     "--immersive-glass-rim",
     "--immersive-glass-shadow",
@@ -124,6 +124,10 @@ test("continuous immersive recipe drives color, blur, rim, and shadow", () => {
   }
   assert.match(immersiveLight, /var\(--glass-intensity, 0\.64\)/);
   assert.doesNotMatch(immersiveLight, /--liquid-glass-|--global-liquid-glass-/);
+  assert.doesNotMatch(
+    immersiveLight,
+    /--immersive-glass-background|--immersive-glass-light-field/,
+  );
 });
 
 test("one immersive recipe drives every global surface family", () => {
@@ -136,16 +140,16 @@ test("one immersive recipe drives every global surface family", () => {
   ]) {
     assert.match(
       immersiveLight,
-      new RegExp(`${alias}: var\\(--immersive-glass-color\\)`),
-      `${alias} must use the immersive glass color`,
+      new RegExp(`${alias}: var\\(--immersive-reference-color\\)`),
+      `${alias} must use the header reference color`,
     );
   }
 
   for (const alias of ["--glass-card", "--content-card-background"]) {
     assert.match(
       immersiveLight,
-      new RegExp(`${alias}: var\\(--immersive-glass-background\\)`),
-      `${alias} must use the immersive glass background`,
+      new RegExp(`${alias}: var\\(--immersive-reference-background\\)`),
+      `${alias} must use the header reference background`,
     );
   }
 
@@ -157,8 +161,8 @@ test("one immersive recipe drives every global surface family", () => {
   ]) {
     assert.match(
       immersiveLight,
-      new RegExp(`${alias}: var\\(--immersive-overlay-background\\)`),
-      `${alias} must use the denser immersive overlay plane`,
+      new RegExp(`${alias}: var\\(--immersive-reference-background\\)`),
+      `${alias} must use the header reference background`,
     );
   }
 });

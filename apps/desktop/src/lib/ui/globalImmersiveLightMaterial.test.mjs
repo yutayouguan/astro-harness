@@ -13,6 +13,16 @@ const [immersive, segmented, sidebar, accessibility, index] = await Promise.all(
 );
 
 test("global chrome, surfaces, and content cards share one immersive recipe", () => {
+  for (const token of [
+    "--immersive-reference-color",
+    "--immersive-reference-background",
+    "--immersive-reference-border",
+    "--immersive-reference-shadow",
+    "--immersive-reference-backdrop",
+  ]) {
+    assert.match(immersive, new RegExp(`${token}:`));
+  }
+
   for (const alias of [
     "--sidebar-bg",
     "--composer-bg",
@@ -26,8 +36,8 @@ test("global chrome, surfaces, and content cards share one immersive recipe", ()
   ]) {
     assert.match(
       immersive,
-      new RegExp(`${alias}: var\\(--immersive-`),
-      `${alias} must use the immersive light contract`,
+      new RegExp(`${alias}: var\\(--immersive-reference-`),
+      `${alias} must use the top-right header material`,
     );
   }
 });
@@ -35,19 +45,19 @@ test("global chrome, surfaces, and content cards share one immersive recipe", ()
 test("segmented controls and sidebar chrome consume the global recipe", () => {
   assert.match(
     segmented,
-    /--seg-shell-bg:\s*var\(\s*--immersive-glass-background/,
+    /--seg-shell-bg:\s*var\(\s*--immersive-reference-background/,
   );
   assert.match(
     segmented,
-    /--seg-shell-shadow:\s*var\(\s*--immersive-glass-shadow/,
+    /--seg-shell-shadow:\s*var\(\s*--immersive-reference-shadow/,
   );
   assert.match(
     sidebar,
-    /--sidebar-chrome-sheen:\s*var\(\s*--immersive-glass-light-field/,
+    /--sidebar-chrome-sheen:\s*var\(\s*--immersive-overlay-light-field/,
   );
   assert.match(
     sidebar,
-    /--sidebar-chrome-filter:\s*var\(\s*--immersive-glass-backdrop/,
+    /--sidebar-chrome-filter:\s*var\(\s*--immersive-reference-backdrop/,
   );
 });
 
@@ -67,10 +77,10 @@ test("immersive material loads after component fallback recipes", () => {
 test("accessibility preferences replace the global recipe with a solid surface", () => {
   assert.match(
     accessibility,
-    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?--immersive-glass-background:\s*var\(--surface-panel-background\);[\s\S]*?--immersive-glass-backdrop:\s*none;/,
+    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?--immersive-reference-background:\s*var\(--surface-panel-background\);[\s\S]*?--immersive-reference-backdrop:\s*none;/,
   );
   assert.match(
     accessibility,
-    /@media \(prefers-contrast: more\)[\s\S]*?--immersive-glass-border:\s*var\(--color-border\);[\s\S]*?--immersive-glass-backdrop:\s*none;/,
+    /@media \(prefers-contrast: more\)[\s\S]*?--immersive-reference-border:\s*var\(--color-border\);[\s\S]*?--immersive-reference-backdrop:\s*none;/,
   );
 });
