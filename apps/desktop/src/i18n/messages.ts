@@ -2491,6 +2491,8 @@ export const zh = {
   "prefs.chat.normalDesc": "显示常用过程：工具、Skills、MCP、记忆与状态",
   "prefs.chat.detailed": "详细",
   "prefs.chat.detailedDesc": "显示全部过程信息，含参数与结果细节",
+  "prefs.chat.sendMode": "忙碌时发送模式",
+  "prefs.chat.sendModeDesc": "Agent 运行中发送消息时的默认投递方式",
   "prefs.chat.details": "过程信息开关",
   "prefs.chat.processDefaultOpen": "默认展开过程",
   "prefs.chat.processDefaultOpenDesc": "新回答的思考与过程卡片默认展开",
@@ -5847,6 +5849,9 @@ export const en: Record<MessageKey, string> = {
     "Show common process: tools, Skills, MCP, memory, and status",
   "prefs.chat.detailed": "Detailed",
   "prefs.chat.detailedDesc": "Show all process info including args and results",
+  "prefs.chat.sendMode": "Send mode while busy",
+  "prefs.chat.sendModeDesc":
+    "Default delivery method when sending while the agent is running",
   "prefs.chat.details": "Process toggles",
   "prefs.chat.processDefaultOpen": "Expand process by default",
   "prefs.chat.processDefaultOpenDesc":

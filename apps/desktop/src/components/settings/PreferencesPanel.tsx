@@ -50,6 +50,11 @@ import type {
   ChatDisplayToggleKey,
   ChatVerbosity,
 } from "../../hooks/chat/useChatDisplayPrefs";
+import {
+  type ChatSendMode,
+  loadChatSendMode,
+  saveChatSendMode,
+} from "../../lib/chat/chatMode";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import {
@@ -515,6 +520,7 @@ export default function PreferencesPanel({
   const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
+  const [sendMode, setSendMode] = useState<ChatSendMode>(loadChatSendMode);
   const [gradientEditorOpen, setGradientEditorOpen] = useState(false);
   const [appMeta, setAppMeta] = useState({
     version: "0.1.0",
@@ -838,6 +844,32 @@ export default function PreferencesPanel({
       id: "detailed",
       labelKey: "prefs.chat.detailed",
       descKey: "prefs.chat.detailedDesc",
+    },
+  ];
+
+  const sendModeOptions: {
+    id: ChatSendMode;
+    labelKey: MessageKey;
+    descKey: MessageKey;
+    badge: string;
+  }[] = [
+    {
+      id: "queue",
+      labelKey: "chat.sendMode.queue",
+      descKey: "chat.sendMode.queue.desc",
+      badge: "Q",
+    },
+    {
+      id: "steer",
+      labelKey: "chat.sendMode.steer",
+      descKey: "chat.sendMode.steer.desc",
+      badge: "S",
+    },
+    {
+      id: "interrupt",
+      labelKey: "chat.sendMode.interrupt",
+      descKey: "chat.sendMode.interrupt.desc",
+      badge: "!",
     },
   ];
 
@@ -1675,6 +1707,48 @@ export default function PreferencesPanel({
                   </button>
                 </div>
               ))}
+            </div>
+
+            <div className="prefs-conversation-choice-group">
+              <h3 className="prefs-toggle-heading">
+                {t("prefs.chat.sendMode")}
+              </h3>
+              <div
+                className="theme-options prefs-conversation-verbosity-options"
+                role="radiogroup"
+                aria-label={t("prefs.chat.sendMode")}
+              >
+                {sendModeOptions.map(({ id, labelKey, descKey, badge }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={sendMode === id}
+                    className={`theme-option ${sendMode === id ? "active" : ""}`}
+                    data-tone={tone}
+                    onClick={() => {
+                      setSendMode(id);
+                      saveChatSendMode(id);
+                    }}
+                  >
+                    <span
+                      className="theme-option-icon lang-badge"
+                      aria-hidden
+                    >
+                      {badge}
+                    </span>
+                    <span className="theme-option-text">
+                      <span className="theme-option-label">
+                        {t(labelKey)}
+                      </span>
+                      <span className="theme-option-desc">
+                        {t(descKey)}
+                      </span>
+                    </span>
+                    <span className="theme-option-check" aria-hidden />
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
         </div>
