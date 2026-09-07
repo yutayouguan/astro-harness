@@ -35,3 +35,24 @@ test("approval UI and resume payload expose scoped command-type permission", asy
   assert.match(wizard, /submitApproval\("approve_type"\)/);
   assert.match(session, /scope: "type"/);
 });
+
+test("command approval separates request, command, actions, and composer surfaces", async () => {
+  const [wizard, activityStyles, composerStyles] = await Promise.all([
+    readFile(new URL("a2ui/ClarifyWizard.tsx", root), "utf8"),
+    readFile(new URL("styles/features/chat/activity.css", root), "utf8"),
+    readFile(new URL("styles/features/chat/markdown.css", root), "utf8"),
+  ]);
+
+  assert.match(wizard, /className="a2ui-approval-intro"/);
+  assert.match(wizard, /className="a2ui-approval-command"/);
+  assert.match(wizard, /className="a2ui-approval-footer"/);
+  assert.match(activityStyles, /\.a2ui-approval-persistent-actions\s*\{/);
+  assert.match(
+    composerStyles,
+    /\.a2ui-clarify-wizard:is\(\.is-approval, \.is-approval-result\)/,
+  );
+  assert.match(
+    composerStyles,
+    /\.composer--stacked\.has-clarify:has\([\s\S]*?border-color:\s*transparent;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/,
+  );
+});

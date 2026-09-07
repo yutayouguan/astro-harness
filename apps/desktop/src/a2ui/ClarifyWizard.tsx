@@ -344,23 +344,24 @@ export default function ClarifyWizard({
         data-a2ui-id="wizard"
         aria-labelledby={approvalTitleId}
       >
-        <div className="a2ui-approval-header">
-          <span className="a2ui-approval-mark" aria-hidden>
-            <ShieldAlert size={19} strokeWidth={2} />
-          </span>
-          <div className="a2ui-approval-heading">
-            <span className="a2ui-approval-eyebrow">
-              {t("chat.a2ui.approvalRequired")}
+        <div className="a2ui-approval-intro">
+          <div className="a2ui-approval-header">
+            <span className="a2ui-approval-mark" aria-hidden>
+              <ShieldAlert size={19} strokeWidth={2} />
             </span>
-            <h3 id={approvalTitleId} className="a2ui-approval-title">
-              {renderedTitle}
-            </h3>
+            <div className="a2ui-approval-heading">
+              <span className="a2ui-approval-eyebrow">
+                {t("chat.a2ui.approvalRequired")}
+              </span>
+              <h3 id={approvalTitleId} className="a2ui-approval-title">
+                {renderedTitle}
+              </h3>
+            </div>
           </div>
+          {content.description ? (
+            <p className="a2ui-approval-description">{content.description}</p>
+          ) : null}
         </div>
-
-        {content.description ? (
-          <p className="a2ui-approval-description">{content.description}</p>
-        ) : null}
 
         {content.command ? (
           <div className="a2ui-approval-command">
@@ -374,65 +375,46 @@ export default function ClarifyWizard({
           </div>
         ) : null}
 
-        <div className="a2ui-approval-actions">
-          <button
-            type="button"
-            className="a2ui-approval-action is-deny"
-            disabled={disabled}
-            onClick={() => submitApproval("deny")}
-          >
-            <X size={17} strokeWidth={2.2} aria-hidden />
-            <span className="a2ui-approval-action-copy">
-              <strong>{t("chat.a2ui.approvalDeny")}</strong>
-              <small>{t("chat.a2ui.approvalDenyHint")}</small>
-            </span>
-          </button>
-          <button
-            type="button"
-            className="a2ui-approval-action is-approve"
-            disabled={disabled}
-            onClick={() => submitApproval("approve")}
-          >
-            <Check size={17} strokeWidth={2.3} aria-hidden />
-            <span className="a2ui-approval-action-copy">
-              <strong>{t("chat.a2ui.approvalOnce")}</strong>
-              <small>{t("chat.a2ui.approvalOnceHint")}</small>
-            </span>
-          </button>
-        </div>
-
-        {allowAlways ? (
-          <div className="a2ui-approval-persistent-actions">
+        <div className="a2ui-approval-footer">
+          <div className="a2ui-approval-actions">
             <button
               type="button"
-              className="a2ui-approval-always"
+              className="a2ui-approval-action is-deny"
               disabled={disabled}
-              onClick={() => submitApproval("approve_always")}
+              onClick={() => submitApproval("deny")}
             >
-              <ShieldCheck size={17} strokeWidth={2} aria-hidden />
+              <X size={17} strokeWidth={2.2} aria-hidden />
               <span className="a2ui-approval-action-copy">
-                <strong>{t("chat.a2ui.approvalAlways")}</strong>
-                <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
+                <strong>{t("chat.a2ui.approvalDeny")}</strong>
+                <small>{t("chat.a2ui.approvalDenyHint")}</small>
               </span>
-              <ArrowRight
-                className="a2ui-approval-always-arrow"
-                size={16}
-                aria-hidden
-              />
             </button>
-            {approvalTypeLabel ? (
+            <button
+              type="button"
+              className="a2ui-approval-action is-approve"
+              disabled={disabled}
+              onClick={() => submitApproval("approve")}
+            >
+              <Check size={17} strokeWidth={2.3} aria-hidden />
+              <span className="a2ui-approval-action-copy">
+                <strong>{t("chat.a2ui.approvalOnce")}</strong>
+                <small>{t("chat.a2ui.approvalOnceHint")}</small>
+              </span>
+            </button>
+          </div>
+
+          {allowAlways ? (
+            <div className="a2ui-approval-persistent-actions">
               <button
                 type="button"
-                className="a2ui-approval-always is-type"
+                className="a2ui-approval-always"
                 disabled={disabled}
-                onClick={() => submitApproval("approve_type")}
+                onClick={() => submitApproval("approve_always")}
               >
-                <TerminalSquare size={17} strokeWidth={2} aria-hidden />
+                <ShieldCheck size={17} strokeWidth={2} aria-hidden />
                 <span className="a2ui-approval-action-copy">
-                  <strong>
-                    {t("chat.a2ui.approvalType", { type: approvalTypeLabel })}
-                  </strong>
-                  <small>{t("chat.a2ui.approvalTypeHint")}</small>
+                  <strong>{t("chat.a2ui.approvalAlways")}</strong>
+                  <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
                 </span>
                 <ArrowRight
                   className="a2ui-approval-always-arrow"
@@ -440,9 +422,32 @@ export default function ClarifyWizard({
                   aria-hidden
                 />
               </button>
-            ) : null}
-          </div>
-        ) : null}
+              {approvalTypeLabel ? (
+                <button
+                  type="button"
+                  className="a2ui-approval-always is-type"
+                  disabled={disabled}
+                  onClick={() => submitApproval("approve_type")}
+                >
+                  <TerminalSquare size={17} strokeWidth={2} aria-hidden />
+                  <span className="a2ui-approval-action-copy">
+                    <strong>
+                      {t("chat.a2ui.approvalType", {
+                        type: approvalTypeLabel,
+                      })}
+                    </strong>
+                    <small>{t("chat.a2ui.approvalTypeHint")}</small>
+                  </span>
+                  <ArrowRight
+                    className="a2ui-approval-always-arrow"
+                    size={16}
+                    aria-hidden
+                  />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </section>
     );
   }

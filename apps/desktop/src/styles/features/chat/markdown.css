@@ -628,6 +628,21 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
     inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
 }
 
+/* Approval is a short decision flow: keep its request and composer controls
+   as separate surfaces instead of wrapping both in one oversized card. */
+.composer--stacked.has-clarify:has(
+  .a2ui-clarify-wizard:is(.is-approval, .is-approval-result)
+) {
+  gap: 9px;
+  padding: 0;
+  overflow: visible;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .composer-clarify-surface {
   max-height: min(64vh, 680px);
   overflow-x: hidden;
@@ -636,8 +651,11 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
   scrollbar-width: thin;
 }
 
-.composer-clarify-surface:has(.a2ui-clarify-wizard.is-approval) {
+.composer-clarify-surface:has(
+  .a2ui-clarify-wizard:is(.is-approval, .is-approval-result)
+) {
   max-height: min(72vh, 620px);
+  padding: 0 4px;
 }
 
 .composer-clarify-surface .a2ui-surface {
@@ -682,14 +700,37 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
   border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
+.composer--stacked.has-clarify:has(
+    .a2ui-clarify-wizard:is(.is-approval, .is-approval-result)
+  )
+  .composer-bar {
+  border: 0.75px solid var(--glass-edge);
+  border-radius: 18px;
+  background: var(--composer-surface-sheen), var(--composer-surface-base);
+  box-shadow:
+    var(--glass-rim),
+    0 1px 4px rgba(var(--shadow-ink), 0.035);
+  backdrop-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+  -webkit-backdrop-filter: blur(
+      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
+    )
+    saturate(var(--glass-saturate, 1.25));
+}
+
 @media (max-width: 700px) {
   .composer-clarify-surface {
     max-height: min(58vh, 560px);
     padding: 14px 12px 8px;
   }
 
-  .composer-clarify-surface:has(.a2ui-clarify-wizard.is-approval) {
+  .composer-clarify-surface:has(
+    .a2ui-clarify-wizard:is(.is-approval, .is-approval-result)
+  ) {
     max-height: min(68vh, 600px);
+    padding: 0 2px;
   }
 
   .composer-clarify-surface .a2ui-column {
