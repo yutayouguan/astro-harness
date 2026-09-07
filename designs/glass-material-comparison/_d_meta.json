@@ -9,10 +9,15 @@
           "path": "Glass Material Comparison.html",
           "createdAt": "2026-09-07T03:05:03.717Z",
           "status": "needs-review"
+        },
+        {
+          "path": "Glass Material Comparison v2.html",
+          "createdAt": "2026-09-07T03:44:21.504Z",
+          "status": "needs-review"
         }
       ]
     }
   },
   "createdAt": "2026-09-07T03:05:03.718Z",
-  "updatedAt": "2026-09-07T03:09:17.729Z"
+  "updatedAt": "2026-09-07T03:44:21.505Z"
 }
