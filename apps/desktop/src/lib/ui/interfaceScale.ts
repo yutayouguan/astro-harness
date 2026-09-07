@@ -1,3 +1,5 @@
+import { readPreference, writePreference } from "../storage/preferenceStore.ts";
+
 export type InterfaceScale = number;
 
 export const INTERFACE_SCALE_MIN = 80;
@@ -19,25 +21,22 @@ export function normalizeInterfaceScale(value: unknown): InterfaceScale {
 }
 
 export function readStoredInterfaceScale(
-  storage: Pick<Storage, "getItem"> = localStorage,
+  storage?: Pick<Storage, "getItem">,
 ): InterfaceScale {
-  try {
-    return normalizeInterfaceScale(storage.getItem(INTERFACE_SCALE_KEY));
-  } catch {
-    return DEFAULT_INTERFACE_SCALE;
-  }
+  return readPreference(
+    INTERFACE_SCALE_KEY,
+    DEFAULT_INTERFACE_SCALE,
+    normalizeInterfaceScale,
+    storage,
+  );
 }
 
 export function persistInterfaceScale(
   scale: InterfaceScale,
-  storage: Pick<Storage, "setItem"> = localStorage,
+  storage?: Pick<Storage, "setItem">,
 ) {
   const normalized = normalizeInterfaceScale(scale);
-  try {
-    storage.setItem(INTERFACE_SCALE_KEY, String(normalized));
-  } catch {
-    // Storage can be unavailable in privacy-restricted webviews.
-  }
+  writePreference(INTERFACE_SCALE_KEY, normalized, String, storage);
 }
 
 export function applyInterfaceScale(root: HTMLElement, scale: InterfaceScale) {

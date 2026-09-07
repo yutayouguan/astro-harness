@@ -1,3 +1,5 @@
+import { readPreference, writePreference } from "../storage/preferenceStore.ts";
+
 export type GlassIntensity = number;
 
 export const GLASS_INTENSITY_MIN = 0;
@@ -19,25 +21,22 @@ export function normalizeGlassIntensity(value: unknown): GlassIntensity {
 }
 
 export function readStoredGlassIntensity(
-  storage: Pick<Storage, "getItem"> = localStorage,
+  storage?: Pick<Storage, "getItem">,
 ): GlassIntensity {
-  try {
-    return normalizeGlassIntensity(storage.getItem(GLASS_INTENSITY_KEY));
-  } catch {
-    return DEFAULT_GLASS_INTENSITY;
-  }
+  return readPreference(
+    GLASS_INTENSITY_KEY,
+    DEFAULT_GLASS_INTENSITY,
+    normalizeGlassIntensity,
+    storage,
+  );
 }
 
 export function persistGlassIntensity(
   intensity: GlassIntensity,
-  storage: Pick<Storage, "setItem"> = localStorage,
+  storage?: Pick<Storage, "setItem">,
 ) {
   const normalized = normalizeGlassIntensity(intensity);
-  try {
-    storage.setItem(GLASS_INTENSITY_KEY, String(normalized));
-  } catch {
-    // Storage can be unavailable in privacy-restricted webviews.
-  }
+  writePreference(GLASS_INTENSITY_KEY, normalized, String, storage);
 }
 
 export function applyGlassIntensity(

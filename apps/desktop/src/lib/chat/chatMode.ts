@@ -4,26 +4,22 @@ export type ChatWorkMode = "agent" | "plan";
 /** Agent 忙碌时用户发送消息的投递模式。 */
 export type ChatSendMode = "queue" | "steer" | "interrupt";
 
+import { readPreference, writePreference } from "../storage/preferenceStore.ts";
+
 const SEND_MODE_KEY = "astro.chat.sendMode";
 
 export const CHAT_SEND_MODES: ChatSendMode[] = ["queue", "steer", "interrupt"];
 
 export function loadChatSendMode(): ChatSendMode {
-  try {
-    const v = localStorage.getItem(SEND_MODE_KEY);
-    if (v === "queue" || v === "steer" || v === "interrupt") return v;
-  } catch {
-    /* 忽略 */
-  }
-  return "steer";
+  return readPreference(SEND_MODE_KEY, "steer", (value) =>
+    value === "queue" || value === "steer" || value === "interrupt"
+      ? value
+      : "steer",
+  );
 }
 
 export function saveChatSendMode(mode: ChatSendMode) {
-  try {
-    localStorage.setItem(SEND_MODE_KEY, mode);
-  } catch {
-    /* 忽略 */
-  }
+  writePreference(SEND_MODE_KEY, mode);
 }
 
 /** 发给后端的交互模式；独立任务调度与工作模式正交。 */
@@ -42,21 +38,14 @@ export function normalizeStoredChatMode(value: string | null): ChatWorkMode {
 
 /** 从 localStorage 读取模式，缺省 `agent` */
 export function loadChatMode(): ChatWorkMode {
-  try {
-    return normalizeStoredChatMode(localStorage.getItem(STORAGE_KEY));
-  } catch {
-    /* 忽略 */
-  }
-  return "agent";
+  return readPreference(STORAGE_KEY, "agent", (value) =>
+    normalizeStoredChatMode(value),
+  );
 }
 
 /** 持久化聊天模式 */
 export function saveChatMode(mode: ChatWorkMode) {
-  try {
-    localStorage.setItem(STORAGE_KEY, mode);
-  } catch {
-    /* 忽略 */
-  }
+  writePreference(STORAGE_KEY, mode);
 }
 
 /** `switch_mode` 工具返回的结构化请求 */

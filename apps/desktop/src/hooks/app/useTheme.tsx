@@ -29,6 +29,10 @@ import {
   readStoredInterfaceScale,
   type InterfaceScale,
 } from "../../lib/ui/interfaceScale";
+import {
+  readPreference,
+  writePreference,
+} from "../../lib/storage/preferenceStore";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type { GlassIntensity } from "../../lib/ui/glassIntensity";
@@ -37,21 +41,13 @@ export type { InterfaceScale } from "../../lib/ui/interfaceScale";
 const STORAGE_KEY = "astro-theme-mode";
 
 function readStoredMode(): ThemeMode {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "light" || v === "dark" || v === "auto") return v;
-  } catch {
-    // ignore
-  }
-  return "auto";
+  return readPreference(STORAGE_KEY, "auto", (value) =>
+    value === "light" || value === "dark" || value === "auto" ? value : "auto",
+  );
 }
 
 function persistMode(mode: ThemeMode) {
-  try {
-    localStorage.setItem(STORAGE_KEY, mode);
-  } catch {
-    // ignore
-  }
+  writePreference(STORAGE_KEY, mode);
 }
 
 function systemPrefersDark(): boolean {
