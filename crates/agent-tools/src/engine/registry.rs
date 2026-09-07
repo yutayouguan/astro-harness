@@ -197,13 +197,9 @@ impl ToolRegistry {
         args: &serde_json::Value,
     ) -> anyhow::Result<types::ToolOutput> {
         let runtime = self.runtime(name);
-        let skill_runtime = (runtime.is_none() && name != "skills")
-            .then(|| self.runtime("skills"))
-            .flatten();
         crate::dispatch::dispatch_runtime(
             self.is_tool_allowed(name),
             runtime.as_ref(),
-            skill_runtime.as_ref(),
             ctx,
             name,
             args,

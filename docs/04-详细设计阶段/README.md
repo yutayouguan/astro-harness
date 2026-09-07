@@ -49,9 +49,9 @@
 
 | 文件 | 说明 |
 | ---- | ---- |
-| [01-Skills系统详细设计.md](04-工具与扩展生态/01-Skills系统详细设计.md) | Skills 系统（对齐 Claude Code）：目录结构、动态上下文注入(!`cmd`)、$ARGUMENTS 参数、多级发现、调用控制、subagent 执行、Skill Hooks、BM25 召回、进化引擎、版本管理 |
-| [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | ToolEntry/Registry/Definition/StepContext/Router/Output 执行链、动态暴露与审批边界 |
-| [03-MCP协议详细设计.md](04-工具与扩展生态/03-MCP协议详细设计.md) | Codex 对齐的 MCP Host/Client：STDIO/Streamable HTTP、分层配置、认证与 OAuth、Server Instructions、工具审批、连接状态机、迁移与验收 |
+| [01-Skills系统详细设计.md](04-工具与扩展生态/01-Skills系统详细设计.md) | Skills 系统：发现/安装、`ExtensionSnapshot` 索引、`skills` 原生工具、canonical output、`astro_tools` additive gate 与恢复边界 |
+| [02-工具系统详细设计.md](04-工具与扩展生态/02-工具系统详细设计.md) | `CoreToolRuntime -> ToolRegistry -> ToolRouter -> StepContext -> ResponseItem` 统一链路，含 MCP 与 Skill 分支 |
+| [03-MCP协议详细设计.md](04-工具与扩展生态/03-MCP协议详细设计.md) | MCP Host/Client：分层配置、连接池、tools/list、动态 runtime、原生 namespace、Step 路由、审批与输出预算 |
 | [04-PluginSDK开发者文档.md](04-工具与扩展生态/04-PluginSDK开发者文档.md) | Plugin SDK：Host API 参考（astro_*）、自定义工具/Hook/Skill 开发、测试调试、打包发布、完整示例 |
 | [05-Responses-API原生工具协议与Astro工具协议详细设计.md](04-工具与扩展生态/05-Responses-API原生工具协议与Astro工具协议详细设计.md) | Responses API 原生 Function/Freeform/Namespace/ToolSearch/WebSearch 契约与 Astro 工具协议：Direct / CodeModeOnly 分层投影、QuickJS `exec/wait`、TypeScript 工具声明与 Responses 回放 |
 

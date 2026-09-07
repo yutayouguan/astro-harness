@@ -1,6 +1,6 @@
 # MCP 接入系统详细设计
 
-> **Harness 当前基线（2026-09-04）**：`McpHub` 是每 Agent 进程级连接池。工具在模型侧以原生 `namespace=mcp__{server_id}` + `name={tool_name}` 暴露，Hub 内部才使用 `mcp__{server_id}__{tool_name}` 执行键。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。`McpEventStreamManager` 已提供 process-owned 生命周期基础，具体 opener/UI 接线仍待完成。
+> **Harness 当前基线（2026-09-07）**：`McpHub` 是每 Agent 进程级连接池。工具在模型侧以原生 `namespace=mcp__{server_id}` + `name={tool_name}` 暴露，Hub 内部才使用 `mcp__{server_id}__{tool_name}` 执行键。普通 MCP tool 与 broker 都同时注册 `ToolEntry` 和 `DynamicToolAdapter` runtime，统一经 `ToolRouter -> ToolRegistry::dispatch` 执行。当 `tool_search` 可用时默认 Deferred，否则回退 Direct；激活不等于授权。Server instructions 是不可信 dynamic context，MCP prompt/resource 不得被当作 system authority。
 
 > 阶段：详细设计
 > 状态：当前实现基线；剩余项显式标注
@@ -50,6 +50,29 @@ MCP 工具不再以展平函数名暴露给 Responses 模型：
 Deferred MCP 工具由 `tool_search` 返回原生 namespace schema；同一 Server 的命中子工具
 会合并到同一 namespace 容器。新 Step 从 durable `ToolSearchOutput` 重建
 `ToolName` 集合，而不依赖独立的内存激活表。
+
+### 1.2 端到端链路
+
+```text
+capture_step_context
+  -> reload_tools_and_mcp
+  -> ExtensionSnapshot.mcp_servers
+  -> McpHub::reload_with_configs
+  -> initialize / tools/list / enabled_tool_entries
+  -> register_mcp_tool_entries
+  -> ToolRegistry::register_dynamic(ToolEntry, DynamicToolAdapter)
+  -> build_tool_router -> StepContext
+  -> Prompt.tools -> ResponsesRequest.tools
+  -> ResponseItem tool call
+  -> model_can_call + MCP approval/HITL
+  -> ToolRouter: (namespace, native_name) => qualified_name
+  -> ToolRegistry::dispatch -> DynamicToolAdapter::handle
+  -> McpHub::call_tool -> Peer::call_tool
+  -> ToolOutput -> hooks -> final output budget
+  -> matching ResponseItem output + rollout/session projection
+```
+
+`attach_mcp_tools()` 每次先 `unregister_toolset(MCP_TOOLSET)`，再根据 Hub 的健康连接快照重建元数据和 runtime。任何只有 schema、没有 `CoreToolRuntime` 的 MCP 条目都不得进入 Step Router。
 
 ## 2. 目标与非目标
 
@@ -342,11 +365,14 @@ hub qualified key: mcp__context7__search
 
 ```text
 server.enabled
+  → Server 已连接且 transport 未关闭
   → enabled_tools allow list
   → disabled_tools deny list
-  → Session/Agent 权限交集
-  → 交互模式可见性
-  → ToolRegistry 注册
+  → 单工具 enabled 覆盖
+  → enabled_tool_entries
+  → ToolRegistry 元数据 + runtime 注册
+  → StepContext 的 interaction mode / Deferred 投影
+  → 执行前 Session/Agent 权限与 MCP approval
 ```
 
 `disabled_tools` 总是在 `enabled_tools` 之后应用。未知新工具在存在 allow list 时默认不可见；不存在 allow list 时按 Server 默认策略处理。
@@ -413,16 +439,19 @@ Astro 当前对 `auto` 采用 fail-safe 解释：只有 Server 同时明确声�
 ## 11. 调用与输出
 
 ```text
-LLM tool_call
-  → 校验 mcp__ 前缀与 Server/Tool enablement
-  → 解析 approval policy
+ResponseItem tool call
+  → ToolRouter 校验当前 Step 的 (namespace, name)
+  → 回映射 Registry qualified_name
+  → 解析 MCP approval policy
   → HITL/自动审批
-  → 获取健康连接 Peer
-  → tool_timeout deadline
-  → tools/call
-  → 结构化 ToolOutput
-  → spill/truncate/compression
-  → session history
+  → ToolRegistry::dispatch
+  → DynamicToolAdapter::handle
+  → McpHub::resolve_tool_peer
+  → tool_timeout deadline + Peer::call_tool(native_name)
+  → 结构化 ToolOutput（原始 output_token_limit）
+  → TransformToolResult / PostToolUse
+  → 最终 output_token_limit + spill/compression
+  → matching ResponseItem output + rollout/session history
 ```
 
 输出要求：
@@ -549,6 +578,9 @@ Composer MCP 菜单只展示真实状态，不把“配置存在”等同于“�
 - 传输字段互斥和 legacy SSE 拒绝。
 - 配置三层合并与权限不扩张。
 - DTO 所有字段 round-trip。
+- `enabled_tool_entries` 的每个普通 MCP tool 都同时具有 `ToolEntry` 和 `CoreToolRuntime`。
+- 原生 `(namespace, name)` 可通过 Step `ToolRouter` 回映射到 qualified key，不允许 schema-only 路由。
+- `output_token_limit` 在 Hub 原始输出和 Core hook 变换后各执行一次。
 - allow/deny 顺序和审批优先级。
 - secret redaction、Header 冲突和环境变量缺失。
 - instructions 注入顺序、长度和安全边界。

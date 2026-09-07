@@ -1,6 +1,6 @@
 # MCP 集成
 
-> **Harness 定位（2026-09-04）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。模型侧使用 Responses 原生 `namespace=mcp__{server}` + `name={tool}`，Hub 内部才使用展平执行键。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
+> **Harness 定位（2026-09-07）**：MCP 是 Harness 的外部工具 Gateway，而不是 Model 本身能力。模型侧使用 Responses 原生 `namespace=mcp__{server}` + `name={tool}`，Hub 内部才使用展平执行键。当 `tool_search` 可用时，MCP 工具默认 Deferred；搜索激活只改变模型可见性，不跳过 MCP approval、HITL、`StepContext` 或审计。见 [Agent Harness 总体架构](../01-架构设计/11-Agent-Harness总体架构.md)。
 
 > 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
 
@@ -10,21 +10,33 @@
 
 `McpHub` 维持每 Agent 连接池并在 `tools/list` 后生成 `ToolEntrySpec`；进程级
 `McpEventStreamManager` 提供独立于 turn task 的长流所有权基础。
-`Session::attach_mcp_tools()` 将条目注册到 `ToolRegistry`：
+`Session::capture_step_context()` 在每个采样 Step 前调用
+`reload_tools_and_mcp()`。它使用当前 turn 冻结的 `ExtensionSnapshot`
+重载 MCP 配置，再由 `attach_mcp_tools()` 将元数据和可执行 runtime
+一起注册到 `ToolRegistry`：
 
 ```text
-MCP tools/list
-  -> ToolEntrySpec { namespace, native_name, qualified_name, schema, approval }
-  -> ToolEntry { namespace, internal name = qualified_name }
-  -> Responses namespace schema
-  -> StepContext / ToolRouter (namespace, native_name)
-  -> qualified_name
-  -> McpHub::resolve_tool_peer
-  -> peer.call_tool(native_name, arguments)
+ExtensionSnapshot.mcp_servers
+  -> McpHub::reload_with_configs
+  -> initialize + tools/list
+  -> enabled_tool_entries
+  -> ToolEntrySpec { namespace, native_name, qualified_name, schema, approval, output_token_limit }
+  -> ToolRegistry::register_dynamic(ToolEntry, DynamicToolAdapter)
+  -> build_tool_router / StepContext 冻结
+  -> Responses namespace schema: (mcp__server, native_name)
+  -> ResponseItem tool call
+  -> ToolRouter: (namespace, name) => qualified_name
+  -> ToolRegistry::dispatch
+  -> DynamicToolAdapter::handle
+  -> McpHub::call_tool(qualified_name, arguments)
+  -> Peer::call_tool(native_name)
+  -> ToolOutput -> hooks / output budget -> matching ResponseItem output
 ```
 
-因此 Agent 执行循环无需根据工具名前缀猜测 Server，但调用仍会通过统一的
-approval、sandbox、hook、output budget 和持久化链路。
+普通 MCP tool 和 `mcp_resources` / `mcp_prompts` broker 都是 Registry 中的
+`CoreToolRuntime`，不存在只注册 schema 、执行时再绕过 Registry 直连 Hub
+的旁路。因此 Agent 执行循环无需根据工具名前缀猜测 Server，
+但调用仍会通过统一的 approval、sandbox、hook、output budget 和持久化链路。
 
 event stream manager 使用 `(thread_id, subscription_id)` 作为稳定所有权键，每次启动分配单调
 `stream_attempt_id`。只有收到首条 `notifications/events/active` 才算激活；通知走容量 64 的

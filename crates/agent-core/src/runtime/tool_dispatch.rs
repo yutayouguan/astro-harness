@@ -9,6 +9,21 @@ use tools::ToolContext;
 
 use super::{AgentLoop, StepContext, ToolInvocation};
 
+fn loaded_skill_id_for_toolset_activation(args: &serde_json::Value) -> Option<&str> {
+    let action = args
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("load")
+        .trim();
+    if !action.eq_ignore_ascii_case("load") && !action.eq_ignore_ascii_case("view") {
+        return None;
+    }
+    args.get("skill_id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|skill_id| !skill_id.is_empty())
+}
+
 /// 工具调用错误：区分取消、深度耗尽与执行异常，避免将取消误记为 ToolFailure。
 #[derive(Debug)]
 pub enum ToolCallError {
@@ -495,28 +510,21 @@ impl AgentLoop {
         args: &serde_json::Value,
         step_context: Option<&StepContext>,
     ) {
-        let Some(skill_id) = args
-            .get("skill_id")
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        else {
+        let Some(skill_id) = loaded_skill_id_for_toolset_activation(args) else {
             return;
         };
-        // 优先复用 skills 工具刚加载过的结果，避免二次扫描 + 读盘。
-        let astro_tools = match skills::recent_astro_tools(skill_id) {
-            Some(tools) => tools,
-            None => match step_context
-                .and_then(|step| step.turn.extension_snapshot())
-                .map_or_else(
-                    || skills::load_skill_by_name(skill_id),
-                    |snapshot| {
-                        skills::load_skill_by_name_with_config(skill_id, snapshot.skill_configs())
-                    },
-                ) {
-                Ok(loaded) => loaded.metadata.astro_tools,
-                Err(_) => return,
-            },
+        // 使用当前 Step 冻结的 Skill 配置重新解析，避免跨 Session
+        // 共享“最近加载”缓存导致同名 Skill 的 toolset 串扰。
+        let astro_tools = match step_context
+            .and_then(|step| step.turn.extension_snapshot())
+            .map_or_else(
+                || skills::skill_astro_tools_with_config(skill_id, &[]),
+                |snapshot| {
+                    skills::skill_astro_tools_with_config(skill_id, snapshot.skill_configs())
+                },
+            ) {
+            Ok(toolsets) => toolsets,
+            Err(_) => return,
         };
         if !astro_tools.is_empty() {
             tracing::info!(
@@ -626,6 +634,32 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_load_and_view_are_eligible_for_skill_toolset_activation() {
+        for action in [None, Some("load"), Some("LOAD"), Some(" view ")] {
+            let mut args = serde_json::json!({"skill_id": "research"});
+            if let Some(action) = action {
+                args["action"] = serde_json::json!(action);
+            }
+            assert_eq!(
+                loaded_skill_id_for_toolset_activation(&args),
+                Some("research")
+            );
+        }
+        for action in ["list", "curate", "manage"] {
+            assert_eq!(
+                loaded_skill_id_for_toolset_activation(
+                    &serde_json::json!({"action": action, "skill_id": "research"})
+                ),
+                None
+            );
+        }
+        assert_eq!(
+            loaded_skill_id_for_toolset_activation(&serde_json::json!({"action": "load"})),
+            None
+        );
+    }
 
     #[tokio::test]
     async fn post_tool_use_controls_model_visible_result() {

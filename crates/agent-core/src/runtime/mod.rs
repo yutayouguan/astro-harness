@@ -34,6 +34,56 @@ use crate::runtime::session::{hydrate_response_history, resolve_session_project_
 use crate::tasks::ActiveTurn;
 use session_services::SessionServices;
 
+fn register_mcp_tool_entries(
+    registry: &mut ToolRegistry,
+    hub: &Arc<TokioMutex<McpHub>>,
+    entries: Vec<mcp::ToolEntrySpec>,
+    deferred: bool,
+) {
+    for spec in entries {
+        let qualified_name = spec.qualified_name.clone();
+        let runtime_hub = Arc::clone(hub);
+        let mcp_approval = types::McpToolApproval {
+            server_id: spec.server_id,
+            native_name: spec.native_name,
+            mode: spec.approval_mode,
+            annotations: spec.annotations,
+        };
+        let needs_confirmation = mcp_approval.needs_review();
+        registry.register_dynamic(
+            ToolEntry {
+                name: spec.qualified_name,
+                toolset: MCP_TOOLSET.to_string(),
+                namespace: spec.namespace,
+                description: spec.description,
+                schema: spec.schema,
+                check_fn: None,
+                icon: "plug",
+                needs_confirmation,
+                mcp_approval: Some(mcp_approval),
+                output_token_limit: spec.output_token_limit,
+                ..if deferred {
+                    ToolEntry::lifecycle_defaults().deferred()
+                } else {
+                    ToolEntry::lifecycle_defaults()
+                }
+            },
+            Arc::new(move |_name, args| {
+                let hub = Arc::clone(&runtime_hub);
+                let qualified_name = qualified_name.clone();
+                let args = args.clone();
+                Box::pin(async move {
+                    let pending = {
+                        let hub = hub.lock().await;
+                        hub.call_tool(&qualified_name, &args)
+                    };
+                    pending.await
+                })
+            }),
+        );
+    }
+}
+
 mod astro_thread;
 pub mod budget;
 pub(crate) mod code_mode;
@@ -2250,32 +2300,7 @@ impl Session {
             .into_iter()
             .any(|entry| entry.name == "tool_search" && entry.exposure.is_direct());
         tool_registry.unregister_toolset(MCP_TOOLSET);
-        for spec in entries {
-            let mcp_approval = types::McpToolApproval {
-                server_id: spec.server_id,
-                native_name: spec.native_name,
-                mode: spec.approval_mode,
-                annotations: spec.annotations,
-            };
-            let needs_confirmation = mcp_approval.needs_review();
-            tool_registry.register(ToolEntry {
-                name: spec.qualified_name,
-                toolset: MCP_TOOLSET.to_string(),
-                namespace: spec.namespace,
-                description: spec.description,
-                schema: spec.schema,
-                check_fn: None,
-                icon: "plug",
-                needs_confirmation,
-                mcp_approval: Some(mcp_approval),
-                output_token_limit: spec.output_token_limit,
-                ..if defer_mcp_tools {
-                    ToolEntry::lifecycle_defaults().deferred()
-                } else {
-                    ToolEntry::lifecycle_defaults()
-                }
-            });
-        }
+        register_mcp_tool_entries(&mut tool_registry, &self.mcp_hub, entries, defer_mcp_tools);
         if !broker_capabilities.resource_servers.is_empty() {
             let server_ids = broker_capabilities.resource_servers.clone();
             let server_summary = server_ids.join(", ");
@@ -3103,6 +3128,58 @@ mod tests {
             .unwrap();
 
         assert_eq!(output.text(), "dynamic:ok");
+    }
+
+    #[test]
+    fn mcp_tool_entries_register_routable_dynamic_runtimes() {
+        let mut registry = ToolRegistry::new();
+        let hub = Arc::new(TokioMutex::new(McpHub::new()));
+        register_mcp_tool_entries(
+            &mut registry,
+            &hub,
+            vec![mcp::ToolEntrySpec {
+                qualified_name: "mcp__demo__lookup".into(),
+                namespace: "mcp__demo".into(),
+                server_id: "demo".into(),
+                native_name: "lookup".into(),
+                description: "look up a value".into(),
+                schema: serde_json::json!({"type": "object", "properties": {}}),
+                approval_mode: types::McpToolApprovalMode::Writes,
+                annotations: types::McpToolAnnotations::default(),
+                output_token_limit: Some(128),
+            }],
+            true,
+        );
+
+        let entry = registry.get("mcp__demo__lookup").expect("MCP metadata");
+        assert!(entry.exposure.is_deferred());
+        assert_eq!(entry.output_token_limit, Some(128));
+        assert_eq!(
+            entry.mcp_approval.as_ref().map(|approval| approval.mode),
+            Some(types::McpToolApprovalMode::Writes)
+        );
+        assert!(registry.runtime("mcp__demo__lookup").is_some());
+
+        let undiscovered = crate::runtime::tool_router::build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            true,
+            &HashSet::new(),
+        )
+        .expect("MCP entry should have a routable runtime");
+        assert!(!undiscovered.model_can_call(Some("mcp__demo"), "lookup"));
+
+        let discovered = HashSet::from([types::ToolName::namespaced("mcp__demo", "lookup")]);
+        let router = crate::runtime::tool_router::build_tool_router(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            true,
+            &discovered,
+        )
+        .expect("discovered MCP entry should have a routable runtime");
+        assert!(router.model_can_call(Some("mcp__demo"), "lookup"));
     }
 
     #[tokio::test]

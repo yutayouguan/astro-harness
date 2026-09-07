@@ -1,315 +1,130 @@
 # Skills 系统
 
-> **Harness 定位（2026-08-29）**：Skill 是按需加载的 scaffold/能力包；它可向 `PromptContract` 注入指令，也可通过 `astro_tools` additive 放宽 toolset，但不拥有 turn loop、审批或沙箱。这些始终由 Harness 执行。
+> **Harness 当前基线（2026-09-07）**：Skill 是按需加载的本地指令/资源包，不是独立执行器、Tool 别名或 Subagent。模型通过内置 `skills` 工具加载 `SKILL.md`；Skill 可用 `astro_tools` additive 放宽 toolset 可用性，但不能跳过 `StepContext`、approval、sandbox、hooks 或工具注册。
 
-> 文档状态：定稿 | 阶段：系统设计 | 拆分自：原 07-MCP与Skills与子Agent.md
-
-> :warning: Skills 系统已在详细设计阶段进行了重大重新设计（对齐 Claude Code Skills 架构）。
-> 本文档描述的是初始系统设计概念，最新完整设计见 [01-Skills系统详细设计](../../04-详细设计阶段/04-工具与扩展生态/01-Skills系统详细设计.md)。
-> 主要变更：目录结构取代单文件、动态上下文注入(!`cmd`)、$ARGUMENTS 参数系统、多级发现、调用控制、Subagent 执行、Skill Hooks。
+> 文档状态：定稿 | 阶段：系统设计 | 实现：`agent-skills` + `agent-tools::skills` + `agent-core`
 
 ---
 
-## 一、概念定义
+## 一、责任边界
 
-Skill 是高于 Tool 的能力单元，一个 Skill 可以编排多个 Tool、调用 LLM、甚至派生子 Agent。
+Skills 系统负责：
 
----
+- 发现、安装、启用、加载和管理 `SKILL.md`；
+- 向 system prompt 提供已启用 Skill 的 `name + description` 索引；
+- 通过 `skills(action=load|view)` 把完整 Skill 内容作为 tool output 加入对话历史；
+- 在成功加载后，按 frontmatter `astro_tools` 对 `ToolRegistry` 做 additive toolset 激活。
 
-## 二、Skill Trait
+Skills 系统不负责：
 
-```rust
-#[async_trait]
-pub trait Skill: Send + Sync {
-    fn manifest(&self) -> &SkillManifest;
-    async fn execute(
-        &self,
-        ctx: &mut AgentContext,
-        input: SkillInput,
-    ) -> anyhow::Result<SkillOutput>;
-}
-
-pub struct SkillManifest {
-    pub name: String,
-    pub description: String,
-    pub input_schema: serde_json::Value,
-    pub can_spawn_agents: bool,         // 声明是否会派生子 agent
-    pub allowed_tools: Vec<String>,     // 白名单，限制 skill 能用哪些工具
-}
-```
+- 创建独立 turn loop 或隐式派生 Subagent；
+- 定义新的权限、审批或沙箱边界；
+- 把 Skill 名注册为模型可直接调用的 Tool；
+- 在未经新 Step 快照的情况下临时扩大当前工具路由。
 
 ---
 
-## 三、Skill 定义文件（SKILL.md 格式）
+## 二、当前数据模型
 
-**唯一格式**：SKILL.md，YAML frontmatter + Markdown 说明体。TOML 格式已废弃。
-
-```markdown
----
-name: research
-description: 对给定主题进行深度研究，返回结构化报告
-version: 1.0.0
-platforms: [desktop]
-can_spawn_agents: true
-allowed_tools: [http_request, file_read, browser_fetch]
-input_schema:
-  type: object
-  properties:
-    topic:    { type: string, description: "研究主题" }
-    depth:    { type: string, enum: [quick, deep], default: deep }
-    language: { type: string, default: zh-CN }
-  required: [topic]
-trigger_tags: [研究, 调研, 深度分析, research]
----
-
-## 说明
-
-本 Skill 会先用 `http_request` 搜索资料，再通过 `browser_fetch` 提取正文，
-最后汇总为结构化 Markdown 报告。
-```
-
-### 目录结构
-
-一个目录 = 一个 Skill：
-
-```text
-~/.astro/skills/
-└── research/
-    ├── SKILL.md        # 元数据 + 说明（必须）
-    ├── scripts/        # 执行脚本（可选，支持多语言）
-    │   ├── main.py     # Python 脚本
-    │   ├── main.ts     # TypeScript 脚本
-    │   ├── main.rhai   # Rhai 脚本（Rust 原生沙箱）
-    │   └── main.wasm   # WASM 模块
-    ├── prompts/        # Prompt 模板（可选）
-    │   └── system.md
-    └── references/     # 参考文档（可选，懒加载）
-```
-
----
-
-## 三-b、Skill 脚本多语言支持
-
-> **设计原则**：Skill 脚本支持 Python、TypeScript、Rhai、WASM 四种运行时，覆盖主流开发者生态。脚本语言通过 SKILL.md 的 `runtime` 字段声明，系统自动选择对应的执行引擎。
-
-### 支持的脚本运行时
-
-| 运行时 | 文件 | 执行方式 | 沙箱隔离 | 适用场景 | 优先级 |
-| ---- | ---- | ---- | ---- | ---- | ---- |
-| **Python** | `main.py` | 子进程 (`python3`) | 进程级隔离 + 可选 Docker | 数据处理、AI/ML、爬虫、科学计算 | P1 |
-| **TypeScript** | `main.ts` | Deno 子进程 (`deno run`) | Deno 权限沙箱 | Web API 调用、JSON 处理、前端开发者 | P1 |
-| **Rhai** | `main.rhai` | 嵌入式 (rhai crate) | Rust 内置沙箱 | 轻量工具逻辑、配置计算、零依赖场景 | P0 |
-| **WASM** | `main.wasm` | wasmtime | 内存隔离 + 能力模型 | 高安全要求、跨平台分发、第三方插件 | P2 |
-| **无脚本** | — | 纯 Prompt Skill | — | 翻译、摘要、代码审查等纯 LLM 任务 | P0 |
-
-### SKILL.md runtime 字段
+运行时只把下列 frontmatter 字段解析为核心元数据：
 
 ```yaml
 ---
-name: data-analyzer
-description: 分析 CSV 数据并生成报告
-runtime: python          # python | typescript | rhai | wasm | prompt（默认）
-runtime_config:
-  python:
-    version: ">=3.10"
-    dependencies:         # 首次运行自动安装到 Skill 虚拟环境
-      - pandas>=2.0
-      - matplotlib>=3.7
-    timeout_secs: 60
-  typescript:
-    permissions:           # Deno 权限声明
-      - --allow-net=api.example.com
-      - --allow-read=./data
-    timeout_secs: 30
+name: research
+description: 对指定主题进行深度调研
+astro_tools:
+  - web_search
+  - browser
 ---
+
+# Research
+
+按步骤完成调研，并记录来源。
 ```
 
-### 脚本接口协议
+```rust
+pub struct SkillMetadata {
+    pub name: String,
+    pub description: String,
+    pub astro_tools: Vec<String>,
+}
 
-所有语言的脚本遵循统一的 JSON stdin/stdout 协议：
+pub struct LoadedSkill {
+    pub metadata: SkillMetadata,
+    pub content: String,
+    pub path: PathBuf,
+}
+```
+
+`astro_tools` 填写的是 toolset ID，只能放宽已注册工具的 gate。它不会生成 runtime，也不会把未注册工具变成可调用工具。
+
+---
+
+## 三、模型可见性与加载链路
 
 ```text
-Astro Agent                          脚本进程
-    │                                    │
-    ├─── stdin: JSON 输入 ──────────────►│
-    │    {                               │
-    │      "input": { ... },             │  脚本执行逻辑
-    │      "context": {                  │
-    │        "workspace_id": "...",       │
-    │        "conversation_id": "..."    │
-    │      }                             │
-    │    }                               │
-    │                                    │
-    │◄── stdout: JSON 输出 ──────────────┤
-    │    {                               │
-    │      "output": "结果文本或结构化数据",│
-    │      "artifacts": [                │
-    │        { "path": "report.pdf", ... }│
-    │      ],                            │
-    │      "error": null                 │
-    │    }                               │
-    │                                    │
-    │◄── stderr: 日志（可选）─────────────┤
+Turn 开始
+  -> ExtensionSnapshot 冻结 skill_index + skill_configs
+  -> build_prompt_contract
+  -> system prompt 写入“可用 Skills”的 name + description
+  -> 模型调用 skills(action=load, skill_id=..., input=...)
+  -> ToolRouter 校验本 Step 已开放 skills
+  -> ToolRegistry::dispatch
+  -> skills::load_skill_by_name_with_config
+  -> 返回 # Skill + root/scripts + SKILL.md + 调用输入
+  -> 解析 astro_tools 并调用 ToolRegistry::activate_skill_toolsets
+  -> TransformToolResult / PostToolUse
+  -> matching ResponseItem tool output 写入历史
+  -> 下一 Step 重新 capture_step_context
+  -> 新 ToolRouter 仅暴露已激活且符合 exposure/模式的工具
 ```
 
-### Python 执行引擎
+`skills` 工具支持：
 
-```rust
-pub struct PythonSkillRunner {
-    python_path: PathBuf,        // python3 二进制路径
-    venv_dir: PathBuf,           // ~/.astro/skills/<name>/.venv/
-}
+| action | 作用 | 是否激活 `astro_tools` |
+| --- | --- | --- |
+| `list` | 列出已启用 Skill 的名称与描述 | 否 |
+| `curate` | 生成使用/闲置建议 | 否 |
+| `load` / `view` | 加载 Skill 全文和资源路径 | 是，仅在成功返回后 |
+| `manage` | 在 Agent skills 目录中 create/update/patch/delete | 否 |
 
-impl PythonSkillRunner {
-    /// 首次运行自动创建虚拟环境并安装依赖
-    pub async fn ensure_venv(&self, skill: &SkillManifest) -> Result<()> {
-        if !self.venv_dir.exists() {
-            Command::new(&self.python_path)
-                .args(["-m", "venv", self.venv_dir.to_str().unwrap()])
-                .status().await?;
-        }
-        if let Some(deps) = &skill.runtime_config.python.dependencies {
-            Command::new(self.venv_dir.join("bin/pip"))
-                .args(["install"].into_iter().chain(deps.iter().map(|s| s.as_str())))
-                .status().await?;
-        }
-        Ok(())
-    }
-
-    /// 执行 Python 脚本
-    pub async fn execute(&self, skill: &SkillManifest, input: Value) -> Result<SkillOutput> {
-        self.ensure_venv(skill).await?;
-        
-        let mut child = Command::new(self.venv_dir.join("bin/python"))
-            .arg(skill.script_path("main.py"))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        
-        // stdin 写入 JSON
-        child.stdin.take().unwrap()
-            .write_all(serde_json::to_vec(&input)?.as_slice()).await?;
-        
-        // 超时控制
-        let timeout = Duration::from_secs(
-            skill.runtime_config.python.timeout_secs.unwrap_or(60) as u64
-        );
-        let output = tokio::time::timeout(timeout, child.wait_with_output()).await
-            .map_err(|_| ToolError::Timeout { timeout_ms: timeout.as_millis() as u64 })??;
-        
-        // 解析 stdout JSON
-        let result: ScriptOutput = serde_json::from_slice(&output.stdout)?;
-        Ok(result.into())
-    }
-}
-```
-
-### TypeScript 执行引擎（Deno）
-
-```rust
-pub struct TypeScriptSkillRunner;
-
-impl TypeScriptSkillRunner {
-    pub async fn execute(&self, skill: &SkillManifest, input: Value) -> Result<SkillOutput> {
-        let permissions: Vec<&str> = skill.runtime_config.typescript
-            .permissions.iter().map(|s| s.as_str()).collect();
-        
-        let mut child = Command::new("deno")
-            .arg("run")
-            .args(&permissions)                    // Deno 沙箱权限
-            .arg("--no-prompt")                    // 不弹交互式权限请求
-            .arg(skill.script_path("main.ts"))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        
-        // 同 Python：stdin JSON → stdout JSON
-        // ...
-    }
-}
-```
-
-> **为什么选 Deno 而非 Node.js**：Deno 内置权限沙箱（`--allow-net`/`--allow-read`/`--allow-write`），默认拒绝所有权限，Skill 必须在 SKILL.md 中显式声明所需权限。Node.js 没有内置沙箱，脚本可以访问文件系统和网络。
-
-### 脚本运行时自动检测与降级
-
-```rust
-pub fn select_runner(skill: &SkillManifest) -> Result<Box<dyn SkillRunner>> {
-    match skill.runtime.as_deref() {
-        Some("python") => {
-            if which::which("python3").is_ok() {
-                Ok(Box::new(PythonSkillRunner::new()))
-            } else {
-                Err(SkillError::RuntimeNotFound("python3 未安装，请运行 brew install python3".into()))
-            }
-        }
-        Some("typescript") => {
-            if which::which("deno").is_ok() {
-                Ok(Box::new(TypeScriptSkillRunner::new()))
-            } else {
-                Err(SkillError::RuntimeNotFound("deno 未安装，请运行 brew install deno".into()))
-            }
-        }
-        Some("rhai") => Ok(Box::new(RhaiSkillRunner::new())),
-        Some("wasm") => Ok(Box::new(WasmSkillRunner::new())),
-        Some("prompt") | None => Ok(Box::new(PromptSkillRunner::new())),
-        Some(other) => Err(SkillError::UnsupportedRuntime(other.to_string())),
-    }
-}
-```
-
-### 安全隔离策略
-
-| 运行时 | 文件系统 | 网络 | 进程 | 超时 |
-| ---- | ---- | ---- | ---- | ---- |
-| Python | 限制在 Skill 目录 + workspace | 受 HumanGuard L2 审批 | 独立子进程 | 默认 60s |
-| TypeScript (Deno) | `--allow-read` 显式声明 | `--allow-net` 显式声明 | 独立子进程 | 默认 30s |
-| Rhai | 无文件系统访问 | 无网络访问 | 嵌入主进程 | 默认 10s |
-| WASM | 沙箱内存隔离 | 能力模型白名单 | wasmtime 沙箱 | 默认 5s |
-
-> **Docker 可选强化**：对于安全敏感场景，Python 和 TypeScript 脚本可配置在 Docker 容器内执行（复用 F-35 多执行后端的 `DockerBackend`），进一步隔离文件系统和网络。在 `workspace.yaml` 中配置 `skill_execution_backend: docker`。
+Skill 全文作为原生工具输出进入 canonical `ResponseItem` 历史，不会拼到用户消息，也不会变成新的 system authority。
 
 ---
 
-## 四、Skill 按需披露（BM25 检索）
+## 四、Skill soft-alias 边界
 
-Agent 不在 system prompt 中静态列出所有 Skill，而是在每轮推理前通过 BM25（tantivy）动态检索与当前对话相关的 Skill，将 top-K 结果注入 system prompt，降低 token 消耗。
+规范调用始终是 `skills(action=load, skill_id=<name>)`。`agent-core`
+保留一个防御性 soft-alias：当非命名空间调用已经进入 Agent 工具处理器、
+名称未注册但与已启用 Skill 同名，且 `skills` 在当前边界可用时，
+调用可改写为 `skills(action=load, ...)`。`ToolRegistry` 本身不做第二次改写。
 
-```text
-触发流程：
-用户输入 → 提取关键词 → BM25 检索 SkillRegistry
-         → 子串匹配兜底 → 取 top-5 → 注入 system prompt 末尾
-         → LLM 推理（知道哪些 Skill 可用）
-```
-
-### 关键参数
-
-| 参数 | 默认值 | 说明 |
-| ---- | ------ | ---- |
-| `max_skills_injected` | 5 | 每轮最多注入 Skill 数 |
-| `skill_description_max_tokens` | 80 | 单个 Skill 描述 token 上限 |
-| `bm25_threshold` | 0.3 | 低于此分数不注入 |
-| `index_rebuild_on_change` | true | 热加载后自动增量更新 BM25 索引 |
-
-**向量检索方案**：桌面端本地使用 **sqlite-vec**（轻量，零外部依赖）。`qdrant-client` 保留作为企业/云部署可选方案，不在桌面端默认启用。
+这不是权限或 Step 路由的绕过：模型产生的直接调用仍先受 `ToolRouter::model_can_call` 约束，Prompt 也明确要求使用 `skills` 工具，不应把 Skill 名当成 Tool 名。
 
 ---
 
-## 五、Skill 加载与热更新
+## 五、生命周期与恢复边界
 
-```rust
-// crates/agent-core/src/skills/loader.rs
-// 支持热加载：监听 skills/ 目录变更，自动重新注册
-pub async fn load_from_dir(dir: &Path) -> Result<SkillRegistry>;
-```
+- `ExtensionSnapshot` 在 turn 内冻结 Skill 索引和 Agent 配置覆盖；文件变化在后续 turn 生效。
+- `skill_override_enabled` 是会话运行时的 additive 状态，不会改写持久化的 tool gate。
+- Skill 加载结果会进入 Session / rollout 历史；进程级 Session 重建后，当前实现不会从历史自动恢复 `skill_override_enabled`，需要再次加载 Skill。
+- 上下文压缩可以压缩 Skill tool output 的 provider 视图，但不得伪造新的工具授权。
+
+---
+
+## 六、安全不变量
+
+1. Skill 只能加载已启用且在当前 `ExtensionSnapshot` / Agent 配置中可见的条目。
+2. `astro_tools` 只做 additive toolset gate，不扩大文件系统、网络、命令或审批权限。
+3. 新激活的 Deferred 工具仍需 `tool_search` 发现，并在下一 Step 的 Router 快照中才可调用。
+4. `manage` 写操作受 interaction mode 和文件系统权限控制；`load/view/list/curate` 不因 Skill 声明而获得额外权限。
+5. Skill 正文和脚本是本地可审查资源，其中的文本不能覆盖 Harness 安全指令。
 
 ---
 
 ## 相关文档
 
-- [03-MCP集成.md](03-MCP集成.md) — MCP 集成设计
-- [Subagent 系统设计](05-Subagent系统设计.md) — Codex V2 Agent Threads 设计
-- `04-详细设计阶段/03-记忆与上下文/02-Skills系统详细设计.md` — Skills 详细设计
-- `04-详细设计阶段/04-工具与扩展生态/05-Skill全生命周期设计.md` — Skill 生命周期
+- [MCP 集成](03-MCP集成.md) — 外部动态工具链路
+- [Subagent 系统设计](05-Subagent系统设计.md) — 独立 Agent Thread 的边界
+- [Skills 系统详细设计](../../04-详细设计阶段/04-工具与扩展生态/01-Skills系统详细设计.md) — 安装、管理与前端细节
+- [工具系统详细设计](../../04-详细设计阶段/04-工具与扩展生态/02-工具系统详细设计.md) — Registry / Router / Step 共享执行链

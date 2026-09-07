@@ -4,8 +4,6 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    sync::Mutex,
-    time::{Duration, Instant},
 };
 
 use anyhow::{bail, Context, Result};
@@ -732,32 +730,7 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 最近一次成功加载的技能记忆（仅供同一次 skills 工具调用内的 additive toolset
-/// 激活复用，避免紧接着再次扫描 + 读盘）。窗口极短，不影响 enable/disable 正确性。
-struct RecentLoad {
-    name: String,
-    astro_tools: Vec<String>,
-    at: Instant,
-}
-
-static RECENT_LOAD: Mutex<Option<RecentLoad>> = Mutex::new(None);
-
-/// 最近一次成功加载 `name` 的 `astro_tools`（若在 [`RECENT_LOAD_TTL`] 内）。
-///
-/// 用于 skills 工具执行后立即做 toolset 激活时复用，省去二次磁盘加载。
-pub fn recent_astro_tools(name: &str) -> Option<Vec<String>> {
-    const RECENT_LOAD_TTL: Duration = Duration::from_secs(5);
-    let guard = RECENT_LOAD.lock().ok()?;
-    let recent = guard.as_ref()?;
-    if recent.name == name && recent.at.elapsed() < RECENT_LOAD_TTL {
-        Some(recent.astro_tools.clone())
-    } else {
-        None
-    }
-}
-
-/// 按名称加载已启用技能的 SKILL.md 全文
-pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
+fn load_skill_by_name_untracked(name: &str) -> Result<LoadedSkill> {
     let installed = list_installed()
         .into_iter()
         .find(|s| s.name == name)
@@ -770,7 +743,7 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
     let content =
         fs::read_to_string(&installed.path).with_context(|| format!("读取 {}", installed.path))?;
 
-    let loaded = LoadedSkill {
+    Ok(LoadedSkill {
         metadata: {
             let mut meta = parse_skill_frontmatter_full(&content);
             if meta.name.is_empty() {
@@ -783,22 +756,17 @@ pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
         },
         path: std::path::PathBuf::from(&installed.path),
         content,
-    };
+    })
+}
 
-    if let Ok(mut guard) = RECENT_LOAD.lock() {
-        *guard = Some(RecentLoad {
-            name: name.to_string(),
-            astro_tools: loaded.metadata.astro_tools.clone(),
-            at: Instant::now(),
-        });
-    }
+/// 按名称加载已启用技能的 SKILL.md 全文并记录一次使用。
+pub fn load_skill_by_name(name: &str) -> Result<LoadedSkill> {
+    let loaded = load_skill_by_name_untracked(name)?;
     crate::usage::record_skill_load(name);
-
     Ok(loaded)
 }
 
-/// Load a skill under an ephemeral child-session config layer.
-pub fn load_skill_by_name_with_config(
+fn load_skill_by_name_with_config_untracked(
     name: &str,
     config: &[(PathBuf, bool)],
 ) -> Result<LoadedSkill> {
@@ -812,24 +780,36 @@ pub fn load_skill_by_name_with_config(
         if !configured_enabled {
             anyhow::bail!("技能已被当前 Agent 配置禁用: {name}");
         }
-        if let Ok(mut guard) = RECENT_LOAD.lock() {
-            *guard = Some(RecentLoad {
-                name: name.to_string(),
-                astro_tools: loaded.metadata.astro_tools.clone(),
-                at: Instant::now(),
-            });
-        }
-        crate::usage::record_skill_load(name);
         return Ok(loaded);
     }
 
-    let loaded = load_skill_by_name(name)?;
+    let loaded = load_skill_by_name_untracked(name)?;
     if config.iter().rev().any(|(path, enabled)| {
         !enabled && same_skill_path(&configured_skill_md(path), &loaded.path)
     }) {
         anyhow::bail!("技能已被当前 Agent 配置禁用: {name}");
     }
     Ok(loaded)
+}
+
+/// Load a skill under an ephemeral child-session config layer.
+pub fn load_skill_by_name_with_config(
+    name: &str,
+    config: &[(PathBuf, bool)],
+) -> Result<LoadedSkill> {
+    let loaded = load_skill_by_name_with_config_untracked(name, config)?;
+    crate::usage::record_skill_load(name);
+    Ok(loaded)
+}
+
+/// 按当前 Agent 配置解析 Skill 声明的 additive toolset，不重复记录使用。
+pub fn skill_astro_tools_with_config(
+    name: &str,
+    config: &[(PathBuf, bool)],
+) -> Result<Vec<String>> {
+    Ok(load_skill_by_name_with_config_untracked(name, config)?
+        .metadata
+        .astro_tools)
 }
 
 const MAX_SKILL_FILE_PREVIEW_BYTES: u64 = 512 * 1024;
@@ -1275,7 +1255,7 @@ mod tests {
         let skill_md = skill_dir.join("SKILL.md");
         fs::write(
             &skill_md,
-            "---\nname: configured-reviewer\ndescription: child only\n---\n# Review\n",
+            "---\nname: configured-reviewer\ndescription: child only\nastro_tools: [web_search, browser]\n---\n# Review\n",
         )
         .unwrap();
 
@@ -1284,6 +1264,10 @@ mod tests {
             .iter()
             .any(|(name, _)| name == "configured-reviewer"));
         assert!(load_skill_by_name_with_config("configured-reviewer", &enabled).is_ok());
+        assert_eq!(
+            skill_astro_tools_with_config("configured-reviewer", &enabled).unwrap(),
+            vec!["web_search", "browser"]
+        );
 
         let disabled = vec![(skill_md, false)];
         let error = load_skill_by_name_with_config("configured-reviewer", &disabled)
@@ -1476,38 +1460,6 @@ mod tests {
         let inline = "---\nname: t2\ndescription: d\nastro_tools: [web_search, browser]\n---\n";
         let m2 = parse_skill_frontmatter_full(inline);
         assert_eq!(m2.astro_tools, vec!["web_search", "browser"]);
-    }
-
-    #[test]
-    fn recent_astro_tools_reused_after_load() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
-        let dir = tempdir().unwrap();
-        let skill_dir = dir.path().join("skills/recent-skill");
-        fs::create_dir_all(&skill_dir).unwrap();
-        fs::write(
-            skill_dir.join("SKILL.md"),
-            "---\nname: recent-skill\ndescription: d\nastro_tools: [exec_command, web_search]\n---\nbody\n",
-        )
-        .unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-        std::env::remove_var("ASTRO_WORKSPACE");
-        fs::write(
-            dir.path().join("active-agent.json"),
-            r#"{"id":"workspace"}"#,
-        )
-        .unwrap();
-
-        assert!(recent_astro_tools("recent-skill").is_none());
-        let loaded = load_skill_by_name("recent-skill").unwrap();
-        assert_eq!(
-            loaded.metadata.astro_tools,
-            vec!["exec_command", "web_search"]
-        );
-        assert_eq!(
-            recent_astro_tools("recent-skill"),
-            Some(vec!["exec_command".to_string(), "web_search".to_string()])
-        );
-        assert!(recent_astro_tools("other-skill").is_none());
     }
 
     #[test]

@@ -44,8 +44,8 @@
 | ---- | ---- |
 | [01-多模态Provider.md](02-核心功能模块/01-多模态Provider.md) | 多模态 Provider 系统：8 个 trait（含 MultimodalClient 继承 TextClient、ImageClient / MusicClient）、路由与降级 |
 | [02-OpenRouter模型目录.md](02-核心功能模块/02-OpenRouter模型目录.md) | OpenRouter 模型目录：价格、能力、模态，实时数据同步方案 |
-| [03-MCP集成.md](02-核心功能模块/03-MCP集成.md) | MCP Client/Server、工具风险等级配置、Transport（stdio/Streamable HTTP）、懒连接 |
-| [04-Skills系统.md](02-核心功能模块/04-Skills系统.md) | Skill Trait、SKILL.md 格式、BM25 按需披露（tantivy）、热加载 |
+| [03-MCP集成.md](02-核心功能模块/03-MCP集成.md) | MCP Client、STDIO/Streamable HTTP、Hub 连接池、Registry runtime、Step 路由与审批/输出链 |
+| [04-Skills系统.md](02-核心功能模块/04-Skills系统.md) | SKILL.md 发现与加载、`skills` 工具、`astro_tools` additive gate 和 Step 冻结 |
 | [05-Subagent系统设计.md](02-核心功能模块/05-Subagent系统设计.md) | Subagent / Codex V2 Agent Threads：六工具控制面、Graph/mailbox/status 持久化、恢复与权限收窄 |
 | [06-自我进化引擎.md](02-核心功能模块/06-自我进化引擎.md) | 自我进化引擎：TaskTrace、反思引擎、Skill 合成、Prompt 优化流程 |
 | [07-上下文管理.md](02-核心功能模块/07-上下文管理.md) | PromptContract、动态上下文、工具结果压缩、token 预算与用量分段 |

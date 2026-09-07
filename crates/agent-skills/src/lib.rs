@@ -65,8 +65,8 @@ pub use installed::{
     list_enabled_for_prompt_with_config_in_workspace, list_installed, list_installed_for_agent,
     list_installed_scoped_for_agent, list_skill_files, list_skill_files_ex, load_skill_by_name,
     load_skill_by_name_with_config, open_skill_file_externally, open_skill_folder,
-    parse_skill_frontmatter_full, read_skill_file, read_skill_file_ex, recent_astro_tools,
-    reveal_skill_file, set_enabled, set_enabled_for_agent,
+    parse_skill_frontmatter_full, read_skill_file, read_skill_file_ex, reveal_skill_file,
+    set_enabled, set_enabled_for_agent, skill_astro_tools_with_config,
 };
 pub use models::{
     InstalledSkill, SkillBundle, SkillFileEntry, SkillUpdateCheckResult, SkillUpdateItemResult,

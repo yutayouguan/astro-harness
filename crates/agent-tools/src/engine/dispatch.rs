@@ -11,7 +11,6 @@ use crate::engine::executor::CoreToolRuntime;
 pub(crate) async fn dispatch_runtime(
     allowed: bool,
     runtime: Option<&Arc<dyn CoreToolRuntime>>,
-    skill_runtime: Option<&Arc<dyn CoreToolRuntime>>,
     ctx: &mut ToolContext<'_>,
     name: &str,
     args: &serde_json::Value,
@@ -35,21 +34,6 @@ pub(crate) async fn dispatch_runtime(
 
     if let Some(runtime) = runtime {
         return runtime.handle(ctx, args).await;
-    }
-
-    if home::is_tool_call_allowed("skills")
-        && skills::list_installed()
-            .into_iter()
-            .any(|skill| skill.name == name && skill.enabled)
-    {
-        let rewritten = serde_json::json!({
-            "action": "load",
-            "skill_id": name,
-            "input": args,
-        });
-        if let Some(runtime) = skill_runtime {
-            return runtime.handle(ctx, &rewritten).await;
-        }
     }
 
     anyhow::bail!("未知工具: {name}")
