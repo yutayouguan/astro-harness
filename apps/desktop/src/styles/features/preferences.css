@@ -454,7 +454,8 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
 }
 
 .prefs-page.is-embedded .prefs-category-stack--appearance > .prefs-card {
-  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border: var(--settings-panel-border-width, 0.5px) solid
+    var(--settings-panel-border, var(--glass-edge));
   border-radius: var(--settings-panel-radius, 20px);
   background: var(--settings-panel-background, var(--glass-fill));
   box-shadow: var(
@@ -806,7 +807,8 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
 .prefs-section {
   padding: 18px 18px 16px;
   border-radius: var(--settings-panel-radius, 20px);
-  border: 1px solid var(--settings-panel-border, var(--glass-edge));
+  border: var(--settings-panel-border-width, 0.5px) solid
+    var(--settings-panel-border, var(--glass-edge));
   background: var(--settings-panel-background, var(--glass-fill));
   box-shadow: var(
     --settings-panel-shadow,

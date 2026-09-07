@@ -14,7 +14,7 @@
   --sidebar-chrome-shadow: var(--header-chip-shadow);
   --sidebar-chrome-filter: var(--titlebar-menu-blur);
   border: 0;
-  border-right: 1px solid var(--sidebar-chrome-border);
+  border-right: 0.5px solid var(--sidebar-chrome-border);
   border-radius: 0;
   background: var(--sidebar-chrome-background);
   box-shadow: var(--sidebar-chrome-shadow);

@@ -343,7 +343,7 @@ test("left sidebar shares the top-right tool group material", () => {
   assert.match(sidebar, /border-radius:\s*0;/);
   assert.match(
     sidebar,
-    /border-right:\s*1px\s+solid\s+var\(--sidebar-chrome-border\);/,
+    /border-right:\s*0\.5px\s+solid\s+var\(--sidebar-chrome-border\);/,
   );
   assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
   assert.match(sidebar, /box-shadow:\s*var\(--sidebar-chrome-shadow\);/);

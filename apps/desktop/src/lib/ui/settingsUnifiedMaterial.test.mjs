@@ -34,6 +34,7 @@ test("settings expose one shared inset and selected material contract", () => {
       `${token} must bind directly to the header reference material`,
     );
   }
+  assert.match(material, /--settings-panel-border-width:\s*0\.5px;/);
 
   for (const token of [
     "--settings-inset-border",
@@ -56,7 +57,7 @@ test("settings expose one shared inset and selected material contract", () => {
   assert.match(material, /> :is\(\.prefs-card, \.prefs-section\)/);
   assert.match(
     material,
-    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(\s*--settings-panel-shadow,[\s\S]*?backdrop-filter:\s*none;/,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*var\(--settings-panel-border-width, 0\.5px\) solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(\s*--settings-panel-shadow,[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.match(
     material,
@@ -74,7 +75,7 @@ test("selected and accessibility states keep the unified hierarchy", () => {
   );
   assert.match(
     material,
-    /@media \(prefers-contrast: more\)[\s\S]*?--settings-panel-border:\s*var\(--color-border\);[\s\S]*?--settings-panel-backdrop:\s*none;[\s\S]*?--settings-inset-border:\s*var\(--color-border\);/,
+    /@media \(prefers-contrast: more\)[\s\S]*?--settings-panel-border-width:\s*1px;[\s\S]*?--settings-panel-border:\s*var\(--color-border\);[\s\S]*?--settings-panel-backdrop:\s*none;[\s\S]*?--settings-inset-border:\s*var\(--color-border\);/,
   );
 });
 
@@ -94,7 +95,7 @@ test("all settings surface families use the neutral appearance glass plane", () 
 
   assert.match(
     material,
-    /\.settings-content-inline[\s\S]*?:is\([\s\S]*?\.providers-pane,[\s\S]*?\.tool-card\.agent-tool-card,[\s\S]*?\.mem-card,[\s\S]*?\.model-market-card,[\s\S]*?\.insights-kpi,[\s\S]*?\)\s*\{[\s\S]*?background:\s*var\(--settings-panel-background\);[\s\S]*?backdrop-filter:\s*none;/,
+    /\.settings-content-inline[\s\S]*?:is\([\s\S]*?\.providers-pane,[\s\S]*?\.tool-card\.agent-tool-card,[\s\S]*?\.mem-card,[\s\S]*?\.model-market-card,[\s\S]*?\.insights-kpi,[\s\S]*?\)\s*\{[\s\S]*?border-width:\s*var\(--settings-panel-border-width, 0\.5px\);[\s\S]*?background:\s*var\(--settings-panel-background\);[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.match(
     material,
