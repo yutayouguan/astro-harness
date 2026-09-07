@@ -101,3 +101,23 @@ test("all settings surface families use the neutral appearance glass plane", () 
     /:is\(\.providers-pane, \.mcp-server-card\)::before\s*\{[\s\S]*?content:\s*none;/,
   );
 });
+
+test("composite settings controls do not create nested glass shells", () => {
+  assert.ok(
+    material.indexOf(".browser-permission-toggles {") >
+      material.indexOf(".prefs-toggle-list,"),
+    "browser permission flattening must follow the generic inset material",
+  );
+  assert.match(
+    material,
+    /\.mm-rankings-commandbar[\s\S]*?> \.mm-rankings-sections\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/,
+  );
+  assert.match(
+    material,
+    /\.browser-permission-toggles\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;[\s\S]*?backdrop-filter:\s*none;/,
+  );
+  assert.match(
+    material,
+    /\.browser-permission-toggles[\s\S]*?> \.prefs-toggle-row\s*\{[\s\S]*?border-top:\s*1px solid var\(--settings-divider\);[\s\S]*?border-radius:\s*0;/,
+  );
+});

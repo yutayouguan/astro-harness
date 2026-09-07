@@ -112,6 +112,19 @@
   content: none;
 }
 
+/* Composite toolbars own one glass shell. Their internal tab row must not
+ * materialize a second rounded surface. */
+.settings-content-inline
+  .mm-rankings-commandbar
+  > .mm-rankings-sections {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 /* Quiet inset material: no blur-on-blur and no page-specific white recipe. */
 .prefs-page.is-embedded
 :is(
@@ -142,6 +155,26 @@
   box-shadow: var(--settings-inset-shadow);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* The permissions card is already the owning surface. This exception follows
+ * the generic inset rule so it cannot be materialized again by `.prefs-toggle-list`. */
+.prefs-page.is-embedded .browser-permission-toggles {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.prefs-page.is-embedded
+  .browser-permission-toggles
+  > .prefs-toggle-row {
+  border-top: 1px solid var(--settings-divider);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .prefs-page.is-embedded
