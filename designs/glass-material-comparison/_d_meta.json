@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Astro 全局玻璃材质方向对比": {
+      "versions": [
+        {
+          "path": "Glass Material Comparison.html",
+          "createdAt": "2026-09-07T03:05:03.717Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-09-07T03:05:03.718Z",
+  "updatedAt": "2026-09-07T03:09:17.729Z"
+}

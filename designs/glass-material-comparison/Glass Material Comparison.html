@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astro 全局玻璃材质方向对比</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --page-bg: #090d13;
+        --page-text: rgba(246, 249, 255, 0.94);
+        --page-muted: rgba(218, 226, 239, 0.58);
+        --line: rgba(218, 231, 255, 0.13);
+        --accent: #80c7ff;
+        --accent-2: #a691ff;
+        --intensity: 64;
+        --glass-blur: 23px;
+        --glass-saturate: 1.46;
+        --apple-fill: 0.21;
+        --apple-edge: 0.42;
+        --apple-shadow: 0.34;
+        --harmony-fill: 0.34;
+        --harmony-glow: 0.27;
+        --harmony-edge: 0.34;
+        --control-progress: 64%;
+        font-family:
+          -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans SC",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 18% 0%, rgba(57, 105, 168, 0.18), transparent 32%),
+          radial-gradient(circle at 82% 8%, rgba(117, 81, 168, 0.13), transparent 30%),
+          var(--page-bg);
+        color: var(--page-text);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .page {
+        width: min(1680px, calc(100% - 48px));
+        margin: 0 auto;
+        padding: 34px 0 48px;
+      }
+
+      .brief {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 32px;
+        align-items: end;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 720;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(26px, 3vw, 42px);
+        line-height: 1.12;
+        letter-spacing: -0.035em;
+      }
+
+      .brief-copy {
+        max-width: 720px;
+        margin: 10px 0 0;
+        color: var(--page-muted);
+        font-size: 14px;
+        line-height: 1.75;
+      }
+
+      .decision {
+        min-width: 290px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(19, 25, 35, 0.68);
+      }
+
+      .decision-label {
+        color: var(--page-muted);
+        font-size: 11px;
+      }
+
+      .decision-value {
+        display: block;
+        margin-top: 5px;
+        color: rgba(247, 250, 255, 0.92);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .control-bar {
+        position: sticky;
+        z-index: 20;
+        top: 12px;
+        display: grid;
+        grid-template-columns: auto minmax(280px, 1fr) auto;
+        gap: 22px;
+        align-items: center;
+        margin-bottom: 22px;
+        padding: 13px 15px;
+        border: 1px solid rgba(219, 232, 255, 0.14);
+        border-radius: 17px;
+        background: rgba(15, 20, 29, 0.78);
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+        backdrop-filter: blur(22px) saturate(145%);
+      }
+
+      .segmented {
+        display: flex;
+        gap: 3px;
+        padding: 3px;
+        border: 1px solid rgba(225, 235, 255, 0.12);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .segmented button {
+        min-height: 30px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--page-muted);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 620;
+      }
+
+      .segmented button[aria-pressed="true"] {
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+        color: rgba(255, 255, 255, 0.94);
+      }
+
+      .slider-control {
+        display: grid;
+        grid-template-columns: auto minmax(180px, 1fr) 42px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .slider-copy strong {
+        display: block;
+        font-size: 12px;
+      }
+
+      .slider-copy span {
+        display: block;
+        margin-top: 2px;
+        color: var(--page-muted);
+        font-size: 10px;
+      }
+
+      .glass-range {
+        width: 100%;
+        height: 20px;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .glass-range::-webkit-slider-runnable-track {
+        height: 5px;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          #76caff 0 var(--control-progress),
+          rgba(255, 255, 255, 0.12) var(--control-progress) 100%
+        );
+      }
+
+      .glass-range::-webkit-slider-thumb {
+        width: 16px;
+        height: 16px;
+        margin-top: -5.5px;
+        appearance: none;
+        border: 2px solid rgba(255, 255, 255, 0.82);
+        border-radius: 50%;
+        background: #79c9ff;
+        box-shadow: 0 4px 12px rgba(75, 174, 241, 0.34);
+      }
+
+      .range-value {
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      .comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      .direction {
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(13, 18, 26, 0.58);
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease;
+      }
+
+      .direction.is-selected {
+        border-color: color-mix(in srgb, var(--direction-accent) 62%, white 12%);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--direction-accent) 18%, transparent);
+      }
+
+      .direction-head {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 2px 2px 13px;
+      }
+
+      .direction-mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--direction-accent) 36%, white 12%);
+        border-radius: 13px;
+        background: color-mix(in srgb, var(--direction-accent) 17%, transparent);
+        color: color-mix(in srgb, var(--direction-accent) 88%, white 12%);
+        font-size: 14px;
+        font-weight: 760;
+      }
+
+      .direction-title {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .direction-subtitle {
+        margin: 4px 0 0;
+        color: var(--page-muted);
+        font-size: 11px;
+      }
+
+      .direction-traits {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 5px;
+      }
+
+      .direction-traits span {
+        padding: 5px 7px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        color: rgba(232, 238, 249, 0.68);
+        font-size: 9.5px;
+      }
+
+      .mock-window {
+        position: relative;
+        aspect-ratio: 1.56;
+        min-height: 430px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 16px;
+        background-color: #0b1119;
+        background-image: var(--mock-background);
+        background-position: center;
+        background-size: cover;
+        box-shadow: 0 22px 62px rgba(0, 0, 0, 0.34);
+        isolation: isolate;
+      }
+
+      body[data-background="wallpaper"] .mock-window {
+        --mock-background:
+          linear-gradient(rgba(5, 11, 18, 0.16), rgba(5, 11, 18, 0.34)),
+          url("./assets/valley-light.jpg");
+      }
+
+      body[data-background="ambient"] .mock-window {
+        --mock-background:
+          radial-gradient(circle at 18% 12%, rgba(94, 168, 255, 0.52), transparent 34%),
+          radial-gradient(circle at 78% 18%, rgba(153, 115, 255, 0.43), transparent 34%),
+          radial-gradient(circle at 55% 90%, rgba(45, 197, 195, 0.2), transparent 42%),
+          linear-gradient(145deg, #121b2b 0%, #17152b 52%, #0b1720 100%);
+      }
+
+      .mock-window::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset: 0;
+        background: rgba(7, 10, 16, 0.14);
+        pointer-events: none;
+      }
+
+      .mock-layout {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        height: 100%;
+      }
+
+      .mock-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px 10px 12px;
+        border-right: 1px solid var(--material-edge);
+      }
+
+      .brand {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        padding: 0 6px 8px;
+      }
+
+      .brand img {
+        width: 23px;
+        height: 23px;
+        border-radius: 7px;
+      }
+
+      .brand strong {
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      .nav-list,
+      .session-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .nav-item,
+      .session-item {
+        display: flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 8px;
+        border-radius: 9px;
+        color: rgba(236, 242, 251, 0.64);
+        font-size: 9.5px;
+      }
+
+      .nav-item::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        margin-right: 8px;
+        border: 1px solid currentcolor;
+        border-radius: 2px;
+      }
+
+      .nav-item.active {
+        background: var(--selected-fill);
+        box-shadow: inset 0 0 0 1px var(--selected-edge);
+        color: rgba(249, 252, 255, 0.94);
+      }
+
+      .sessions-label {
+        margin: 4px 7px 0;
+        color: rgba(232, 238, 248, 0.36);
+        font-size: 8px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+      }
+
+      .session-item {
+        justify-content: space-between;
+        gap: 7px;
+      }
+
+      .session-item span:first-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-item time {
+        flex: 0 0 auto;
+        color: rgba(228, 237, 248, 0.38);
+        font-size: 7.5px;
+      }
+
+      .mock-main {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 11px;
+        padding: 13px;
+      }
+
+      .mock-topbar {
+        display: flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border: 1px solid var(--material-edge);
+        border-radius: 12px;
+      }
+
+      .mock-topbar strong {
+        font-size: 11px;
+      }
+
+      .topbar-actions {
+        display: flex;
+        gap: 5px;
+      }
+
+      .topbar-actions i {
+        display: block;
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--quiet-edge);
+        border-radius: 6px;
+        background: var(--quiet-fill);
+      }
+
+      .mock-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .mock-card {
+        position: relative;
+        min-height: 128px;
+        overflow: hidden;
+        padding: 13px;
+        border: 1px solid var(--material-edge);
+        border-radius: 15px;
+      }
+
+      .mock-card.wide {
+        grid-column: 1 / -1;
+        min-height: 102px;
+      }
+
+      .mock-card h3 {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 680;
+      }
+
+      .mock-card p {
+        max-width: 88%;
+        margin: 5px 0 12px;
+        color: rgba(229, 236, 247, 0.54);
+        font-size: 8.5px;
+        line-height: 1.55;
+      }
+
+      .setting-line {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 9px;
+        align-items: center;
+        min-height: 29px;
+        border-top: 1px solid var(--quiet-edge);
+        color: rgba(241, 245, 252, 0.74);
+        font-size: 8.5px;
+      }
+
+      .mini-switch {
+        width: 25px;
+        height: 14px;
+        padding: 2px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--direction-accent) 62%, rgba(255, 255, 255, 0.12));
+      }
+
+      .mini-switch::after {
+        content: "";
+        display: block;
+        width: 10px;
+        height: 10px;
+        margin-left: auto;
+        border-radius: 50%;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      }
+
+      .mini-chart {
+        display: flex;
+        height: 32px;
+        align-items: end;
+        gap: 5px;
+      }
+
+      .mini-chart i {
+        display: block;
+        width: 9px;
+        border-radius: 3px 3px 1px 1px;
+        background: color-mix(in srgb, var(--direction-accent) 70%, white 8%);
+        opacity: 0.74;
+      }
+
+      .mock-composer {
+        display: flex;
+        min-height: 40px;
+        align-items: center;
+        gap: 8px;
+        margin-top: auto;
+        padding: 0 11px;
+        border: 1px solid var(--material-edge);
+        border-radius: 13px;
+        color: rgba(235, 241, 250, 0.5);
+        font-size: 9px;
+      }
+
+      .mock-composer span {
+        flex: 1;
+      }
+
+      .mock-composer button {
+        width: 23px;
+        height: 23px;
+        border: 0;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--direction-accent) 72%, white 8%);
+      }
+
+      .material-apple {
+        --direction-accent: #8ed1ff;
+        --material-edge: rgba(235, 247, 255, var(--apple-edge));
+        --quiet-edge: rgba(238, 247, 255, 0.11);
+        --quiet-fill: rgba(236, 245, 255, 0.07);
+        --selected-edge: rgba(229, 246, 255, 0.3);
+        --selected-fill: rgba(223, 242, 255, 0.14);
+      }
+
+      .material-apple .glass {
+        background:
+          linear-gradient(142deg, rgba(255, 255, 255, calc(var(--apple-fill) * 0.76)), transparent 44%),
+          linear-gradient(320deg, rgba(142, 209, 255, calc(var(--apple-fill) * 0.42)), transparent 52%),
+          rgba(16, 24, 35, var(--apple-fill));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, calc(var(--apple-edge) * 0.82)),
+          inset 1px 0 0 rgba(255, 255, 255, calc(var(--apple-edge) * 0.28)),
+          0 14px 34px rgba(0, 0, 0, var(--apple-shadow));
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      }
+
+      .material-apple .mock-card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(112deg, rgba(255, 255, 255, 0.1), transparent 34% 72%, rgba(255, 255, 255, 0.04));
+        pointer-events: none;
+      }
+
+      .material-harmony {
+        --direction-accent: #8fb9ff;
+        --material-edge: rgba(171, 210, 255, var(--harmony-edge));
+        --quiet-edge: rgba(191, 216, 255, 0.12);
+        --quiet-fill: rgba(126, 167, 230, 0.09);
+        --selected-edge: rgba(157, 207, 255, 0.32);
+        --selected-fill: rgba(87, 145, 224, 0.18);
+      }
+
+      .material-harmony .glass {
+        background:
+          radial-gradient(circle at 16% 0%, rgba(121, 191, 255, calc(var(--harmony-glow) * 0.7)), transparent 44%),
+          radial-gradient(circle at 92% 20%, rgba(166, 131, 255, calc(var(--harmony-glow) * 0.58)), transparent 42%),
+          rgba(20, 29, 45, var(--harmony-fill));
+        box-shadow:
+          inset 0 1px 0 rgba(232, 246, 255, calc(var(--harmony-edge) * 0.56)),
+          0 0 34px rgba(89, 165, 255, calc(var(--harmony-glow) * 0.34)),
+          0 16px 38px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(calc(var(--glass-blur) * 0.82)) saturate(calc(var(--glass-saturate) * 0.9));
+      }
+
+      .material-harmony .mock-card::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border: 1px solid transparent;
+        border-radius: inherit;
+        background: linear-gradient(128deg, rgba(120, 207, 255, 0.28), transparent 40%, rgba(183, 139, 255, 0.22)) border-box;
+        mask:
+          linear-gradient(#000 0 0) padding-box,
+          linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        -webkit-mask:
+          linear-gradient(#000 0 0) padding-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        opacity: calc(0.38 + var(--harmony-glow));
+        pointer-events: none;
+      }
+
+      .direction-footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 2px 2px;
+      }
+
+      .direction-note {
+        margin: 0;
+        color: var(--page-muted);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      .choose-button {
+        min-height: 34px;
+        padding: 0 13px;
+        border: 1px solid color-mix(in srgb, var(--direction-accent) 38%, white 8%);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--direction-accent) 17%, transparent);
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 680;
+      }
+
+      .choose-button:hover,
+      .choose-button:focus-visible {
+        background: color-mix(in srgb, var(--direction-accent) 25%, transparent);
+        outline: none;
+      }
+
+      .comparison-notes {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 24px;
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-top: 1px solid var(--line);
+        color: var(--page-muted);
+        font-size: 11px;
+        line-height: 1.65;
+      }
+
+      .comparison-notes strong {
+        color: rgba(245, 249, 255, 0.86);
+      }
+
+      @media (max-width: 1120px) {
+        .brief {
+          grid-template-columns: 1fr;
+        }
+
+        .decision {
+          min-width: 0;
+        }
+
+        .control-bar,
+        .comparison {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-window {
+          min-height: 410px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100% - 24px, 1680px);
+          padding-top: 20px;
+        }
+
+        .slider-control,
+        .direction-head,
+        .direction-footer,
+        .comparison-notes {
+          grid-template-columns: 1fr;
+        }
+
+        .direction-traits {
+          justify-content: flex-start;
+        }
+
+        .mock-layout {
+          grid-template-columns: 106px minmax(0, 1fr);
+        }
+
+        .mock-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-card.wide {
+          grid-column: auto;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body data-background="wallpaper">
+    <main class="page" data-screen-label="玻璃材质方向对比">
+      <header class="brief">
+        <div>
+          <p class="eyebrow">Astro Material Study · 01</p>
+          <h1>全局玻璃材质方向对比</h1>
+          <p class="brief-copy">
+            同一套界面、同一强度、同一背景，只比较材质本身。Apple 液态玻璃偏“物理表面”，鸿蒙沉浸光感偏“环境光场”。
+          </p>
+        </div>
+        <aside class="decision" aria-live="polite">
+          <span class="decision-label">当前选择</span>
+          <strong class="decision-value" id="decisionValue">尚未选择 · 请先切换背景并拖动强度</strong>
+        </aside>
+      </header>
+
+      <section class="control-bar" aria-label="设计比较控制器">
+        <div class="segmented" aria-label="背景类型">
+          <button type="button" data-background-button="wallpaper" aria-pressed="true">壁纸</button>
+          <button type="button" data-background-button="ambient" aria-pressed="false">氛围配色</button>
+        </div>
+
+        <label class="slider-control" for="glassIntensity">
+          <span class="slider-copy">
+            <strong>玻璃强度</strong>
+            <span id="strengthLabel">平衡 · 适合日常使用</span>
+          </span>
+          <input class="glass-range" id="glassIntensity" type="range" min="0" max="100" value="64" />
+          <output class="range-value" id="rangeValue" for="glassIntensity">64</output>
+        </label>
+
+        <div class="segmented" aria-label="建议强度">
+          <button type="button" data-preset="32" aria-pressed="false">清透</button>
+          <button type="button" data-preset="64" aria-pressed="true">平衡</button>
+          <button type="button" data-preset="88" aria-pressed="false">沉浸</button>
+        </div>
+      </section>
+
+      <section class="comparison" aria-label="材质方向">
+        <article class="direction material-apple" data-direction="apple">
+          <header class="direction-head">
+            <span class="direction-mark" aria-hidden="true">A</span>
+            <div>
+              <h2 class="direction-title">Apple 液态玻璃</h2>
+              <p class="direction-subtitle">清晰折射 · 镜面边缘 · 强物理层次</p>
+            </div>
+            <div class="direction-traits" aria-label="特征">
+              <span>高透</span><span>锐利边缘</span><span>悬浮感</span>
+            </div>
+          </header>
+
+          <div class="mock-window" aria-label="Apple 液态玻璃应用预览">
+            <div class="mock-layout">
+              <aside class="mock-sidebar glass">
+                <div class="brand"><img src="./assets/astro-app-icon.png" alt="" /><strong>ASTRO</strong></div>
+                <div class="nav-list">
+                  <div class="nav-item active">对话</div>
+                  <div class="nav-item">自动压缩</div>
+                  <div class="nav-item">模型服务</div>
+                  <div class="nav-item">工具与技能</div>
+                </div>
+                <span class="sessions-label">最近会话</span>
+                <div class="session-list">
+                  <div class="session-item"><span>统一玻璃材质设计</span><time>7h</time></div>
+                  <div class="session-item"><span>工具页层级调整</span><time>2d</time></div>
+                  <div class="session-item"><span>主题系统讨论</span><time>09/01</time></div>
+                </div>
+              </aside>
+              <section class="mock-main">
+                <header class="mock-topbar glass">
+                  <strong>外观与材质</strong>
+                  <span class="topbar-actions"><i></i><i></i></span>
+                </header>
+                <div class="mock-grid">
+                  <article class="mock-card glass">
+                    <h3>玻璃材质</h3>
+                    <p>清晰的高光边缘强调每个可交互表面。</p>
+                    <div class="setting-line"><span>全局玻璃强度</span><span>64</span></div>
+                    <div class="setting-line"><span>减少透明效果</span><span class="mini-switch"></span></div>
+                  </article>
+                  <article class="mock-card glass">
+                    <h3>界面响应</h3>
+                    <p>卡片边缘像真实材质一样捕捉背景亮度。</p>
+                    <div class="mini-chart"><i style="height: 42%"></i><i style="height: 78%"></i><i style="height: 58%"></i><i style="height: 92%"></i><i style="height: 66%"></i></div>
+                  </article>
+                  <article class="mock-card wide glass">
+                    <h3>对话预览</h3>
+                    <p>内容层保持高透明，靠镜面边缘和阴影与壁纸分离。</p>
+                    <div class="setting-line"><span>根据背景自适应文字对比度</span><span class="mini-switch"></span></div>
+                  </article>
+                </div>
+                <div class="mock-composer glass"><span>输入消息，或描述你想要的界面风格…</span><button type="button" aria-label="发送"></button></div>
+              </section>
+            </div>
+          </div>
+
+          <footer class="direction-footer">
+            <p class="direction-note">优势：玻璃边界最清晰、壁纸穿透感最强。风险：复杂壁纸下更容易产生高光噪声。</p>
+            <button class="choose-button" type="button" data-choose="Apple 液态玻璃">选择 A</button>
+          </footer>
+        </article>
+
+        <article class="direction material-harmony" data-direction="harmony">
+          <header class="direction-head">
+            <span class="direction-mark" aria-hidden="true">B</span>
+            <div>
+              <h2 class="direction-title">鸿蒙 7 沉浸光感</h2>
+              <p class="direction-subtitle">环境取色 · 柔光渗透 · 稳定可读性</p>
+            </div>
+            <div class="direction-traits" aria-label="特征">
+              <span>低噪</span><span>环境光</span><span>融合感</span>
+            </div>
+          </header>
+
+          <div class="mock-window" aria-label="鸿蒙沉浸光感应用预览">
+            <div class="mock-layout">
+              <aside class="mock-sidebar glass">
+                <div class="brand"><img src="./assets/astro-app-icon.png" alt="" /><strong>ASTRO</strong></div>
+                <div class="nav-list">
+                  <div class="nav-item active">对话</div>
+                  <div class="nav-item">自动压缩</div>
+                  <div class="nav-item">模型服务</div>
+                  <div class="nav-item">工具与技能</div>
+                </div>
+                <span class="sessions-label">最近会话</span>
+                <div class="session-list">
+                  <div class="session-item"><span>统一玻璃材质设计</span><time>7h</time></div>
+                  <div class="session-item"><span>工具页层级调整</span><time>2d</time></div>
+                  <div class="session-item"><span>主题系统讨论</span><time>09/01</time></div>
+                </div>
+              </aside>
+              <section class="mock-main">
+                <header class="mock-topbar glass">
+                  <strong>外观与材质</strong>
+                  <span class="topbar-actions"><i></i><i></i></span>
+                </header>
+                <div class="mock-grid">
+                  <article class="mock-card glass">
+                    <h3>玻璃材质</h3>
+                    <p>环境色缓慢融入表面，边界保持柔和但可辨。</p>
+                    <div class="setting-line"><span>全局玻璃强度</span><span>64</span></div>
+                    <div class="setting-line"><span>环境光自适应</span><span class="mini-switch"></span></div>
+                  </article>
+                  <article class="mock-card glass">
+                    <h3>界面响应</h3>
+                    <p>光晕从背景主色扩散，整体更安静、更连续。</p>
+                    <div class="mini-chart"><i style="height: 42%"></i><i style="height: 78%"></i><i style="height: 58%"></i><i style="height: 92%"></i><i style="height: 66%"></i></div>
+                  </article>
+                  <article class="mock-card wide glass">
+                    <h3>对话预览</h3>
+                    <p>材料厚度更稳定，复杂壁纸下仍保持内容清晰。</p>
+                    <div class="setting-line"><span>根据背景生成沉浸光场</span><span class="mini-switch"></span></div>
+                  </article>
+                </div>
+                <div class="mock-composer glass"><span>输入消息，或描述你想要的界面风格…</span><button type="button" aria-label="发送"></button></div>
+              </section>
+            </div>
+          </div>
+
+          <footer class="direction-footer">
+            <p class="direction-note">优势：氛围色融合自然、信息稳定、适合全局统一。风险：强度过高时容易显得偏厚。</p>
+            <button class="choose-button" type="button" data-choose="鸿蒙 7 沉浸光感">选择 B</button>
+          </footer>
+        </article>
+      </section>
+
+      <section class="comparison-notes" aria-label="比较结论">
+        <div><strong>Apple：</strong>材质本身是主角，靠折射、镜面亮边和透明度建立层级。</div>
+        <div><strong>鸿蒙：</strong>背景环境是主角，靠取色、柔光扩散和稳定厚度建立沉浸感。</div>
+      </section>
+    </main>
+
+    <script>
+      const root = document.documentElement;
+      const body = document.body;
+      const slider = document.getElementById("glassIntensity");
+      const valueOutput = document.getElementById("rangeValue");
+      const strengthLabel = document.getElementById("strengthLabel");
+      const decisionValue = document.getElementById("decisionValue");
+
+      function setIntensity(rawValue) {
+        const value = Math.max(0, Math.min(100, Number(rawValue)));
+        const strength = value / 100;
+        slider.value = String(value);
+        valueOutput.value = String(value);
+        valueOutput.textContent = String(value);
+        root.style.setProperty("--intensity", String(value));
+        root.style.setProperty("--glass-blur", `${8 + strength * 24}px`);
+        root.style.setProperty("--glass-saturate", String(1.08 + strength * 0.6));
+        root.style.setProperty("--apple-fill", String(0.07 + strength * 0.22));
+        root.style.setProperty("--apple-edge", String(0.18 + strength * 0.38));
+        root.style.setProperty("--apple-shadow", String(0.18 + strength * 0.25));
+        root.style.setProperty("--harmony-fill", String(0.16 + strength * 0.31));
+        root.style.setProperty("--harmony-glow", String(0.08 + strength * 0.34));
+        root.style.setProperty("--harmony-edge", String(0.16 + strength * 0.28));
+        root.style.setProperty("--control-progress", `${value}%`);
+        strengthLabel.textContent = value < 45 ? "清透 · 背景穿透更明显" : value < 78 ? "平衡 · 适合日常使用" : "沉浸 · 材质与光场更强";
+        document.querySelectorAll("[data-preset]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(Number(button.dataset.preset) === value));
+        });
+        document.querySelectorAll(".setting-line > span:last-child").forEach((node) => {
+          if (/^\d+$/.test(node.textContent.trim())) node.textContent = String(value);
+        });
+      }
+
+      document.querySelectorAll("[data-background-button]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const next = button.dataset.backgroundButton;
+          body.dataset.background = next;
+          document.querySelectorAll("[data-background-button]").forEach((candidate) => {
+            candidate.setAttribute("aria-pressed", String(candidate === button));
+          });
+        });
+      });
+
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => setIntensity(button.dataset.preset));
+      });
+
+      document.querySelectorAll("[data-choose]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".direction").forEach((direction) => direction.classList.remove("is-selected"));
+          button.closest(".direction").classList.add("is-selected");
+          decisionValue.textContent = `已选择 · ${button.dataset.choose} · 强度 ${slider.value}`;
+        });
+      });
+
+      slider.addEventListener("input", (event) => setIntensity(event.target.value));
+      setIntensity(slider.value);
+    </script>
+  </body>
+</html>
