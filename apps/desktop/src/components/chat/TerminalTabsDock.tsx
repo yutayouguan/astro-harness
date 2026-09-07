@@ -77,7 +77,6 @@ const MIN_TERMINAL_DOCK_HEIGHT = 160;
 const MAX_TERMINAL_DOCK_HEIGHT = 720;
 const RESIZE_KEYBOARD_STEP = 24;
 const WRITE_CHUNK_BYTES = 32 * 1024;
-const SCROLLBAR_WIDTH = 4;
 const TERMINAL_START_TIMEOUT_MS = 15_000;
 const READ_RETRY_DELAYS = [500, 1_000, 2_000, 4_000];
 const OPEN_RETRY_DELAYS = [1_000, 2_000, 4_000];
@@ -166,7 +165,6 @@ function TerminalPane({
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       lineHeight: settings.lineHeight,
-      overviewRuler: { width: SCROLLBAR_WIDTH },
       scrollback: settings.scrollback,
       theme: terminalTheme(),
     });
