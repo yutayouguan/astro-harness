@@ -4,16 +4,15 @@ The application imports token files directly from `styles/index.css` in this ord
 
 1. `tokens.primitive`: theme-independent geometry, elevation, motion, and raw theme palettes.
 2. `tokens.semantic`: light/dark meaning (`--color-*`, `--surface-panel-*`).
-3. `tokens.component`: glass, liquid-glass, menu, header, badge, and segmented-control recipes.
+3. `tokens.component`: fallback glass, menu, header, badge, and segmented-control recipes.
 4. `overrides`: document/local tone mapping, unified color, glass intensity, and accessibility preferences.
 
 ## Glass intensity
 
-`component/glass.css` owns the fallback frosted recipe. `component/liquid-glass.css`
-keeps the legacy continuous recipe and compatibility names. `glass-intensity.css`
-maps those names onto the global surface contract; `immersive-light.css` then supplies
-the active Harmony-inspired recipe: low-chroma environment color from wallpaper or Tab
-tone, stable translucent fill, soft edge light, and restrained depth. Surfaces keep
+`component/glass.css` owns the fallback frosted recipe. `immersive-light.css` is the
+single active recipe and maps the continuous strength onto every global surface family:
+low-chroma environment color from wallpaper or Tab tone, stable translucent fill, soft
+edge light, and restrained depth. Surfaces keep
 consuming `--glass-fill` / `--glass-rim` / `--glass-edge` and need no per-file changes.
 The persisted user value is an integer from `0` to `100`; `64` is the balanced default.
 

@@ -2,11 +2,11 @@
 @media (prefers-reduced-transparency: reduce) {
   /* 写死的 backdrop-filter 只受这两个旋钮控制，必须与 --backdrop-glass: none 同步归零 */
   html[data-theme] {
-    --global-liquid-glass-color: var(--surface-panel-background);
-    --global-liquid-glass-background: var(--surface-panel-background);
-    --global-liquid-glass-border: var(--color-border);
-    --global-liquid-glass-shadow: var(--shadow-card);
-    --global-liquid-glass-backdrop: none;
+    --immersive-glass-color: var(--surface-panel-background);
+    --immersive-glass-background: var(--surface-panel-background);
+    --immersive-glass-border: var(--color-border);
+    --immersive-glass-shadow: var(--shadow-card);
+    --immersive-glass-backdrop: none;
     --glass-blur-scale: 0;
     --glass-saturate: 1;
     --content-card-background: var(--surface-panel-background);
@@ -121,9 +121,9 @@
 
 @media (prefers-contrast: more) {
   html[data-theme] {
-    --global-liquid-glass-border: var(--color-border);
-    --global-liquid-glass-shadow: var(--shadow-card);
-    --global-liquid-glass-backdrop: none;
+    --immersive-glass-border: var(--color-border);
+    --immersive-glass-shadow: var(--shadow-card);
+    --immersive-glass-backdrop: none;
     --content-card-background: var(--surface-panel-background);
     --content-card-border: var(--color-border);
     --content-card-backdrop: none;

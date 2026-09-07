@@ -7,25 +7,17 @@ import {
   readStoredGlassIntensity,
 } from "./glassIntensity.ts";
 
-const [
-  preferences,
-  styles,
-  theme,
-  intensityRuntime,
-  liquidGlass,
-  glassIntensityStyles,
-  main,
-] = await Promise.all(
-  [
-    "../../components/settings/PreferencesPanel.tsx",
-    "../../styles/features/preferences.css",
-    "../../hooks/app/useTheme.tsx",
-    "./glassIntensity.ts",
-    "../../styles/tokens/component/liquid-glass.css",
-    "../../styles/tokens/glass-intensity.css",
-    "../../main.tsx",
-  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
-);
+const [preferences, styles, theme, intensityRuntime, immersiveLight, main] =
+  await Promise.all(
+    [
+      "../../components/settings/PreferencesPanel.tsx",
+      "../../styles/features/preferences.css",
+      "../../hooks/app/useTheme.tsx",
+      "./glassIntensity.ts",
+      "../../styles/tokens/immersive-light.css",
+      "../../main.tsx",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
 
 test("glass intensity uses one accessible continuous 0-100 range", () => {
   const control = preferences.slice(
@@ -120,64 +112,53 @@ test("glass intensity normalization clamps input and rejects the removed presets
   assert.equal(properties.get("--glass-intensity"), "0.75");
 });
 
-test("continuous recipe drives transparency, blur, saturation, rim, and shadow", () => {
+test("continuous immersive recipe drives color, blur, rim, and shadow", () => {
   for (const token of [
-    "--liquid-glass-tint",
-    "--liquid-glass-sheen",
-    "--liquid-glass-blur-scale",
-    "--liquid-glass-saturate",
-    "--liquid-glass-rim",
-    "--liquid-glass-shadow",
+    "--immersive-glass-color",
+    "--immersive-glass-background",
+    "--immersive-glass-backdrop",
+    "--immersive-glass-rim",
+    "--immersive-glass-shadow",
   ]) {
-    assert.match(liquidGlass, new RegExp(`${token}:`));
+    assert.match(immersiveLight, new RegExp(`${token}:`));
   }
-  assert.match(liquidGlass, /var\(--glass-intensity, 0\.5\)/);
-  assert.doesNotMatch(liquidGlass, /liquid-glass-soft/);
+  assert.match(immersiveLight, /var\(--glass-intensity, 0\.64\)/);
+  assert.doesNotMatch(immersiveLight, /--liquid-glass-|--global-liquid-glass-/);
 });
 
-test("one liquid-glass recipe drives every global surface family", () => {
-  for (const token of [
-    "--global-liquid-glass-color",
-    "--global-liquid-glass-background",
-    "--global-liquid-glass-border",
-    "--global-liquid-glass-shadow",
-    "--global-liquid-glass-backdrop",
-  ]) {
-    assert.match(glassIntensityStyles, new RegExp(`${token}:`));
-  }
-
+test("one immersive recipe drives every global surface family", () => {
   for (const alias of [
     "--glass-fill",
-    "--glass-card",
     "--sidebar-bg",
     "--composer-bg",
     "--menu-glass-bg",
-    "--menu-overlay-bg",
-    "--titlebar-menu-bg",
     "--header-chip-bg",
-    "--lens-bg",
-    "--badge-bg",
-    "--content-card-background",
   ]) {
     assert.match(
-      glassIntensityStyles,
-      new RegExp(
-        `${alias}: var\\(--global-liquid-glass-(?:color|background)\\)`,
-      ),
-      `${alias} must use the global liquid-glass recipe`,
+      immersiveLight,
+      new RegExp(`${alias}: var\\(--immersive-glass-color\\)`),
+      `${alias} must use the immersive glass color`,
     );
   }
 
-  for (const colorMixInput of [
-    "--glass-fill",
-    "--glass-fill-soft",
-    "--menu-glass-bg",
-    "--header-chip-bg",
+  for (const alias of ["--glass-card", "--content-card-background"]) {
+    assert.match(
+      immersiveLight,
+      new RegExp(`${alias}: var\\(--immersive-glass-background\\)`),
+      `${alias} must use the immersive glass background`,
+    );
+  }
+
+  for (const alias of [
+    "--menu-overlay-bg",
+    "--titlebar-menu-bg",
+    "--lens-bg",
+    "--badge-bg",
   ]) {
     assert.match(
-      glassIntensityStyles,
-      new RegExp(`${colorMixInput}: var\\(--global-liquid-glass-color\\)`),
-      `${colorMixInput} must stay color-valued for color-mix consumers`,
+      immersiveLight,
+      new RegExp(`${alias}: var\\(--immersive-overlay-background\\)`),
+      `${alias} must use the denser immersive overlay plane`,
     );
   }
 });

@@ -112,7 +112,7 @@ function GlassStack() {
   );
 }
 
-function LiquidGlassComparison() {
+function ImmersiveLightGlassComparison() {
   return (
     <main
       style={{
@@ -121,7 +121,7 @@ function LiquidGlassComparison() {
         background: "var(--shell-bg)",
         color: "var(--ink)",
       }}
-      data-testid="liquid-glass-comparison"
+      data-testid="immersive-light-glass-comparison"
     >
       <div
         style={{
@@ -171,13 +171,13 @@ function LiquidGlassComparison() {
 }
 
 const meta = {
-  id: "liquid-glass",
+  id: "immersive-light-glass",
   title: "Design/Immersive Light Glass",
-  component: LiquidGlassComparison,
+  component: ImmersiveLightGlassComparison,
   parameters: {
     controls: { disable: true },
   },
-} satisfies Meta<typeof LiquidGlassComparison>;
+} satisfies Meta<typeof ImmersiveLightGlassComparison>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

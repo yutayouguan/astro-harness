@@ -22,14 +22,12 @@
 @import "./tokens/semantic-light.css" layer(tokens.semantic);
 @import "./tokens/semantic-dark.css" layer(tokens.semantic);
 @import "./tokens/component/glass.css" layer(tokens.component);
-@import "./tokens/component/liquid-glass.css" layer(tokens.component);
 @import "./tokens/component/menu.css" layer(tokens.component);
 @import "./tokens/component/header.css" layer(tokens.component);
 @import "./tokens/component/badge.css" layer(tokens.component);
 @import "./tokens/component/segmented.css" layer(tokens.component);
 @import "./tokens/tone-context.css" layer(overrides);
 @import "./tokens/unified-color.css" layer(overrides);
-@import "./tokens/glass-intensity.css" layer(overrides);
 @import "./tokens/immersive-light.css" layer(overrides);
 @import "./tokens/icon-preferences.css" layer(overrides);
 @import "./tokens/a11y.css" layer(overrides);

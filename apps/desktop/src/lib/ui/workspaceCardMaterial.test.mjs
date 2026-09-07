@@ -10,8 +10,8 @@ const a11y = await readFile(
   new URL("../../styles/tokens/a11y.css", import.meta.url),
   "utf8",
 );
-const glassIntensity = await readFile(
-  new URL("../../styles/tokens/glass-intensity.css", import.meta.url),
+const immersiveLight = await readFile(
+  new URL("../../styles/tokens/immersive-light.css", import.meta.url),
   "utf8",
 );
 const cron = await readFile(
@@ -88,34 +88,27 @@ test("workspace content cards become solid for accessibility preferences", () =>
   );
 });
 
-test("workspace content cards follow continuous liquid glass intensity", () => {
-  const block = rule(glassIntensity, "[data-glass-intensity]");
+test("workspace content cards follow continuous immersive light intensity", () => {
+  const block = rule(immersiveLight, "[data-glass-intensity]");
   assert.ok(block, "missing continuous glass intensity overrides");
   assert.match(
     block,
-    /--glass-blur-scale:\s*var\(--liquid-glass-blur-scale\);/,
+    /--glass-blur-scale:\s*calc\(1\.4 \* var\(--glass-intensity, 0\.64\)\);/,
   );
   assert.match(
     block,
-    /--global-liquid-glass-border:\s*var\(--liquid-glass-edge\);/,
+    /--content-card-border:\s*var\(--immersive-glass-border\);/,
   );
   assert.match(
     block,
-    /--global-liquid-glass-background:[\s\S]*?--liquid-glass-sheen/,
+    /--content-card-background:\s*var\(--immersive-glass-background\);/,
   );
+  assert.match(block, /--content-card-shadow:[\s\S]*?--immersive-glass-shadow/);
   assert.match(
     block,
-    /--content-card-border:\s*var\(--global-liquid-glass-border\);/,
+    /--content-card-backdrop:\s*var\(--immersive-glass-backdrop\);/,
   );
-  assert.match(
-    block,
-    /--content-card-background:\s*var\(--global-liquid-glass-background\);/,
-  );
-  assert.match(
-    block,
-    /--content-card-backdrop:\s*var\(--global-liquid-glass-backdrop\);/,
-  );
-  assert.doesNotMatch(glassIntensity, /data-glass="/);
+  assert.doesNotMatch(immersiveLight, /data-glass="/);
 });
 
 test("content cards keep tone in accents rather than their base fill", () => {

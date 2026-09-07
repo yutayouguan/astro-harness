@@ -13,29 +13,18 @@ const [tokens, shell, index, app, intensity, wallpaper] = await Promise.all(
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
-test("immersive light overrides the former liquid recipe after intensity mapping", () => {
-  assert.ok(
-    index.indexOf("tokens/immersive-light.css") >
-      index.indexOf("tokens/glass-intensity.css"),
-  );
-  for (const token of [
-    "--global-liquid-glass-color",
-    "--global-liquid-glass-background",
-    "--global-liquid-glass-border",
-    "--global-liquid-glass-backdrop",
-  ]) {
-    assert.match(tokens, new RegExp(`${token}: var\\(--immersive-`));
-  }
+test("immersive light is the only active material recipe", () => {
+  assert.ok(index.indexOf("tokens/immersive-light.css") > 0);
+  assert.doesNotMatch(index, /liquid-glass\.css|glass-intensity\.css/);
   assert.match(
     tokens,
-    /--global-liquid-glass-shadow:[\s\S]*?var\(--immersive-glass-shadow\)/,
+    /--content-card-background:\s*var\(--immersive-glass-background\)/,
   );
-  assert.match(tokens, /--liquid-glass-tint:\s*var\(--immersive-glass-color\)/);
-  assert.match(tokens, /--liquid-glass-sheen:/);
   assert.match(
     tokens,
-    /--liquid-glass-backdrop:\s*var\(--immersive-glass-backdrop\)/,
+    /--menu-overlay-bg:\s*var\(--immersive-overlay-background\)/,
   );
+  assert.doesNotMatch(tokens, /--liquid-glass-|--global-liquid-glass-/);
 });
 
 test("environment color follows wallpaper, unified color, then active tone", () => {

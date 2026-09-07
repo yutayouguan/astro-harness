@@ -4,7 +4,7 @@
 
 .body-row {
   --sidebar-chrome-sheen: var(
-    --liquid-glass-sheen,
+    --immersive-glass-light-field,
     linear-gradient(
       165deg,
       color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
@@ -13,7 +13,7 @@
   );
   --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
   --sidebar-chrome-filter: var(
-    --global-liquid-glass-backdrop,
+    --immersive-glass-backdrop,
     blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
       saturate(var(--glass-saturate, 1.25))
   );
@@ -21,7 +21,7 @@
 
 .sidebar {
   --sidebar-chrome-sheen: var(
-    --liquid-glass-sheen,
+    --immersive-glass-light-field,
     linear-gradient(
       165deg,
       color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
@@ -30,7 +30,7 @@
   );
   --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
   --sidebar-chrome-filter: var(
-    --global-liquid-glass-backdrop,
+    --immersive-glass-backdrop,
     blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
       saturate(var(--glass-saturate, 1.25))
   );

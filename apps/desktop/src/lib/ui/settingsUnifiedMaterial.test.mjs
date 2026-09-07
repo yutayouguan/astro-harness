@@ -10,7 +10,7 @@ const [entry, preview, material] = await Promise.all(
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
-test("unified settings material loads after the legacy style bundle", () => {
+test("unified settings material loads after shared feature styles", () => {
   assert.ok(
     entry.indexOf("./styles/features/settings-material-unified.css") >
       entry.indexOf("./styles/index.css"),
@@ -30,8 +30,8 @@ test("settings expose one shared inset and selected material contract", () => {
   ]) {
     assert.match(
       material,
-      new RegExp(`${token}: var\\(\\s*--global-liquid-glass-`),
-      `${token} must bind directly to global liquid glass`,
+      new RegExp(`${token}: var\\(\\s*--immersive-glass-`),
+      `${token} must bind directly to immersive glass`,
     );
   }
 
@@ -56,7 +56,7 @@ test("settings expose one shared inset and selected material contract", () => {
   assert.match(material, /> :is\(\.prefs-card, \.prefs-section\)/);
   assert.match(
     material,
-    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(--settings-panel-shadow,[\s\S]*?backdrop-filter:\s*none;/,
+    /> :is\(\.prefs-card, \.prefs-section\)\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--settings-panel-radius,[\s\S]*?background-clip:\s*padding-box;[\s\S]*?box-shadow:\s*var\(\s*--settings-panel-shadow,[\s\S]*?backdrop-filter:\s*none;/,
   );
   assert.match(
     material,
