@@ -1,10 +1,5 @@
 /** 偏好设置（主题、语言、日志诊断、关于）。 */
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -82,6 +77,8 @@ import {
 } from "../../lib/diagnostics/logView";
 import {
   diagnosticLogLevel,
+  type DiagnosticLogTimeRange,
+  type LogSourceFilter,
   useDiagnosticsSettings,
 } from "../../hooks/settings/useDiagnosticsSettings";
 import { AppMorphIcon } from "../icons/MorphIcon";
@@ -581,140 +578,53 @@ export default function PreferencesPanel({
     }
   };
 
-  const hasSession = Boolean(activeSessionId);
-  const [scope, setScope] = useState<LogScope>(hasSession ? "current" : "all");
-  const [level, setLevel] = useState<LogLevelFilter>("all");
-  const [lines, setLines] = useState<number>(50);
-  const [source, setSource] = useState<LogSourceFilter>("both");
-  const [timeRange, setTimeRange] = useState<DiagnosticLogTimeRange>("1h");
-  const [customSince, setCustomSince] = useState(() =>
-    toLocalDateTimeInput(Date.now() - 60 * 60 * 1_000),
-  );
-  const [customUntil, setCustomUntil] = useState(() =>
-    toLocalDateTimeInput(Date.now()),
-  );
-  const [liveLogs, setLiveLogs] = useState(true);
-  const [manualSession, setManualSession] = useState("");
-  const [turnId, setTurnId] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [logSearch, setLogSearch] = useState("");
-  const [logsCopied, setLogsCopied] = useState(false);
-  const [rows, setRows] = useState<AgentLogLine[]>([]);
-  const [diagnosticsStatus, setDiagnosticsStatus] =
-    useState<DiagnosticsStatusDto | null>(null);
-  const [diagnosticsStatusError, setDiagnosticsStatusError] = useState("");
-  const [diagnosticsStatusBusy, setDiagnosticsStatusBusy] = useState(false);
-  const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
-  const [diagnosticsExportPath, setDiagnosticsExportPath] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [queried, setQueried] = useState(false);
-  const [logsUpdatedAt, setLogsUpdatedAt] = useState<string | null>(null);
-  const logRequestGenerationRef = useRef(0);
-  const logRequestInFlightRef = useRef(false);
-  const logRowsSignatureRef = useRef("");
-  const logListRef = useRef<HTMLUListElement | null>(null);
-  const normalizedLogSearch = logSearch.trim().toLowerCase();
-  const visibleLogRows = normalizedLogSearch
-    ? rows.filter((row) =>
-        `${row.source} ${row.raw}`.toLowerCase().includes(normalizedLogSearch),
-      )
-    : rows;
-  const diagnosticCards: DiagnosticStatusCardModel[] = diagnosticsStatus
-    ? [
-        {
-          id: "backend",
-          label: t("prefs.diag.status.backend"),
-          value: t(
-            diagnosticsStatus.backendHealthy
-              ? "prefs.diag.status.healthy"
-              : "prefs.diag.status.unavailable",
-          ),
-          detail: diagnosticsStatus.backendHealthy
-            ? t("prefs.diag.status.backendDetail", {
-                endpoint: diagnosticsStatus.backendEndpoint.replace(
-                  /^https?:\/\//,
-                  "",
-                ),
-              })
-            : t("prefs.diag.status.unavailable"),
-          state: diagnosticsStatus.backendHealthy ? "healthy" : "error",
-        },
-        {
-          id: "provider",
-          label: t("prefs.diag.status.provider"),
-          value: `${diagnosticsStatus.providerEnabled}/${diagnosticsStatus.providerTotal}`,
-          detail: diagnosticsStatus.providerError
-            ? t("prefs.diag.status.unavailable")
-            : diagnosticsStatus.activeProviderName ||
-                diagnosticsStatus.activeProviderId
-              ? t("prefs.diag.status.providerDetail", {
-                  provider:
-                    diagnosticsStatus.activeProviderName ??
-                    diagnosticsStatus.activeProviderId ??
-                    "",
-                })
-              : t("prefs.diag.status.noneActive"),
-          state: diagnosticsStatus.providerError
-            ? "error"
-            : diagnosticsStatus.providerEnabled ===
-                  diagnosticsStatus.providerTotal &&
-                diagnosticsStatus.providerTotal > 0
-              ? "healthy"
-              : "warning",
-        },
-        {
-          id: "mcp",
-          label: t("prefs.diag.status.mcp"),
-          value: `${diagnosticsStatus.mcpConnected}/${diagnosticsStatus.mcpTotal}`,
-          detail: diagnosticsStatus.mcpError
-            ? t("prefs.diag.status.unavailable")
-            : diagnosticsStatus.mcpTotal === 0
-              ? t("prefs.diag.status.mcpNone")
-              : diagnosticsStatus.mcpRetrying > 0
-                ? t("prefs.diag.status.mcpRetrying", {
-                    count: String(diagnosticsStatus.mcpRetrying),
-                  })
-                : diagnosticsStatus.mcpConnected === diagnosticsStatus.mcpTotal
-                  ? t("prefs.diag.status.mcpReady")
-                  : t("prefs.diag.status.mcpDisconnected", {
-                      count: String(
-                        diagnosticsStatus.mcpTotal -
-                          diagnosticsStatus.mcpConnected,
-                      ),
-                    }),
-          state: diagnosticsStatus.mcpError
-            ? "error"
-            : diagnosticsStatus.mcpTotal === 0
-              ? "unknown"
-              : diagnosticsStatus.mcpRetrying > 0 ||
-                  diagnosticsStatus.mcpConnected < diagnosticsStatus.mcpTotal
-                ? "warning"
-                : "healthy",
-        },
-        {
-          id: "database",
-          label: t("prefs.diag.status.database"),
-          value: diagnosticsStatus.databaseJournalMode,
-          detail:
-            diagnosticsStatus.databaseHealthy &&
-            diagnosticsStatus.databaseSchemaVersion != null
-              ? t("prefs.diag.status.databaseDetail", {
-                  version: String(diagnosticsStatus.databaseSchemaVersion),
-                })
-              : t("prefs.diag.status.unavailable"),
-          state: diagnosticsStatus.databaseHealthy ? "healthy" : "error",
-        },
-      ]
-    : (["backend", "provider", "mcp", "database"] as const).map((id) => ({
-        id,
-        label: t(`prefs.diag.status.${id}` as MessageKey),
-        value: diagnosticsStatusBusy ? t("prefs.diag.status.checking") : "—",
-        detail: diagnosticsStatusError
-          ? t("prefs.diag.status.unavailable")
-          : t("prefs.diag.status.waiting"),
-        state: "unknown" as const,
-      }));
+  const {
+    hasSession,
+    scope,
+    setScope,
+    level,
+    setLevel,
+    lines,
+    setLines,
+    source,
+    setSource,
+    timeRange,
+    setTimeRange,
+    customSince,
+    setCustomSince,
+    customUntil,
+    setCustomUntil,
+    liveLogs,
+    setLiveLogs,
+    manualSession,
+    setManualSession,
+    turnId,
+    setTurnId,
+    showAdvanced,
+    setShowAdvanced,
+    logSearch,
+    setLogSearch,
+    logsCopied,
+    rows,
+    visibleLogRows,
+    diagnosticCards,
+    diagnosticsStatusBusy,
+    exportingDiagnostics,
+    diagnosticsExportPath,
+    busy,
+    errorMsg,
+    queried,
+    logsUpdatedAt,
+    logListRef,
+    refreshLogs,
+    refreshDiagnosticsStatus,
+    copyLogs,
+    exportDiagnostics,
+  } = useDiagnosticsSettings({
+    active: activeCategory === "diagnostics",
+    activeSessionId,
+    t,
+  });
 
   const themeOptions: {
     id: ThemeMode;
@@ -895,159 +805,6 @@ export default function PreferencesPanel({
       Icon: IconAtom,
     },
   ];
-
-  const refreshRef = useRef<(silent?: boolean) => Promise<void>>(
-    async () => {},
-  );
-
-  async function refreshLogs(silent = false) {
-    if (silent && logRequestInFlightRef.current) return;
-    const generation = ++logRequestGenerationRef.current;
-    const manual = manualSession.trim();
-    const effectiveSession =
-      manual || (scope === "current" ? (activeSessionId ?? null) : null);
-    const { sinceMs, untilMs } = diagnosticLogTimeBounds(
-      timeRange,
-      customSince,
-      customUntil,
-    );
-    if (sinceMs != null && untilMs != null && sinceMs > untilMs) {
-      logRequestInFlightRef.current = false;
-      if (!silent) setBusy(false);
-      setErrorMsg(t("prefs.diag.time.invalid"));
-      return;
-    }
-    logRequestInFlightRef.current = true;
-    const shouldFollow = liveLogs && (logListRef.current?.scrollTop ?? 0) < 24;
-    if (!silent) setBusy(true);
-    setErrorMsg("");
-    try {
-      const result = await invoke<AgentLogLine[]>("query_agent_logs", {
-        args: {
-          sessionId: effectiveSession || null,
-          turnId: turnId.trim() || null,
-          source,
-          lines,
-          minLevel: level === "issues" ? "WARN" : null,
-          sinceMs,
-          untilMs,
-        },
-      });
-      if (generation !== logRequestGenerationRef.current) return;
-      const signature = result
-        .map((row) => `${row.timestamp}\u0000${row.source}\u0000${row.raw}`)
-        .join("\u0001");
-      if (signature !== logRowsSignatureRef.current) {
-        logRowsSignatureRef.current = signature;
-        setRows(result);
-        if (shouldFollow) {
-          window.requestAnimationFrame(() =>
-            logListRef.current?.scrollTo(0, 0),
-          );
-        }
-      }
-      setQueried(true);
-      setLogsUpdatedAt(new Date().toISOString());
-    } catch (error) {
-      if (generation !== logRequestGenerationRef.current) return;
-      logRowsSignatureRef.current = "";
-      setRows([]);
-      setQueried(true);
-      setErrorMsg(error instanceof Error ? error.message : String(error));
-    } finally {
-      if (generation === logRequestGenerationRef.current) {
-        logRequestInFlightRef.current = false;
-        if (!silent) setBusy(false);
-      }
-    }
-  }
-  refreshRef.current = refreshLogs;
-
-  const refreshDiagnosticsStatus = useCallback(async () => {
-    setDiagnosticsStatusBusy(true);
-    setDiagnosticsStatusError("");
-    try {
-      setDiagnosticsStatus(
-        await invoke<DiagnosticsStatusDto>("get_diagnostics_status"),
-      );
-    } catch (error) {
-      setDiagnosticsStatus(null);
-      setDiagnosticsStatusError(
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setDiagnosticsStatusBusy(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeCategory !== "diagnostics") return;
-    const timer = setTimeout(() => {
-      void refreshRef.current();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [
-    activeCategory,
-    scope,
-    level,
-    lines,
-    source,
-    timeRange,
-    customSince,
-    customUntil,
-    manualSession,
-    turnId,
-  ]);
-
-  useEffect(() => {
-    if (activeCategory !== "diagnostics" || !liveLogs) return;
-    const timer = window.setInterval(() => {
-      void refreshRef.current(true);
-    }, 1_500);
-    return () => window.clearInterval(timer);
-  }, [activeCategory, liveLogs]);
-
-  useEffect(
-    () => () => {
-      logRequestGenerationRef.current += 1;
-      logRequestInFlightRef.current = false;
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (activeCategory === "diagnostics") void refreshDiagnosticsStatus();
-  }, [activeCategory, refreshDiagnosticsStatus]);
-
-  useEffect(() => {
-    if (!logsCopied) return;
-    const timer = window.setTimeout(() => setLogsCopied(false), 1800);
-    return () => window.clearTimeout(timer);
-  }, [logsCopied]);
-
-  async function copyLogs() {
-    const text = visibleLogRows.map((r) => `[${r.source}] ${r.raw}`).join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setLogsCopied(true);
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  async function exportDiagnostics() {
-    if (exportingDiagnostics) return;
-    setExportingDiagnostics(true);
-    setErrorMsg("");
-    try {
-      const path = await invoke<string | null>("export_diagnostics_bundle");
-      if (path) setDiagnosticsExportPath(path);
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : String(error));
-    } finally {
-      setExportingDiagnostics(false);
-    }
-  }
 
   return (
     <div
@@ -1652,7 +1409,6 @@ export default function PreferencesPanel({
                 </div>
               ))}
             </div>
-
           </section>
 
           <section className="prefs-card prefs-card--send-mode">
@@ -1661,17 +1417,13 @@ export default function PreferencesPanel({
                 <IconZap width={22} height={22} />
               </div>
               <div>
-                <h2 className="prefs-card-title">
-                  {t("prefs.chat.sendMode")}
-                </h2>
-                <p className="prefs-card-sub">
-                  {t("prefs.chat.sendModeDesc")}
-                </p>
+                <h2 className="prefs-card-title">{t("prefs.chat.sendMode")}</h2>
+                <p className="prefs-card-sub">{t("prefs.chat.sendModeDesc")}</p>
               </div>
             </div>
 
             <div
-              className="theme-options prefs-conversation-verbosity-options"
+              className="theme-options prefs-conversation-send-mode-options"
               role="radiogroup"
               aria-label={t("prefs.chat.sendMode")}
             >
@@ -1688,19 +1440,12 @@ export default function PreferencesPanel({
                     saveChatSendMode(id);
                   }}
                 >
-                  <span
-                    className="theme-option-icon lang-badge"
-                    aria-hidden
-                  >
+                  <span className="theme-option-icon lang-badge" aria-hidden>
                     {badge}
                   </span>
                   <span className="theme-option-text">
-                    <span className="theme-option-label">
-                      {t(labelKey)}
-                    </span>
-                    <span className="theme-option-desc">
-                      {t(descKey)}
-                    </span>
+                    <span className="theme-option-label">{t(labelKey)}</span>
+                    <span className="theme-option-desc">{t(descKey)}</span>
                   </span>
                   <span className="theme-option-check" aria-hidden />
                 </button>

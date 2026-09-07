@@ -16,6 +16,8 @@ const [
   updater,
   prototypePages,
   prototypeCss,
+  diagnosticsHook,
+  diagnosticsModel,
 ] = await Promise.all(
   [
     "../../styles/features/shell/layout/projects.css",
@@ -28,9 +30,11 @@ const [
     "../../hooks/chat/useChatDisplayPrefs.ts",
     "../../components/settings/TerminalSettingsPanel.tsx",
     "../../components/settings/CompressionSettingsCard.tsx",
-    "../../../src-tauri/src/commands/updater.rs",
+    "../../../src-tauri/src/commands/ui/updater.rs",
     "../../../../../designs/astro-wallpaper/settings-pages.jsx",
     "../../../../../designs/astro-wallpaper/settings-prototype.css",
+    "../../hooks/settings/useDiagnosticsSettings.ts",
+    "../settings/diagnosticsModel.ts",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
@@ -233,6 +237,7 @@ test("automatic compression hides expert controls behind native disclosure", () 
 });
 
 test("diagnostics and about have task-specific layouts", () => {
+  const diagnosticsRuntime = `${diagnosticsHook}\n${diagnosticsModel}`;
   assert.match(preferences, /prefs-category-stack--diagnostics/);
   assert.match(preferences, /prefs-card--diagnostics/);
   assert.match(preferences, /prefs-diag-status-grid/);
@@ -240,22 +245,22 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(preferences, /prefs-diag-filter-grid/);
   assert.match(preferences, /prefs-diag-search/);
   assert.match(preferences, /prefs-diag-live/);
-  assert.match(preferences, /setInterval\(\(\) =>/);
+  assert.match(diagnosticsRuntime, /setInterval\(/);
   assert.match(preferences, /DiagnosticLogTimeRange/);
-  assert.match(preferences, /sinceMs/);
-  assert.match(preferences, /untilMs/);
+  assert.match(diagnosticsRuntime, /sinceMs/);
+  assert.match(diagnosticsRuntime, /untilMs/);
   assert.match(preferences, /datetime-local/);
   assert.match(preferences, /visibleLogRows/);
-  assert.match(preferences, /diagnosticLogLevel/);
+  assert.match(diagnosticsRuntime, /diagnosticLogLevel/);
   assert.match(preferences, /prefs-diag-log-list/);
   assert.match(preferences, /const LINE_PRESETS = \[50, 100, 200, 500\]/);
   assert.match(preferences, /logsCopied/);
   assert.match(
-    preferences,
+    diagnosticsRuntime,
     /invoke<DiagnosticsStatusDto>\("get_diagnostics_status"\)/,
   );
   assert.match(
-    preferences,
+    diagnosticsRuntime,
     /invoke<string \| null>\("export_diagnostics_bundle"\)/,
   );
   assert.match(preferences, /prefs-diag-export-card/);
