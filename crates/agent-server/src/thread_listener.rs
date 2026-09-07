@@ -288,9 +288,16 @@ fn event_to_proto(thread_id: &str, event: &Event) -> proto::ThreadEvent {
                 value,
             )),
         ),
-        EventMsg::Error(error) | EventMsg::StreamError(error) => (
+        EventMsg::Error(error) => (
             event.id.clone(),
             Payload::Error(proto::ThreadError {
+                message: error.message.clone(),
+                error_type: error.error_type.clone(),
+            }),
+        ),
+        EventMsg::StreamError(error) => (
+            event.id.clone(),
+            Payload::Warning(proto::ThreadError {
                 message: error.message.clone(),
                 error_type: error.error_type.clone(),
             }),

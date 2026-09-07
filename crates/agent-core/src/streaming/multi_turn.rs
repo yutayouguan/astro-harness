@@ -674,20 +674,113 @@ pub(crate) async fn run_turn(
             }
         }
 
-        let sampling =
-            match run_sampling_request(&session, &streamer, &sampling_prompt, raw_rounds).await {
-                Ok(s) => s,
-                Err(err) => {
-                    return finish_task_error(
-                        &session,
-                        &turn_context,
-                        &streamer,
-                        err,
-                        saw_usage.then_some(total_usage),
-                    )
-                    .await;
+        let sampling = {
+            let mut stream_retries: usize = 0;
+            let mut connection_retries: usize = 0;
+            loop {
+                match run_sampling_request(&session, &streamer, &sampling_prompt, raw_rounds).await
+                {
+                    Ok(s) => break s,
+                    Err(err) => {
+                        if !super::retry::is_retryable(&err) {
+                            return finish_task_error(
+                                &session,
+                                &turn_context,
+                                &streamer,
+                                err,
+                                saw_usage.then_some(total_usage),
+                            )
+                            .await;
+                        }
+                        if cancellation_token.is_cancelled() || pause.is_cancelled() {
+                            return finish_task_cancelled(
+                                &session,
+                                &turn_context,
+                                &streamer,
+                                saw_usage.then_some(total_usage),
+                            )
+                            .await;
+                        }
+                        if super::retry::is_connection_failure(&err) {
+                            connection_retries += 1;
+                            let delay = super::retry::connection_backoff(connection_retries);
+                            tracing::warn!(
+                                attempt = connection_retries,
+                                delay_ms = delay.as_millis() as u64,
+                                error = %err,
+                                "sampling connection failure, retrying (unbounded)"
+                            );
+                            emit(
+                                &session,
+                                &turn_context,
+                                EventMsg::StreamError(agent_protocol::ErrorEvent {
+                                    message: "Reconnecting... waiting for network".into(),
+                                    error_type: "reconnecting".into(),
+                                }),
+                            )
+                            .await;
+                            tokio::select! {
+                                () = tokio::time::sleep(delay) => continue,
+                                () = cancellation_token.cancelled() => {
+                                    return finish_task_cancelled(
+                                        &session,
+                                        &turn_context,
+                                        &streamer,
+                                        saw_usage.then_some(total_usage),
+                                    )
+                                    .await;
+                                }
+                            }
+                        } else {
+                            stream_retries += 1;
+                            if stream_retries > super::retry::MAX_STREAM_RETRIES {
+                                return finish_task_error(
+                                    &session,
+                                    &turn_context,
+                                    &streamer,
+                                    err,
+                                    saw_usage.then_some(total_usage),
+                                )
+                                .await;
+                            }
+                            let delay = super::retry::backoff(stream_retries);
+                            tracing::warn!(
+                                attempt = stream_retries,
+                                max = super::retry::MAX_STREAM_RETRIES,
+                                delay_ms = delay.as_millis() as u64,
+                                error = %err,
+                                "sampling transient error, retrying"
+                            );
+                            emit(
+                                &session,
+                                &turn_context,
+                                EventMsg::StreamError(agent_protocol::ErrorEvent {
+                                    message: format!(
+                                        "Reconnecting... {}/{}",
+                                        stream_retries,
+                                        super::retry::MAX_STREAM_RETRIES
+                                    ),
+                                    error_type: "reconnecting".into(),
+                                }),
+                            )
+                            .await;
+                            tokio::select! {
+                                () = tokio::time::sleep(delay) => continue,
+                                () = cancellation_token.cancelled() => {
+                                    return finish_task_cancelled(
+                                        &session,
+                                        &turn_context,
+                                        &streamer,
+                                        saw_usage.then_some(total_usage),
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                    }
                 }
-            };
+            }
+        };
         let SamplingRequest {
             stream: raw_stream,
             provider: sampling_provider,

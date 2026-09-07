@@ -1107,6 +1107,7 @@ export const zh = {
   "status.error": "出错",
   "status.none": "未选择",
   "status.unknownError": "未知错误",
+  "status.reconnecting": "正在重连…",
   "status.emptyResponse": "模型没有返回内容，请重试或更换模型。",
 
   welcome:
@@ -4375,6 +4376,7 @@ export const en: Record<MessageKey, string> = {
   "status.error": "Error",
   "status.none": "None",
   "status.unknownError": "Unknown error",
+  "status.reconnecting": "Reconnecting…",
   "status.emptyResponse":
     "The model returned no content. Please retry or switch models.",
 

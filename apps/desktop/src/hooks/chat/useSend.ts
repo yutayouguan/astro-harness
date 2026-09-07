@@ -949,6 +949,10 @@ export function useSend(deps: UseSendDeps) {
               if (pendingModeSwitch) {
                 onModeSwitchPrompt?.(pendingModeSwitch);
               }
+            } else if (payload.type === "stream_error") {
+              setStatusDetail(
+                payload.message || t("status.reconnecting"),
+              );
             } else if (payload.type === "error") {
               if (streamRafRef.current != null) {
                 cancelAnimationFrame(streamRafRef.current);

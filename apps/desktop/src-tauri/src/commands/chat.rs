@@ -165,6 +165,10 @@ pub enum ChatStreamEvent {
     Error {
         message: String,
     },
+    StreamError {
+        message: String,
+        error_type: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]

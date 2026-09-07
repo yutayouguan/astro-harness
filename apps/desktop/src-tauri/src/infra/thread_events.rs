@@ -2006,12 +2006,21 @@ fn map_thread_event(event: proto::ThreadEvent) -> Vec<ChatStreamEvent> {
         Some(Payload::Error(error)) => vec![ChatStreamEvent::Error {
             message: error.message,
         }],
-        Some(Payload::Warning(warning)) => vec![activity(
-            turn_id,
-            "warning",
-            serde_json::json!({"message":warning.message,"error_type":warning.error_type})
-                .to_string(),
-        )],
+        Some(Payload::Warning(warning)) => {
+            if warning.error_type == "reconnecting" {
+                vec![ChatStreamEvent::StreamError {
+                    message: warning.message,
+                    error_type: warning.error_type,
+                }]
+            } else {
+                vec![activity(
+                    turn_id,
+                    "warning",
+                    serde_json::json!({"message":warning.message,"error_type":warning.error_type})
+                        .to_string(),
+                )]
+            }
+        }
         Some(Payload::TurnComplete(complete)) => {
             let mut events = Vec::new();
             if complete.has_error {

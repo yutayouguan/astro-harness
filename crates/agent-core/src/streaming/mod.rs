@@ -26,6 +26,8 @@ mod maintenance;
 pub(crate) mod multi_turn;
 /// `ProviderStreamer`：Streaming trait 实现 + fallback 接入。
 mod provider;
+/// 采样请求瞬态错误重试与指数退避。
+mod retry;
 /// 显式 Run 阶段 / requirements。
 pub mod run_state;
 /// 迭代预算耗尽后的强制总结轮。
