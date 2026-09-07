@@ -356,7 +356,7 @@ Absorb 列表中的技能在批准后被 `set_enabled(false)`，不删文件。
 | `crates/agent-evolution/src/judge.rs` | 泛化 judge 提示词 |
 | `crates/agent-evolution/src/proposal.rs` | 提案落盘/批准/回滚 |
 | `crates/agent-memory/src/config.rs` | `EvolutionSearch`（含 max_eval_examples / max_llm_calls / population_size）、`EvolutionCurator`（含 llm_diagnose / max_llm_calls） |
-| `apps/desktop/src-tauri/src/evolution_run_commands.rs` | Tauri 命令：search 主循环（注入 LLM 调用）、fitness_score、holdout、sandbox、curator LLM 诊断 |
+| `apps/desktop/src-tauri/src/commands/evolution_run.rs` | Tauri 命令：search 主循环（注入 LLM 调用）、fitness_score、holdout、sandbox、curator LLM 诊断 |
 
 ---
 

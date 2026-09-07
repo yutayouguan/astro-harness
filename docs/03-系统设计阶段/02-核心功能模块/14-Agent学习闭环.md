@@ -5,10 +5,10 @@ Astro 将「可复用工作流」固化为 **Skills（程序性记忆）**，将
 | 层 | 状态 | 说明 |
 |----|------|------|
 | **运行时闭环** | 本期已落地 | Agent 用 `skills` / `memory` 建改；回合后复杂任务 nudge；`curate` 修剪建议 |
-| **记忆 review** | 已有 | 回合后 `auxiliary.background_review` 精炼 MEMORY/USER（见 [`memory.md`](./memory.md)） |
+| **记忆 review** | 已有 | 回合后 `auxiliary.background_review` 精炼 MEMORY/USER（见 [`10-记忆系统.md`](./10-记忆系统.md)） |
 | **离线进化** | 已落地（Rust GEPA-lite + 可选 DSPy） | 读轨迹→反思/搜索产候选→门禁/打分→应用内待审批；完整外部 GEPA 为可选扩展 |
 
-设计规格：[`docs/superpowers/specs/2026-07-17-agent-learning-loop-design.md`](./superpowers/specs/2026-07-17-agent-learning-loop-design.md)。
+设计规格：[`superpowers/specs/2026-07-17-agent-learning-loop-design.md`](../../superpowers/specs/2026-07-17-agent-learning-loop-design.md)。
 
 ---
 
@@ -47,19 +47,19 @@ Astro 将「可复用工作流」固化为 **Skills（程序性记忆）**，将
 | `curate` | 启用列表 + 上次加载时间 + 闲置建议 |
 | `manage` | `create` / `update` / `patch` / `delete`（仅 Agent `workspace/skills/`） |
 
-`patch`：`old_string` 须在 SKILL.md 中**唯一**匹配，再替换为 `new_string`（对齐 `file_ops.patch`）。
+`patch`：`old_string` 须在 SKILL.md 中**唯一**匹配，再替换为 `new_string`（对齐 `apply_patch`）。
 
 ---
 
 ## 配置
 
-路径：`~/.astro/config.yaml` 的 `learning:` 段。
+路径：`~/.astro/config.toml` 的 `[learning]` 段。
 
-```yaml
-learning:
-  nudge_enabled: true                 # 复杂任务后是否在下一轮注入提示
-  complex_task_tool_threshold: 5      # 本轮工具次数达到该值视为「复杂」
-  unused_skill_days: 30               # curate 将更久未加载的技能标为闲置建议
+```toml
+[learning]
+nudge_enabled = true                 # 复杂任务后是否在下一轮注入提示
+complex_task_tool_threshold = 5      # 本轮工具次数达到该值视为「复杂」
+unused_skill_days = 30               # curate 将更久未加载的技能标为闲置建议
 ```
 
 | 键 | 默认 | 说明 |
@@ -74,10 +74,10 @@ learning:
 
 ## 与记忆系统的关系
 
-- **MEMORY / USER**：有界事实与偏好；可选 `write_approval`、background review、入梦。见 [`memory.md`](./memory.md)。  
+- **MEMORY / USER**：有界事实与偏好；可选 `write_approval`、background review、入梦。见 [`10-记忆系统.md`](./10-记忆系统.md)。  
 - **Skills**：可执行流程与脚本索引；Agent 主动 `manage`，本系统**不**在 Done 后自动写 Skill。  
 - **DecisionLog**：`~/.astro/learning/decisions.jsonl`；近期 `ToolFailure` 可强化「把正确路径 patch 进 skill」提示。  
-- **search**：跨会话原文 / 记忆 / 知识库按需召回；摘要仍由模型完成，不自动入库。
+- **context_search**：跨会话原文 / 记忆 / 知识库按需召回；摘要仍由模型完成，不自动入库。
 
 ---
 
@@ -85,7 +85,7 @@ learning:
 
 离线遗传优化：读取执行轨迹 → 生成 Skill/提示变体 → 测试与体积门禁 → **应用内人工审批**（始终人审，非 git PR 自动流）。独立流水线，不改变运行时默认行为。
 
-**专页文档**（架构 / 配置 / 三种模式 / 提案 / DSPy 契约 / 命令速查）：[`evolution.md`](./evolution.md)。
+**专页文档**（架构 / 配置 / 三种模式 / 提案 / DSPy 契约 / 命令速查）：[`13-离线进化引擎.md`](./13-离线进化引擎.md)。
 
 **已落地（Rust 内置引擎）**：模型服务页「离线进化」子 Tab 可配置 `evolution.enabled`、`reflection` / `judge` 路由与门禁（run_tests / max_skill_bytes / min_judge_score；`require_pr` 为始终人审不变量），并新增：
 
@@ -137,4 +137,4 @@ crate：[`evolution::search`](../evolution/src/search.rs)（`pareto_front` / `se
 | judge | 对候选判分 | 可省或中等模型 |
 | target | 被优化对象实际运行 | 生产主模型 |
 
-详见规格 [`specs/2026-07-17-agent-learning-loop-design.md`](./superpowers/specs/2026-07-17-agent-learning-loop-design.md)。
+详见规格 [`specs/2026-07-17-agent-learning-loop-design.md`](../../superpowers/specs/2026-07-17-agent-learning-loop-design.md)。

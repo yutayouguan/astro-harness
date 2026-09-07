@@ -29,14 +29,14 @@
 3. 保持「原生 SDK per vendor」而非强行 OpenAI 化——Astro 的 Google Interactions 迁移已印证这个方向正确。
 
 ### 已落地（本轮）
-- `common::media::{MediaAsset, MediaKind, MediaRef}`：对齐 Agno Image/Audio/Video/File 的统一引用
+- `types::media::{MediaAsset, MediaKind, MediaRef}`：对齐 Agno Image/Audio/Video/File 的统一引用
 - `Message.media` + `ToolResult.media`：结构化附件；发给 LLM 仍用文本摘要
 - 生成工具（`image_gen` / `tts` / `video_gen` / `music_gen`）附加 `astro_media_v1:` sidecar
 - 流事件 `MultiTurnStreamItem::ToolResult.media` → proto `ToolCallEvent.media` → Tauri/UI
 - 前端 `MsgActivity` 优先用结构化 `activity.media`，回落 `parseGeneratedMedia`（含 sidecar）
 - session schema **v15** `messages.media_json`：用户附图 / 工具媒体落盘；hydrate 优先读列，tool 回落 sidecar
 - **已做**：`ChatContentPart::{AudioUrl,VideoUrl}`；Gemini native/Interactions 走 inlineData；OpenAI/Anthropic 回落文本标注；`to_provider_messages` 映射 Parts + `Message.media`
-- **Model 一等公民**：`common::{ModelSpec, ModelRole}`（`provider:model_id` 简写）；`AgentLoop::set_model` / `set_role_model`；`set_fallback_models` / `set_role_fallback_models`（糖，复用 `chat_targets`）；Team 成员 / `spawn_agent` 可选 `model` 覆盖子 Agent 模型
+- **Model 一等公民**：`types::{ModelSpec, ModelRole}`（`provider:model_id` 简写）；`AgentLoop::set_model` / `set_role_model`；`set_fallback_models` / `set_role_fallback_models`（糖，复用 `chat_targets`）；Team 成员 / `spawn_agent` 可选 `model` 覆盖子 Agent 模型
 
 ## 二、统一工具调用与 Agent 生命周期
 
@@ -100,7 +100,7 @@
 关键路径：
 - `crates/agent-core/src/prompt/context.rs`
 - `crates/agent-core/src/prompt/context_usage.rs`
-- `crates/agent-session/src/store/messages.rs`(`compact_and_split`)
+- `crates/agent-session/src/store/response_items.rs`（`compact_and_split`）
 
 ### 可借鉴
 1. **统一 `ContextSource` trait + 预算**：session / memory / FTS /（未来）KB / inject 各自 `contribute(budget)`，替代在拼 prompt 处堆叠逻辑。
@@ -135,12 +135,12 @@ messages 中 tool 结果超阈值
   → Provider 视图用 compressed_content；DB/UI 仍保留原文
   → 无辅模型目标或失败时回退 head/tail
 ```
-与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。术语见 [`docs/context-compression.md`](context-compression.md)「Provider 视图」。
+与现有压实互补：压实管**会话生命周期**，压缩管**单次 run 的 context 预算**。术语见 [`docs/04-详细设计阶段/03-记忆与上下文/06-上下文压缩工业级实现.md`](../04-详细设计阶段/03-记忆与上下文/06-上下文压缩工业级实现.md)「Provider 视图」。
 
 ### 已落地（本轮）
-- `common::Message.compressed_content` + session schema v14 `messages.compressed_content`
+- item metadata `astro_compressed_output` + session DB `compressed_content` 列
 - `agent::compression::ToolCompressionManager`：条数兜底（≥12）+ 窗口分阶段 Soft/Medium/Hard；`set_context_window` 注入模型窗口
-- **工业级 Run 内维护**：`maintain_tool_context` = spill（≥16KiB）+ prune + **Agno 式 LLM 逐条摘要**（失败回退 head/tail）+ thrashing；详见 [`docs/context-compression.md`](context-compression.md)
+- **工业级 Run 内维护**：`maintain_tool_context` = spill（≥16KiB）+ prune + **Agno 式 LLM 逐条摘要**（失败回退 head/tail）+ thrashing；详见 [`docs/04-详细设计阶段/03-记忆与上下文/06-上下文压缩工业级实现.md`](../04-详细设计阶段/03-记忆与上下文/06-上下文压缩工业级实现.md)
 - `agent::exec::tool_llm_compress`：`AuxiliaryTask::Compaction`，标记 `[astro:llm-compressed-tool-result]`
 - `AgentLoop::compress_tool_results_if_needed` 委托 `maintain_tool_context`
 - `to_provider_messages` 对 tool 角色优先发送压缩视图；FTS/UI 仍用原文
@@ -202,7 +202,7 @@ messages 中 tool 结果超阈值
 | UserProfile | `USER.md` | 无字段 schema |
 | UserMemory | `MEMORY.md` + daily | 无 entity 图 |
 | SessionContext | session + compact | — |
-| LearnedKnowledge | skills + 运行时 manage/patch/curate | 部分：见 [`learning-loop.md`](./learning-loop.md)；无离线遗传进化 |
+| LearnedKnowledge | skills + 运行时 manage/patch/curate | 部分：见 [`agent-learning-loop-design.md`](../superpowers/specs/2026-07-17-agent-learning-loop-design.md)；无离线遗传进化 |
 | DecisionLog | usage/trace 旁路 | 已有 `~/.astro/learning/decisions.jsonl`；可强化 skill patch nudge |
 | EntityMemory | — | **缺** |
 
@@ -216,7 +216,7 @@ messages 中 tool 结果超阈值
 - `memory::decision_log::{DecisionEntry, DecisionKind, append_decision, list_recent}`
 - JSONL：`~/.astro/learning/decisions.jsonl`
 - 挂点：pending `reject` → `MemoryRejected`；工具执行失败 → `ToolFailure`
-- **运行时学习闭环（P1）：** Skills `patch` / `curate`、skill-usage、learning nudge — 见 [`learning-loop.md`](./learning-loop.md)
+- **运行时学习闭环（P1）：** Skills `patch` / `curate`、skill-usage、learning nudge — 见 [`agent-learning-loop-design.md`](../superpowers/specs/2026-07-17-agent-learning-loop-design.md)
 - **未做**：EntityMemory / Always 模式 / 离线遗传进化 / Done 后自动写 Skill
 
 ---
@@ -232,7 +232,7 @@ messages 中 tool 结果超阈值
 - 会话 FTS5、Skills、artifacts 索引；Provider 上 `supports_embedding` 仅**能力位预留**。
 - **基本缺失**：向量 DB、embedding 流水线、chunking、RAG 索引/检索。
 
-关键路径：`crates/agent-session/src/store/search.rs`(FTS)、`artifacts/src/db.rs`、`crates/agent-providers/src/api/trait_.rs`(`supports_embedding`)
+关键路径：`crates/agent-session/src/store/search.rs`(FTS)、`crates/agent-artifacts/src/db.rs`、`crates/agent-providers/src/api/trait_.rs`(`supports_embedding`)
 
 ### 可借鉴（若做 KB）
 1. **Content DB 先行**：文档登记 → 状态 → 删除连带清理；比一上来接向量更重要。
@@ -255,7 +255,7 @@ messages 中 tool 结果超阈值
 ### Astro
 - 本地多 SQLite：session（sessions/messages/FTS5）、usage、cron、subagents、artifacts。
 
-关键路径：`crates/agent-session/src/store/schema.rs`、`crates/agent-session/src/store/mod.rs`、`usage/src/db.rs`
+关键路径：`crates/agent-session/src/store/schema.rs`、`crates/agent-session/src/store/mod.rs`、`crates/agent-usage/src/db.rs`
 
 ### 可借鉴
 - 统一 **打开/迁移协议**（`path` + `migrate`），实现仍 rusqlite；**不要**做成跨域大一统 CRUD / ORM。
@@ -263,9 +263,9 @@ messages 中 tool 结果超阈值
 - Trace/eval 数据集可从现有 usage + session 导出。
 
 ### 已落地
-- `common::sqlite::{open_wal, delete_sqlite_files, SqliteStore, ExampleSqliteStore}`：共享 WAL 打开 + path/migrate 协议
+- `types::sqlite::{open_wal, delete_sqlite_files, SqliteStore, ExampleSqliteStore}`：共享 WAL 打开 + path/migrate 协议
 - 生产库均已统一 SQLite 连接约定：`UsageDb` / `SessionStore` / `KnowledgeDb` / `ArtifactDb` / `CronRunDb` / `AgentGraphStore`
-- 不合并多库、不上 Postgres；旧 `usage::sqlite_store` 已删除，一律用 `common::sqlite`
+- 不合并多库、不上 Postgres；旧 `usage::sqlite_store` 已删除，一律用 `types::sqlite`
 - Memory 仍为 Markdown + `MemoryOps`，不塞进 SQLite trait
 
 ---
@@ -279,7 +279,7 @@ messages 中 tool 结果超阈值
 - 独立 `mcp` crate：多服务器 Hub、按 Agent 配置持久化、工具发现缓存、Responses 原生 MCP namespace 与 Hub qualified key 桥接。
 - 传输：stdio + streamable HTTP。
 
-关键路径：`mcp/src/hub.rs`、`mcp/src/config.rs`、`mcp/src/names.rs`
+关键路径：`crates/agent-mcp/src/hub.rs`、`crates/agent-mcp/src/config.rs`、`crates/agent-mcp/src/names.rs`
 
 ### 可借鉴（边角）
 - 生命周期：connect / refresh / disconnect 与 Agent run 绑定更清晰。
@@ -336,7 +336,7 @@ P2  DecisionLog + Propose 写入（挂审批，扩展入梦/review）
 P3  Knowledge Content DB + FTS（可选再 embedding）
 P4  EntityMemory（有真实「记公司/项目」需求再上）
 —   MediaAsset + 结构化 ToolResult（§一；ChatContentPart 多模态 audio/video 入模已补）
-—   MCP / 多后端 DB：观望；SQLite 打开协议已收敛到 `common::sqlite`
+—   MCP / 多后端 DB：观望；SQLite 打开协议已收敛到 `types::sqlite`
 ```
 
 ---

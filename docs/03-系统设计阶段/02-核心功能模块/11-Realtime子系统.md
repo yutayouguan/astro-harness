@@ -70,7 +70,7 @@ Azure deployment name。
 - 长期密钥和临时 token 都不进入浏览器，浏览器只接收 SDP answer。
 
 Microsoft Learn 离线快照及逐项实现映射见
-[Azure OpenAI Realtime 参考](azure/realtime/README.md)。
+[Azure OpenAI Realtime 参考](../../azure/realtime/README.md)。
 
 ## 版本契约
 
@@ -193,7 +193,7 @@ Astro 当前生产路径由 WebView `getUserMedia` / WebRTC 或 PCM WebSocket �
 因此 Astro 不暴露一个只会握手的空入口。未来接入必须同时满足：包内 canonical path、
 协议/build 完全匹配、分片无关的有界 frame reader、子进程环境白名单、三平台 runtime
 依赖/签名校验，以及失败时回退现有 WebView 路径且不改变 durable `RealtimeItem`。完整设计见
-[Native Voice Helper 对齐设计](superpowers/specs/2026-09-04-native-voice-helper-alignment-design.md)。
+[Native Voice Helper 对齐设计](../../superpowers/specs/2026-09-04-native-voice-helper-alignment-design.md)。
 
 ## 验证矩阵
 

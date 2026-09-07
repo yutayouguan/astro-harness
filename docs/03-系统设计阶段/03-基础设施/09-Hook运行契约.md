@@ -13,7 +13,7 @@
 | Plugin | 进程级 bus，同步 callback | 可返回 typed `HookOutcome` 并影响流程 |
 | Command/MCP | 配置来自 user/project，绑定到 session runtime | 可按事件返回 block、permission、modify、context 或 keep-going |
 | Gateway | 扫描 `hooks/{name}/HOOK.yaml` | 当前为观察/通知 |
-| legacy Shell | `~/.astro/config.yaml` 的命令映射 | 异步观察，输出不参与决策 |
+| legacy Shell | `~/.astro/config.toml` 的命令映射 | 异步观察，输出不参与决策 |
 
 `dispatch()` 会为同一事件生成事件专属 payload，依次触达这些执行面，再聚合 Plugin 与 Command/MCP 的有效决策。Gateway/Shell 的存在不改变控制流。
 
@@ -82,7 +82,7 @@ Project 配置只在项目已信任时加载。每个 handler 根据事件、mat
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "terminal|apply_patch",
+        "matcher": "exec_command|apply_patch",
         "hooks": [
           {
             "type": "command",

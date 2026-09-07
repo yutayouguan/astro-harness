@@ -26,31 +26,27 @@ Google Gemini 对外提供三套 API，Astro 全部接入：
 
 ### `google`（推荐，对应 Interactions API）
 
-```yaml
-# ~/.astro/config.yaml
-providers:
-  - id: google
-    api_key: YOUR_GOOGLE_API_KEY  # 或环境变量 GOOGLE_API_KEY / GEMINI_API_KEY
-    model: gemini-3.5-flash       # 默认模型
+```toml
+# ~/.astro/config.toml（或环境变量 GOOGLE_API_KEY / GEMINI_API_KEY）
+# Google 为内置 Provider，通过 providers.json 或环境变量配置
+# 默认模型：gemini-3.5-flash
 ```
 
 - `ApiMode::Interactions`
-- 聊天走 `interactions_chat_stream`（`interactions_chat.rs`）
-- 多模态生成走 `interactions_http.rs` 各函数
+- 聊天与多模态生成统一走 `interactions_http.rs`
 - HTTP 请求头：`x-goog-api-key: {key}` + `Api-Revision: 2026-05-20`
 
 ### `gemini-native`（原生 generateContent）
 
-```yaml
-providers:
-  - id: gemini-native
-    api_key: YOUR_GOOGLE_API_KEY
-    model: gemini-3.1-pro
+```toml
+# ~/.astro/config.toml（或环境变量 GOOGLE_API_KEY / GEMINI_API_KEY）
+# gemini-native 为内置 Provider，通过 providers.json 或环境变量配置
+# 默认模型：gemini-3.1-pro
 ```
 
 - `ApiMode::GeminiNative`
 - API key 作 query 参数：`?key={key}&alt=sse`
-- 聊天走 `gemini_native_chat_stream`（`native_chat.rs`）
+- 聊天走 `interactions_http.rs` 内的原生 generateContent 流
 - 完整支持 `system_instruction`、`function_declarations`、thinking（思考链）
 
 ---
@@ -59,7 +55,7 @@ providers:
 
 ### 1. 对话（Chat）
 
-**代码**：`crates/agent-providers/src/google/interactions_chat.rs`
+**代码**：`crates/agent-providers/src/google/interactions_http.rs`
 
 | 功能 | 支持 |
 |------|------|
@@ -199,11 +195,10 @@ providers:
 providers/src/google/
 ├── mod.rs                  # 模块入口，GoogleProvider 类型别名
 ├── defaults.rs             # 默认模型 / BASE URL 常量
-├── interactions_chat.rs    # 对话流（Interactions API）
-├── interactions_http.rs    # TTS / 图片 / 视觉 / 视频理解 / 音频 / 音乐
+├── interactions_http.rs    # 对话流 + TTS / 图片 / 视觉 / 视频理解 / 音频 / 音乐
 ├── veo_http.rs             # Veo 视频生成 + TTS 模型默认值 + google_native_base
-├── native_chat.rs          # generateContent 原生对话流（gemini-native）
 ├── files_http.rs           # Files API 上传/删除
+├── tools.rs                # 工具声明转换
 └── robotics_http.rs        # Robotics-ER generateContent（特殊场景）
 ```
 
