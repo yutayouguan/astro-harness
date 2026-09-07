@@ -267,20 +267,19 @@ mod inventory_register_tests {
         let mut registry = ToolRegistry::new();
         register_all(&mut registry);
         for entry in registry.all_tools() {
-            assert!(
-                registry.runtime(&entry.name).is_some(),
-                "metadata tool `{}` has no CoreToolRuntime",
-                entry.name
-            );
+            let runtime = registry
+                .runtime(&entry.name)
+                .unwrap_or_else(|| panic!("metadata tool `{}` has no CoreToolRuntime", entry.name));
             assert_eq!(
-                registry
-                    .runtime(&entry.name)
-                    .expect("runtime checked above")
-                    .tool_name(),
+                runtime.tool_name(),
                 entry.tool_name(),
                 "runtime identity differs from metadata for `{}`",
                 entry.name
             );
+            assert_eq!(runtime.description(), entry.description);
+            assert_eq!(runtime.toolset(), entry.toolset);
+            assert_eq!(runtime.icon(), entry.icon);
+            assert_eq!(runtime.approval_requirement(), entry.approval_requirement);
         }
     }
 

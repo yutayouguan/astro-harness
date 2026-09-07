@@ -124,11 +124,14 @@ async fn metadata_tools_have_native_runtimes_without_legacy_memory_aliases() {
     let mut registry = ToolRegistry::new();
     register_all(&mut registry);
     for entry in registry.all_tools() {
-        assert!(
-            registry.runtime(&entry.name).is_some(),
-            "metadata tool `{}` missing native runtime",
-            entry.name
-        );
+        let runtime = registry
+            .runtime(&entry.name)
+            .unwrap_or_else(|| panic!("metadata tool `{}` missing native runtime", entry.name));
+        assert_eq!(runtime.tool_name(), entry.tool_name());
+        assert_eq!(runtime.description(), entry.description);
+        assert_eq!(runtime.toolset(), entry.toolset);
+        assert_eq!(runtime.icon(), entry.icon);
+        assert_eq!(runtime.approval_requirement(), entry.approval_requirement);
     }
     for legacy in ["memory_add", "memory_replace", "memory_remove"] {
         assert!(
