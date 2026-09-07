@@ -1,31 +1,53 @@
-pub(crate) mod agent;
-pub(crate) mod artifacts;
+// === Flat modules (unchanged) ===
 pub(crate) mod auxiliary;
-pub(crate) mod branches;
-pub(crate) mod browser;
-pub(crate) mod chat;
 pub(crate) mod common;
-pub(crate) mod compaction;
-pub(crate) mod compression_settings;
-pub(crate) mod config;
-pub(crate) mod cron;
-pub(crate) mod dreaming;
 pub(crate) mod environment_dependencies;
-pub(crate) mod evolution;
-pub(crate) mod evolution_run;
-pub(crate) mod files;
-pub(crate) mod icon;
-pub(crate) mod loops;
-pub(crate) mod mcp_oauth;
 pub(crate) mod media;
-pub(crate) mod memory;
-pub(crate) mod model_catalog;
-pub(crate) mod openrouter_rankings;
-pub(crate) mod providers;
-pub(crate) mod session;
-pub(crate) mod skills;
-pub(crate) mod subagents;
 pub(crate) mod terminal;
-pub(crate) mod ui_style;
-pub(crate) mod updater;
-pub(crate) mod wallpaper;
+
+// === Directory modules ===
+pub(crate) mod agents;
+pub(crate) mod automation;
+pub(crate) mod chat;
+#[path = "evolution/mod.rs"]
+mod evolution_impl;
+pub(crate) mod extensions;
+#[path = "memory/mod.rs"]
+mod memory_impl;
+pub(crate) mod providers;
+pub(crate) mod ui;
+pub(crate) mod workspace;
+
+// === Re-exports: preserve the flat API surface ===
+pub(crate) use chat::branches;
+pub(crate) use chat::compaction;
+pub(crate) use chat::session;
+
+pub(crate) use providers::config;
+pub(crate) use providers::model_catalog;
+pub(crate) use providers::openrouter_rankings;
+
+pub(crate) use memory_impl::compression_settings;
+pub(crate) use memory_impl::core as memory;
+pub(crate) use memory_impl::dreaming;
+
+pub(crate) use evolution_impl::run as evolution_run;
+pub(crate) use evolution_impl::settings as evolution;
+
+pub(crate) use workspace::artifacts;
+pub(crate) use workspace::files;
+
+pub(crate) use agents::agent;
+pub(crate) use agents::subagents;
+
+pub(crate) use extensions::mcp_oauth;
+pub(crate) use extensions::skills;
+
+pub(crate) use automation::cron;
+pub(crate) use automation::loops;
+
+pub(crate) use ui::browser;
+pub(crate) use ui::icon;
+pub(crate) use ui::ui_style;
+pub(crate) use ui::updater;
+pub(crate) use ui::wallpaper;

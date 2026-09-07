@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use super::providers::{find_provider_by_backend, resolve_api_key};
+use super::core::{find_provider_by_backend, resolve_api_key};
 
 const OPENROUTER_ORIGIN: &str = "https://openrouter.ai";
 const OFFICIAL_CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);

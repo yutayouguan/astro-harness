@@ -273,7 +273,7 @@ pub async fn compact_chat_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::providers::{ProviderConfig as UiProvider, ProviderKind};
+    use crate::commands::providers::core::{ProviderConfig as UiProvider, ProviderKind};
     use std::sync::{Arc, Mutex};
 
     fn ui_provider(id: &str) -> UiProvider {

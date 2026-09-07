@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 use uuid::Uuid;
 
-use super::common::open_sessions;
+use crate::commands::common::open_sessions;
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -645,7 +645,7 @@ pub async fn unpin_session(session_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn delete_session_permanently(app: AppHandle, session_id: String) -> Result<(), String> {
     if let Err(e) =
-        super::chat::chat_control(app.clone(), session_id.clone(), "release_session".into()).await
+        super::core::chat_control(app.clone(), session_id.clone(), "release_session".into()).await
     {
         tracing::warn!(
             session = %session_id,

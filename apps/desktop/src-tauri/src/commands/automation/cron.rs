@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::common::bootstrap_workspace;
+use crate::commands::common::bootstrap_workspace;
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -151,12 +151,14 @@ fn run_to_dto(r: cron::run_db::CronRunRow) -> CronRunDto {
 fn resolve_creds_for_job(
     job: &cron::CronJob,
 ) -> Result<agent::exec::cron::CronExecCredentials, String> {
-    use super::providers::{find_provider, find_provider_by_backend, resolve_model_targets};
+    use crate::commands::providers::{
+        find_provider, find_provider_by_backend, resolve_model_targets,
+    };
 
     let provider_cfg = if let Some(id) = job.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id).or_else(|_| find_provider_by_backend(id))?
     } else {
-        let state = super::providers::get_providers_state()?;
+        let state = crate::commands::providers::get_providers_state()?;
         let id = state
             .active_provider_id
             .or_else(|| state.providers.first().map(|p| p.id.clone()))
@@ -210,12 +212,12 @@ pub async fn extract_cron_job(args: ExtractCronJobArgs) -> Result<ExtractCronJob
         return Err("请输入自然语言描述".into());
     }
 
-    use super::providers::{find_provider, resolve_api_key};
+    use crate::commands::providers::{find_provider, resolve_api_key};
 
     let provider_cfg = if let Some(id) = args.provider_id.as_deref().filter(|s| !s.is_empty()) {
         find_provider(id)?
     } else {
-        let state = super::providers::get_providers_state()?;
+        let state = crate::commands::providers::get_providers_state()?;
         let id = state
             .active_provider_id
             .or_else(|| state.providers.first().map(|p| p.id.clone()))

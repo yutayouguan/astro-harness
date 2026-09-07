@@ -13,11 +13,11 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
-use super::common::{bootstrap_workspace, friendly_error, open_sessions};
-use super::providers::{
+use super::session::ensure_default_project_in_store;
+use crate::commands::common::{bootstrap_workspace, friendly_error, open_sessions};
+use crate::commands::providers::core::{
     cached_model_info, resolve_image_gen_targets, resolve_model_targets, ImageGenTarget,
 };
-use super::session::ensure_default_project_in_store;
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use crate::infra::thread_events::{
     accepted_turn_id, emit_chat_events, managed_bridge, submission_failure_events,

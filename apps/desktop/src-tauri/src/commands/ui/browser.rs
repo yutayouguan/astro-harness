@@ -384,8 +384,8 @@ pub async fn browser_preview_project_file(
     if session_id.is_empty() {
         return Err("需要先开始一个对话，才能预览网页".into());
     }
-    let roots = super::files::project_roots(&request.project_id).await?;
-    let path = super::files::resolve_project_path(&roots, &request.path)?;
+    let roots = crate::commands::files::project_roots(&request.project_id).await?;
+    let path = crate::commands::files::resolve_project_path(&roots, &request.path)?;
     if request
         .content
         .as_ref()

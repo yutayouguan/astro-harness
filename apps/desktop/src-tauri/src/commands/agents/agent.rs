@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use super::common::{bootstrap_workspace, memory_dir, memory_root, workspace_dir};
+use crate::commands::common::{bootstrap_workspace, memory_dir, memory_root, workspace_dir};
 use crate::infra::grpc::default_grpc_address;
 
 // ---------------------------------------------------------------------------

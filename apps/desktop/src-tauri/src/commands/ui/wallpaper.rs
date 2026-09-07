@@ -645,7 +645,7 @@ pub async fn import_wallpaper(source_path: String) -> Result<WallpaperAssetDto, 
 #[tauri::command]
 pub async fn generate_wallpaper(prompt: String) -> Result<WallpaperAssetDto, String> {
     let prompt = validate_prompt(&prompt)?;
-    let generated = super::chat::generate_image_data(prompt, 1536, 1024).await?;
+    let generated = crate::commands::chat::generate_image_data(prompt, 1536, 1024).await?;
     let name = format!("AI 壁纸 {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
     store_wallpaper_at(
         &home::default_memory_dir(),

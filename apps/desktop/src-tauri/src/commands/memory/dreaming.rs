@@ -14,7 +14,9 @@ use memory::{list_pending, load_memory_config};
 use providers::types::stream::StreamChunk;
 use providers::ProviderConfig;
 
-use super::providers::{self as providers_commands, resolve_api_key, ProviderConfig as UiProvider};
+use crate::commands::providers::{
+    self as providers_commands, resolve_api_key, ProviderConfig as UiProvider,
+};
 use crate::infra::thread_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };

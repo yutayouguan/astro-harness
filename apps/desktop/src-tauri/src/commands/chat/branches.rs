@@ -4,7 +4,7 @@ use agent::exec::dispatch::{DefaultDesktopAgentThreadControl, DesktopAgentThread
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
 
-use super::common::open_sessions;
+use crate::commands::common::open_sessions;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

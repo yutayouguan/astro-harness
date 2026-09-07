@@ -682,7 +682,7 @@ pub async fn get_diagnostics_status() -> Result<DiagnosticsStatusDto, String> {
         active_provider_id,
         active_provider_name,
         provider_error,
-    ) = match super::providers::get_providers_state() {
+    ) = match super::core::get_providers_state() {
         Ok(state) => {
             let total = state
                 .providers
@@ -731,7 +731,7 @@ pub async fn get_diagnostics_status() -> Result<DiagnosticsStatusDto, String> {
     };
 
     let (database_healthy, database_schema_version, database_error) =
-        match super::common::open_sessions().await {
+        match crate::commands::common::open_sessions().await {
             Ok(store) => match store.schema_version().await {
                 Ok(version) => (true, Some(version), None),
                 Err(error) => (false, None, Some(error.to_string())),

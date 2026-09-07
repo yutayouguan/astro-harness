@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
-use super::chat::chat_control_rpc;
+use crate::commands::chat::chat_control_rpc;
 use crate::infra::thread_events::{
     emit_session_event, now_ts_ms, MemoryUpdatedDto, PendingChangedDto, SessionEventDto,
 };
