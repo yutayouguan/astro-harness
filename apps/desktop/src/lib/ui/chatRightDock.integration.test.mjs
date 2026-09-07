@@ -123,8 +123,7 @@ test("browser focus mode expands inside the chat canvas and keeps the composer a
   assert.match(browserDock, /Minimize2/);
   assert.match(appSource, /expanded=\{browserExpanded\}/);
   assert.match(appSource, /onExpandedChange=\{setBrowserExpanded\}/);
-  assert.match(browserDock, /onTitleMouseDown/);
-  assert.match(browserDock, /onTitleDoubleClick/);
+  assert.match(browserDock, /data-tauri-drag-region="true"/);
   assert.match(chatView, /composerPresentation === "capsule"/);
   assert.match(chatView, /<motion\.form/);
   assert.match(chatView, /<motion\.div/);

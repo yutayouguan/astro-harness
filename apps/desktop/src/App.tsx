@@ -1391,8 +1391,7 @@ export default function App() {
       )}
       <div
         className="native-drag-region"
-        onMouseDown={(e) => void winChrome.onTitleMouseDown(e)}
-        onDoubleClick={(e) => void winChrome.onTitleDoubleClick(e)}
+        data-tauri-drag-region="true"
         aria-hidden
       />
 
@@ -1455,8 +1454,7 @@ export default function App() {
         >
           <div
             className="sidebar-window-drag-region"
-            onMouseDown={(event) => void winChrome.onTitleMouseDown(event)}
-            onDoubleClick={(event) => void winChrome.onTitleDoubleClick(event)}
+            data-tauri-drag-region="true"
             aria-hidden
           />
           {nav === "settings" ? (
@@ -2022,10 +2020,7 @@ export default function App() {
           {browserOwnsTitlebar ? (
             <div
               className="content-window-drag-region"
-              onMouseDown={(event) => void winChrome.onTitleMouseDown(event)}
-              onDoubleClick={(event) =>
-                void winChrome.onTitleDoubleClick(event)
-              }
+              data-tauri-drag-region="true"
               aria-hidden
             />
           ) : null}
@@ -2601,8 +2596,6 @@ export default function App() {
                       expanded={browserExpanded}
                       onControl={chat.controlBrowser}
                       onExpandedChange={setBrowserExpanded}
-                      onTitleMouseDown={winChrome.onTitleMouseDown}
-                      onTitleDoubleClick={winChrome.onTitleDoubleClick}
                       onClose={() => {
                         setBrowserExpanded(false);
                         setBrowserComposerOverlayOpen(false);

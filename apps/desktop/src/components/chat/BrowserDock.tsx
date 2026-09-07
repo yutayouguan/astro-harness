@@ -7,7 +7,6 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   type TransitionEvent as ReactTransitionEvent,
   type WheelEvent,
@@ -58,8 +57,6 @@ type Props = {
   expanded: boolean;
   onControl: BrowserControl;
   onExpandedChange: (expanded: boolean) => void;
-  onTitleMouseDown?: (event: ReactMouseEvent) => void;
-  onTitleDoubleClick?: (event: ReactMouseEvent) => void;
   onClose: () => void;
 };
 
@@ -95,8 +92,6 @@ export default function BrowserDock({
   expanded,
   onControl,
   onExpandedChange,
-  onTitleMouseDown,
-  onTitleDoubleClick,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -572,8 +567,7 @@ export default function BrowserDock({
       ) : null}
       <div
         className="browser-dock-drag-region"
-        onMouseDown={onTitleMouseDown}
-        onDoubleClick={onTitleDoubleClick}
+        data-tauri-drag-region="true"
         aria-hidden
       />
       <header className="browser-dock-header">

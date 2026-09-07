@@ -71,7 +71,7 @@ test("browser titlebar keeps controls interactive and preserves main window drag
   );
   assert.match(
     appSource,
-    /browserOwnsTitlebar \? \([\s\S]*?className="content-window-drag-region"[\s\S]*?onMouseDown=\{\(event\) => void winChrome\.onTitleMouseDown\(event\)\}/,
+    /browserOwnsTitlebar \? \([\s\S]*?className="content-window-drag-region"[\s\S]*?data-tauri-drag-region="true"/,
   );
   assert.match(
     shellStyles,
@@ -82,7 +82,7 @@ test("browser titlebar keeps controls interactive and preserves main window drag
 test("sidebar owns a drag handle above its overlay stacking layer", () => {
   assert.match(
     appSource,
-    /className="sidebar-window-drag-region"[\s\S]*?onMouseDown=\{\(event\) => void winChrome\.onTitleMouseDown\(event\)\}/,
+    /className="sidebar-window-drag-region"[\s\S]*?data-tauri-drag-region="true"/,
   );
   assert.match(
     shellStyles,
