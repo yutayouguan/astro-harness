@@ -36,6 +36,7 @@ import type { MessageKey } from "../../i18n/messages";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
+import { compactSessionTime } from "../../lib/chat/compactSessionTime";
 import {
   matchesSidebarSessionPlacement,
   scopeFallbackSessionsToProject,
@@ -80,17 +81,6 @@ type Props = {
   /** 当前会话被删除或移出当前项目后清理本地状态 */
   onClearDeletedCurrentSession?: () => void | Promise<void>;
 };
-
-function relativeTime(iso: string | null, t: Translate): string {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return t("time.justNow");
-  if (mins < 60) return t("time.minutesAgo", { n: String(mins) });
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return t("time.hoursAgo", { n: String(hours) });
-  return t("time.daysAgo", { n: String(Math.floor(hours / 24)) });
-}
 
 export default function SidebarSessionList({
   activeSessionId,
@@ -459,7 +449,7 @@ function SessionItem({
         )}
         {status === "idle" && (
           <span className="sidebar-session-time">
-            {relativeTime(s.createdAt, t)}
+            {compactSessionTime(s.createdAt, t("time.justNow"))}
           </span>
         )}
         <SessionStatusIcon
