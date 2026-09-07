@@ -23,6 +23,19 @@ test("unified settings material loads after the legacy style bundle", () => {
 
 test("settings expose one shared inset and selected material contract", () => {
   for (const token of [
+    "--settings-panel-border",
+    "--settings-panel-background",
+    "--settings-panel-shadow",
+    "--settings-panel-backdrop",
+  ]) {
+    assert.match(
+      material,
+      new RegExp(`${token}: var\\(\\s*--global-liquid-glass-`),
+      `${token} must bind directly to global liquid glass`,
+    );
+  }
+
+  for (const token of [
     "--settings-inset-border",
     "--settings-inset-background",
     "--settings-inset-background-strong",
@@ -57,10 +70,10 @@ test("selected and accessibility states keep the unified hierarchy", () => {
   assert.match(material, /\.browser-viewport-options button\.is-active/);
   assert.match(
     material,
-    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?--settings-inset-background:\s*var\(--surface-panel-background\);/,
+    /@media \(prefers-reduced-transparency: reduce\)[\s\S]*?--settings-panel-background:\s*var\(--surface-panel-background\);[\s\S]*?--settings-panel-backdrop:\s*none;[\s\S]*?--settings-inset-background:\s*var\(--surface-panel-background\);/,
   );
   assert.match(
     material,
-    /@media \(prefers-contrast: more\)[\s\S]*?--settings-inset-border:\s*var\(--color-border\);/,
+    /@media \(prefers-contrast: more\)[\s\S]*?--settings-panel-border:\s*var\(--color-border\);[\s\S]*?--settings-panel-backdrop:\s*none;[\s\S]*?--settings-inset-border:\s*var\(--color-border\);/,
   );
 });

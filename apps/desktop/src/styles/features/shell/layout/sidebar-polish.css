@@ -3,29 +3,37 @@
    controls inside remain flat so translucent layers do not stack. */
 
 .body-row {
-  --sidebar-chrome-sheen: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
-    transparent 72%
+  --sidebar-chrome-sheen: var(
+    --liquid-glass-sheen,
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+      transparent 72%
+    )
   );
   --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
-  --sidebar-chrome-filter: blur(
-      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
+  --sidebar-chrome-filter: var(
+    --global-liquid-glass-backdrop,
+    blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+      saturate(var(--glass-saturate, 1.25))
+  );
 }
 
 .sidebar {
-  --sidebar-chrome-sheen: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
-    transparent 72%
+  --sidebar-chrome-sheen: var(
+    --liquid-glass-sheen,
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
+      transparent 72%
+    )
   );
   --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
-  --sidebar-chrome-filter: blur(
-      calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1))
-    )
-    saturate(var(--glass-saturate, 1.25));
+  --sidebar-chrome-filter: var(
+    --global-liquid-glass-backdrop,
+    blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
+      saturate(var(--glass-saturate, 1.25))
+  );
   border: 0;
   border-right: 0.5px solid
     color-mix(in srgb, var(--glass-edge) 62%, transparent);

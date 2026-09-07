@@ -7,17 +7,25 @@ import {
   readStoredGlassIntensity,
 } from "./glassIntensity.ts";
 
-const [preferences, styles, theme, intensityRuntime, liquidGlass, main] =
-  await Promise.all(
-    [
-      "../../components/settings/PreferencesPanel.tsx",
-      "../../styles/features/preferences.css",
-      "../../hooks/app/useTheme.tsx",
-      "./glassIntensity.ts",
-      "../../styles/tokens/component/liquid-glass.css",
-      "../../main.tsx",
-    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
-  );
+const [
+  preferences,
+  styles,
+  theme,
+  intensityRuntime,
+  liquidGlass,
+  glassIntensityStyles,
+  main,
+] = await Promise.all(
+  [
+    "../../components/settings/PreferencesPanel.tsx",
+    "../../styles/features/preferences.css",
+    "../../hooks/app/useTheme.tsx",
+    "./glassIntensity.ts",
+    "../../styles/tokens/component/liquid-glass.css",
+    "../../styles/tokens/glass-intensity.css",
+    "../../main.tsx",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+);
 
 test("glass intensity uses one accessible continuous 0-100 range", () => {
   const control = preferences.slice(
@@ -125,4 +133,51 @@ test("continuous recipe drives transparency, blur, saturation, rim, and shadow",
   }
   assert.match(liquidGlass, /var\(--glass-intensity, 0\.5\)/);
   assert.doesNotMatch(liquidGlass, /liquid-glass-soft/);
+});
+
+test("one liquid-glass recipe drives every global surface family", () => {
+  for (const token of [
+    "--global-liquid-glass-color",
+    "--global-liquid-glass-background",
+    "--global-liquid-glass-border",
+    "--global-liquid-glass-shadow",
+    "--global-liquid-glass-backdrop",
+  ]) {
+    assert.match(glassIntensityStyles, new RegExp(`${token}:`));
+  }
+
+  for (const alias of [
+    "--glass-fill",
+    "--glass-card",
+    "--sidebar-bg",
+    "--composer-bg",
+    "--menu-glass-bg",
+    "--menu-overlay-bg",
+    "--titlebar-menu-bg",
+    "--header-chip-bg",
+    "--lens-bg",
+    "--badge-bg",
+    "--content-card-background",
+  ]) {
+    assert.match(
+      glassIntensityStyles,
+      new RegExp(
+        `${alias}: var\\(--global-liquid-glass-(?:color|background)\\)`,
+      ),
+      `${alias} must use the global liquid-glass recipe`,
+    );
+  }
+
+  for (const colorMixInput of [
+    "--glass-fill",
+    "--glass-fill-soft",
+    "--menu-glass-bg",
+    "--header-chip-bg",
+  ]) {
+    assert.match(
+      glassIntensityStyles,
+      new RegExp(`${colorMixInput}: var\\(--global-liquid-glass-color\\)`),
+      `${colorMixInput} must stay color-valued for color-mix consumers`,
+    );
+  }
 });

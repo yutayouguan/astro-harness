@@ -95,11 +95,25 @@ test("workspace content cards follow continuous liquid glass intensity", () => {
     block,
     /--glass-blur-scale:\s*var\(--liquid-glass-blur-scale\);/,
   );
-  assert.match(block, /--content-card-border:\s*var\(--liquid-glass-edge\);/);
-  assert.match(block, /--content-card-background:[\s\S]*?--liquid-glass-sheen/);
   assert.match(
     block,
-    /--content-card-backdrop:\s*var\(--liquid-glass-backdrop\);/,
+    /--global-liquid-glass-border:\s*var\(--liquid-glass-edge\);/,
+  );
+  assert.match(
+    block,
+    /--global-liquid-glass-background:[\s\S]*?--liquid-glass-sheen/,
+  );
+  assert.match(
+    block,
+    /--content-card-border:\s*var\(--global-liquid-glass-border\);/,
+  );
+  assert.match(
+    block,
+    /--content-card-background:\s*var\(--global-liquid-glass-background\);/,
+  );
+  assert.match(
+    block,
+    /--content-card-backdrop:\s*var\(--global-liquid-glass-backdrop\);/,
   );
   assert.doesNotMatch(glassIntensity, /data-glass="/);
 });

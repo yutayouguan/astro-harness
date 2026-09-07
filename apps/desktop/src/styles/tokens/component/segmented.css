@@ -105,26 +105,33 @@ html[data-theme="dark"] {
   .mcp-add-drawer-tab,
   .loop-config-tab
 ) {
-  --seg-shell-border: color-mix(
-    in srgb,
-    var(--tone) var(--seg-border-tone-amt),
-    var(--seg-border-base)
+  --seg-shell-border: var(
+    --global-liquid-glass-border,
+    color-mix(
+      in srgb,
+      var(--tone) var(--seg-border-tone-amt),
+      var(--seg-border-base)
+    )
   );
-  --seg-shell-bg:
+  --seg-shell-bg: var(
+    --global-liquid-glass-background,
     linear-gradient(155deg, var(--seg-shell-sheen-a), var(--seg-shell-sheen-b)),
     color-mix(
-      in srgb,
-      var(--tone-soft) var(--seg-shell-tone-amt),
-      var(--seg-shell-base)
-    );
-  --seg-shell-shadow:
+        in srgb,
+        var(--tone-soft) var(--seg-shell-tone-amt),
+        var(--seg-shell-base)
+      )
+  );
+  --seg-shell-shadow: var(
+    --global-liquid-glass-shadow,
     var(--seg-shell-drop-geo)
-    color-mix(
-      in srgb,
-      var(--tone) var(--seg-shell-drop-tone-amt),
-      var(--seg-shell-drop-base)
-    ),
-    inset 0 1px 0 var(--seg-shell-rim);
+      color-mix(
+        in srgb,
+        var(--tone) var(--seg-shell-drop-tone-amt),
+        var(--seg-shell-drop-base)
+      ),
+    inset 0 1px 0 var(--seg-shell-rim)
+  );
   --seg-item-color-hover: var(--tone);
   --seg-item-bg-hover: color-mix(
     in srgb,

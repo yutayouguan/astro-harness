@@ -6,6 +6,24 @@
 
 .settings-content-inline,
 .prefs-page.is-embedded {
+  /* Settings surfaces bind directly to the global liquid-glass recipe. This
+   * prevents feature-local aliases from breaking the intensity control. */
+  --settings-panel-border: var(
+    --global-liquid-glass-border,
+    var(--content-card-border)
+  );
+  --settings-panel-background: var(
+    --global-liquid-glass-background,
+    var(--content-card-background)
+  );
+  --settings-panel-shadow: var(
+    --global-liquid-glass-shadow,
+    var(--content-card-shadow)
+  );
+  --settings-panel-backdrop: var(
+    --global-liquid-glass-backdrop,
+    var(--content-card-backdrop)
+  );
   --settings-divider: color-mix(in srgb, var(--ink) 8%, transparent);
   --settings-inset-border: color-mix(in srgb, var(--ink) 10%, transparent);
   --settings-inset-background: color-mix(
@@ -209,6 +227,10 @@
 @media (prefers-reduced-transparency: reduce) {
   .settings-content-inline,
   .prefs-page.is-embedded {
+    --settings-panel-border: var(--color-border);
+    --settings-panel-background: var(--surface-panel-background);
+    --settings-panel-shadow: var(--shadow-card);
+    --settings-panel-backdrop: none;
     --settings-inset-background: var(--surface-panel-background);
     --settings-inset-background-strong: var(--surface-panel-background);
     --settings-inset-hover: var(--surface-panel-background);
@@ -223,6 +245,10 @@
 @media (prefers-contrast: more) {
   .settings-content-inline,
   .prefs-page.is-embedded {
+    --settings-panel-border: var(--color-border);
+    --settings-panel-background: var(--surface-panel-background);
+    --settings-panel-shadow: var(--shadow-card);
+    --settings-panel-backdrop: none;
     --settings-divider: var(--color-border);
     --settings-inset-border: var(--color-border);
     --settings-selected-border: var(--tone);
