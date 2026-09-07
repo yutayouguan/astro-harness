@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { ProjectDto } from "../../types";
 import { ModalShell } from "../ui";
 import ProjectFolderIcon from "./ProjectFolderIcon";
@@ -33,6 +34,7 @@ export default function ProjectEditDialog({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [roots, setRoots] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const { showToast, toastHost } = useTransientToast();
 
   useEffect(() => {
     if (!open) return;
@@ -108,11 +110,21 @@ export default function ProjectEditDialog({
       onClose();
     } catch (err) {
       console.error("[ProjectEditDialog] save failed:", err);
-      alert(`保存失败: ${err}`);
+      showToast(`保存失败: ${String(err)}`, { tone: "error" });
     } finally {
       setSaving(false);
     }
-  }, [project, name, iconId, roots, saving, onUpdated, onCreated, onClose]);
+  }, [
+    project,
+    name,
+    iconId,
+    roots,
+    saving,
+    onUpdated,
+    onCreated,
+    onClose,
+    showToast,
+  ]);
 
   const handleRemoveProject = useCallback(async () => {
     if (!project) return;
@@ -273,6 +285,7 @@ export default function ProjectEditDialog({
           </button>
         </div>
       </div>
+      {toastHost}
     </ModalShell>
   );
 }
