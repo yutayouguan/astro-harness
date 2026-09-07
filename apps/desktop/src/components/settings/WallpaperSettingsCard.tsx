@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import type { WallpaperController } from "../../hooks/app/useWallpaper";
+import { useTheme } from "../../hooks/app/useTheme";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import {
@@ -79,6 +80,7 @@ function WallpaperPreview({
 
 export default function WallpaperSettingsCard({ controller, tone }: Props) {
   const { t } = useI18n();
+  const { resolved } = useTheme();
   const { prefs, busy, error } = controller;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -88,10 +90,12 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
   const automaticPalette = resolveWallpaperPalette(
     { ...prefs, adaptiveColor: true },
     prefs.current,
+    resolved,
   );
   const manualPalette = resolveWallpaperPalette(
     { ...prefs, adaptiveColor: false },
     prefs.current,
+    resolved,
   );
   const palette = prefs.adaptiveColor
     ? automaticPalette

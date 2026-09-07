@@ -37,14 +37,23 @@ export type WallpaperPalette = {
 
 type ExtractedWallpaperColors = Pick<
   WallpaperAsset,
-  "accentColor" | "secondaryColor" | "recommendedTheme"
+  "accentColor" | "secondaryColor"
 >;
+
+type WallpaperPaletteTheme = "light" | "dark";
 
 export const MAX_RECENT_WALLPAPERS = 6;
 export const DEFAULT_WALLPAPER_THEME_COLOR = "#4f6ef7";
 export const DEFAULT_WALLPAPER_HIGHLIGHT_COLOR = "#22b8a7";
-const EXTRACTED_COLOR_MAX_LUMA = 0.5;
-const EXTRACTED_COLOR_MAX_LIGHTNESS = { light: 0.44, dark: 0.5 } as const;
+const EXTRACTED_COLOR_BOUNDS = {
+  light: { minLightness: 0, maxLightness: 0.44, minLuma: 0, maxLuma: 0.5 },
+  dark: {
+    minLightness: 0.52,
+    maxLightness: 0.58,
+    minLuma: 0.22,
+    maxLuma: 0.68,
+  },
+} as const;
 
 export const DEFAULT_WALLPAPER_PREFS: WallpaperPrefs = {
   mode: "wallpaper",
@@ -69,51 +78,93 @@ function normalizeHexColor(value: unknown): string | undefined {
     : undefined;
 }
 
-function toneDownExtractedColor(
+function rgbToHsl([red, green, blue]: number[]): [number, number, number] {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  if (delta === 0) return [0, 0, lightness];
+
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+  const hue =
+    max === r
+      ? 60 * (((g - b) / delta) % 6)
+      : max === g
+        ? 60 * ((b - r) / delta + 2)
+        : 60 * ((r - g) / delta + 4);
+  return [hue < 0 ? hue + 360 : hue, saturation, lightness];
+}
+
+function hslToRgb(
+  hue: number,
+  saturation: number,
+  lightness: number,
+): number[] {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const section = (((hue % 360) + 360) % 360) / 60;
+  const x = chroma * (1 - Math.abs((section % 2) - 1));
+  const [red, green, blue] =
+    section < 1
+      ? [chroma, x, 0]
+      : section < 2
+        ? [x, chroma, 0]
+        : section < 3
+          ? [0, chroma, x]
+          : section < 4
+            ? [0, x, chroma]
+            : section < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+  const offset = lightness - chroma / 2;
+  return [red, green, blue].map((channel) =>
+    Math.round((channel + offset) * 255),
+  );
+}
+
+function adaptExtractedColor(
   value: unknown,
-  recommendedTheme: WallpaperAsset["recommendedTheme"],
+  theme: WallpaperPaletteTheme,
 ): string | undefined {
   const color = normalizeHexColor(value);
   if (!color) return undefined;
 
-  const channels = [1, 3, 5].map((offset) =>
+  const source = [1, 3, 5].map((offset) =>
     Number.parseInt(color.slice(offset, offset + 2), 16),
   );
-  const max = Math.max(...channels);
-  const min = Math.min(...channels);
-  const lightness = (max + min) / 510;
-  const luma =
-    (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255;
-  // Keep cached palettes on the same darker contract as newly analyzed images.
-  const maxLightness =
-    EXTRACTED_COLOR_MAX_LIGHTNESS[recommendedTheme ?? "dark"];
-  const scale = Math.min(
-    1,
-    lightness > 0 ? maxLightness / lightness : 1,
-    luma > 0 ? EXTRACTED_COLOR_MAX_LUMA / luma : 1,
+  const [hue, saturation, sourceLightness] = rgbToHsl(source);
+  const bounds = EXTRACTED_COLOR_BOUNDS[theme];
+  const lightness = Math.min(
+    bounds.maxLightness,
+    Math.max(bounds.minLightness, sourceLightness),
   );
-  if (scale >= 1) return color;
+  let channels = hslToRgb(hue, saturation, lightness);
+  const luma = () =>
+    (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255;
+  const currentLuma = luma();
+  if (currentLuma > bounds.maxLuma) {
+    const scale = bounds.maxLuma / currentLuma;
+    channels = channels.map((channel) => Math.round(channel * scale));
+  } else if (currentLuma < bounds.minLuma) {
+    const mix = (bounds.minLuma - currentLuma) / (1 - currentLuma);
+    channels = channels.map((channel) =>
+      Math.round(channel + (255 - channel) * mix),
+    );
+  }
 
   return `#${channels
-    .map((channel) =>
-      Math.round(channel * scale)
-        .toString(16)
-        .padStart(2, "0"),
-    )
+    .map((channel) => channel.toString(16).padStart(2, "0"))
     .join("")}`;
 }
 
 export function resolveExtractedWallpaperPalette(
   wallpaper: ExtractedWallpaperColors | null,
+  theme: WallpaperPaletteTheme,
 ): WallpaperPalette | null {
-  const themeColor = toneDownExtractedColor(
-    wallpaper?.accentColor,
-    wallpaper?.recommendedTheme,
-  );
-  const highlightColor = toneDownExtractedColor(
-    wallpaper?.secondaryColor,
-    wallpaper?.recommendedTheme,
-  );
+  const themeColor = adaptExtractedColor(wallpaper?.accentColor, theme);
+  const highlightColor = adaptExtractedColor(wallpaper?.secondaryColor, theme);
   return themeColor && highlightColor ? { themeColor, highlightColor } : null;
 }
 
@@ -204,8 +255,10 @@ export function resolveWallpaperPalette(
     "adaptiveColor" | "customThemeColor" | "customHighlightColor"
   >,
   wallpaper: ExtractedWallpaperColors | null,
+  theme: WallpaperPaletteTheme,
 ): WallpaperPalette | null {
-  if (prefs.adaptiveColor) return resolveExtractedWallpaperPalette(wallpaper);
+  if (prefs.adaptiveColor)
+    return resolveExtractedWallpaperPalette(wallpaper, theme);
 
   const themeColor = normalizeHexColor(prefs.customThemeColor);
   const highlightColor = normalizeHexColor(prefs.customHighlightColor);

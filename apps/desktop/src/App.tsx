@@ -857,9 +857,9 @@ export default function App() {
     : null;
   const wallpaperPalette = wallpaperPresentation.generated
     ? wallpaperAdaptiveColor
-      ? resolveExtractedWallpaperPalette(effectiveWallpaper)
+      ? resolveExtractedWallpaperPalette(effectiveWallpaper, resolved)
       : null
-    : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper);
+    : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper, resolved);
   const wallpaperThemeColor = wallpaperPalette?.themeColor ?? null;
   const wallpaperHighlightColor = wallpaperPalette?.highlightColor ?? null;
   useEffect(() => {

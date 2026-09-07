@@ -94,10 +94,13 @@ test("wallpaper palette defaults to extracted colors and accepts a manual overri
     accentColor: "#22C55E",
     secondaryColor: "#3B82F6",
   };
-  assert.deepEqual(resolveWallpaperPalette(DEFAULT_WALLPAPER_PREFS, current), {
-    themeColor: "#1ca24d",
-    highlightColor: "#316dce",
-  });
+  assert.deepEqual(
+    resolveWallpaperPalette(DEFAULT_WALLPAPER_PREFS, current, "light"),
+    {
+      themeColor: "#1ca24d",
+      highlightColor: "#0a58d7",
+    },
+  );
   assert.deepEqual(
     resolveWallpaperPalette(
       {
@@ -106,6 +109,7 @@ test("wallpaper palette defaults to extracted colors and accepts a manual overri
         customHighlightColor: "#EC4899",
       },
       current,
+      "dark",
     ),
     { themeColor: "#f97316", highlightColor: "#ec4899" },
   );
@@ -117,29 +121,46 @@ test("wallpaper palette defaults to extracted colors and accepts a manual overri
         customHighlightColor: undefined,
       },
       current,
+      "light",
     ),
     null,
   );
   assert.match(DEFAULT_WALLPAPER_HIGHLIGHT_COLOR, /^#[0-9a-f]{6}$/);
 });
 
-test("extracted wallpaper colors are capped at a darker visual range", () => {
-  assert.deepEqual(
-    resolveExtractedWallpaperPalette({
-      accentColor: "#f5d90a",
-      secondaryColor: "#8ab4ff",
-      recommendedTheme: "light",
-    }),
-    { themeColor: "#968506", highlightColor: "#4f6792" },
+function colorMetrics(color: string) {
+  const channels = [1, 3, 5].map((offset) =>
+    Number.parseInt(color.slice(offset, offset + 2), 16),
   );
-  assert.deepEqual(
-    resolveExtractedWallpaperPalette({
-      accentColor: "#194d33",
-      secondaryColor: "#203040",
-      recommendedTheme: "dark",
-    }),
-    { themeColor: "#194d33", highlightColor: "#203040" },
-  );
+  return {
+    lightness: (Math.max(...channels) + Math.min(...channels)) / 510,
+    luma:
+      (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) /
+      255,
+  };
+}
+
+test("extracted wallpaper colors adapt to the active light and dark theme", () => {
+  const wallpaper = {
+    accentColor: "#f5d90a",
+    secondaryColor: "#000020",
+  };
+  const light = resolveExtractedWallpaperPalette(wallpaper, "light");
+  const dark = resolveExtractedWallpaperPalette(wallpaper, "dark");
+  assert.ok(light);
+  assert.ok(dark);
+  assert.notDeepEqual(light, dark);
+
+  for (const color of [light.themeColor, light.highlightColor]) {
+    const metrics = colorMetrics(color);
+    assert.ok(metrics.lightness <= 0.445, `${color} is too light`);
+    assert.ok(metrics.luma <= 0.505, `${color} is too bright`);
+  }
+  for (const color of [dark.themeColor, dark.highlightColor]) {
+    const metrics = colorMetrics(color);
+    assert.ok(metrics.luma >= 0.215, `${color} is too dark`);
+    assert.ok(metrics.luma <= 0.685, `${color} is too bright`);
+  }
 });
 
 test("recent wallpapers are deduplicated and bounded", () => {
