@@ -2,7 +2,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -78,74 +77,19 @@ import {
   INTERFACE_SCALE_MIN,
 } from "../../lib/ui/interfaceScale";
 import {
-  diagnosticLogTimeBounds,
   formatDiagnosticTimestamp,
   presentDiagnosticMessage,
-  toLocalDateTimeInput,
-  type DiagnosticLogTimeRange,
 } from "../../lib/diagnostics/logView";
+import {
+  diagnosticLogLevel,
+  useDiagnosticsSettings,
+} from "../../hooks/settings/useDiagnosticsSettings";
 import { AppMorphIcon } from "../icons/MorphIcon";
-import { IconGlobe, IconChat, IconAtom } from "../icons/NavIcons";
+import { IconGlobe, IconChat, IconAtom, IconZap } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
 import WallpaperSettingsCard from "./WallpaperSettingsCard";
-
-/** 查询返回的单行日志 */
-type AgentLogLine = {
-  raw: string;
-  source: string;
-  timestamp: string;
-  level: string;
-  message: string;
-};
-
-type DiagnosticsStatusDto = {
-  backendHealthy: boolean;
-  backendEndpoint: string;
-  backendError: string | null;
-  providerEnabled: number;
-  providerTotal: number;
-  activeProviderId: string | null;
-  activeProviderName: string | null;
-  providerError: string | null;
-  mcpConnected: number;
-  mcpTotal: number;
-  mcpRetrying: number;
-  mcpError: string | null;
-  databaseHealthy: boolean;
-  databaseJournalMode: string;
-  databaseSchemaVersion: number | null;
-  databaseError: string | null;
-};
-
-/** 日志来源过滤 */
-type LogSourceFilter = "both" | "agent" | "errors";
-
-/** 查询范围：本次会话 / 全部会话 */
-type LogScope = "current" | "all";
-
-/** 内容过滤：全部 / 只看问题（warn 及以上） */
-type LogLevelFilter = "all" | "issues";
-
-type DiagnosticLogLevel = "error" | "warn" | "info" | "debug" | "unknown";
-
-type DiagnosticStatusCardModel = {
-  id: string;
-  label: string;
-  value: string;
-  detail: string;
-  state: "healthy" | "warning" | "error" | "unknown";
-};
-
-function diagnosticLogLevel(raw: string): DiagnosticLogLevel {
-  const upper = raw.toUpperCase();
-  if (upper.includes("CRITICAL") || upper.includes("ERROR")) return "error";
-  if (upper.includes("WARNING") || upper.includes("WARN")) return "warn";
-  if (upper.includes("INFO")) return "info";
-  if (upper.includes("DEBUG") || upper.includes("TRACE")) return "debug";
-  return "unknown";
-}
 
 function DiagnosticStatusCard({
   label,
@@ -1709,46 +1653,58 @@ export default function PreferencesPanel({
               ))}
             </div>
 
-            <div className="prefs-conversation-choice-group">
-              <h3 className="prefs-toggle-heading">
-                {t("prefs.chat.sendMode")}
-              </h3>
-              <div
-                className="theme-options prefs-conversation-verbosity-options"
-                role="radiogroup"
-                aria-label={t("prefs.chat.sendMode")}
-              >
-                {sendModeOptions.map(({ id, labelKey, descKey, badge }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={sendMode === id}
-                    className={`theme-option ${sendMode === id ? "active" : ""}`}
-                    data-tone={tone}
-                    onClick={() => {
-                      setSendMode(id);
-                      saveChatSendMode(id);
-                    }}
-                  >
-                    <span
-                      className="theme-option-icon lang-badge"
-                      aria-hidden
-                    >
-                      {badge}
-                    </span>
-                    <span className="theme-option-text">
-                      <span className="theme-option-label">
-                        {t(labelKey)}
-                      </span>
-                      <span className="theme-option-desc">
-                        {t(descKey)}
-                      </span>
-                    </span>
-                    <span className="theme-option-check" aria-hidden />
-                  </button>
-                ))}
+          </section>
+
+          <section className="prefs-card prefs-card--send-mode">
+            <div className="prefs-card-head">
+              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
+                <IconZap width={22} height={22} />
               </div>
+              <div>
+                <h2 className="prefs-card-title">
+                  {t("prefs.chat.sendMode")}
+                </h2>
+                <p className="prefs-card-sub">
+                  {t("prefs.chat.sendModeDesc")}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="theme-options prefs-conversation-verbosity-options"
+              role="radiogroup"
+              aria-label={t("prefs.chat.sendMode")}
+            >
+              {sendModeOptions.map(({ id, labelKey, descKey, badge }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={sendMode === id}
+                  className={`theme-option ${sendMode === id ? "active" : ""}`}
+                  data-tone={tone}
+                  onClick={() => {
+                    setSendMode(id);
+                    saveChatSendMode(id);
+                  }}
+                >
+                  <span
+                    className="theme-option-icon lang-badge"
+                    aria-hidden
+                  >
+                    {badge}
+                  </span>
+                  <span className="theme-option-text">
+                    <span className="theme-option-label">
+                      {t(labelKey)}
+                    </span>
+                    <span className="theme-option-desc">
+                      {t(descKey)}
+                    </span>
+                  </span>
+                  <span className="theme-option-check" aria-hidden />
+                </button>
+              ))}
             </div>
           </section>
         </div>
