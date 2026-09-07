@@ -86,12 +86,13 @@ test("terminal dock resets ownership when the active project changes", () => {
   assert.match(component, /setSession\(null\)/);
 });
 
-test("terminal dock configures the xterm 6 custom scrollbar instead of the legacy viewport", () => {
+test("terminal dock hides the overview ruler while keeping xterm scrolling", () => {
   const component = source("components/chat/TerminalDock.tsx");
+  const tabsComponent = source("components/chat/TerminalTabsDock.tsx");
   const css = source("styles/features/chat/terminal-dock.css");
 
-  assert.match(component, /SCROLLBAR_WIDTH = 4/);
-  assert.match(component, /overviewRuler:\s*\{ width: SCROLLBAR_WIDTH \}/);
+  assert.doesNotMatch(component, /SCROLLBAR_WIDTH|overviewRuler/);
+  assert.doesNotMatch(tabsComponent, /SCROLLBAR_WIDTH|overviewRuler/);
   assert.match(css, /\.xterm-scrollable-element/);
   assert.match(css, /> \.scrollbar/);
   assert.match(css, /> \.slider/);
@@ -113,7 +114,7 @@ test("terminal content is borderless and keeps all four xterm corners square", (
   );
 });
 
-test("terminal always uses the denser readable glass material", () => {
+test("terminal uses the top-right tool group material", () => {
   const app = source("App.tsx");
   const dock = source("components/chat/TerminalTabsDock.tsx");
   const css = source("styles/features/chat/terminal-dock.css");
@@ -133,9 +134,10 @@ test("terminal always uses the denser readable glass material", () => {
     css,
     /background-color:\s*var\(--terminal-screen-bg\) !important/,
   );
-  assert.match(css, /\.terminal-dock\s*\{[\s\S]*?backdrop-filter:\s*blur\(/);
-  assert.match(css, /backdrop-filter:\s*blur\(/);
-  assert.match(css, /prefers-reduced-transparency/);
+  assert.match(
+    css,
+    /\.terminal-dock\s*\{[\s\S]*?border-top:\s*0 solid var\(--titlebar-menu-border\);[\s\S]*?background:\s*var\(--titlebar-menu-bg\);[\s\S]*?box-shadow:\s*var\(--header-chip-shadow\);[\s\S]*?backdrop-filter:\s*var\(--titlebar-menu-blur\);/,
+  );
   assert.match(css, /prefers-contrast:\s*more/);
 });
 

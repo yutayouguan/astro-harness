@@ -52,7 +52,7 @@
   flex-basis: min(var(--project-files-width, 264px), 42%);
   width: min(var(--project-files-width, 264px), 42%);
   margin: var(--chat-dock-inset);
-  border-width: 0.5px;
+  border-width: 1px;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;

@@ -194,10 +194,22 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
   assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
-  assert.match(layoutBase, /--chat-dock-surface-border:\s*0\.5px solid/);
-  assert.match(layoutBase, /--chat-dock-surface-background:/);
-  assert.match(layoutBase, /--chat-dock-surface-shadow:/);
-  assert.match(layoutBase, /--chat-dock-surface-filter:/);
+  assert.match(
+    layoutBase,
+    /--chat-dock-surface-border:\s*1px solid var\(--titlebar-menu-border\);/,
+  );
+  assert.match(
+    layoutBase,
+    /--chat-dock-surface-background:\s*var\(--titlebar-menu-bg\);/,
+  );
+  assert.match(
+    layoutBase,
+    /--chat-dock-surface-shadow:\s*var\(--header-chip-shadow\);/,
+  );
+  assert.match(
+    layoutBase,
+    /--chat-dock-surface-filter:\s*var\(--titlebar-menu-blur\);/,
+  );
   assert.ok(runtimePanel, "missing runtime panel rule");
   assert.match(runtimePanel, /right:\s*var\(--chat-dock-inset\);/);
   assert.match(runtimePanel, /bottom:\s*var\(--chat-dock-inset\);/);
@@ -255,7 +267,7 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
   assert.match(editorBody, /background:\s*transparent;/);
   assert.match(titlebarTabs, /background:\s*transparent;/);
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
-  assert.match(openProjectPanel, /border-width:\s*0\.5px;/);
+  assert.match(openProjectPanel, /border-width:\s*1px;/);
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(
     app,
@@ -270,11 +282,6 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
     projectFileEditor,
     /<section className="project-file-workbench"[^>]*>[\s\S]*?<div className="project-file-tabs"/,
   );
-  assert.match(
-    rightPanelStyles,
-    /@media \(prefers-reduced-transparency: reduce\)/,
-  );
-  assert.match(rightPanelStyles, /@media \(prefers-contrast: more\)/);
 });
 
 test("project files dock animates layout in both directions", () => {
@@ -296,7 +303,7 @@ test("project files dock animates layout in both directions", () => {
     openPanel,
     /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/,
   );
-  assert.match(openPanel, /border-width:\s*0\.5px;/);
+  assert.match(openPanel, /border-width:\s*1px;/);
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
   assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);

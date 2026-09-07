@@ -62,6 +62,14 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(css, /\.browser-dock button:not\(\.browser-dock-resizer\)/);
   assert.match(
     css,
+    /\.browser-dock\s*\{[\s\S]*?border-left:\s*0 solid var\(--titlebar-menu-border\);[\s\S]*?background:\s*var\(--chat-dock-surface-background\);[\s\S]*?box-shadow:\s*var\(--chat-dock-surface-shadow\);[\s\S]*?backdrop-filter:\s*var\(--chat-dock-surface-filter\);/,
+  );
+  assert.match(
+    css,
+    /\.browser-dock\.is-open\s*\{[\s\S]*?border-left-width:\s*1px;/,
+  );
+  assert.match(
+    css,
     /\.browser-dock \.browser-dock-resizer\s*\{\s*cursor:\s*ew-resize;/,
   );
   const addressStart = dock.indexOf('<form className="browser-address-row"');

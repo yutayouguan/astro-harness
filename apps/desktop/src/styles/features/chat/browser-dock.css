@@ -17,8 +17,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 0 solid transparent;
+  border-left: 0 solid var(--titlebar-menu-border);
   background: var(--chat-dock-surface-background);
+  box-shadow: var(--chat-dock-surface-shadow);
   backdrop-filter: var(--chat-dock-surface-filter);
   -webkit-backdrop-filter: var(--chat-dock-surface-filter);
   opacity: 0;
@@ -40,8 +41,7 @@
   flex-basis: var(--browser-dock-current-width);
   width: var(--browser-dock-current-width);
   max-width: calc(100% - 320px);
-  border-left-width: 0.5px;
-  border-left-color: color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-left-width: 1px;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -66,8 +66,7 @@
 .chat-layout-with-right.is-browser-expanded > .browser-dock.is-restoring {
   width: var(--browser-dock-current-width);
   max-width: calc(100% - 320px);
-  border-left-width: 0.5px;
-  border-left-color: color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-left-width: 1px;
 }
 
 /* BrowserDock 仍绝对定位时，chat-main 不会随收回动画缩小。

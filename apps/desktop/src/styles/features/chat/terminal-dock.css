@@ -2,14 +2,6 @@ html {
   --terminal-screen-bg: rgba(0, 0, 0, 0);
 }
 
-html[data-theme="light"] {
-  --terminal-dock-bg: rgba(232, 242, 247, 0.42);
-}
-
-html[data-theme="dark"] {
-  --terminal-dock-bg: rgba(7, 10, 18, 0.48);
-}
-
 .terminal-dock {
   --terminal-dock-height: 260px;
   position: relative;
@@ -20,15 +12,11 @@ html[data-theme="dark"] {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-  border-top: 0 solid transparent;
-  background: var(--terminal-dock-bg);
-  box-shadow:
-    0 -14px 34px rgba(var(--shadow-ink), 0.13),
-    inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.16));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
-    saturate(var(--glass-saturate, 1.16));
+  border-top: 0 solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--header-chip-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -67,8 +55,7 @@ html[data-theme="dark"] {
 
 .terminal-dock.is-open {
   flex-basis: var(--terminal-dock-height);
-  border-top-width: 0.5px;
-  border-top-color: color-mix(in srgb, var(--glass-edge) 72%, transparent);
+  border-top-width: 1px;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -420,14 +407,6 @@ html[data-theme="dark"] {
   .terminal-dock {
     transform: none;
     transition: none;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .terminal-dock {
-    background: var(--surface-panel-background);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 
