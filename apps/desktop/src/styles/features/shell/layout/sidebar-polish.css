@@ -1,45 +1,23 @@
-/* Final sidebar contract: quiet, flush navigation chrome with one stable hierarchy.
-   The outer surface keeps a continuous glass fill without a floating drop shadow;
-   controls inside remain flat so translucent layers do not stack. */
+/* Final sidebar contract: reuse the top-right tool group's material on a flush,
+   full-height navigation surface. Controls inside stay flat so glass does not stack. */
 
 .body-row {
-  --sidebar-chrome-sheen: var(
-    --immersive-overlay-light-field,
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
-      transparent 72%
-    )
-  );
-  --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
-  --sidebar-chrome-filter: var(
-    --immersive-reference-backdrop,
-    blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
-      saturate(var(--glass-saturate, 1.25))
-  );
+  --sidebar-chrome-background: var(--titlebar-menu-bg);
+  --sidebar-chrome-border: var(--titlebar-menu-border);
+  --sidebar-chrome-shadow: var(--header-chip-shadow);
+  --sidebar-chrome-filter: var(--titlebar-menu-blur);
 }
 
 .sidebar {
-  --sidebar-chrome-sheen: var(
-    --immersive-overlay-light-field,
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--tone-soft, transparent) 26%, transparent),
-      transparent 72%
-    )
-  );
-  --sidebar-chrome-background: var(--sidebar-chrome-sheen), var(--sidebar-bg);
-  --sidebar-chrome-filter: var(
-    --immersive-reference-backdrop,
-    blur(calc(var(--blur-glass, 20px) * var(--glass-blur-scale, 1)))
-      saturate(var(--glass-saturate, 1.25))
-  );
+  --sidebar-chrome-background: var(--titlebar-menu-bg);
+  --sidebar-chrome-border: var(--titlebar-menu-border);
+  --sidebar-chrome-shadow: var(--header-chip-shadow);
+  --sidebar-chrome-filter: var(--titlebar-menu-blur);
   border: 0;
-  border-right: 0.5px solid
-    color-mix(in srgb, var(--glass-edge) 62%, transparent);
+  border-right: 1px solid var(--sidebar-chrome-border);
   border-radius: 0;
   background: var(--sidebar-chrome-background);
-  box-shadow: none;
+  box-shadow: var(--sidebar-chrome-shadow);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
   font-optical-sizing: auto;
@@ -47,7 +25,7 @@
 
 .sidebar.is-pinned {
   background: var(--sidebar-chrome-background);
-  box-shadow: none;
+  box-shadow: var(--sidebar-chrome-shadow);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }
@@ -74,7 +52,7 @@ html[data-theme="dark"] .sidebar.is-pinned {
 /* Settings keeps the same continuous material while retaining its own navigation layout. */
 .sidebar.is-settings {
   background: var(--sidebar-chrome-background);
-  box-shadow: none;
+  box-shadow: var(--sidebar-chrome-shadow);
   backdrop-filter: var(--sidebar-chrome-filter);
   -webkit-backdrop-filter: var(--sidebar-chrome-filter);
 }

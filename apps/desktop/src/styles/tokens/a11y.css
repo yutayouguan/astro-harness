@@ -88,9 +88,10 @@
 
   .body-row,
   .sidebar {
-    --sidebar-chrome-sheen: none;
-    --sidebar-chrome-background: var(--sidebar-bg);
-    --sidebar-chrome-filter: none;
+    --sidebar-chrome-background: var(--titlebar-menu-bg);
+    --sidebar-chrome-border: var(--titlebar-menu-border);
+    --sidebar-chrome-shadow: var(--header-chip-shadow);
+    --sidebar-chrome-filter: var(--titlebar-menu-blur);
   }
 
   html:root {
@@ -177,14 +178,9 @@
 
   .body-row,
   .sidebar {
-    --sidebar-chrome-background: color-mix(
-      in srgb,
-      var(--surface-panel-background) 94%,
-      transparent
-    );
-  }
-
-  .sidebar {
-    border-right-color: color-mix(in srgb, var(--ink) 28%, transparent);
+    --sidebar-chrome-background: var(--titlebar-menu-bg);
+    --sidebar-chrome-border: var(--titlebar-menu-border);
+    --sidebar-chrome-shadow: var(--header-chip-shadow);
+    --sidebar-chrome-filter: var(--titlebar-menu-blur);
   }
 }

@@ -30,10 +30,6 @@ const shellStyles = await readFile(
   new URL("../../styles/features/shell/shell.css", import.meta.url),
   "utf8",
 );
-const unifiedColorStyles = await readFile(
-  new URL("../../styles/tokens/unified-color.css", import.meta.url),
-  "utf8",
-);
 const a11yStyles = await readFile(
   new URL("../../styles/tokens/a11y.css", import.meta.url),
   "utf8",
@@ -251,7 +247,10 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
     pinnedSidebar,
     /background:\s*var\(--sidebar-chrome-background\);/,
   );
-  assert.match(pinnedSidebar, /box-shadow:\s*none;/);
+  assert.match(
+    pinnedSidebar,
+    /box-shadow:\s*var\(--sidebar-chrome-shadow\);/,
+  );
   assert.match(
     pinnedSidebar,
     /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/,
@@ -321,27 +320,41 @@ test("sidebar hierarchy stays compact and keeps a separated footer", () => {
   assert.match(footerDivider, /height:\s*1px;/);
 });
 
-test("left sidebar shares the flush glass chrome contract", () => {
+test("left sidebar shares the top-right tool group material", () => {
   const sidebar = rule(sidebarPolishStyles, ".sidebar");
-  const unifiedSidebar = rule(
-    unifiedColorStyles,
-    'html:is([data-color-style="unified"], [data-color-style="dynamic"]) .sidebar',
-  );
 
   assert.ok(sidebar, "missing sidebar surface rule");
-  assert.match(sidebar, /--sidebar-chrome-background:/);
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-background:\s*var\(--titlebar-menu-bg\);/,
+  );
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-border:\s*var\(--titlebar-menu-border\);/,
+  );
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-shadow:\s*var\(--header-chip-shadow\);/,
+  );
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-filter:\s*var\(--titlebar-menu-blur\);/,
+  );
   assert.match(sidebar, /border-radius:\s*0;/);
-  assert.match(sidebar, /border-right:\s*0\.5px\s+solid\s+color-mix\(/);
+  assert.match(
+    sidebar,
+    /border-right:\s*1px\s+solid\s+var\(--sidebar-chrome-border\);/,
+  );
   assert.match(sidebar, /background:\s*var\(--sidebar-chrome-background\);/);
-  assert.match(sidebar, /box-shadow:\s*none;/);
+  assert.match(sidebar, /box-shadow:\s*var\(--sidebar-chrome-shadow\);/);
   assert.match(sidebar, /backdrop-filter:\s*var\(--sidebar-chrome-filter\);/);
-  assert.ok(unifiedSidebar, "missing unified sidebar sheen override");
-  assert.match(unifiedSidebar, /--sidebar-chrome-sheen:\s*linear-gradient\(/);
-  assert.doesNotMatch(unifiedSidebar, /\n\s*background:/);
-  assert.match(a11yStyles, /--sidebar-chrome-filter:\s*none;/);
   assert.match(
     a11yStyles,
-    /--sidebar-chrome-background:\s*var\(--sidebar-bg\);/,
+    /--sidebar-chrome-background:\s*var\(--titlebar-menu-bg\);/,
+  );
+  assert.match(
+    a11yStyles,
+    /--sidebar-chrome-filter:\s*var\(--titlebar-menu-blur\);/,
   );
 });
 

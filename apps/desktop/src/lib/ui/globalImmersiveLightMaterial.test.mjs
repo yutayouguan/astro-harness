@@ -53,11 +53,19 @@ test("segmented controls and sidebar chrome consume the global recipe", () => {
   );
   assert.match(
     sidebar,
-    /--sidebar-chrome-sheen:\s*var\(\s*--immersive-overlay-light-field/,
+    /--sidebar-chrome-background:\s*var\(--titlebar-menu-bg\);/,
   );
   assert.match(
     sidebar,
-    /--sidebar-chrome-filter:\s*var\(\s*--immersive-reference-backdrop/,
+    /--sidebar-chrome-border:\s*var\(--titlebar-menu-border\);/,
+  );
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-shadow:\s*var\(--header-chip-shadow\);/,
+  );
+  assert.match(
+    sidebar,
+    /--sidebar-chrome-filter:\s*var\(--titlebar-menu-blur\);/,
   );
 });
 
