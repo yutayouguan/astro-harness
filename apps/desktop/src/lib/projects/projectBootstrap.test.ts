@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import type { ProjectDto } from "../../types";
 import {
+  applyDefaultProjectRoot,
   DEFAULT_PROJECT_PLACEHOLDER,
   ensureDefaultProjectVisible,
   loadProjectsWithRetry,
@@ -35,6 +36,16 @@ test("an existing backend default project is preserved without duplication", () 
   };
   const projects = [backendDefault, project("custom")];
   assert.strictEqual(ensureDefaultProjectVisible(projects), projects);
+});
+
+test("default workspace path hydrates the fallback project roots", () => {
+  assert.deepEqual(
+    applyDefaultProjectRoot([DEFAULT_PROJECT_PLACEHOLDER], " /workspace "),
+    [{ ...DEFAULT_PROJECT_PLACEHOLDER, roots: ["/workspace"] }],
+  );
+  assert.deepEqual(applyDefaultProjectRoot([project("custom")], ""), [
+    project("custom"),
+  ]);
 });
 
 test("project loading retries transient failures before returning the list", async () => {
@@ -75,7 +86,11 @@ test("App uses the atomic project list command and preserves its fallback", asyn
   const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
   assert.match(app, /loadProjectsWithRetry\(\(\) =>/);
   assert.match(app, /invoke<ProjectDto\[]>\("list_projects"\)/);
-  assert.match(app, /setProjects\(list\);[\s\S]*?dispatchSessionsChanged\(\)/);
+  assert.match(app, /invoke<string>\("get_default_workspace_path"\)/);
+  assert.match(
+    app,
+    /setProjects\(\(current\) =>[\s\S]*?dispatchSessionsChanged\(\)/,
+  );
   assert.doesNotMatch(app, /invoke<ProjectDto>\("ensure_default_project"\)/);
   assert.doesNotMatch(app, /setProjects\(\[\]\)/);
 });

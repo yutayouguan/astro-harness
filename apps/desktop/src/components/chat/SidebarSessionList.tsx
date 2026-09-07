@@ -38,6 +38,7 @@ import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
 import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
 import {
   matchesSidebarSessionPlacement,
+  scopeFallbackSessionsToProject,
   type SidebarSessionPlacement,
 } from "../../lib/chat/sidebarSessionPlacement";
 import SessionActionsMenu from "./SessionActionsMenu";
@@ -111,6 +112,11 @@ export default function SidebarSessionList({
   const visibleCount = readVisibleCount();
 
   const load = useCallback(async () => {
+    const normalize = (list: RecentSessionDto[] | null | undefined) =>
+      (list ?? []).map((item) => ({
+        ...item,
+        summary: visibleSessionTitle(item.summary, item.sessionId),
+      }));
     try {
       const list = await invoke<RecentSessionDto[]>("list_sessions", {
         filter: listKind,
@@ -118,14 +124,24 @@ export default function SidebarSessionList({
         projectId,
         placement,
       });
-      setItems(
-        (list ?? []).map((item) => ({
-          ...item,
-          summary: visibleSessionTitle(item.summary, item.sessionId),
-        })),
-      );
-    } catch {
-      setItems([]);
+      setItems(normalize(list));
+    } catch (primaryError) {
+      if (listKind !== "active") {
+        console.warn("load archived sessions failed", primaryError);
+        setItems([]);
+        return;
+      }
+      try {
+        const fallback = await invoke<RecentSessionDto[]>(
+          "list_recent_sessions",
+          { limit: projectId ? 50 : 200 },
+        );
+        setItems(
+          normalize(scopeFallbackSessionsToProject(fallback, projectId)),
+        );
+      } catch (fallbackError) {
+        console.warn("load sessions failed", primaryError, fallbackError);
+      }
     }
   }, [listKind, placement, projectId]);
 

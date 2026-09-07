@@ -29,3 +29,27 @@ export function matchesSidebarSessionPlacement(
 ): boolean {
   return placement === "all" || sidebarSessionPlacement(session) === placement;
 }
+
+export function scopeFallbackSessionsToProject(
+  sessions: RecentSessionDto[],
+  projectId: string | null,
+): RecentSessionDto[] {
+  if (!projectId) return sessions;
+  if (projectId !== "default") {
+    return sessions.filter((session) => session.projectId === projectId);
+  }
+  return sessions
+    .filter(
+      (session) =>
+        session.projectId === "default" ||
+        (!session.projectId && session.source !== "cron"),
+    )
+    .map((session) =>
+      session.projectId
+        ? session
+        : {
+            ...session,
+            projectId: "default",
+          },
+    );
+}

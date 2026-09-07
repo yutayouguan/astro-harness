@@ -115,6 +115,7 @@ import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
 import {
+  applyDefaultProjectRoot,
   DEFAULT_PROJECT_PLACEHOLDER,
   ensureDefaultProjectVisible,
   loadProjectsWithRetry,
@@ -277,13 +278,27 @@ export default function App() {
   // 启动时确保默认项目存在于 DB，然后加载全部项目
   useEffect(() => {
     let cancelled = false;
+    void invoke<string>("get_default_workspace_path")
+      .then((root) => {
+        if (!cancelled) {
+          setProjects((current) => applyDefaultProjectRoot(current, root));
+        }
+      })
+      .catch((error) => {
+        console.warn("load default project root failed", error);
+      });
     void (async () => {
       try {
         const list = await loadProjectsWithRetry(() =>
           invoke<ProjectDto[]>("list_projects"),
         );
         if (cancelled) return;
-        setProjects(list);
+        setProjects((current) => {
+          const fallbackRoot = current.find(
+            (project) => project.id === DEFAULT_PROJECT_PLACEHOLDER.id,
+          )?.roots[0];
+          return applyDefaultProjectRoot(list, fallbackRoot);
+        });
         setActiveProjectId((current) =>
           list.some((project) => project.id === current) ? current : list[0].id,
         );

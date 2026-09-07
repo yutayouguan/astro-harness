@@ -21,6 +21,19 @@ export function ensureDefaultProjectVisible(
     : [DEFAULT_PROJECT_PLACEHOLDER, ...list];
 }
 
+export function applyDefaultProjectRoot(
+  projects: ProjectDto[],
+  root: string | null | undefined,
+): ProjectDto[] {
+  const normalizedRoot = root?.trim();
+  if (!normalizedRoot) return projects;
+  return ensureDefaultProjectVisible(projects).map((project) =>
+    project.id === DEFAULT_PROJECT_PLACEHOLDER.id
+      ? { ...project, roots: [normalizedRoot] }
+      : project,
+  );
+}
+
 export async function loadProjectsWithRetry(
   load: () => Promise<ProjectDto[] | null | undefined>,
   wait: (delayMs: number) => Promise<void> = (delayMs) =>
