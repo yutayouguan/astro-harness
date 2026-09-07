@@ -1,0 +1,155 @@
+/* Harmony-inspired immersive light material.
+ *
+ * One 0-100 intensity drives every glass-bearing surface. Environment color
+ * comes from the wallpaper palette first, then the active unified/tab tone.
+ * Chroma stays deliberately low so the material never becomes a fixed purple,
+ * green, or blue theme. Existing `--liquid-glass-*` names remain compatibility
+ * inputs for components while their recipe is replaced here. */
+
+html[data-theme="light"] {
+  --immersive-neutral-rgb: 246, 249, 250;
+  --immersive-base-alpha-start: 0.8;
+  --immersive-base-alpha-span: 0.32;
+  --immersive-edge-alpha-start: 0.3;
+  --immersive-edge-alpha-span: 0.24;
+  --immersive-shadow-rgb: 34, 55, 68;
+  --immersive-shadow-alpha: 0.13;
+}
+
+html[data-theme="dark"] {
+  --immersive-neutral-rgb: 17, 25, 32;
+  --immersive-base-alpha-start: 0.7;
+  --immersive-base-alpha-span: 0.3;
+  --immersive-edge-alpha-start: 0.08;
+  --immersive-edge-alpha-span: 0.12;
+  --immersive-shadow-rgb: 0, 0, 0;
+  --immersive-shadow-alpha: 0.3;
+}
+
+[data-glass-intensity] {
+  --immersive-env-primary: var(
+    --wallpaper-tone,
+    var(--unified-tone, var(--tone, var(--tone-blue)))
+  );
+  --immersive-env-secondary: var(
+    --wallpaper-accent-2,
+    var(--accent-2, var(--tone-soft, var(--tone-blue-soft)))
+  );
+  --immersive-base-alpha: calc(
+    var(--immersive-base-alpha-start) -
+    (var(--immersive-base-alpha-span) * var(--glass-intensity, 0.64))
+  );
+  --immersive-neutral: rgba(
+    var(--immersive-neutral-rgb),
+    var(--immersive-base-alpha)
+  );
+  --immersive-glass-color: color-mix(
+    in srgb,
+    var(--immersive-neutral) 91%,
+    var(--immersive-env-primary) 9%
+  );
+  --immersive-light-primary: color-mix(
+    in srgb,
+    var(--immersive-env-primary) 12%,
+    transparent
+  );
+  --immersive-light-secondary: color-mix(
+    in srgb,
+    var(--immersive-env-secondary) 8%,
+    transparent
+  );
+  --immersive-glass-background:
+    radial-gradient(
+      circle at 12% -18%,
+      var(--immersive-light-primary),
+      transparent 48%
+    ),
+    radial-gradient(
+      circle at 92% 18%,
+      var(--immersive-light-secondary),
+      transparent 46%
+    ),
+    var(--immersive-glass-color);
+  --immersive-edge-base: rgba(
+    255,
+    255,
+    255,
+    calc(
+      var(--immersive-edge-alpha-start) +
+      (var(--immersive-edge-alpha-span) * var(--glass-intensity, 0.64))
+    )
+  );
+  --immersive-glass-border: color-mix(
+    in srgb,
+    var(--immersive-edge-base) 90%,
+    var(--immersive-env-primary) 10%
+  );
+  --immersive-glass-inner: color-mix(
+    in srgb,
+    rgba(255, 255, 255, calc(0.04 + 0.09 * var(--glass-intensity, 0.64))) 92%,
+    var(--immersive-env-primary) 8%
+  );
+  --immersive-glass-rim:
+    inset 0 0.5px 0 var(--immersive-glass-inner),
+    inset 0 0 0 0.5px
+    color-mix(in srgb, var(--immersive-glass-border) 66%, transparent);
+  --immersive-glass-shadow:
+    0 8px 24px -14px
+    rgba(
+      var(--immersive-shadow-rgb),
+      calc(var(--immersive-shadow-alpha) * var(--glass-intensity, 0.64))
+    ),
+    0 0 28px -22px
+    color-mix(in srgb, var(--immersive-env-primary) 24%, transparent);
+  --immersive-glass-backdrop: blur(calc(28px * var(--glass-intensity, 0.64)))
+    saturate(calc(1 + (0.34 * var(--glass-intensity, 0.64))))
+    brightness(calc(1 + (0.04 * var(--glass-intensity, 0.64))));
+  --immersive-overlay-color: color-mix(
+    in srgb,
+    var(--immersive-glass-color) 88%,
+    var(--immersive-neutral) 12%
+  );
+  --immersive-overlay-background:
+    radial-gradient(
+      circle at 16% 0%,
+      color-mix(in srgb, var(--immersive-env-primary) 14%, transparent),
+      transparent 48%
+    ),
+    var(--immersive-overlay-color);
+  --immersive-field-opacity: calc(0.32 * var(--glass-intensity, 0.64));
+  --immersive-particle-opacity: calc(0.24 * var(--glass-intensity, 0.64));
+
+  /* Compatibility contract consumed across shell, cards, controls and panels. */
+  --liquid-glass-tint: var(--immersive-glass-color);
+  --liquid-glass-sheen:
+    radial-gradient(
+      circle at 12% -18%,
+      var(--immersive-light-primary),
+      transparent 48%
+    ),
+    radial-gradient(
+      circle at 92% 18%,
+      var(--immersive-light-secondary),
+      transparent 46%
+    );
+  --liquid-glass-edge: var(--immersive-glass-border);
+  --liquid-glass-inner: var(--immersive-glass-inner);
+  --liquid-glass-rim: var(--immersive-glass-rim);
+  --liquid-glass-shadow: var(--immersive-glass-shadow);
+  --liquid-glass-backdrop: var(--immersive-glass-backdrop);
+  --liquid-glass-blur-scale: calc(1.4 * var(--glass-intensity, 0.64));
+  --liquid-glass-saturate: calc(1 + (0.34 * var(--glass-intensity, 0.64)));
+
+  --global-liquid-glass-color: var(--immersive-glass-color);
+  --global-liquid-glass-background: var(--immersive-glass-background);
+  --global-liquid-glass-border: var(--immersive-glass-border);
+  --global-liquid-glass-shadow:
+    var(--immersive-glass-shadow), var(--immersive-glass-rim);
+  --global-liquid-glass-backdrop: var(--immersive-glass-backdrop);
+
+  /* Elevated surfaces share the algorithm but use the slightly denser plane. */
+  --menu-overlay-bg: var(--immersive-overlay-background);
+  --titlebar-menu-bg: var(--immersive-overlay-background);
+  --lens-bg: var(--immersive-overlay-background);
+  --badge-bg: var(--immersive-overlay-background);
+}

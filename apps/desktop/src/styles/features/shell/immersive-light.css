@@ -1,0 +1,70 @@
+/* One restrained environmental light field behind all UI surfaces.
+ * Ordinary cards never own particles or animated gas, avoiding stacked noise. */
+
+.app-shell {
+  isolation: isolate;
+}
+
+.shell-immersive-light-field {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--immersive-field-opacity, 0.2);
+  background:
+    radial-gradient(
+      ellipse 64% 48% at 10% 0%,
+      color-mix(in srgb, var(--immersive-env-primary) 56%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 54% 42% at 94% 18%,
+      color-mix(in srgb, var(--immersive-env-secondary) 42%, transparent),
+      transparent 72%
+    );
+}
+
+.app-shell.has-wallpaper .shell-immersive-light-field {
+  opacity: calc(var(--immersive-field-opacity, 0.2) * 0.72);
+  mix-blend-mode: screen;
+}
+
+.shell-immersive-light-particle {
+  position: absolute;
+  left: var(--immersive-particle-x);
+  top: var(--immersive-particle-y);
+  width: var(--immersive-particle-size);
+  height: var(--immersive-particle-size);
+  border-radius: 50%;
+  background: var(--immersive-env-primary);
+  box-shadow: 0 0 12px
+    color-mix(in srgb, var(--immersive-env-primary) 46%, transparent);
+  opacity: var(--immersive-particle-opacity, 0.14);
+  animation: immersive-particle-pulse 8s ease-in-out
+    var(--immersive-particle-delay) infinite alternate;
+}
+
+.shell-immersive-light-particle:nth-child(even) {
+  background: var(--immersive-env-secondary);
+  box-shadow: 0 0 12px
+    color-mix(in srgb, var(--immersive-env-secondary) 42%, transparent);
+}
+
+@keyframes immersive-particle-pulse {
+  to {
+    opacity: calc(var(--immersive-particle-opacity, 0.14) * 0.38);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-immersive-light-particle {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .shell-immersive-light-field {
+    display: none;
+  }
+}

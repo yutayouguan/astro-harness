@@ -30,6 +30,7 @@
 @import "./tokens/tone-context.css" layer(overrides);
 @import "./tokens/unified-color.css" layer(overrides);
 @import "./tokens/glass-intensity.css" layer(overrides);
+@import "./tokens/immersive-light.css" layer(overrides);
 @import "./tokens/icon-preferences.css" layer(overrides);
 @import "./tokens/a11y.css" layer(overrides);
 
@@ -40,6 +41,7 @@
 
 /* Application shell */
 @import "./features/shell/shell.css" layer(shell);
+@import "./features/shell/immersive-light.css" layer(shell);
 /* layout / header 大量以 .sidebar-x .expandable-search-btn、.model-picker-icon
    .model-brand-icon 这类页面作用域覆写共享组件，进 shell 层会被 components 反压，
    故暂随 features 走；等这些覆写收敛成组件变体后再下沉到 shell。 */

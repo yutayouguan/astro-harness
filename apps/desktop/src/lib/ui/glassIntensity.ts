@@ -2,7 +2,7 @@ export type GlassIntensity = number;
 
 export const GLASS_INTENSITY_MIN = 0;
 export const GLASS_INTENSITY_MAX = 100;
-export const DEFAULT_GLASS_INTENSITY = 50;
+export const DEFAULT_GLASS_INTENSITY = 64;
 
 const GLASS_INTENSITY_KEY = "astro-glass-intensity";
 

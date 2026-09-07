@@ -77,8 +77,8 @@ test("glass range stays contained and exposes progress, focus, and reduced motio
   );
 });
 
-test("theme state persists a normalized intensity with a default of 50", () => {
-  assert.match(intensityRuntime, /DEFAULT_GLASS_INTENSITY = 50/);
+test("theme state persists a normalized intensity with a balanced default of 64", () => {
+  assert.match(intensityRuntime, /DEFAULT_GLASS_INTENSITY = 64/);
   assert.match(intensityRuntime, /GLASS_INTENSITY_MIN = 0/);
   assert.match(intensityRuntime, /GLASS_INTENSITY_MAX = 100/);
   assert.match(intensityRuntime, /"astro-glass-intensity"/);
@@ -97,8 +97,8 @@ test("theme state persists a normalized intensity with a default of 50", () => {
 });
 
 test("glass intensity normalization clamps input and rejects the removed presets", () => {
-  assert.equal(readStoredGlassIntensity({ getItem: () => null }), 50);
-  assert.equal(readStoredGlassIntensity({ getItem: () => "liquid" }), 50);
+  assert.equal(readStoredGlassIntensity({ getItem: () => null }), 64);
+  assert.equal(readStoredGlassIntensity({ getItem: () => "liquid" }), 64);
   assert.equal(normalizeGlassIntensity(-20), 0);
   assert.equal(normalizeGlassIntensity(42.6), 43);
   assert.equal(normalizeGlassIntensity(140), 100);

@@ -1,8 +1,8 @@
-/* Map the continuous 0-100 Liquid Glass strength onto the shared surface
- * contract. `--glass-intensity` is normalized to 0-1 by useTheme. */
+/* Map the continuous 0-100 material strength onto the shared surface
+ * compatibility contract. `--glass-intensity` is normalized to 0-1 by useTheme. */
 [data-glass-intensity] {
-  /* One global Apple-style Liquid Glass contract. Every surface family below
-   * aliases these five values instead of maintaining an independent recipe. */
+  /* Every surface family aliases these five values instead of maintaining an
+   * independent recipe. `immersive-light.css` supplies their active values. */
   --global-liquid-glass-color: var(--liquid-glass-tint);
   --global-liquid-glass-background:
     var(--liquid-glass-sheen), var(--liquid-glass-tint);

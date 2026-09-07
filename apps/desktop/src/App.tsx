@@ -1356,6 +1356,52 @@ export default function App() {
           <span />
         </div>
       ) : null}
+      <div className="shell-immersive-light-field" aria-hidden>
+        <i
+          className="shell-immersive-light-particle"
+          style={
+            {
+              "--immersive-particle-x": "12%",
+              "--immersive-particle-y": "18%",
+              "--immersive-particle-size": "3px",
+              "--immersive-particle-delay": "-1s",
+            } as CSSProperties
+          }
+        />
+        <i
+          className="shell-immersive-light-particle"
+          style={
+            {
+              "--immersive-particle-x": "38%",
+              "--immersive-particle-y": "76%",
+              "--immersive-particle-size": "4px",
+              "--immersive-particle-delay": "-4s",
+            } as CSSProperties
+          }
+        />
+        <i
+          className="shell-immersive-light-particle"
+          style={
+            {
+              "--immersive-particle-x": "68%",
+              "--immersive-particle-y": "14%",
+              "--immersive-particle-size": "2px",
+              "--immersive-particle-delay": "-6s",
+            } as CSSProperties
+          }
+        />
+        <i
+          className="shell-immersive-light-particle"
+          style={
+            {
+              "--immersive-particle-x": "88%",
+              "--immersive-particle-y": "68%",
+              "--immersive-particle-size": "3px",
+              "--immersive-particle-delay": "-2s",
+            } as CSSProperties
+          }
+        />
+      </div>
       {toneFade && (
         <div
           key={toneFade.revision}

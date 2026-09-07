@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-/** 连续玻璃强度的低、中、高三个校准点。 */
+/** 连续沉浸光感强度的关闭、均衡与最强三个校准点。 */
 const VARIANTS = [
   { intensity: 0, label: "0（关闭）" },
-  { intensity: 50, label: "50（默认）" },
+  { intensity: 64, label: "64（均衡默认）" },
   { intensity: 100, label: "100（最强）" },
 ] as const;
 
@@ -172,7 +172,7 @@ function LiquidGlassComparison() {
 
 const meta = {
   id: "liquid-glass",
-  title: "Design/Liquid Glass",
+  title: "Design/Immersive Light Glass",
   component: LiquidGlassComparison,
   parameters: {
     controls: { disable: true },

@@ -37,7 +37,7 @@ export type WallpaperPalette = {
 
 export const MAX_RECENT_WALLPAPERS = 6;
 export const DEFAULT_WALLPAPER_THEME_COLOR = "#4f6ef7";
-export const DEFAULT_WALLPAPER_HIGHLIGHT_COLOR = "#a855f7";
+export const DEFAULT_WALLPAPER_HIGHLIGHT_COLOR = "#22b8a7";
 
 export const DEFAULT_WALLPAPER_PREFS: WallpaperPrefs = {
   mode: "wallpaper",

@@ -10,11 +10,12 @@ The application imports token files directly from `styles/index.css` in this ord
 ## Glass intensity
 
 `component/glass.css` owns the fallback frosted recipe. `component/liquid-glass.css`
-derives the Liquid Glass recipe continuously from `--glass-intensity` (`0` to `1`).
-`glass-intensity.css` activates it through `data-glass-intensity` and maps it onto the
-generic `--glass-*` contract, so surfaces keep consuming `--glass-fill` /
-`--glass-rim` / `--glass-edge` and need no per-file changes. The persisted user value is
-an integer from `0` to `100`; `50` is the default.
+keeps the legacy continuous recipe and compatibility names. `glass-intensity.css`
+maps those names onto the global surface contract; `immersive-light.css` then supplies
+the active Harmony-inspired recipe: low-chroma environment color from wallpaper or Tab
+tone, stable translucent fill, soft edge light, and restrained depth. Surfaces keep
+consuming `--glass-fill` / `--glass-rim` / `--glass-edge` and need no per-file changes.
+The persisted user value is an integer from `0` to `100`; `64` is the balanced default.
 
 `--glass-blur-scale` and `--glass-saturate` are global knobs. Hardcoded
 `backdrop-filter: blur(16px) saturate(1.25)` across feature styles was rewired to
@@ -26,7 +27,7 @@ idempotent and will convert anything that regressed.
 
 `data-glass-intensity` is not restricted to `html` — custom properties inherit, so
 setting it together with a local `--glass-intensity` on a container enables a local
-preview. `Design/Liquid Glass` in Storybook renders the 0, 50, and 100 calibration points
+preview. `Design/Immersive Light Glass` in Storybook renders the 0, 64, and 100 calibration points
 side by side.
 
 ## Content card material
@@ -38,7 +39,7 @@ this contract so feature colors remain accents rather than competing base materi
 Small controls and nested rows intentionally keep lighter component-specific surfaces;
 do not apply the content-card recipe recursively. Accessibility overrides replace the
 background with the semantic panel surface and disable backdrop blur.
-Content cards follow the selected continuous Liquid Glass strength. Accessibility
+Content cards follow the selected continuous immersive-light strength. Accessibility
 preferences still replace the recipe with a solid semantic surface.
 
 `foundation/themes.css` and `foundation/tones.css` are deprecated barrels for legacy external entry points. The application does not import them, preventing duplicate token injection.
