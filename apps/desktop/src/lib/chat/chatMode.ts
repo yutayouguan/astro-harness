@@ -13,7 +13,7 @@ export function loadChatSendMode(): ChatSendMode {
     const v = localStorage.getItem(SEND_MODE_KEY);
     if (v === "queue" || v === "steer" || v === "interrupt") return v;
   } catch {
-    /* ignore */
+    /* 忽略 */
   }
   return "steer";
 }
@@ -22,7 +22,7 @@ export function saveChatSendMode(mode: ChatSendMode) {
   try {
     localStorage.setItem(SEND_MODE_KEY, mode);
   } catch {
-    /* ignore */
+    /* 忽略 */
   }
 }
 
@@ -45,7 +45,7 @@ export function loadChatMode(): ChatWorkMode {
   try {
     return normalizeStoredChatMode(localStorage.getItem(STORAGE_KEY));
   } catch {
-    /* ignore */
+    /* 忽略 */
   }
   return "agent";
 }
@@ -55,7 +55,7 @@ export function saveChatMode(mode: ChatWorkMode) {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
   } catch {
-    /* ignore */
+    /* 忽略 */
   }
 }
 

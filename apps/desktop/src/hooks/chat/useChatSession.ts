@@ -619,7 +619,7 @@ export function useChatSession({
           return;
         }
 
-        // mode === "queue"
+        // 排队模式：加入 follow-up 队列，Agent 完成后自动出队
         let overflow = false;
         setQueuedFollowUps((prev) => {
           if (prev.length >= MAX_QUEUED_FOLLOWUPS) {

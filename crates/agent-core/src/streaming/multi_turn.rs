@@ -658,8 +658,7 @@ pub(crate) async fn run_turn(
         )
         .await;
 
-        // An in-flight request keeps its original snapshot. A complete settings update is
-        // published atomically immediately before the next provider request.
+        // 飞行中的请求保留原快照；完整的设置更新在下一次 provider 请求前原子发布。
         if let Some(settings) = turn_context.provider_settings() {
             if settings.generation != settings_generation {
                 settings_generation = settings.generation;
