@@ -467,6 +467,7 @@ export function useSend(deps: UseSendDeps) {
                 flushToolDeltas();
               }
               touchActivity();
+              setStatusDetail(null);
               enqueueStreamToken(assistantId, payload.content);
             } else if (
               payload.type === "async_message" &&
