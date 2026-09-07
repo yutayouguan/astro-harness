@@ -4,7 +4,8 @@
   --chat-dock-inset: 0px;
   --chat-dock-radius: 0px;
   --chat-workbench-radius: 18px;
-  --chat-dock-surface-border: 1px solid var(--titlebar-menu-border);
+  --chat-dock-surface-border: var(--content-card-border-width, 0.5px) solid
+    var(--titlebar-menu-border);
   --chat-dock-surface-background: var(--titlebar-menu-bg);
   --chat-dock-surface-shadow: var(--header-chip-shadow);
   --chat-dock-surface-filter: var(--titlebar-menu-blur);

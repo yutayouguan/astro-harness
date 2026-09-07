@@ -196,7 +196,7 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
   assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
   assert.match(
     layoutBase,
-    /--chat-dock-surface-border:\s*1px solid var\(--titlebar-menu-border\);/,
+    /--chat-dock-surface-border:\s*var\(--content-card-border-width, 0\.5px\) solid\s+var\(--titlebar-menu-border\);/,
   );
   assert.match(
     layoutBase,
@@ -267,7 +267,10 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
   assert.match(editorBody, /background:\s*transparent;/);
   assert.match(titlebarTabs, /background:\s*transparent;/);
   assert.match(openProjectPanel, /margin:\s*var\(--chat-dock-inset\);/);
-  assert.match(openProjectPanel, /border-width:\s*1px;/);
+  assert.match(
+    openProjectPanel,
+    /border-width:\s*var\(--content-card-border-width, 0\.5px\);/,
+  );
   assert.match(sidePanel, /margin:\s*var\(--chat-dock-inset\);/);
   assert.match(
     app,
@@ -303,7 +306,10 @@ test("project files dock animates layout in both directions", () => {
     openPanel,
     /flex-basis:\s*min\(var\(--project-files-width, 264px\), 42%\);/,
   );
-  assert.match(openPanel, /border-width:\s*1px;/);
+  assert.match(
+    openPanel,
+    /border-width:\s*var\(--content-card-border-width, 0\.5px\);/,
+  );
   assert.match(openPanel, /visibility:\s*visible;/);
   assert.match(openPanel, /pointer-events:\s*auto;/);
   assert.match(projectFilesPanel, /new ResizeObserver\(reportRenderedWidth\)/);

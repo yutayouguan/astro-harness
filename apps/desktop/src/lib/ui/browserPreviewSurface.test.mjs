@@ -66,7 +66,7 @@ test("browser preview supports standalone browsing and completed browser tool re
   );
   assert.match(
     css,
-    /\.browser-dock\.is-open\s*\{[\s\S]*?border-left-width:\s*1px;/,
+    /\.browser-dock\.is-open\s*\{[\s\S]*?border-left-width:\s*var\(--content-card-border-width, 0\.5px\);/,
   );
   assert.match(
     css,

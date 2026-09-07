@@ -1,0 +1,7 @@
+/* Keep semantic card outlines optically light across feature-owned recipes.
+ * Match complete class tokens ending in `-card`; nested `*-card-*` controls are
+ * intentionally excluded. Borderless cards stay borderless because this rule
+ * changes width only, not border style. */
+:where([class$="-card"], [class*="-card "], [class~="card"], .prefs-section) {
+  border-width: var(--content-card-border-width, 0.5px);
+}

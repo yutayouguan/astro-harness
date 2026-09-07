@@ -126,6 +126,7 @@
 
 @media (prefers-contrast: more) {
   html[data-theme] {
+    --content-card-border-width: 1px;
     --immersive-glass-border: var(--color-border);
     --immersive-glass-shadow: var(--shadow-card);
     --immersive-glass-backdrop: none;

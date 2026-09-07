@@ -114,6 +114,9 @@
 @import "./foundation/transitions.css" layer(base);
 @import "./components/illustrations.css" layer(features);
 
+/* Cross-feature optical density belongs above feature-local card shorthands. */
+@import "./components/card-borders.css" layer(overrides);
+
 /* 统一分段 Tab：overrides 层显式声明「压过各功能页历史外观」，
    不再依赖它是 index.css 最后一行 */
 @import "./components/tabs.css" layer(overrides);

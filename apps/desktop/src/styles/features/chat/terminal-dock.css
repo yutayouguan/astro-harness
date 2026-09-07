@@ -55,7 +55,7 @@ html {
 
 .terminal-dock.is-open {
   flex-basis: var(--terminal-dock-height);
-  border-top-width: 1px;
+  border-top-width: var(--content-card-border-width, 0.5px);
   opacity: 1;
   visibility: visible;
   pointer-events: auto;

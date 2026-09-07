@@ -84,6 +84,7 @@ html[data-theme] {
   --panel: var(--surface-panel-background);
   /* 跨工作台与设置页的主内容卡片材质；功能色只用于图标、状态和交互反馈。 */
   --content-card-radius: 18px;
+  --content-card-border-width: 0.5px;
   --content-card-border: var(--glass-edge);
   --content-card-background: var(--glass-fill);
   --content-card-shadow: var(--shadow-card), var(--glass-rim);

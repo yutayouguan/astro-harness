@@ -138,6 +138,10 @@ test("terminal uses the top-right tool group material", () => {
     css,
     /\.terminal-dock\s*\{[\s\S]*?border-top:\s*0 solid var\(--titlebar-menu-border\);[\s\S]*?background:\s*var\(--titlebar-menu-bg\);[\s\S]*?box-shadow:\s*var\(--header-chip-shadow\);[\s\S]*?backdrop-filter:\s*var\(--titlebar-menu-blur\);/,
   );
+  assert.match(
+    css,
+    /\.terminal-dock\.is-open\s*\{[\s\S]*?border-top-width:\s*var\(--content-card-border-width, 0\.5px\);/,
+  );
   assert.match(css, /prefers-contrast:\s*more/);
 });
 
