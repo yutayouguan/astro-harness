@@ -32,6 +32,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `exec/cron.rs` | Cron 定时任务执行入口（`execute_job` → `run_agent_job`） |
 | `exec/subagents.rs` | 子 Agent 线程生命周期管理 |
 | `exec/dispatch.rs` | `DefaultAgentThreadDispatch` 实现 |
+| `exec/agent_runtime.rs` | `AgentRuntimeManager` 与封装的 `RuntimeState` 代际转换 |
 | `exec/background.rs` | 后台 Agent 线程执行 |
 | `exec/memory_review.rs` | 记忆回顾与审批 |
 | `exec/mid_run_summary.rs` | 中途摘要生成 |
@@ -50,6 +51,8 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `runtime/session_services.rs` | `SessionServices` — 会话级服务注册表 |
 | `runtime/session_io.rs` | `AgentStatus` 状态枚举与 I/O 绑定 |
 | `runtime/astro_thread.rs` | `AstroThread` — Session 的事件流句柄 |
+| `runtime/event_dispatch.rs` | durable event 的 rollout-first 持久化与 live 投递 |
+| `runtime/response_journal.rs` | canonical `ResponseItem` 追加与 SQLite 投影边界 |
 | `runtime/model_ctx.rs` | `ModelContext` — LLM 凭证、model_targets/fallback 链 |
 | `runtime/turn_budget.rs` | `TurnState` — turn_id、轮次/深度计数、`MaxDepthError` |
 | `runtime/turn_lifecycle.rs` | 轮次生命周期 — `begin_user_turn` / `run_turn` / `prepare_llm_context` |
@@ -126,6 +129,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 9. **Persistent 门禁**：只有 OpenAI backend 且模型目录存在非空 persistent instructions 时可启用；wire effort 为 `disabled`
 10. **Extension 冻结**：当前 turn 的 snapshot 不可替换，pending reconcile 只能在下一 turn 发布
 11. **Usage 恢复**：resume 使用最后一条 cumulative checkpoint，fork 不继承父 Thread 累计值
+12. **Runtime 转换封装**：`RuntimeState` 不暴露 `HashMap` 的 `DerefMut`，slot 声明周期只能通过显式转换方法修改
 
 ## 测试
 

@@ -1,7 +1,6 @@
 //! 活跃 Agent Turn 运行时管理——调度、生命周期、中断与清理。
 
 use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
@@ -122,13 +121,49 @@ struct RuntimeState {
 }
 
 impl RuntimeState {
+    fn contains_thread(&self, thread_id: &str) -> bool {
+        self.slots.contains_key(thread_id)
+    }
+
+    fn active_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    fn slot(&self, thread_id: &str) -> Option<&RuntimeSlot> {
+        self.slots.get(thread_id)
+    }
+
+    fn slot_mut(&mut self, thread_id: &str) -> Option<&mut RuntimeSlot> {
+        self.slots.get_mut(thread_id)
+    }
+
+    fn insert_slot(&mut self, thread_id: String, slot: RuntimeSlot) {
+        self.slots.insert(thread_id, slot);
+    }
+
+    fn remove_slot(&mut self, thread_id: &str) -> Option<RuntimeSlot> {
+        self.slots.remove(thread_id)
+    }
+
+    fn has_close_intent(&self, thread_id: &str) -> bool {
+        self.close_intents.contains(thread_id)
+    }
+
+    fn mark_close_intent(&mut self, thread_id: &str) {
+        self.close_intents.insert(thread_id.to_string());
+    }
+
+    fn clear_close_intent(&mut self, thread_id: &str) {
+        self.close_intents.remove(thread_id);
+    }
+
     fn claim_running(
         &mut self,
         thread_id: &str,
         start_token: Option<&str>,
         turn: ActiveAgentTurn,
     ) -> anyhow::Result<()> {
-        if self.close_intents.contains(thread_id) {
+        if self.has_close_intent(thread_id) {
             anyhow::bail!("agent thread {thread_id:?} has a pending close intent");
         }
         match (self.slots.entry(thread_id.to_string()), start_token) {
@@ -148,20 +183,6 @@ impl RuntimeState {
                 anyhow::bail!("agent thread {thread_id:?} already has an active runtime turn")
             }
         }
-    }
-}
-
-impl Deref for RuntimeState {
-    type Target = HashMap<String, RuntimeSlot>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.slots
-    }
-}
-
-impl DerefMut for RuntimeState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.slots
     }
 }
 
@@ -922,14 +943,14 @@ impl AgentRuntimeManager {
     pub fn is_running(&self, thread_id: &str) -> bool {
         self.active
             .lock()
-            .map(|active| active.contains_key(thread_id))
+            .map(|active| active.contains_thread(thread_id))
             .unwrap_or(false)
     }
 
     pub fn active_count(&self) -> usize {
         self.active
             .lock()
-            .map(|active| active.len())
+            .map(|active| active.active_count())
             .unwrap_or_default()
     }
 
@@ -942,15 +963,15 @@ impl AgentRuntimeManager {
         mut request: RunAgentTurnRequest,
     ) -> anyhow::Result<FollowupAdmission> {
         let mut active = self.lock_active()?;
-        if active.close_intents.contains(thread_id) {
+        if active.has_close_intent(thread_id) {
             anyhow::bail!("agent thread {thread_id:?} has a pending close intent");
         }
-        let Some(slot) = active.get_mut(thread_id) else {
+        let Some(slot) = active.slot_mut(thread_id) else {
             let (result_tx, result_rx) = watch::channel(None);
             let token = Uuid::new_v4().to_string();
             request.followup_start_tx = Some(result_tx.clone());
             request.start_token = Some(token.clone());
-            active.insert(
+            active.insert_slot(
                 thread_id.to_string(),
                 RuntimeSlot::Starting(StartingAgentTurn {
                     token,
@@ -1062,7 +1083,7 @@ impl AgentRuntimeManager {
         thread_id: &str,
     ) -> anyhow::Result<RuntimeTerminationState> {
         let active = self.lock_active()?;
-        match active.get(thread_id) {
+        match active.slot(thread_id) {
             Some(RuntimeSlot::Running(turn)) => Ok(RuntimeTerminationState::Running {
                 control: Arc::clone(&turn.interrupt),
                 terminated: turn.terminated.clone(),
@@ -1077,10 +1098,10 @@ impl AgentRuntimeManager {
         let mut rejected_starting = None;
         let admission = {
             let mut active = self.lock_active()?;
-            active.close_intents.insert(thread_id.to_string());
-            if matches!(active.get(thread_id), Some(RuntimeSlot::Starting(_))) {
+            active.mark_close_intent(thread_id);
+            if matches!(active.slot(thread_id), Some(RuntimeSlot::Starting(_))) {
                 let starting = active
-                    .remove(thread_id)
+                    .remove_slot(thread_id)
                     .and_then(|slot| match slot {
                         RuntimeSlot::Starting(starting) => Some(starting),
                         RuntimeSlot::Running(_) => None,
@@ -1089,7 +1110,7 @@ impl AgentRuntimeManager {
                 rejected_starting = Some(starting.result_tx);
                 CloseSlotAdmission::Starting
             } else {
-                match active.get_mut(thread_id) {
+                match active.slot_mut(thread_id) {
                     Some(RuntimeSlot::Running(turn)) => {
                         let terminated = turn.terminated.clone();
                         rejected_followup = turn.pending_followup.take();
@@ -1121,7 +1142,7 @@ impl AgentRuntimeManager {
 
     pub(super) fn clear_close_intent(&self, thread_id: &str) {
         if let Ok(mut active) = self.lock_active() {
-            active.close_intents.remove(thread_id);
+            active.clear_close_intent(thread_id);
         }
     }
 
@@ -1417,11 +1438,11 @@ impl AgentRuntimeManager {
         reserve_followup: bool,
     ) -> anyhow::Result<(bool, Option<PendingFollowup>)> {
         let mut active = self.lock_active()?;
-        let matches = active.get(thread_id).is_some_and(
+        let matches = active.slot(thread_id).is_some_and(
             |slot| matches!(slot, RuntimeSlot::Running(turn) if turn.turn_id == turn_id),
         );
         let pending = matches
-            .then(|| active.remove(thread_id))
+            .then(|| active.remove_slot(thread_id))
             .flatten()
             .and_then(|slot| match slot {
                 RuntimeSlot::Running(turn) => turn.pending_followup,
@@ -1434,7 +1455,7 @@ impl AgentRuntimeManager {
                     .start_token
                     .clone()
                     .expect("pending follow-up owns a starting token");
-                active.insert(
+                active.insert_slot(
                     thread_id.to_string(),
                     RuntimeSlot::Starting(StartingAgentTurn {
                         token,
@@ -1461,11 +1482,11 @@ impl AgentRuntimeManager {
         };
         let mut removed = false;
         if let Ok(mut active) = self.lock_active() {
-            let matches = active.get(&request.thread.thread_id).is_some_and(
+            let matches = active.slot(&request.thread.thread_id).is_some_and(
                 |slot| matches!(slot, RuntimeSlot::Starting(starting) if starting.token == token),
             );
             if matches {
-                active.remove(&request.thread.thread_id);
+                active.remove_slot(&request.thread.thread_id);
                 removed = true;
             }
         }
@@ -1484,7 +1505,7 @@ impl AgentRuntimeManager {
     }
 
     fn active_turn_matches(&self, thread_id: &str, turn_id: &str) -> anyhow::Result<bool> {
-        Ok(self.lock_active()?.get(thread_id).is_some_and(
+        Ok(self.lock_active()?.slot(thread_id).is_some_and(
             |slot| matches!(slot, RuntimeSlot::Running(turn) if turn.turn_id == turn_id),
         ))
     }
@@ -1817,7 +1838,7 @@ mod tests {
         let manager = AgentRuntimeManager::default();
         let (result_tx, result_rx) = watch::channel(None);
         let result_observer = result_rx.clone();
-        manager.active.lock().unwrap().insert(
+        manager.active.lock().unwrap().insert_slot(
             thread.thread_id.clone(),
             RuntimeSlot::Starting(StartingAgentTurn {
                 token: "starting-token".into(),
@@ -3455,7 +3476,7 @@ mod tests {
             .unwrap();
         let replacement_control = Arc::new(AgentThreadControl::default());
         let (_replacement_tx, replacement_rx) = watch::channel(None);
-        manager.lock_active().unwrap().insert(
+        manager.lock_active().unwrap().insert_slot(
             thread.thread_id.clone(),
             RuntimeSlot::Running(Box::new(ActiveAgentTurn {
                 turn_id: "replacement-turn".into(),
@@ -3490,7 +3511,7 @@ mod tests {
             manager
                 .lock_active()
                 .unwrap()
-                .get(&thread.thread_id),
+                .slot(&thread.thread_id),
             Some(RuntimeSlot::Running(turn)) if turn.turn_id == "replacement-turn"
         ));
         let current = control.runtime_handle(&thread.thread_id).unwrap().unwrap();
@@ -3552,7 +3573,7 @@ mod tests {
         let error = manager.start_turn(stale).await.unwrap_err();
         assert!(format!("{error:#}").contains("no longer owns"));
         assert!(matches!(
-            manager.lock_active().unwrap().get(&thread.thread_id),
+            manager.lock_active().unwrap().slot(&thread.thread_id),
             Some(RuntimeSlot::Starting(starting)) if starting.token == owner_token
         ));
 
