@@ -93,8 +93,11 @@ export function activityDisplayTarget(activity: ChatActivity): string {
   const input = activityInput(activity.input);
   const patchTarget = activityPatchTarget(activity.input);
   const kind = activityVisualKind(activity);
-  const link = activityLinkPresentation(activity);
-  if ((kind === "read" || kind === "browse") && link) return link.label;
+  const webTarget = webActionDisplayTarget(
+    activity.webAction,
+    activity.webPageTitle,
+  );
+  if (webTarget) return webTarget;
   if (!input) return patchTarget;
 
   const raw =
@@ -119,37 +122,22 @@ export function activityDisplayTarget(activity: ChatActivity): string {
   return compact.length > 72 ? `${compact.slice(0, 69)}…` : compact;
 }
 
-/** Resolve a safe web target without scanning arbitrary tool prose. */
+/** Resolve a clickable target from the structured action only. */
 export function activityLinkPresentation(
   activity: ChatActivity,
 ): ActivityLinkPresentation | null {
-  const kind = activityVisualKind(activity);
-  if (kind !== "read" && kind !== "browse") return null;
-
-  const input = activityInput(activity.input);
-  const output = activityInput(activity.output);
-  const snapshot = activityRecord(output?.snapshot);
-  const activeTab = activityActiveBrowserTab(output);
-  const webTool = BROWSE_NAMES.test(activity.title.trim().toLowerCase());
-  const url = firstHttpUrl(
-    webTool ? output?.url : undefined,
-    webTool ? snapshot?.url : undefined,
-    webTool ? activeTab?.url : undefined,
-    input?.url,
-    input?.href,
-    input?.uri,
-  );
-  if (!url) return null;
-
-  const title = firstString(
-    webTool ? output?.title : undefined,
-    webTool ? snapshot?.title : undefined,
-    webTool ? activeTab?.title : undefined,
-    input?.title,
-  );
+  const action = activity.webAction;
+  if (
+    !action ||
+    (action.type !== "openPage" && action.type !== "findInPage") ||
+    !action.url ||
+    !/^https?:\/\/[^\s]+$/i.test(action.url)
+  ) {
+    return null;
+  }
   return {
-    url,
-    label: compactActivityTarget(title || url),
+    url: action.url,
+    label: compactActivityTarget(activity.webPageTitle || action.url),
   };
 }
 
@@ -253,42 +241,25 @@ function activityInput(
   }
 }
 
-function activityRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function activityActiveBrowserTab(
-  output: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  if (!Array.isArray(output?.tabs)) return null;
-  const activeTabId = firstString(output?.active_tab_id, output?.activeTabId);
-  const tabs = output.tabs.map(activityRecord).filter(Boolean) as Record<
-    string,
-    unknown
-  >[];
-  return (
-    tabs.find((tab) => tab.active === true) ??
-    tabs.find((tab) => firstString(tab.id) === activeTabId) ??
-    null
-  );
-}
-
-function firstString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
+function webActionDisplayTarget(
+  action: ChatActivity["webAction"],
+  pageTitle?: string,
+): string {
+  if (!action || action.type === "other") return "";
+  if (action.type === "search") {
+    if (action.query) return compactActivityTarget(action.query);
+    const first = action.queries?.[0] || "";
+    return compactActivityTarget(
+      action.queries && action.queries.length > 1 ? `${first} ...` : first,
+    );
   }
-  return "";
-}
-
-function firstHttpUrl(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    const candidate = value.trim();
-    if (/^https?:\/\/[^\s]+$/i.test(candidate)) return candidate;
+  const page = pageTitle || action.url || "";
+  if (action.type === "findInPage" && action.pattern) {
+    return compactActivityTarget(
+      page ? `'${action.pattern}' in ${page}` : `'${action.pattern}'`,
+    );
   }
-  return "";
+  return compactActivityTarget(page);
 }
 
 function compactActivityTarget(value: string): string {

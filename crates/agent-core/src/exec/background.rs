@@ -338,6 +338,8 @@ mod tests {
             name: "exec_command".into(),
             arguments: serde_json::json!({"command": "pwd"}),
             output: None,
+            web_action: None,
+            web_page_title: None,
             media: Vec::new(),
             file_changes: Vec::new(),
             status: ToolStatus::InProgress,

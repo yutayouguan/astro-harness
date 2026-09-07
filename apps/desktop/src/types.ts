@@ -99,6 +99,13 @@ export type TurnStatus =
   | "error"
   | "interrupted";
 
+/** Codex-aligned structured web activity action. */
+export type ChatWebAction =
+  | { type: "search"; query?: string; queries?: string[] }
+  | { type: "openPage"; url?: string }
+  | { type: "findInPage"; url?: string; pattern?: string }
+  | { type: "other" };
+
 /** 助手气泡旁的活动记录 */
 export type ChatActivity = {
   id: string;
@@ -109,6 +116,9 @@ export type ChatActivity = {
   input?: string;
   /** 工具 result / 记忆 content */
   output?: string;
+  /** Structured web action projected once from the native tool item. */
+  webAction?: ChatWebAction;
+  webPageTitle?: string;
   status?: ChatActivityStatus;
   /** 开始时刻（ms） */
   at?: number;
@@ -256,6 +266,8 @@ export type HistoryActivityProjection = {
   title: string;
   input?: string | null;
   output?: string | null;
+  webAction?: ChatWebAction | null;
+  webPageTitle?: string | null;
   status?: string | null;
   /** 结构化媒体（来自 ResponseItem metadata）；缺省时前端可从 output 解析 */
   media?: Array<{ kind: string; path: string }> | null;

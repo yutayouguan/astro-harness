@@ -57,6 +57,10 @@ pub struct ToolItem {
     pub name: String,
     pub arguments: Value,
     pub output: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_action: Option<WebSearchAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_page_title: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<types::MediaAsset>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -66,6 +70,29 @@ pub struct ToolItem {
     pub batch_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_mode: Option<ToolExecutionMode>,
+}
+
+/// Codex-aligned semantic action for web activity presentation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum WebSearchAction {
+    Search {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        query: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        queries: Option<Vec<String>>,
+    },
+    OpenPage {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+    },
+    FindInPage {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pattern: Option<String>,
+    },
+    Other,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,6 +266,22 @@ mod tests {
             assert_eq!(serde_json::to_string(&status).unwrap(), wire);
             assert_eq!(serde_json::from_str::<ToolStatus>(wire).unwrap(), status);
         }
+    }
+
+    #[test]
+    fn web_search_action_uses_codex_camel_case_discriminators() {
+        let action = WebSearchAction::FindInPage {
+            url: Some("https://example.com".into()),
+            pattern: Some("pricing".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(action).unwrap(),
+            serde_json::json!({
+                "type": "findInPage",
+                "url": "https://example.com",
+                "pattern": "pricing",
+            })
+        );
     }
 
     #[test]

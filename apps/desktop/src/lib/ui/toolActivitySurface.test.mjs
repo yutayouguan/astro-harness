@@ -99,18 +99,36 @@ test("TODO updates stay out of answers and use a compact centered composer statu
 });
 
 test("web activity targets open in Astro's built-in browser", async () => {
-  const [app, chatView, activity, css] = await Promise.all([
-    source("App.tsx"),
-    source("components/chat/ChatView.tsx"),
-    source("components/chat/MsgActivity.tsx"),
-    source("styles/features/chat/activity.css"),
-  ]);
+  const [app, chatView, activity, presentation, send, parallel, history, css] =
+    await Promise.all([
+      source("App.tsx"),
+      source("components/chat/ChatView.tsx"),
+      source("components/chat/MsgActivity.tsx"),
+      source("lib/chat/activityPresentation.ts"),
+      source("hooks/chat/useSend.ts"),
+      source("hooks/chat/useParallelTasks.ts"),
+      source("lib/chat/projectResponseItemsToEntries.ts"),
+      source("styles/features/chat/activity.css"),
+    ]);
 
   assert.match(activity, /activityLinkPresentation\(activity\)/);
+  assert.match(presentation, /const action = activity\.webAction/);
   assert.match(activity, /className="msg-activity-url-action"/);
   assert.match(activity, /chat\.activityOpenInBrowser/);
   assert.match(chatView, /onOpenUrl=\{onOpenActivityUrl\}/);
-  assert.match(app, /chat\.controlBrowser\("open", \{ url, new_tab: false \}\)/);
+  assert.match(
+    send,
+    /webAction: normalizeChatWebAction\(payload\.web_action\)/,
+  );
+  assert.match(
+    parallel,
+    /webAction: normalizeChatWebAction\(payload\.web_action\)/,
+  );
+  assert.match(history, /const webActivity = deriveChatWebActivity/);
+  assert.match(
+    app,
+    /chat\.controlBrowser\("open", \{ url, new_tab: false \}\)/,
+  );
   assert.match(app, /onOpenActivityUrl=\{openActivityUrlInBrowser\}/);
   assert.match(css, /\.msg-activity-url-action\s*\{/);
 

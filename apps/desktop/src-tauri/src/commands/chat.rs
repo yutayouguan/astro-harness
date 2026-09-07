@@ -76,6 +76,10 @@ pub enum ChatStreamEvent {
         name: String,
         arguments_json: String,
         result: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        web_action: Option<agent_protocol::WebSearchAction>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        web_page_title: Option<String>,
         phase: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         batch_id: Option<String>,

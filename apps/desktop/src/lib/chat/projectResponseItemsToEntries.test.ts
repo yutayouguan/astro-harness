@@ -162,10 +162,51 @@ test("projectResponseItemsToEntries renders native shell, web, image, and agent 
     messages[0]?.activities?.map((activity) => activity.title),
     ["local_shell", "web_search", "image_generation"],
   );
+  assert.deepEqual(messages[0]?.activities?.[1]?.webAction, {
+    type: "search",
+    query: "weather",
+  });
   assert.deepEqual(messages[0]?.activities?.[2]?.media, [
     { kind: "image", path: "data:image/png;base64,aW1hZ2U=" },
   ]);
   assert.equal(messages[0]?.content, "done");
+});
+
+test("projectResponseItemsToEntries enriches browser history with a structured page action", () => {
+  const messages = projectResponseItemsToEntries([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "function_call",
+        call_id: "browser_1",
+        namespace: "browser",
+        name: "snapshot",
+        arguments: '{"action":"read"}',
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "function_call_output",
+        call_id: "browser_1",
+        namespace: "browser",
+        name: "snapshot",
+        output: JSON.stringify({
+          astro_browser: true,
+          url: "https://www.bilibili.com/",
+          title: "B站",
+        }),
+      },
+    },
+  ]);
+
+  assert.deepEqual(messages[0]?.activities?.[0]?.webAction, {
+    type: "openPage",
+    url: "https://www.bilibili.com/",
+  });
+  assert.equal(messages[0]?.activities?.[0]?.webPageTitle, "B站");
 });
 
 test("normalizeProjectedEntries restores activity media", () => {

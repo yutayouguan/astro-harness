@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use agent_protocol::{
     AgentMessageItem, DeltaEvent, Event, EventMsg, ExtensionItem, ItemEvent, TextItem,
-    TokenCountEvent, ToolExecutionMode, ToolItem, ToolStatus, TurnItem,
+    TokenCountEvent, ToolExecutionMode, ToolItem, ToolStatus, TurnItem, WebSearchAction,
 };
 use providers::Usage;
 
@@ -71,11 +71,14 @@ pub(crate) fn tool_turn_item_with_execution(
 ) -> TurnItem {
     let id = id.into();
     let name = name.into();
+    let (web_action, web_page_title) = web_activity(&name, &arguments, output.as_ref());
     let item = ToolItem {
         id,
         name: name.clone(),
         arguments,
         output,
+        web_action,
+        web_page_title,
         media,
         file_changes: Vec::new(),
         status,
@@ -85,6 +88,8 @@ pub(crate) fn tool_turn_item_with_execution(
     let child_name = name.rsplit('.').next().unwrap_or(&name);
     if child_name == "exec_command" || child_name == "code_exec" {
         TurnItem::CommandExecution(item)
+    } else if child_name == "web_search" {
+        TurnItem::WebSearch(item)
     } else if child_name == "image_gen" {
         TurnItem::ImageGeneration(item)
     } else if name.starts_with("mcp__") {
@@ -106,6 +111,173 @@ pub(crate) fn tool_turn_item_with_execution(
     } else {
         TurnItem::DynamicToolCall(item)
     }
+}
+
+fn web_activity(
+    name: &str,
+    arguments: &serde_json::Value,
+    output: Option<&serde_json::Value>,
+) -> (Option<WebSearchAction>, Option<String>) {
+    let normalized = name.trim().to_ascii_lowercase();
+    if !normalized.split(['.', '_', ':', '-']).any(|part| {
+        matches!(
+            part,
+            "browser" | "web" | "fetch" | "crawl" | "navigate" | "visit" | "http" | "url"
+        )
+    }) {
+        return (None, None);
+    }
+
+    let args = arguments.as_object();
+    let result_value = output.and_then(|value| match value {
+        serde_json::Value::Object(_) => Some(value.clone()),
+        serde_json::Value::String(text) => serde_json::from_str(text).ok(),
+        _ => None,
+    });
+    let result = result_value.as_ref().and_then(serde_json::Value::as_object);
+    let action_type = first_json_string(
+        args.into_iter()
+            .flat_map(|args| [args.get("type"), args.get("action"), args.get("operation")])
+            .flatten(),
+    )
+    .replace('_', "")
+    .to_ascii_lowercase();
+
+    let is_search = normalized
+        .split(['.', '_', ':', '-'])
+        .any(|part| part == "search")
+        || action_type == "search";
+    if is_search {
+        let query = args
+            .map(|args| first_json_string([args.get("query"), args.get("q")].into_iter().flatten()))
+            .filter(|value| !value.is_empty());
+        let queries = args
+            .and_then(|args| args.get("queries"))
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|values| !values.is_empty());
+        return (Some(WebSearchAction::Search { query, queries }), None);
+    }
+
+    let snapshot = result
+        .and_then(|result| result.get("snapshot"))
+        .and_then(serde_json::Value::as_object);
+    let active_tab = result.and_then(active_browser_tab);
+    let url = first_http_url([
+        result.and_then(|value| value.get("url")),
+        snapshot.and_then(|value| value.get("url")),
+        active_tab.and_then(|value| value.get("url")),
+        args.and_then(|value| value.get("url")),
+        args.and_then(|value| value.get("href")),
+        args.and_then(|value| value.get("uri")),
+    ]);
+    let title = first_json_string(
+        [
+            result.and_then(|value| value.get("title")),
+            snapshot.and_then(|value| value.get("title")),
+            active_tab.and_then(|value| value.get("title")),
+            args.and_then(|value| value.get("title")),
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    let title = (!title.is_empty()).then(|| bounded_title(&title));
+    let pattern = args
+        .map(|args| {
+            first_json_string(
+                [args.get("pattern"), args.get("find"), args.get("text")]
+                    .into_iter()
+                    .flatten(),
+            )
+        })
+        .filter(|value| !value.is_empty());
+    let is_find =
+        action_type == "findinpage" || normalized.replace(['_', '-'], "").contains("findinpage");
+    if is_find {
+        return (Some(WebSearchAction::FindInPage { url, pattern }), title);
+    }
+    if !is_open_page_tool(&normalized) {
+        return (Some(WebSearchAction::Other), None);
+    }
+    match url {
+        Some(url) => (Some(WebSearchAction::OpenPage { url: Some(url) }), title),
+        None => (Some(WebSearchAction::Other), title),
+    }
+}
+
+fn is_open_page_tool(name: &str) -> bool {
+    let parts = name
+        .split(['.', '_', ':', '-'])
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let browser_operation = parts
+        .iter()
+        .position(|part| *part == "browser")
+        .and_then(|index| parts.get(index + 1))
+        .copied()
+        .unwrap_or_default();
+    matches!(
+        browser_operation,
+        "open" | "navigate" | "snapshot" | "screenshot" | "back" | "forward" | "reload"
+    ) || parts.iter().any(|part| {
+        matches!(
+            *part,
+            "fetch" | "crawl" | "navigate" | "visit" | "http" | "url"
+        )
+    })
+}
+
+fn first_json_string<'a>(values: impl IntoIterator<Item = &'a serde_json::Value>) -> String {
+    values
+        .into_iter()
+        .find_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn first_http_url(values: [Option<&serde_json::Value>; 6]) -> Option<String> {
+    values.into_iter().flatten().find_map(|value| {
+        let candidate = value.as_str()?.trim();
+        let lower = candidate.to_ascii_lowercase();
+        (lower.starts_with("https://") || lower.starts_with("http://"))
+            .then(|| candidate.to_string())
+    })
+}
+
+fn active_browser_tab(
+    output: &serde_json::Map<String, serde_json::Value>,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    let active_id = output
+        .get("active_tab_id")
+        .or_else(|| output.get("activeTabId"))
+        .and_then(serde_json::Value::as_str);
+    let tabs = output.get("tabs")?.as_array()?;
+    tabs.iter()
+        .filter_map(serde_json::Value::as_object)
+        .find(|tab| tab.get("active").and_then(serde_json::Value::as_bool) == Some(true))
+        .or_else(|| {
+            tabs.iter()
+                .filter_map(serde_json::Value::as_object)
+                .find(|tab| tab.get("id").and_then(serde_json::Value::as_str) == active_id)
+        })
+}
+
+fn bounded_title(value: &str) -> String {
+    let first_line = value.lines().next().unwrap_or_default().trim();
+    if first_line.chars().count() <= 72 {
+        return first_line.to_string();
+    }
+    first_line.chars().take(69).collect::<String>() + "…"
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -755,6 +927,71 @@ mod tests {
             panic!("expected namespaced ImageGeneration item");
         };
         assert_eq!(item.name, "media.image_gen");
+    }
+
+    #[test]
+    fn web_search_uses_a_codex_aligned_structured_action() {
+        let TurnItem::WebSearch(item) = tool_turn_item_with_execution(
+            "search-1",
+            "web_search",
+            serde_json::json!({"type":"search","query":"Astro Agent"}),
+            None,
+            Vec::new(),
+            ToolStatus::Completed,
+            None,
+        ) else {
+            panic!("expected web search item");
+        };
+        assert_eq!(
+            item.web_action,
+            Some(WebSearchAction::Search {
+                query: Some("Astro Agent".into()),
+                queries: None,
+            })
+        );
+    }
+
+    #[test]
+    fn browser_result_projects_open_page_url_and_title() {
+        let TurnItem::DynamicToolCall(item) = tool_turn_item_with_execution(
+            "browser-1",
+            "browser.snapshot",
+            serde_json::json!({"action":"read"}),
+            Some(serde_json::Value::String(
+                serde_json::json!({
+                    "astro_browser": true,
+                    "url": "https://www.bilibili.com/",
+                    "title": "B站",
+                })
+                .to_string(),
+            )),
+            Vec::new(),
+            ToolStatus::Completed,
+            None,
+        ) else {
+            panic!("expected dynamic browser tool item");
+        };
+        assert_eq!(
+            item.web_action,
+            Some(WebSearchAction::OpenPage {
+                url: Some("https://www.bilibili.com/".into()),
+            })
+        );
+        assert_eq!(item.web_page_title.as_deref(), Some("B站"));
+
+        let TurnItem::DynamicToolCall(click) = tool_turn_item_with_execution(
+            "browser-2",
+            "browser.click",
+            serde_json::json!({"selector":"#submit"}),
+            Some(serde_json::json!({"url":"https://www.bilibili.com/after"})),
+            Vec::new(),
+            ToolStatus::Completed,
+            None,
+        ) else {
+            panic!("expected dynamic browser tool item");
+        };
+        assert_eq!(click.web_action, Some(WebSearchAction::Other));
+        assert_eq!(click.web_page_title, None);
     }
 
     async fn session() -> (tempfile::TempDir, Arc<Session>, Arc<TurnContext>) {

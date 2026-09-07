@@ -14,6 +14,10 @@ import {
   isLiveActivityStatus,
   resolveToolActivityStatus,
 } from "./toolActivityStatus.ts";
+import {
+  deriveChatWebActivity,
+  normalizeChatWebAction,
+} from "./webActivity.ts";
 
 const ACTIVITY_KINDS = new Set<ChatActivityKind>([
   "tool",
@@ -181,17 +185,31 @@ function projectResponseItems(
       if (callId) activity.id = callId;
       if (title) activity.title = title;
       activity.output = output;
+      const webActivity = deriveChatWebActivity({
+        name: activity.title,
+        input: activity.input,
+        output,
+      });
+      activity.webAction = webActivity?.action;
+      activity.webPageTitle = webActivity?.pageTitle;
       activity.status = status;
       if (media) activity.media = media;
       if (fileChanges) activity.fileChanges = fileChanges;
       return;
     }
     assistant.activities ??= [];
+    const activityTitle = title ?? "tool";
+    const webActivity = deriveChatWebActivity({
+      name: activityTitle,
+      output,
+    });
     assistant.activities.push({
       id: callId ?? "unknown",
       kind: "tool",
-      title: title ?? "tool",
+      title: activityTitle,
       output,
+      webAction: webActivity?.action,
+      webPageTitle: webActivity?.pageTitle,
       status,
       media,
       fileChanges,
@@ -254,12 +272,15 @@ function projectResponseItems(
           : typeof item.input === "string"
             ? item.input
             : JSON.stringify(item.arguments ?? {});
+      const webActivity = deriveChatWebActivity({ name: title, input });
       assistant.activities ??= [];
       assistant.activities.push({
         id: callId,
         kind: "tool",
         title,
         input,
+        webAction: webActivity?.action,
+        webPageTitle: webActivity?.pageTitle,
         status: "running",
       });
     } else if (type === "local_shell_call" || type === "web_search_call") {
@@ -280,12 +301,15 @@ function projectResponseItems(
         typeof item.status === "string" ? item.status : "completed",
         "",
       );
+      const webActivity = deriveChatWebActivity({ name: title, input });
       assistant.activities ??= [];
       assistant.activities.push({
         id: callId,
         kind: "tool",
         title,
         input,
+        webAction: webActivity?.action,
+        webPageTitle: webActivity?.pageTitle,
         status,
       });
     } else if (type === "image_generation_call") {
@@ -424,6 +448,8 @@ function mergeActivities(
       id,
       input: act.input ?? prev.input,
       output: act.output ?? prev.output,
+      webAction: act.webAction ?? prev.webAction,
+      webPageTitle: act.webPageTitle ?? prev.webPageTitle,
       media: act.media ?? prev.media,
       status: act.status ?? prev.status,
     });
@@ -561,6 +587,11 @@ function mapActivity(a: HistoryActivityProjection): ChatActivity {
     title: a.title,
     input: a.input ?? undefined,
     output: a.output ?? undefined,
+    webAction: normalizeChatWebAction(a.webAction),
+    webPageTitle:
+      typeof a.webPageTitle === "string" && a.webPageTitle.trim()
+        ? a.webPageTitle.trim()
+        : undefined,
     status,
     media: media && media.length > 0 ? media : undefined,
   };

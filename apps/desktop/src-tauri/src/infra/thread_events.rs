@@ -2168,6 +2168,8 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
                     other => other.to_string(),
                 })
                 .unwrap_or_default(),
+            web_action: tool.web_action,
+            web_page_title: tool.web_page_title,
             phase: if started {
                 "started"
             } else {
@@ -2214,6 +2216,8 @@ fn map_item_event(item_event: proto::ThreadItemEvent, started: bool) -> Vec<Chat
             name: "plan".into(),
             arguments_json: String::new(),
             result: text.content,
+            web_action: None,
+            web_page_title: None,
             phase: if started { "started" } else { "completed" }.into(),
             batch_id: None,
             execution_mode: None,
@@ -3059,6 +3063,8 @@ mod tests {
                         name: "read_file".into(),
                         arguments: serde_json::json!({"path":"README.md"}),
                         output: Some(serde_json::json!(expected_phase)),
+                        web_action: None,
+                        web_page_title: None,
                         media: Vec::new(),
                         file_changes: Vec::new(),
                         status,
@@ -3081,6 +3087,42 @@ mod tests {
                     && execution_mode.as_deref() == Some("parallel")
             ));
         }
+    }
+
+    #[test]
+    fn browser_tool_item_maps_structured_web_action() {
+        let item = proto::ThreadItem {
+            id: "browser-1".into(),
+            item_type: "dynamic_tool_call".into(),
+            status: "completed".into(),
+            payload_json: serde_json::to_string(&TurnItem::DynamicToolCall(
+                agent_protocol::ToolItem {
+                    id: "browser-1".into(),
+                    name: "browser.snapshot".into(),
+                    arguments: serde_json::json!({"action":"read"}),
+                    output: Some(serde_json::json!({"url":"https://www.bilibili.com/"})),
+                    web_action: Some(agent_protocol::WebSearchAction::OpenPage {
+                        url: Some("https://www.bilibili.com/".into()),
+                    }),
+                    web_page_title: Some("B站".into()),
+                    media: Vec::new(),
+                    file_changes: Vec::new(),
+                    status: agent_protocol::ToolStatus::Completed,
+                    batch_id: None,
+                    execution_mode: None,
+                },
+            ))
+            .unwrap(),
+        };
+
+        assert!(matches!(
+            map_item_event(proto::ThreadItemEvent { item: Some(item) }, false).as_slice(),
+            [ChatStreamEvent::ToolCall {
+                web_action: Some(agent_protocol::WebSearchAction::OpenPage { url }),
+                web_page_title: Some(title),
+                ..
+            }] if url.as_deref() == Some("https://www.bilibili.com/") && title == "B站"
+        ));
     }
 
     #[test]

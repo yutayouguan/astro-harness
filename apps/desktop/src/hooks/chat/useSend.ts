@@ -27,6 +27,7 @@ import {
 import { resolveComposerTurn } from "../../lib/chat/composerResolve";
 import { parseHitlRunFinished } from "../../lib/chat/hitlRunFinished";
 import { resolveTaskCompletion } from "../../lib/chat/taskCompletion";
+import { normalizeChatWebAction } from "../../lib/chat/webActivity";
 import {
   isLiveActivityStatus,
   isSettledActivityStatus,
@@ -437,6 +438,8 @@ export function useSend(deps: UseSendDeps) {
           arguments_json?: string;
           arguments?: string;
           result?: string;
+          web_action?: ChatActivity["webAction"];
+          web_page_title?: string;
           delta?: string;
           phase?: string;
           batch_id?: string;
@@ -834,6 +837,8 @@ export function useSend(deps: UseSendDeps) {
               title: name,
               input: payload.arguments_json || undefined,
               output: payload.result || undefined,
+              webAction: normalizeChatWebAction(payload.web_action),
+              webPageTitle: payload.web_page_title?.trim() || undefined,
               detail: payload.result || payload.arguments_json || undefined,
               status: resolveToolActivityStatus(payload.phase, payload.result),
               at: Date.now(),

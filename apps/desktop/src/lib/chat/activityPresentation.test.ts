@@ -91,6 +91,11 @@ test("uses browser result metadata when the read call has no input target", () =
     ...activity("browser.snapshot"),
     status: "done" as const,
     input: '{"action":"read"}',
+    webAction: {
+      type: "openPage" as const,
+      url: "https://www.bilibili.com/",
+    },
+    webPageTitle: "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili",
     output: JSON.stringify({
       astro_browser: true,
       url: "https://www.bilibili.com/",
@@ -115,6 +120,11 @@ test("links only http browser targets and falls back to the active tab", () => {
   const value = {
     ...activity("browser.snapshot"),
     input: "{}",
+    webAction: {
+      type: "openPage" as const,
+      url: "https://www.bilibili.com/video/BV1",
+    },
+    webPageTitle: "B站视频",
     output: JSON.stringify({
       active_tab_id: "tab-b",
       tabs: [
@@ -136,6 +146,7 @@ test("links only http browser targets and falls back to the active tab", () => {
     activityLinkPresentation({
       ...activity("browser.open"),
       input: '{"url":"javascript:alert(1)"}',
+      webAction: { type: "openPage", url: "javascript:alert(1)" },
     }),
     null,
   );
@@ -271,4 +282,14 @@ test("uses concise media generation titles while retaining prompt details", () =
       target: "",
     });
   }
+});
+
+test("uses the first structured query with the Codex multi-query suffix", () => {
+  assert.equal(
+    activityDisplayTarget({
+      ...activity("web_search"),
+      webAction: { type: "search", queries: ["Astro", "Codex"] },
+    }),
+    "Astro ...",
+  );
 });

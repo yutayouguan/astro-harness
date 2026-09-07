@@ -23,6 +23,7 @@ import {
 import { consumeBufferedTextReconcile } from "../../lib/chat/streamReconcile";
 import { upsertAsyncAgentUpdate } from "../../lib/chat/asyncAgentUpdate";
 import { resolveParallelTaskCompletion } from "../../lib/chat/taskCompletion";
+import { normalizeChatWebAction } from "../../lib/chat/webActivity";
 import {
   isLiveActivityStatus,
   isSettledActivityStatus,
@@ -521,6 +522,8 @@ export function useParallelTasks(deps: Deps) {
           arguments?: string;
           arguments_json?: string;
           result?: string;
+          web_action?: ChatActivity["webAction"];
+          web_page_title?: string;
           delta?: string;
           phase?: string;
           batch_id?: string;
@@ -713,6 +716,8 @@ export function useParallelTasks(deps: Deps) {
               title: name,
               input: payload.arguments_json ?? payload.arguments,
               output: payload.result,
+              webAction: normalizeChatWebAction(payload.web_action),
+              webPageTitle: payload.web_page_title?.trim() || undefined,
               status: resolveToolActivityStatus(payload.phase, payload.result),
               at: Date.now(),
               batchId: payload.batch_id,
