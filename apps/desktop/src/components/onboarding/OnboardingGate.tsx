@@ -1032,6 +1032,11 @@ export function FirstRunOnboarding({
                           value={model}
                           options={modelOptions}
                           placeholder={copy.chooseModel}
+                          search={{
+                            placeholder: copy.searchModels,
+                            emptyLabel: copy.noMatchingModels,
+                          }}
+                          menuMaxHeight={360}
                           disabled={
                             modelsStatus !== "ready" ||
                             providerStatus === "testing"

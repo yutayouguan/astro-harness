@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { Search } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
   ChevronDown as ChevronDownData,
@@ -42,6 +43,8 @@ type Props = {
   selectionIndicator?: "check" | "radio";
   /** 长选项列表的可视高度上限。 */
   menuMaxHeight?: number;
+  /** Opt-in filtering; labels are supplied by the calling surface for localization. */
+  search?: { placeholder: string; emptyLabel: string };
 };
 
 /** 选中项勾选标记 */
@@ -85,13 +88,28 @@ export function SelectMenu({
   openDirection = "auto",
   selectionIndicator = "check",
   menuMaxHeight = 260,
+  search,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchEnabled = Boolean(search);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleOptions =
+    searchEnabled && normalizedQuery
+      ? options.filter((option) =>
+          `${option.label} ${option.value}`
+            .toLocaleLowerCase()
+            .includes(normalizedQuery),
+        )
+      : options;
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const listId = useId();
+  const popupId = `${listId}-popup`;
   const { layer, bringToFront } = useDynamicOverlayLayer(open);
   const selected = options.find((o) => o.value === value);
   const label = selected?.label ?? placeholder;
@@ -106,10 +124,10 @@ export function SelectMenu({
   const pos = useAnchoredMenu({
     open,
     anchorRef: triggerRef,
-    menuRef: listRef,
-    sizeKey: `${options.length}:${value}:${openDirection}:${menuMaxHeight}`,
+    menuRef: searchEnabled ? popupRef : listRef,
+    sizeKey: `${visibleOptions.length}:${query}:${value}:${openDirection}:${menuMaxHeight}`,
     minWidth: 140,
-    maxWidth: 280,
+    maxWidth: searchEnabled ? 360 : 280,
     maxHeightCap: menuMaxHeight,
     maxHeightRatio: menuMaxHeight > 260 ? 0.8 : 0.42,
     preferAlign: "start",
@@ -121,18 +139,20 @@ export function SelectMenu({
   const openMenu = (initialIndex?: number) => {
     const idx = initialIndex ?? options.findIndex((o) => o.value === value);
     setHighlightedIndex(idx >= 0 ? idx : 0);
+    setQuery("");
     setOpen(true);
   };
 
   const closeMenu = (restoreFocus = false) => {
     setOpen(false);
+    setQuery("");
     setHighlightedIndex(-1);
     if (restoreFocus) triggerRef.current?.focus();
   };
 
   const selectHighlighted = () => {
-    if (highlightedIndex >= 0 && highlightedIndex < options.length) {
-      const opt = options[highlightedIndex]!;
+    if (highlightedIndex >= 0 && highlightedIndex < visibleOptions.length) {
+      const opt = visibleOptions[highlightedIndex]!;
       closeMenu(true);
       if (opt.value !== value) onChange(opt.value);
     }
@@ -195,12 +215,49 @@ export function SelectMenu({
     }
   };
 
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setHighlightedIndex((i) => Math.min(i + 1, visibleOptions.length - 1));
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setHighlightedIndex((i) =>
+          visibleOptions.length ? Math.max(i - 1, 0) : -1,
+        );
+        break;
+      case "Enter":
+        event.preventDefault();
+        selectHighlighted();
+        break;
+      case "Escape":
+        event.preventDefault();
+        event.stopPropagation();
+        closeMenu(true);
+        break;
+      case "Tab":
+        closeMenu(true);
+        break;
+    }
+  };
+
+  const positioned = Boolean(pos);
+  useEffect(() => {
+    if (open && searchEnabled && positioned) searchRef.current?.focus();
+  }, [open, searchEnabled, positioned]);
+
+  useEffect(() => {
+    if (disabled && open) closeMenu();
+  }, [disabled, open]);
+
   useEffect(() => {
     if (!open || highlightedIndex < 0 || !listRef.current) return;
     const items =
       listRef.current.querySelectorAll<HTMLElement>('[role="option"]');
     items[highlightedIndex]?.scrollIntoView({ block: "nearest" });
-  }, [open, highlightedIndex]);
+  }, [open, positioned, highlightedIndex, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -208,6 +265,7 @@ export function SelectMenu({
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (listRef.current?.contains(target)) return;
+      if (popupRef.current?.contains(target)) return;
       closeMenu();
     };
     document.addEventListener("mousedown", onMouseDown);
@@ -229,69 +287,125 @@ export function SelectMenu({
         })()
       : undefined;
 
+  const menuStyle: CSSProperties | undefined = pos
+    ? {
+        top: pos.top,
+        left: pos.left,
+        width: "max-content",
+        minWidth: Math.max(pos.width, 140),
+        maxWidth: pos.widthCap,
+        maxHeight: pos.maxHeight,
+        zIndex: layer,
+        ...menuToneStyle,
+      }
+    : undefined;
+  const menuClassName = `select-menu-list${pos?.openUp ? " is-up" : ""}`;
+  const list =
+    open && pos ? (
+      <ul
+        id={listId}
+        ref={listRef}
+        className={searchEnabled ? "select-menu-results" : menuClassName}
+        role="listbox"
+        aria-label={ariaLabel}
+        style={searchEnabled ? undefined : menuStyle}
+        onPointerDownCapture={searchEnabled ? undefined : bringToFront}
+      >
+        {visibleOptions.map((opt, i) => {
+          const active = opt.value === value;
+          const highlighted = i === highlightedIndex;
+          return (
+            <li
+              key={opt.value}
+              id={optionId(i)}
+              role="option"
+              aria-selected={active}
+            >
+              <button
+                type="button"
+                className={`select-menu-option${active ? " is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
+                tabIndex={-1}
+                title={searchEnabled ? opt.label : undefined}
+                onMouseDown={(event) => {
+                  if (searchEnabled) event.preventDefault();
+                }}
+                onMouseEnter={() => setHighlightedIndex(i)}
+                onClick={() => {
+                  closeMenu(true);
+                  if (opt.value !== value) onChange(opt.value);
+                }}
+              >
+                {opt.icon ? (
+                  <span className="select-menu-option-icon" aria-hidden>
+                    {opt.icon}
+                  </span>
+                ) : null}
+                <span className="select-menu-option-label">{opt.label}</span>
+                {active ? (
+                  selectionIndicator === "radio" ? (
+                    <RadioIcon />
+                  ) : (
+                    <CheckIcon />
+                  )
+                ) : selectionIndicator === "radio" ? (
+                  <span className="select-menu-radio" aria-hidden />
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    ) : null;
   const menu =
     open && pos
       ? createPortal(
-          <ul
-            id={listId}
-            ref={listRef}
-            className={`select-menu-list${pos.openUp ? " is-up" : ""}`}
-            role="listbox"
-            aria-label={ariaLabel}
-            style={{
-              top: pos.top,
-              left: pos.left,
-              width: "max-content",
-              minWidth: Math.max(pos.width, 140),
-              maxWidth: pos.widthCap,
-              maxHeight: pos.maxHeight,
-              zIndex: layer,
-              ...menuToneStyle,
-            }}
-            onPointerDownCapture={bringToFront}
-          >
-            {options.map((opt, i) => {
-              const active = opt.value === value;
-              const highlighted = i === highlightedIndex;
-              return (
-                <li
-                  key={opt.value}
-                  id={optionId(i)}
-                  role="option"
-                  aria-selected={active}
-                >
-                  <button
-                    type="button"
-                    className={`select-menu-option${active ? " is-active" : ""}${highlighted ? " is-highlighted" : ""}`}
-                    tabIndex={-1}
-                    onMouseEnter={() => setHighlightedIndex(i)}
-                    onClick={() => {
-                      closeMenu(true);
-                      if (opt.value !== value) onChange(opt.value);
-                    }}
-                  >
-                    {opt.icon ? (
-                      <span className="select-menu-option-icon" aria-hidden>
-                        {opt.icon}
-                      </span>
-                    ) : null}
-                    <span className="select-menu-option-label">
-                      {opt.label}
-                    </span>
-                    {active ? (
-                      selectionIndicator === "radio" ? (
-                        <RadioIcon />
-                      ) : (
-                        <CheckIcon />
-                      )
-                    ) : selectionIndicator === "radio" ? (
-                      <span className="select-menu-radio" aria-hidden />
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>,
+          search ? (
+            <div
+              id={popupId}
+              ref={popupRef}
+              className={`${menuClassName} select-menu-list--searchable`}
+              role="dialog"
+              aria-label={ariaLabel}
+              style={menuStyle}
+              onPointerDownCapture={bringToFront}
+            >
+              <div className="select-menu-search">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  role="combobox"
+                  aria-label={search.placeholder}
+                  placeholder={search.placeholder}
+                  aria-autocomplete="list"
+                  aria-expanded={open}
+                  aria-controls={listId}
+                  aria-activedescendant={
+                    highlightedIndex >= 0 &&
+                    highlightedIndex < visibleOptions.length
+                      ? optionId(highlightedIndex)
+                      : undefined
+                  }
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setHighlightedIndex(0);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                />
+              </div>
+              {list}
+              {visibleOptions.length === 0 && (
+                <p className="select-menu-empty" role="status">
+                  {search.emptyLabel}
+                </p>
+              )}
+            </div>
+          ) : (
+            list
+          ),
           document.body,
         )
       : null;
@@ -306,11 +420,13 @@ export function SelectMenu({
         type="button"
         className="select-menu-trigger"
         disabled={disabled}
-        aria-haspopup="listbox"
+        aria-haspopup={searchEnabled ? "dialog" : "listbox"}
         aria-expanded={open}
-        aria-controls={open ? listId : undefined}
+        aria-controls={open ? (searchEnabled ? popupId : listId) : undefined}
         aria-activedescendant={
-          open && highlightedIndex >= 0 ? optionId(highlightedIndex) : undefined
+          !searchEnabled && open && highlightedIndex >= 0
+            ? optionId(highlightedIndex)
+            : undefined
         }
         aria-label={ariaLabel}
         onClick={() => {

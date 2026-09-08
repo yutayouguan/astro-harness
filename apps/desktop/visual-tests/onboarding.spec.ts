@@ -480,6 +480,62 @@ test("base_url is directly editable and edits invalidate model verification", as
   });
 });
 
+for (const theme of ["light", "dark"] as const) {
+  test(`model search filters names and IDs without choosing automatically · ${theme}`, async ({ page }, testInfo) => {
+    await installTransport(page);
+    await page.addInitScript(theme => localStorage.setItem("astro-theme-mode", theme), theme);
+    await page.setViewportSize({ width: theme === "dark" ? 390 : 1100, height: 1000 });
+    await page.route("**/__onboarding_mock/models", route => route.fulfill({
+      json: { models: [
+        { id: "vendor/rapid-v2", display_name: "Fast Chat" },
+        { id: "vendor/reason", display_name: "Deep Think" },
+        ...Array.from({ length: 80 }, (_, i) => ({ id: `vendor/model-${i}` })),
+      ] },
+    }));
+    await startProvider(page);
+    await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+    await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+    const picker = page.getByRole("button", { name: "默认模型", exact: true });
+    await picker.click();
+    const search = page.getByRole("combobox", { name: "搜索模型名称或 ID" });
+    const popup = page.getByRole("dialog", { name: "默认模型", exact: true });
+    await expect(search).toBeFocused();
+    await expect(page.getByRole("option")).toHaveCount(82);
+    await search.fill("  FAST CHAT  ");
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(page.getByRole("option")).toContainText("vendor/rapid-v2");
+    await search.fill("VENDOR/RAPID");
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await search.fill("no-such-model");
+    await expect(page.getByRole("option")).toHaveCount(0);
+    await expect(popup.getByRole("status")).toContainText("没有匹配的模型");
+    await search.press("Enter");
+    await expect(popup).toBeVisible();
+    await expect(picker).toContainText("请选择默认模型");
+    await search.fill("Think");
+    await search.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+    await expect(popup).toBeVisible();
+    await popup.screenshot({ path: testInfo.outputPath("model-search.png"), animations: "disabled" });
+    await search.press("ArrowDown");
+    await search.press("Enter");
+    await expect(popup).toHaveCount(0);
+    await expect(picker).toBeFocused();
+    await expect(picker).toContainText("Deep Think");
+    await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+    await picker.click();
+    await expect(search).toHaveValue("");
+    await expect(page.getByRole("option")).toHaveCount(82);
+    await search.fill("rapid");
+    await search.press("Escape");
+    await expect(popup).toHaveCount(0);
+    await expect(picker).toBeFocused();
+    await expect(picker).toContainText("Deep Think");
+    await picker.click();
+    await search.press("Tab");
+    await expect(popup).toHaveCount(0);
+  });
+}
+
 test("credential URL is not saved and cannot be tested", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);

@@ -227,6 +227,68 @@
     transform 0.18s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
 
+.select-menu-list--searchable {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.select-menu-search {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 8px 10px 12px;
+  margin-bottom: 5px;
+  border-bottom: 0.5px solid var(--surface-panel-border);
+  color: var(--ink-secondary);
+}
+
+.select-menu-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.select-menu-search:focus-within {
+  border-bottom-color: var(--select-tone);
+}
+
+.select-menu-search input::placeholder {
+  color: var(--ink-secondary);
+}
+
+.select-menu-results {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.select-menu-results .select-menu-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-menu-empty {
+  margin: 0;
+  padding: 16px 10px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .select-menu-option:active {
   transform: scale(0.97);
   transition-duration: 0.06s;
