@@ -129,6 +129,14 @@
   align-items: center;
   padding: 20px;
 }
+
+.loop-empty-create {
+  min-height: 38px;
+  margin-top: 8px;
+  padding-inline: 18px;
+  font-weight: 650;
+}
+
 .loop-empty-templates {
   margin-top: 24px;
   width: 100%;

@@ -14,6 +14,13 @@ const loopStyles = await readFile(
   new URL("../../styles/features/loop/panel.css", import.meta.url),
   "utf8",
 );
+const loopOverlayStyles = await readFile(
+  new URL(
+    "../../styles/features/loop/responsive-overlays.css",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const cronStyles = await readFile(
   new URL("../../styles/features/cron/base.css", import.meta.url),
   "utf8",
@@ -29,6 +36,24 @@ test("workflow creation actions form the left toolbar group without a visible ti
   assert.match(
     loopStyles,
     /\.loop-toolbar-end\s*\{[\s\S]*?margin-left:\s*auto;/,
+  );
+});
+
+test("empty workflow state exposes the canonical create action", () => {
+  const emptyState = loopPanel.slice(
+    loopPanel.indexOf('className="loop-empty-with-templates"'),
+    loopPanel.indexOf("renderGallery()"),
+  );
+
+  assert.match(
+    emptyState,
+    /className="loop-btn loop-btn--primary loop-empty-create"/,
+  );
+  assert.match(emptyState, /onClick=\{handleCreate\}/);
+  assert.match(emptyState, /t\("loop\.createWorkflow"\)/);
+  assert.match(
+    loopOverlayStyles,
+    /\.loop-empty-create\s*\{[\s\S]*?min-height:\s*38px;[\s\S]*?padding-inline:\s*18px;/,
   );
 });
 

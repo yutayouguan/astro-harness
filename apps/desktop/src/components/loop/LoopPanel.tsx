@@ -911,12 +911,22 @@ export default function LoopPanel({
               hint={search.trim() ? undefined : t("loop.emptyHint")}
             />
             {!search.trim() && (
-              <div className="loop-empty-templates">
-                <div className="loop-empty-templates-title">
-                  {t("loop.templateQuickStart")}
+              <>
+                <button
+                  type="button"
+                  className="loop-btn loop-btn--primary loop-empty-create"
+                  onClick={handleCreate}
+                >
+                  <Plus size={15} aria-hidden />
+                  <span>{t("loop.createWorkflow")}</span>
+                </button>
+                <div className="loop-empty-templates">
+                  <div className="loop-empty-templates-title">
+                    {t("loop.templateQuickStart")}
+                  </div>
+                  {renderTemplateGrid()}
                 </div>
-                {renderTemplateGrid()}
-              </div>
+              </>
             )}
           </div>
         )}
