@@ -2,6 +2,12 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## 工作规则与项目配置
+
+项目工作规则统一放在项目根目录的 `AGENTS.md`，不放入 `.astro`。运行时叠加全局工作区的 `AGENTS.md` 与本文件；冲突时项目规则优先，其余全局工作原则继续适用，不覆盖全局人格、身份、用户偏好或工具环境。
+
+项目 `.astro/` 仅存放项目特有配置（例如显式配置的 `config.toml`、自定义 Agent 定义）。没有项目特有配置时无需创建该目录；读取工作规则或打开项目不得为此创建 `.astro/`。既有项目配置不得因规则路径调整而删除。
+
 ## Project Overview
 
 Astro Agent（阿童木）— 本地 AI 桌面工作站。技术栈：**Rust workspace + Tauri 2 + React/Vite**。

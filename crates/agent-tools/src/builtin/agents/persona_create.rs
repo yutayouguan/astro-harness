@@ -122,7 +122,7 @@ pub fn dispatch(ctx: &mut ToolContext<'_>, args: &serde_json::Value) -> anyhow::
     }
 
     Ok(format!(
-        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 apply_patch 继续微调 AGENT.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
+        "已创建 Agent「{name}」\n- id: {id}\n- 工作区: {path}\n- 配置: {cfg}\n- 已激活: {active}\n- 图标: {icon}\n\n可用 apply_patch 继续微调 AGENTS.md / IDENTITY.md / SOUL.md / USER.md / MEMORY.md。",
         name = info.name,
         id = info.id,
         path = info.path,

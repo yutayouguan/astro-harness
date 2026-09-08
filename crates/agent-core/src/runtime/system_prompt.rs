@@ -49,17 +49,20 @@ fn load_agent_instructions(
             None
         }
     };
-    let global = read_layer(
-        &global_workspace.join("AGENTS.md"),
-        "全局工作原则",
-        "global",
-    );
+    let global_path = global_workspace.join("AGENTS.md");
+    let global = read_layer(&global_path, "全局工作原则", "global");
     let project = project_root.and_then(|root| {
-        read_layer(
-            &root.join(".astro/AGENT.md"),
-            "项目工作原则（冲突时优先）",
-            "project",
-        )
+        let project_path = root.join("AGENTS.md");
+        if project_path == global_path
+            || project_path
+                .canonicalize()
+                .ok()
+                .zip(global_path.canonicalize().ok())
+                .is_some_and(|(project, global)| project == global)
+        {
+            return None;
+        }
+        read_layer(&project_path, "项目工作原则（冲突时优先）", "project")
     });
     // The higher-priority layer comes first so prefix budgeting preserves it.
     // These are natural-language policies: retain both, do not guess clause-level merges.
@@ -68,7 +71,7 @@ fn load_agent_instructions(
         return None;
     }
     Some(format!(
-        "全局 AGENTS.md 提供基础工作原则，项目 .astro/AGENT.md 补充项目规则；冲突时项目规则优先，无冲突的全局规则继续适用。此优先级仅作用于工作原则层，不覆盖身份、人格、用户偏好、工具环境或运行时安全与授权契约；加载不会改写任何源文件。\n\n{}",
+        "全局 AGENTS.md 提供基础工作原则，项目根目录 AGENTS.md 补充项目规则；冲突时项目规则优先，无冲突的全局规则继续适用。此优先级仅作用于工作原则层，不覆盖身份、人格、用户偏好、工具环境或运行时安全与授权契约；加载不会改写源文件或创建项目 .astro 目录。\n\n{}",
         layers.join("\n\n---\n\n")
     ))
 }
@@ -608,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn project_agent_md_overlays_global_agents_md_without_replacing_it() {
+    fn project_root_agents_md_overlays_global_without_creating_config_directory() {
         let global = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         std::fs::write(global.path().join("AGENTS.md"), "global rules").unwrap();
@@ -618,8 +621,7 @@ mod tests {
         assert!(global_only.contains("\"scope\":\"global\""));
         assert!(!global_only.contains("\"scope\":\"project\""));
 
-        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
-        std::fs::write(project.path().join(".astro/AGENT.md"), "project rules").unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), "project rules").unwrap();
         let combined = load_agent_instructions(Some(project.path()), global.path()).unwrap();
         assert!(combined.contains("冲突时项目规则优先"));
         assert!(combined.contains("无冲突的全局规则继续适用"));
@@ -630,6 +632,7 @@ mod tests {
             std::fs::read_to_string(global.path().join("AGENTS.md")).unwrap(),
             "global rules"
         );
+        assert!(!project.path().join(".astro").exists());
     }
 
     #[test]
@@ -637,21 +640,40 @@ mod tests {
         let global = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         assert!(load_agent_instructions(None, global.path()).is_none());
+        assert!(load_agent_instructions(Some(project.path()), global.path()).is_none());
+        assert!(!project.path().join(".astro").exists());
         std::fs::create_dir_all(project.path().join(".astro")).unwrap();
         std::fs::write(global.path().join("AGENT.md"), "wrong global filename").unwrap();
+        std::fs::write(project.path().join("AGENT.md"), "wrong project filename").unwrap();
+        std::fs::write(
+            project.path().join(".astro/AGENT.md"),
+            "legacy rules ignored",
+        )
+        .unwrap();
         std::fs::write(
             project.path().join(".astro/AGENTS.md"),
-            "wrong project filename",
+            "legacy plural rules ignored",
         )
         .unwrap();
         assert!(load_agent_instructions(Some(project.path()), global.path()).is_none());
         std::fs::write(global.path().join("AGENTS.md"), "  \n").unwrap();
-        std::fs::write(project.path().join(".astro/AGENT.md"), "project only").unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), "project only").unwrap();
         let rules = load_agent_instructions(Some(project.path()), global.path()).unwrap();
         assert!(rules.contains("project only"));
         assert!(!rules.contains("\"scope\":\"global\""));
-        std::fs::write(project.path().join(".astro/AGENT.md"), "\n").unwrap();
+        assert!(!rules.contains("legacy rules ignored"));
+        std::fs::write(project.path().join("AGENTS.md"), "\n").unwrap();
         assert!(load_agent_instructions(Some(project.path()), global.path()).is_none());
+    }
+
+    #[test]
+    fn same_global_and_project_rules_file_is_not_loaded_twice() {
+        let workspace = tempfile::tempdir().unwrap();
+        std::fs::write(workspace.path().join("AGENTS.md"), "UNIQUE_WORK_RULE").unwrap();
+        let rules = load_agent_instructions(Some(workspace.path()), workspace.path()).unwrap();
+        assert_eq!(rules.matches("UNIQUE_WORK_RULE").count(), 1);
+        assert!(!rules.contains("\"scope\":\"project\""));
+        assert!(!workspace.path().join(".astro").exists());
     }
 
     #[test]
@@ -661,8 +683,7 @@ mod tests {
         let b = tempfile::tempdir().unwrap();
         std::fs::write(global.path().join("AGENTS.md"), "GLOBAL_WORK").unwrap();
         for (project, text) in [(a.path(), "PROJECT_A"), (b.path(), "PROJECT_B")] {
-            std::fs::create_dir_all(project.join(".astro")).unwrap();
-            std::fs::write(project.join(".astro/AGENT.md"), text).unwrap();
+            std::fs::write(project.join("AGENTS.md"), text).unwrap();
         }
         let first = load_agent_instructions(Some(a.path()), global.path()).unwrap();
         assert!(first.contains("PROJECT_A") && first.contains("GLOBAL_WORK"));
@@ -672,6 +693,7 @@ mod tests {
         let no_project = load_agent_instructions(None, global.path()).unwrap();
         assert!(no_project.contains("GLOBAL_WORK"));
         assert!(!no_project.contains("PROJECT_A") && !no_project.contains("PROJECT_B"));
+        assert!(!a.path().join(".astro").exists() && !b.path().join(".astro").exists());
     }
 
     #[tokio::test]
@@ -681,18 +703,17 @@ mod tests {
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let mut config = super::super::Config::with_defaults(dir.path().to_path_buf());
         let ws = home::agent_workspace_dir(dir.path(), &home::active_agent_id(dir.path()));
-        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
         for name in ["SOUL.md", "IDENTITY.md", "USER.md", "TOOLS.md"] {
             std::fs::write(ws.join(name), format!("- GLOBAL_{name}")).unwrap();
             std::fs::write(
-                project.path().join(".astro").join(name),
+                project.path().join(name),
                 format!("PROJECT_SHOULD_NOT_LOAD_{name}"),
             )
             .unwrap();
         }
         config.soul = std::fs::read_to_string(ws.join("SOUL.md")).unwrap();
         std::fs::write(ws.join("AGENTS.md"), "GLOBAL_WORK_RULES").unwrap();
-        std::fs::write(project.path().join(".astro/AGENT.md"), "PROJECT_WORK_RULES").unwrap();
+        std::fs::write(project.path().join("AGENTS.md"), "PROJECT_WORK_RULES").unwrap();
         let session = AgentLoop::with_session_id(config, "layer-scope".into())
             .await
             .unwrap();
@@ -712,5 +733,6 @@ mod tests {
         let without_project = session.build_system_prompt().await;
         assert!(without_project.contains("GLOBAL_WORK_RULES"));
         assert!(!without_project.contains("PROJECT_WORK_RULES"));
+        assert!(!project.path().join(".astro").exists());
     }
 }

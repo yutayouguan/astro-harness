@@ -499,6 +499,17 @@ mod tests {
     }
 
     #[test]
+    fn reading_project_without_overrides_does_not_create_dot_astro() {
+        let fixture = Fixture::new(Some("trusted"));
+        fs::write(fixture.project.join("AGENTS.md"), "project work rules").unwrap();
+        assert!(!fixture.project.join(DOT_ASTRO_DIR).exists());
+        assert!(!fixture.nested.join(DOT_ASTRO_DIR).exists());
+        load_local_config(&fixture.options()).unwrap();
+        assert!(!fixture.project.join(DOT_ASTRO_DIR).exists());
+        assert!(!fixture.nested.join(DOT_ASTRO_DIR).exists());
+    }
+
+    #[test]
     fn loads_profile_and_project_chain_in_official_precedence_order() {
         let fixture = Fixture::new(Some("trusted"));
         fs::write(

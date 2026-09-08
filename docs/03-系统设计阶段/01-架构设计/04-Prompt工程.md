@@ -1,6 +1,6 @@
 # Prompt 工程指南
 
-> **工作原则继承**：全局使用 `AGENTS.md`，项目使用 `.astro/AGENT.md`；两层原文同时加载，项目补充且冲突时优先，其他全局规则保留。此覆盖关系仅限工作原则层，不替换 SOUL/IDENTITY/USER/TOOLS，也不改写源文件或扩大授权。
+> **工作原则继承**：全局使用 `AGENTS.md`，项目使用 根目录 `AGENTS.md`；两层原文同时加载，项目补充且冲突时优先，其他全局规则保留。此覆盖关系仅限工作原则层，不替换 SOUL/IDENTITY/USER/TOOLS，也不改写源文件或扩大授权。
 
 > **协作与续接基线（2026-09-08）**：`agent-core/src/prompt/behavior_guidance.md` 仅保留授权、证据与运行时协议底线。身份、表达、用户偏好、工作方法和环境备忘分别由 `IDENTITY.md`、`SOUL.md`、`USER.md`、`AGENTS.md`、`TOOLS.md` 维护；默认正文位于 `agent-home/src/workspace/templates/*.md`。线程 notes 作为独立 user 上下文注入，history 回读 canonical rollout，显式压缩在完整工具结果批次持久化之后执行。实现与验收见 [线程检查点与上下文续接](../../04-详细设计阶段/03-记忆与上下文/07-线程检查点与上下文续接.md)。下文通用“先列方案确认”等历史示例不覆盖当前运行时契约。
 
