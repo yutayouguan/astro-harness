@@ -804,23 +804,27 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlistenPrefs: (() => void) | undefined;
     let unlistenAbout: (() => void) | undefined;
     void listen("open-preferences", () => {
       setNav("settings");
     })
       .then((fn) => {
-        unlistenPrefs = fn;
+        if (disposed) fn();
+        else unlistenPrefs = fn;
       })
       .catch(() => {});
     void listen("open-about", () => {
       setAboutOpen(true);
     })
       .then((fn) => {
-        unlistenAbout = fn;
+        if (disposed) fn();
+        else unlistenAbout = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlistenPrefs?.();
       unlistenAbout?.();
     };

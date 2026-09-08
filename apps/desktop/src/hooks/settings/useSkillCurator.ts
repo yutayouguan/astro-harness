@@ -62,6 +62,7 @@ export function useSkillCurator(active = true): UseSkillCurator {
     if (!active) return;
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<CuratorUpdatedPayload>("curator-updated", (ev) => {
       void reload();
@@ -71,10 +72,12 @@ export function useSkillCurator(active = true): UseSkillCurator {
       }
     })
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [active, reload]);

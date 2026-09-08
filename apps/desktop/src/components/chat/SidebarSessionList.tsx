@@ -99,9 +99,11 @@ export default function SidebarSessionList({
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [unreadTick, setUnreadTick] = useState(0);
+  const loadRevisionRef = useRef(0);
   const visibleCount = readVisibleCount();
 
   const load = useCallback(async () => {
+    const revision = ++loadRevisionRef.current;
     const normalize = (list: RecentSessionDto[] | null | undefined) =>
       (list ?? []).map((item) => ({
         ...item,
@@ -114,8 +116,10 @@ export default function SidebarSessionList({
         projectId,
         placement,
       });
+      if (loadRevisionRef.current !== revision) return;
       setItems(normalize(list));
     } catch (primaryError) {
+      if (loadRevisionRef.current !== revision) return;
       if (listKind !== "active") {
         console.warn("load archived sessions failed", primaryError);
         setItems([]);
@@ -126,10 +130,12 @@ export default function SidebarSessionList({
           "list_recent_sessions",
           { limit: projectId ? 50 : 200 },
         );
+        if (loadRevisionRef.current !== revision) return;
         setItems(
           normalize(scopeFallbackSessionsToProject(fallback, projectId)),
         );
       } catch (fallbackError) {
+        if (loadRevisionRef.current !== revision) return;
         console.warn("load sessions failed", primaryError, fallbackError);
       }
     }
@@ -137,6 +143,9 @@ export default function SidebarSessionList({
 
   useEffect(() => {
     void load();
+    return () => {
+      loadRevisionRef.current += 1;
+    };
   }, [load]);
 
   useEffect(

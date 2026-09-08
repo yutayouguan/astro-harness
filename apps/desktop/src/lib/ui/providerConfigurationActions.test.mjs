@@ -6,6 +6,10 @@ const providersPanel = await readFile(
   new URL("../../components/settings/ProvidersPanel.tsx", import.meta.url),
   "utf8",
 );
+const providersHook = await readFile(
+  new URL("../../hooks/providers/useProviders.ts", import.meta.url),
+  "utf8",
+);
 const providerStyles = await readFile(
   new URL("../../styles/features/providers.css", import.meta.url),
   "utf8",
@@ -50,5 +54,13 @@ test("provider actions expose immediate and reduced-motion feedback", () => {
   assert.match(
     providerStyles,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.providers-switch-thumb[\s\S]*?transition:\s*none;/,
+  );
+});
+
+test("chat model selection uses the atomic provider model command", () => {
+  assert.match(providersHook, /"set_active_provider_model"/);
+  assert.doesNotMatch(
+    providersHook,
+    /onChatModelChange[\s\S]*?"save_provider"/,
   );
 });

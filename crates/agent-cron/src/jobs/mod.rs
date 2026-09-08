@@ -380,4 +380,28 @@ mod tests {
         let job = store.add("every:1h", "hi").unwrap();
         assert_eq!(job.agent_id, home::DEFAULT_AGENT_ID);
     }
+
+    #[test]
+    fn concurrent_adds_preserve_every_job() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().to_path_buf();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let mut handles = Vec::new();
+        for index in 0..8 {
+            let root = root.clone();
+            let barrier = std::sync::Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                let store = CronStore::open(root).unwrap();
+                barrier.wait();
+                store
+                    .add("every:1h", &format!("concurrent-{index}"))
+                    .unwrap();
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let jobs = CronStore::open(dir.path()).unwrap().list().unwrap();
+        assert_eq!(jobs.len(), 8);
+    }
 }

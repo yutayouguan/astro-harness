@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { subscribeSessionsChanged } from "../../lib/chat/sessionManagement";
@@ -17,8 +17,10 @@ export function useActiveSessionMetadata(
   sessionId: string | null,
 ): RecentSessionDto | null {
   const [session, setSession] = useState<RecentSessionDto | null>(null);
+  const loadRevisionRef = useRef(0);
 
   const load = useCallback(async () => {
+    const revision = ++loadRevisionRef.current;
     if (!sessionId) {
       setSession(null);
       return;
@@ -37,8 +39,10 @@ export function useActiveSessionMetadata(
       const match = [...(active ?? []), ...(archived ?? [])].find(
         (row) => row.sessionId === sessionId,
       );
+      if (loadRevisionRef.current !== revision) return;
       setSession(match?.summary?.trim() ? match : null);
     } catch {
+      if (loadRevisionRef.current !== revision) return;
       setSession(null);
     }
   }, [sessionId]);
@@ -46,6 +50,9 @@ export function useActiveSessionMetadata(
   useEffect(() => {
     setSession(null);
     void load();
+    return () => {
+      loadRevisionRef.current += 1;
+    };
   }, [load]);
 
   useEffect(() => subscribeSessionsChanged(() => void load()), [load]);

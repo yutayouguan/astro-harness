@@ -941,6 +941,7 @@ export function useChatSession({
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<{ installed: string[]; failed: string[] }>(
       "default-skills-seeded",
@@ -954,10 +955,12 @@ export function useChatSession({
       },
     )
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [t, showTransientToast]);
@@ -966,6 +969,7 @@ export function useChatSession({
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<{ op?: string; content?: string; new_memories?: number }>(
       "memory-updated",
@@ -979,10 +983,12 @@ export function useChatSession({
       },
     )
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [t, showTransientToast, chatDisplayPrefsRef]);
@@ -991,6 +997,7 @@ export function useChatSession({
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     type SessionEventPayload = {
       sessionId?: string | null;
@@ -1036,10 +1043,12 @@ export function useChatSession({
       }
     })
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [sessionId, showTransientToast, t]);

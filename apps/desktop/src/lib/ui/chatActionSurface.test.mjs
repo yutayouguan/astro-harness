@@ -219,7 +219,7 @@ test("composer exposes an accessible hover-revealed input height control", async
 
   assert.match(source, /className="composer-expand-btn"/);
   assert.match(source, /className="composer-expand-indicator"/);
-  assert.match(source, /d="M 5 3 A 20 20 0 0 1 24\.56 18\.84"/);
+  assert.match(source, /d="M 22 0 A 22 22 0 0 1 43\.52 17\.43"/);
   assert.match(source, /className="composer-expand-glyph"/);
   assert.match(source, /aria-expanded=\{composerManuallyExpanded\}/);
   assert.match(source, /className="composer-expand-icon is-expand"/);
@@ -251,6 +251,28 @@ test("composer exposes an accessible hover-revealed input height control", async
   assert.match(
     styles,
     /\.composer-input\s*\{[\s\S]*?transition:[\s\S]*?height 220ms/,
+  );
+  assert.match(styles, /--composer-corner-radius:\s*22px/);
+  assert.match(
+    styles,
+    /\.composer-expand-btn\s*\{[\s\S]*?width:\s*calc\(var\(--composer-corner-radius\) \* 2\);[\s\S]*?height:\s*calc\(var\(--composer-corner-radius\) \* 2\);/,
+  );
+});
+
+test("composer leaves ordinary clipboard text to the native textarea paste", async () => {
+  const source = await readFile(chatViewUrl, "utf8");
+  const nativeTextGate = source.indexOf(
+    'if (text || clipboardTypes.includes("text/html")) return;',
+  );
+  const osClipboardFallback = source.indexOf(
+    "const fromOs = await attachmentsFromOsClipboard();",
+  );
+
+  assert.ok(nativeTextGate >= 0, "missing native text paste gate");
+  assert.ok(osClipboardFallback > nativeTextGate);
+  assert.match(
+    source,
+    /if \(pathList\.length\)[\s\S]*?if \(created\.length\)[\s\S]*?insertClipboardText\(\);[\s\S]*?return;/,
   );
 });
 

@@ -537,6 +537,7 @@ html[data-theme="dark"] .bubble.assistant {
 }
 
 .composer {
+  --composer-corner-radius: 22px;
   --composer-surface-base: var(--sidebar-bg);
   --composer-surface-focus: color-mix(
     in srgb,
@@ -555,7 +556,7 @@ html[data-theme="dark"] .bubble.assistant {
   gap: 10px;
   margin: 0 12px 12px;
   padding: 10px 10px 10px 12px;
-  border-radius: 22px;
+  border-radius: var(--composer-corner-radius);
   background: var(--composer-surface-sheen), var(--composer-surface-base);
   border: 0.75px solid var(--glass-edge);
   box-shadow:
@@ -788,17 +789,17 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 }
 
 .composer-input-wrap:has(.composer-expand-btn) {
-  padding-right: 42px;
+  padding-right: 48px;
 }
 
 .composer-expand-btn {
   position: absolute;
   z-index: 3;
-  top: -7px;
-  right: -7px;
+  top: -12px;
+  right: -12px;
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: calc(var(--composer-corner-radius) * 2);
+  height: calc(var(--composer-corner-radius) * 2);
   padding: 0;
   place-items: center;
   border: 0;
@@ -817,8 +818,9 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 
 .composer-expand-indicator {
   position: absolute;
-  inset: 5px;
+  inset: 0;
   display: block;
+  overflow: visible;
   opacity: 0.88;
   fill: none;
   stroke: color-mix(in srgb, var(--ink) 54%, transparent);
@@ -826,7 +828,7 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
-  transform: scale(0.92);
+  transform: rotate(0);
   transform-origin: center;
   transition:
     opacity 140ms ease,
@@ -835,7 +837,7 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 }
 
 .composer-expand-btn[aria-expanded="true"] .composer-expand-indicator {
-  transform: rotate(180deg) scale(0.92);
+  transform: rotate(180deg);
 }
 
 .composer-expand-glyph {

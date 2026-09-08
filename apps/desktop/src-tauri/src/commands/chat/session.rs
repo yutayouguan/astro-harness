@@ -796,9 +796,9 @@ pub async fn assign_session_to_project(
 
 /// List status of each session (active / idle / terminated).
 #[tauri::command]
-pub async fn list_session_statuses() -> Result<Vec<serde_json::Value>, String> {
-    // Stub added during sqlx-migration merge – full implementation pending.
-    Ok(Vec::new())
+pub async fn list_session_statuses(
+) -> Result<Vec<crate::infra::thread_events::SessionStatusChangedDto>, String> {
+    Ok(crate::infra::thread_events::session_status_snapshot())
 }
 
 /// Discard an ephemeral side session that is no longer needed.

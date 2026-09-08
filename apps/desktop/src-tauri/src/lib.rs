@@ -442,6 +442,7 @@ pub fn run() {
             commands::providers::reorder_providers,
             commands::providers::delete_provider,
             commands::providers::set_active_provider,
+            commands::providers::set_active_provider_model,
             commands::providers::set_active_image_provider,
             commands::providers::set_provider_api_key,
             commands::providers::get_provider_api_key,

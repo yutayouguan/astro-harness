@@ -281,6 +281,8 @@ export function useRealtimeConversation({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
+      return;
     let disposed = false;
     let unlisten: UnlistenFn | undefined;
     void listen<RealtimeConversationEvent>(
@@ -379,7 +381,7 @@ export function useRealtimeConversation({
     ).then((stop) => {
       if (disposed) stop();
       else unlisten = stop;
-    });
+    }).catch(() => {});
     return () => {
       disposed = true;
       attemptRef.current += 1;

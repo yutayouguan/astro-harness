@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
@@ -50,6 +51,33 @@ fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, Sessio
     static REGISTRY: OnceLock<std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>> =
         OnceLock::new();
     REGISTRY.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+fn next_session_status_ts_ms() -> i64 {
+    static LAST_TS_MS: AtomicI64 = AtomicI64::new(0);
+    let now = now_ts_ms();
+    let mut previous = LAST_TS_MS.load(Ordering::Relaxed);
+    loop {
+        let next = now.max(previous.saturating_add(1));
+        match LAST_TS_MS.compare_exchange_weak(
+            previous,
+            next,
+            Ordering::SeqCst,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return next,
+            Err(current) => previous = current,
+        }
+    }
+}
+
+pub(crate) fn session_status_snapshot() -> Vec<SessionStatusChangedDto> {
+    let mut statuses = session_status_registry()
+        .lock()
+        .map(|statuses| statuses.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    statuses.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    statuses
 }
 
 #[derive(Clone, Serialize)]
@@ -152,7 +180,7 @@ pub(crate) fn emit_session_status(
         status: status.into(),
         active_flags,
         error,
-        ts_ms: now_ts_ms(),
+        ts_ms: next_session_status_ts_ms(),
     };
     if let Ok(mut statuses) = session_status_registry().lock() {
         statuses.insert(changed.session_id.clone(), changed.clone());
@@ -6178,6 +6206,13 @@ mod tests {
             backoff.after_attempt(false),
             std::time::Duration::from_secs(1)
         );
+    }
+
+    #[test]
+    fn session_status_timestamps_are_strictly_monotonic() {
+        let first = next_session_status_ts_ms();
+        let second = next_session_status_ts_ms();
+        assert!(second > first);
     }
 
     #[test]

@@ -2594,11 +2594,8 @@ mod tests {
     async fn response_items_reach_canonical_rollout_before_sqlite_projection() {
         let dir = TempDir::new().unwrap();
         let rollout_root = dir.path().join("sessions").join("rollouts");
-        let path = agent_rollout::new_rollout_path(
-            &rollout_root,
-            "canonical-first",
-            chrono::Utc::now(),
-        );
+        let path =
+            agent_rollout::new_rollout_path(&rollout_root, "canonical-first", chrono::Utc::now());
         let session = Arc::new(
             Session::with_session_id(test_config(&dir), "canonical-first".into())
                 .await

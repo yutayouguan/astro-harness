@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 
 use chrono::{DateTime, Duration, Local, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,14 @@ use super::model::{
     default_agent_id, normalize_cron_agent_id, title_from_task, CronJob, NewCronJob,
 };
 use super::schedule::{compute_next_run, ensure_custom_start};
+
+static STORE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_store() -> anyhow::Result<MutexGuard<'static, ()>> {
+    STORE_LOCK
+        .lock()
+        .map_err(|error| anyhow::anyhow!("cron store lock poisoned: {error}"))
+}
 
 /// `jobs.json` 顶层结构
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -47,8 +56,9 @@ impl CronStore {
 
     /// 列出全部任务（加载时补全缺省 title / agent_id）
     pub fn list(&self) -> anyhow::Result<Vec<CronJob>> {
+        let _guard = lock_store()?;
         Ok(self
-            .load()?
+            .load_unlocked()?
             .jobs
             .into_iter()
             .filter(|job| job.agent_id == default_agent_id())
@@ -90,7 +100,8 @@ impl CronStore {
         let next =
             compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let job = CronJob {
             id: Uuid::new_v4().to_string(),
             schedule,
@@ -106,7 +117,7 @@ impl CronStore {
             show_in_chat: input.show_in_chat,
         };
         file.jobs.push(job.clone());
-        self.save(&file)?;
+        self.save_unlocked(&file)?;
         Ok(job)
     }
 
@@ -135,7 +146,8 @@ impl CronStore {
         let next =
             compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let mut updated = None;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
@@ -152,21 +164,22 @@ impl CronStore {
             }
         }
         if updated.is_some() {
-            self.save(&file)?;
+            self.save_unlocked(&file)?;
         }
         Ok(updated)
     }
 
     /// 按 id 或前缀删除任务；未找到返回 `Ok(false)`
     pub fn remove(&self, id_or_prefix: &str) -> anyhow::Result<bool> {
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let before = file.jobs.len();
         file.jobs
             .retain(|j| j.id != id_or_prefix && !j.id.starts_with(id_or_prefix));
         if file.jobs.len() == before {
             return Ok(false);
         }
-        self.save(&file)?;
+        self.save_unlocked(&file)?;
         Ok(true)
     }
 
@@ -178,7 +191,8 @@ impl CronStore {
     ) -> anyhow::Result<bool> {
         let fired_at = fired_at
             .unwrap_or_else(|| Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let mut found = false;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
@@ -190,13 +204,14 @@ impl CronStore {
         if !found {
             return Ok(false);
         }
-        self.save(&file)?;
+        self.save_unlocked(&file)?;
         Ok(true)
     }
 
     /// 启用或禁用任务；启用时会补算缺失的 `next_run_at`。
     pub fn set_enabled(&self, id_or_prefix: &str, enabled: bool) -> anyhow::Result<bool> {
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let mut found = false;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
@@ -214,14 +229,15 @@ impl CronStore {
         if !found {
             return Ok(false);
         }
-        self.save(&file)?;
+        self.save_unlocked(&file)?;
         Ok(true)
     }
 
     /// 扫描到期任务：更新 next_run，返回已触发的任务（不写 output JSON）
     pub fn claim_due(&self) -> anyhow::Result<Vec<CronJob>> {
         let now = Local::now();
-        let mut file = self.load()?;
+        let _guard = lock_store()?;
+        let mut file = self.load_unlocked()?;
         let mut fired = Vec::new();
 
         for job in &mut file.jobs {
@@ -249,7 +265,7 @@ impl CronStore {
         }
 
         if !fired.is_empty() {
-            self.save(&file)?;
+            self.save_unlocked(&file)?;
         } else {
             // 只在有 next_run 需要初始化时才写文件
             let mut needs_save = false;
@@ -263,7 +279,7 @@ impl CronStore {
                 }
             }
             if needs_save {
-                self.save(&file)?;
+                self.save_unlocked(&file)?;
             }
         }
 
@@ -283,6 +299,11 @@ impl CronStore {
 
     /// 从磁盘加载 `jobs.json`；不存在或空文件返回空列表
     pub(crate) fn load(&self) -> anyhow::Result<JobsFile> {
+        let _guard = lock_store()?;
+        self.load_unlocked()
+    }
+
+    fn load_unlocked(&self) -> anyhow::Result<JobsFile> {
         let path = self.jobs_path();
         if !path.exists() {
             return Ok(JobsFile::default());
@@ -310,17 +331,29 @@ impl CronStore {
             }
         }
         if migrated {
-            self.save(&file)?;
+            self.save_unlocked(&file)?;
         }
         Ok(file)
     }
 
     /// 原子写入 `jobs.json`（先写 `.json.tmp` 再 rename）
     pub(crate) fn save(&self, file: &JobsFile) -> anyhow::Result<()> {
+        let _guard = lock_store()?;
+        self.save_unlocked(file)
+    }
+
+    fn save_unlocked(&self, file: &JobsFile) -> anyhow::Result<()> {
         let path = self.jobs_path();
-        let tmp = path.with_extension("json.tmp");
+        let tmp = path.with_extension(format!("json.{}.tmp", Uuid::new_v4().simple()));
         fs::write(&tmp, serde_json::to_string_pretty(file)?)?;
-        fs::rename(&tmp, &path)?;
+        #[cfg(target_os = "windows")]
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        if let Err(error) = fs::rename(&tmp, &path) {
+            let _ = fs::remove_file(&tmp);
+            return Err(error.into());
+        }
         Ok(())
     }
 

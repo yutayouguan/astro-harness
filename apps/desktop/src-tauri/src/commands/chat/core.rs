@@ -638,7 +638,6 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         images,
     } = build_chat_payload(&content, &attachments);
     let resume_json = resume_json.unwrap_or_default();
-    let grpc_address = default_grpc_address();
     let event_name = format!("chat_stream_{sid}");
     let thinking_enabled = thinking_enabled.unwrap_or(false);
     let mut reasoning_effort = reasoning_effort
@@ -923,7 +922,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
     tauri::async_runtime::spawn(async move {
         let result = async {
             bridge.wait_ready_for(THREAD_EVENTS_READY_TIMEOUT).await?;
-            let endpoint = endpoint_url(&grpc_address);
+            let endpoint = endpoint_url(&default_grpc_address());
             let mut client = AstroServiceClient::connect(endpoint)
                 .await
                 .map_err(|error| error.to_string())?;

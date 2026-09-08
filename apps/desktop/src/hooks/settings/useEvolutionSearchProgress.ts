@@ -18,16 +18,19 @@ export function useEvolutionSearchProgress(
     if (!active) return;
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
       return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<SearchProgressEvent>("evolution-search-progress", (ev) => {
       eventsRef.current = [...eventsRef.current, ev.payload];
       setEvents(eventsRef.current);
     })
       .then((fn) => {
-        unlisten = fn;
+        if (disposed) fn();
+        else unlisten = fn;
       })
       .catch(() => {});
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [active]);

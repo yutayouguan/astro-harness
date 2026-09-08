@@ -62,7 +62,7 @@ export function useActiveUiStyle() {
     void listen(UI_STYLE_CHANGED_EVENT, () => void refresh()).then((stop) => {
       if (disposed) stop();
       else unlisten = stop;
-    });
+    }).catch(() => {});
     const timer = window.setInterval(onVisible, REFRESH_MS);
     window.addEventListener("focus", onVisible);
     window.addEventListener(UI_STYLE_RESET_EVENT, onReset);

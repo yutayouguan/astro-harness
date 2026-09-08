@@ -2267,6 +2267,19 @@ export default function ChatView({
     }
 
     const text = e.clipboardData?.getData("text/plain") ?? "";
+    const clipboardTypes = Array.from(e.clipboardData?.types ?? []);
+    const insertClipboardText = () => {
+      const el = textareaRef.current;
+      if (!el || !text) return;
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? start;
+      const next = el.value.slice(0, start) + text + el.value.slice(end);
+      onInputChange(next);
+      const caret = start + text.length;
+      window.requestAnimationFrame(() => {
+        el.setSelectionRange(caret, caret);
+      });
+    };
     const pathList = pathsFromClipboardText(text);
     if (pathList.length) {
       e.preventDefault();
@@ -2275,10 +2288,15 @@ export default function ChatView({
         addAttachments(created);
         return;
       }
+      insertClipboardText();
+      return;
     }
 
+    // 普通文字交给 textarea 原生粘贴；不要让较慢的系统文件剪贴板探测阻塞输入。
+    if (text || clipboardTypes.includes("text/html")) return;
+
     // 系统文件剪贴板（复制媒体后）在 WKWebView 里常不进 clipboardData.files
-    // 先拦截，再读 OS 剪贴板 / 图片像素；都没有则回填普通文本
+    // 仅在事件本身没有文字/文件时拦截，再读 OS 剪贴板或图片像素。
     e.preventDefault();
     const fromOs = await attachmentsFromOsClipboard();
     if (fromOs.length) {
@@ -2289,19 +2307,6 @@ export default function ChatView({
     if (fromRead.length) {
       await addFiles(fromRead);
       return;
-    }
-    if (text) {
-      const el = textareaRef.current;
-      if (el) {
-        const start = el.selectionStart ?? el.value.length;
-        const end = el.selectionEnd ?? start;
-        const next = el.value.slice(0, start) + text + el.value.slice(end);
-        onInputChange(next);
-        const caret = start + text.length;
-        window.requestAnimationFrame(() => {
-          el.setSelectionRange(caret, caret);
-        });
-      }
     }
   };
 
@@ -4151,10 +4156,10 @@ export default function ChatView({
                 >
                   <svg
                     className="composer-expand-indicator"
-                    viewBox="0 0 28 28"
+                    viewBox="0 0 44 44"
                     aria-hidden
                   >
-                    <path d="M 5 3 A 20 20 0 0 1 24.56 18.84" pathLength={1} />
+                    <path d="M 22 0 A 22 22 0 0 1 43.52 17.43" pathLength={1} />
                   </svg>
                   <span className="composer-expand-glyph" aria-hidden>
                     <Maximize2

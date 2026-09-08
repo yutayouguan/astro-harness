@@ -292,7 +292,7 @@ impl ProviderConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProvidersState {
     pub providers: Vec<ProviderConfig>,
     pub active_provider_id: Option<String>,
@@ -800,7 +800,23 @@ fn save_state(state: &ProvidersState) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let raw = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    fs::write(path, raw).map_err(|e| e.to_string())
+    let temporary = path.with_extension(format!(
+        "json.{}.{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0)
+    ));
+    if let Err(error) = fs::write(&temporary, raw) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error.to_string());
+    }
+    if let Err(error) = fs::rename(&temporary, &path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 /// `resolve_api_key`。
@@ -921,9 +937,10 @@ where
     if guard.is_none() {
         *guard = Some(load_state()?);
     }
-    let state = guard.as_mut().unwrap();
-    let result = f(state)?;
-    save_state(state)?;
+    let mut next = guard.as_ref().expect("provider state initialized").clone();
+    let result = f(&mut next)?;
+    save_state(&next)?;
+    *guard = Some(next);
     Ok(result)
 }
 
@@ -1104,6 +1121,34 @@ pub fn set_active_provider(id: String) -> Result<ProvidersStateDto, String> {
         s.active_provider_id = Some(id);
         Ok(to_state_dto(s))
     })
+}
+
+/// 原子更新聊天模型并设为当前 Provider，避免前端用不完整配置覆盖高级字段。
+#[tauri::command]
+pub fn set_active_provider_model(id: String, model: String) -> Result<ProvidersStateDto, String> {
+    let model = model.trim();
+    if model.is_empty() {
+        return Err("模型 ID 不能为空".to_string());
+    }
+    with_state_mut(|state| set_active_provider_model_in_state(state, &id, model))
+}
+
+fn set_active_provider_model_in_state(
+    state: &mut ProvidersState,
+    id: &str,
+    model: &str,
+) -> Result<ProvidersStateDto, String> {
+    let provider = state
+        .providers
+        .iter_mut()
+        .find(|provider| provider.id == id && provider.enabled)
+        .ok_or_else(|| "提供商不存在或未启用".to_string())?;
+    if !providers::dispatch::supports_agent_responses(&toml_backend_id(provider)) {
+        return Err("该提供商不支持 Agent Responses API".to_string());
+    }
+    provider.model = model.to_string();
+    state.active_provider_id = Some(id.to_string());
+    Ok(to_state_dto(state))
 }
 
 /// 设置独立的默认图片生成 Provider。
@@ -2053,6 +2098,40 @@ mod tests {
         assert!(providers::dispatch::supports_agent_responses("openai"));
         assert!(providers::dispatch::supports_agent_responses("openrouter"));
         assert!(!providers::dispatch::supports_agent_responses("ollama"));
+    }
+
+    #[test]
+    fn active_model_update_preserves_advanced_provider_fields() {
+        let mut provider = ProviderConfig::new(ProviderKind::Openai);
+        provider.id = "provider-1".into();
+        provider.fallback = vec![ProviderFallbackEntry {
+            provider_id: "provider-2".into(),
+            model: Some("fallback-model".into()),
+        }];
+        provider.image_model = "image-model".into();
+        provider.video_model = "video-model".into();
+        provider.tts_model = "tts-model".into();
+        provider.vision_model = "vision-model".into();
+        provider.music_model = "music-model".into();
+        provider.embedding_model = "embedding-model".into();
+        let mut state = ProvidersState {
+            providers: vec![provider.clone()],
+            active_provider_id: None,
+            active_image_provider_id: None,
+        };
+
+        set_active_provider_model_in_state(&mut state, "provider-1", "next-model").unwrap();
+
+        let updated = &state.providers[0];
+        assert_eq!(updated.model, "next-model");
+        assert_eq!(updated.fallback, provider.fallback);
+        assert_eq!(updated.image_model, provider.image_model);
+        assert_eq!(updated.video_model, provider.video_model);
+        assert_eq!(updated.tts_model, provider.tts_model);
+        assert_eq!(updated.vision_model, provider.vision_model);
+        assert_eq!(updated.music_model, provider.music_model);
+        assert_eq!(updated.embedding_model, provider.embedding_model);
+        assert_eq!(state.active_provider_id.as_deref(), Some("provider-1"));
     }
 
     #[test]
