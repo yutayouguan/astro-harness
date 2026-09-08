@@ -2,6 +2,8 @@ import type { ProviderDto } from "../../types";
 
 export const ONBOARDING_VERSION = 1;
 export const ONBOARDING_RESET_EVENT = "astro:onboarding-reset";
+export const ONBOARDING_STARTER_PROMPT_KEY =
+  "astro.onboarding.starterPrompt.v1";
 
 export const ONBOARDING_STEPS = [
   "intro",
@@ -61,4 +63,25 @@ export function providerConfigInput(provider: ProviderDto, model: string) {
 export function inferProjectName(path: string): string {
   const segments = path.split(/[\\/]/).filter(Boolean);
   return segments[segments.length - 1] ?? "Workspace";
+}
+
+export function storeOnboardingStarterPrompt(prompt: string): void {
+  const value = prompt.trim();
+  if (!value || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(ONBOARDING_STARTER_PROMPT_KEY, value);
+  } catch {
+    // Session storage may be unavailable in restricted WebViews.
+  }
+}
+
+export function takeOnboardingStarterPrompt(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.sessionStorage.getItem(ONBOARDING_STARTER_PROMPT_KEY);
+    window.sessionStorage.removeItem(ONBOARDING_STARTER_PROMPT_KEY);
+    return value?.trim() || null;
+  } catch {
+    return null;
+  }
 }

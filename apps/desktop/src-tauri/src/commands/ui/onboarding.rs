@@ -37,21 +37,32 @@ fn state_path(base: &Path) -> PathBuf {
     base.join(ONBOARDING_FILE)
 }
 
-fn directory_has_entries(path: &Path) -> bool {
-    fs::read_dir(path)
-        .ok()
-        .and_then(|mut entries| entries.next())
-        .is_some()
-}
-
 /// 旧安装不应在升级后被强制拉回首次引导。
 ///
-/// 这里只检查明确代表用户已使用过 Astro 的持久化产物，不使用可能在空白
-/// 启动过程中就被创建的空 SQLite 文件。
-fn is_established_install(base: &Path) -> bool {
-    base.join("providers.json").is_file()
-        || base.join("config.toml").is_file()
-        || directory_has_entries(&base.join("sessions").join("rollouts"))
+/// 启动过程会创建默认配置、Provider 文件和 workspace event rollout，因此只有
+/// 真实会话表中存在记录才算已使用过的安装。
+async fn is_established_install(base: &Path) -> bool {
+    let database = home::session_db_path(base);
+    if !database.is_file() {
+        return false;
+    }
+    let Ok(store) = session::SessionStore::open(&database).await else {
+        // 旧数据库无法读取时不强制展示首次引导，避免遮挡诊断入口。
+        return true;
+    };
+    let active = store
+        .list_sessions(session::SessionListFilter::Active, 1)
+        .await
+        .map(|sessions| !sessions.is_empty())
+        .unwrap_or(true);
+    if active {
+        return true;
+    }
+    store
+        .list_sessions(session::SessionListFilter::Archived, 1)
+        .await
+        .map(|sessions| !sessions.is_empty())
+        .unwrap_or(true)
 }
 
 fn normalize(mut state: OnboardingStateDto) -> OnboardingStateDto {
@@ -71,7 +82,7 @@ fn normalize(mut state: OnboardingStateDto) -> OnboardingStateDto {
     state
 }
 
-fn load_at(base: &Path) -> Result<OnboardingStateDto, String> {
+async fn load_at(base: &Path) -> Result<OnboardingStateDto, String> {
     let path = state_path(base);
     if path.is_file() {
         let raw =
@@ -81,7 +92,7 @@ fn load_at(base: &Path) -> Result<OnboardingStateDto, String> {
         return Ok(normalize(state));
     }
 
-    if is_established_install(base) {
+    if is_established_install(base).await {
         return Ok(OnboardingStateDto {
             version: ONBOARDING_VERSION,
             step: "complete".to_string(),
@@ -124,8 +135,8 @@ fn save_step_at(base: &Path, step: &str) -> Result<OnboardingStateDto, String> {
 }
 
 #[tauri::command]
-pub fn get_onboarding_state() -> Result<OnboardingStateDto, String> {
-    load_at(&home::default_memory_dir())
+pub async fn get_onboarding_state() -> Result<OnboardingStateDto, String> {
+    load_at(&home::default_memory_dir()).await
 }
 
 #[tauri::command]
@@ -157,31 +168,48 @@ pub fn reset_onboarding_state() -> Result<OnboardingStateDto, String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn fresh_install_starts_at_intro() {
+    #[tokio::test]
+    async fn fresh_install_starts_at_intro() {
         let temp = tempfile::tempdir().unwrap();
-        let state = load_at(temp.path()).unwrap();
+        let state = load_at(temp.path()).await.unwrap();
         assert!(state.should_show);
         assert!(!state.completed);
         assert_eq!(state.step, "intro");
     }
 
-    #[test]
-    fn established_install_is_not_interrupted() {
+    #[tokio::test]
+    async fn established_install_is_not_interrupted() {
         let temp = tempfile::tempdir().unwrap();
-        fs::write(temp.path().join("providers.json"), "{}").unwrap();
-        let state = load_at(temp.path()).unwrap();
+        let database = home::session_db_path(temp.path());
+        let store = session::SessionStore::open(&database).await.unwrap();
+        store
+            .create_session("existing", "desktop", None, None, None)
+            .await
+            .unwrap();
+        let state = load_at(temp.path()).await.unwrap();
         assert!(!state.should_show);
         assert!(state.completed);
         assert!(state.inferred_existing_install);
     }
 
-    #[test]
-    fn progress_and_completion_round_trip() {
+    #[tokio::test]
+    async fn generated_bootstrap_files_do_not_hide_first_run() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("providers.json"), "{}").unwrap();
+        fs::write(temp.path().join("config.toml"), "").unwrap();
+        let database = home::session_db_path(temp.path());
+        session::SessionStore::open(&database).await.unwrap();
+        let state = load_at(temp.path()).await.unwrap();
+        assert!(state.should_show);
+        assert_eq!(state.step, "intro");
+    }
+
+    #[tokio::test]
+    async fn progress_and_completion_round_trip() {
         let temp = tempfile::tempdir().unwrap();
         let state = save_step_at(temp.path(), "provider").unwrap();
         assert_eq!(state.step, "provider");
-        assert!(load_at(temp.path()).unwrap().should_show);
+        assert!(load_at(temp.path()).await.unwrap().should_show);
 
         let completed = write_at(
             temp.path(),
@@ -196,7 +224,7 @@ mod tests {
         )
         .unwrap();
         assert!(completed.completed);
-        assert!(!load_at(temp.path()).unwrap().should_show);
+        assert!(!load_at(temp.path()).await.unwrap().should_show);
     }
 
     #[test]

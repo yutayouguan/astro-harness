@@ -127,6 +127,16 @@ pub async fn set_active_agent(app: AppHandle, agent_id: String) -> Result<AppCon
     Ok(cfg)
 }
 
+/// 更新单专家模式下默认 Agent 的显示名称。
+#[tauri::command]
+pub async fn set_default_agent_name(app: AppHandle, name: String) -> Result<AgentInfoDto, String> {
+    bootstrap_workspace()?;
+    let info = home::set_default_agent_display_name(&memory_root(), &name)
+        .map_err(|error| error.to_string())?;
+    emit_agents_changed(&app, &info.id);
+    Ok(agent_info_dto(info))
+}
+
 /// 创建引导页：暂存 Agent 图标（Lucide SVG / 上传图片），待 create_agent 时写入工作区。
 #[tauri::command]
 pub async fn set_pending_agent_icon(

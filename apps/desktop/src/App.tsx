@@ -113,6 +113,7 @@ import {
 } from "./lib/chat/chatMode";
 import type { SlashAction } from "./lib/chat/composerCommands";
 import type { ComposerContextToken } from "./lib/chat/composerContext";
+import { takeOnboardingStarterPrompt } from "./lib/ui/onboarding";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
@@ -449,6 +450,14 @@ export default function App() {
     prepareDeleteCurrentSession,
     clearDeletedCurrentSession,
   } = chat;
+  useEffect(() => {
+    const starterPrompt = takeOnboardingStarterPrompt();
+    if (!starterPrompt) return;
+    void startNewChat().then(() => {
+      setNav("chat");
+      setInput(starterPrompt);
+    });
+  }, [setInput, startNewChat]);
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],

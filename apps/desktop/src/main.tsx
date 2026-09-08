@@ -103,13 +103,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <ThemeProvider>
           <MorphiconProvider>
             <LocaleProvider>
-              <ActiveAgentProvider>
-                <DialogProvider>
-                  <OnboardingGate>
+              <OnboardingGate>
+                <ActiveAgentProvider>
+                  <DialogProvider>
                     <App />
-                  </OnboardingGate>
-                </DialogProvider>
-              </ActiveAgentProvider>
+                  </DialogProvider>
+                </ActiveAgentProvider>
+              </OnboardingGate>
             </LocaleProvider>
           </MorphiconProvider>
         </ThemeProvider>

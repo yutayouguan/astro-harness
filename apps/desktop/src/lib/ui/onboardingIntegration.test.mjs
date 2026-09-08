@@ -19,6 +19,7 @@ const preferences = readFileSync(
   new URL("../../components/settings/PreferencesPanel.tsx", import.meta.url),
   "utf8",
 );
+const app = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
 
 test("desktop startup is gated by the persisted first-run flow", () => {
   assert.match(
@@ -35,6 +36,7 @@ test("onboarding uses canonical provider, project, and permission commands", () 
   assert.match(gate, /"set_active_provider_model"/);
   assert.match(gate, /"create_project"/);
   assert.match(gate, /"set_permission_preset"/);
+  assert.match(gate, /"set_default_agent_name"/);
   assert.doesNotMatch(gate, /localStorage\.setItem\([^)]*api/i);
 });
 
@@ -56,4 +58,9 @@ test("registered commands support progress, completion, and settings reset", () 
   }
   assert.match(preferences, /ONBOARDING_RESET_EVENT/);
   assert.match(preferences, /"reset_onboarding_state"/);
+  assert.match(gate, /storeOnboardingStarterPrompt/);
+  assert.match(commands, /commands::agent::set_default_agent_name/);
+  assert.match(app, /takeOnboardingStarterPrompt\(\)/);
+  assert.match(app, /startNewChat\(\)\.then/);
+  assert.match(app, /setInput\(starterPrompt\)/);
 });

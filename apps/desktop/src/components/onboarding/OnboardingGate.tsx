@@ -4,18 +4,23 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
+  Bot,
   Check,
   ChevronRight,
+  Code2,
   FolderOpen,
   KeyRound,
   Languages,
   LoaderCircle,
+  ListTodo,
+  MessageCircle,
   Monitor,
   Moon,
   ShieldCheck,
@@ -38,10 +43,12 @@ import {
   providerConfigInput,
   providerIsReady,
   providerRequiresApiKey,
+  storeOnboardingStarterPrompt,
   type OnboardingStateDto,
   type OnboardingStep,
 } from "../../lib/ui/onboarding";
 import { WelcomeLogoEffect } from "../chat/WelcomeLogoEffect";
+import { AstroLogoMark } from "../icons/AstroLogoMark";
 import { ProviderBrandIcon } from "../icons/ProviderIcons";
 import { Button } from "../ui";
 
@@ -60,6 +67,8 @@ const COPY = {
     personalizeSub: "语言和外观会立即生效，之后也可以随时在设置中修改。",
     language: "界面语言",
     theme: "外观主题",
+    agentName: "Agent 名称（可选）",
+    agentNamePlaceholder: "Astro",
     chinese: "中文",
     english: "English",
     light: "浅色",
@@ -100,8 +109,16 @@ const COPY = {
     finish: "完成设置",
     finishing: "正在完成初始化",
     completeTitle: "一切准备就绪",
-    completeSub: "Astro 已连接模型，并准备好在你的工作空间中开始。",
-    enter: "进入 Astro",
+    completeSub: "初始化检查已通过。选一个任务开始，或直接进入 Astro。",
+    healthAgent: "Agent 身份",
+    healthModel: "模型连接",
+    healthWorkspace: "工作空间",
+    healthPermission: "执行权限",
+    starterTitle: "从第一个任务开始",
+    starterReview: "分析当前项目的架构、风险和优先改进项",
+    starterPlan: "根据当前工作空间，为我制定今天最重要的三个任务",
+    starterExplore: "介绍你能在这个工作空间为我做什么，并给出建议",
+    enter: "空白开始",
     retry: "重试",
     loadError: "无法读取初始化状态，已直接进入 Astro。",
   },
@@ -115,6 +132,8 @@ const COPY = {
       "Language and appearance update instantly and remain editable in Settings.",
     language: "Interface language",
     theme: "Appearance",
+    agentName: "Agent name (optional)",
+    agentNamePlaceholder: "Astro",
     chinese: "中文",
     english: "English",
     light: "Light",
@@ -158,8 +177,20 @@ const COPY = {
     finish: "Finish setup",
     finishing: "Finishing setup",
     completeTitle: "Everything is ready",
-    completeSub: "Astro is connected and ready to begin in your workspace.",
-    enter: "Enter Astro",
+    completeSub:
+      "Initialization checks passed. Pick a first task or enter Astro with a blank composer.",
+    healthAgent: "Agent identity",
+    healthModel: "Model connection",
+    healthWorkspace: "Workspace",
+    healthPermission: "Execution permissions",
+    starterTitle: "Start with your first task",
+    starterReview:
+      "Analyze this project's architecture, risks, and highest-priority improvements",
+    starterPlan:
+      "Plan the three most important tasks for today from this workspace",
+    starterExplore:
+      "Explain what you can do in this workspace and recommend where to start",
+    enter: "Start blank",
     retry: "Retry",
     loadError: "Setup state could not be loaded, so Astro opened directly.",
   },
@@ -167,12 +198,35 @@ const COPY = {
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me";
 type ProviderStatus = "idle" | "testing" | "success" | "error";
+type AppConfigSlice = {
+  active_agent_id: string;
+  agents: Array<{ id: string; name: string }>;
+};
 
 type FirstRunOnboardingProps = {
   initialStep?: OnboardingStep;
   onComplete: () => void;
   previewProviders?: ProviderDto[];
+  disableIntroAdvance?: boolean;
 };
+
+type HealthSummary = {
+  agent: string;
+  provider: string;
+  workspace: string;
+  permission: string;
+};
+
+const INTRO_PARTICLES = Array.from({ length: 28 }, (_, index) => {
+  const angle = (index / 28) * Math.PI * 2 + (index % 3) * 0.18;
+  const radius = 118 + (index % 6) * 25;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius * 0.72,
+    delay: (index % 7) * 34,
+    size: 2 + (index % 3),
+  };
+});
 
 function stepIndex(step: OnboardingStep): number {
   return STEP_ORDER.indexOf(step);
@@ -199,7 +253,25 @@ function OnboardingLogo({ compact = false }: { compact?: boolean }) {
       className={`onboarding-logo ${compact ? "is-compact" : ""}`}
       aria-hidden
     >
+      {!compact ? (
+        <span className="onboarding-particle-field">
+          {INTRO_PARTICLES.map((particle, index) => (
+            <i
+              key={index}
+              style={
+                {
+                  "--particle-x": `${particle.x.toFixed(1)}px`,
+                  "--particle-y": `${particle.y.toFixed(1)}px`,
+                  "--particle-delay": `${particle.delay}ms`,
+                  "--particle-size": `${particle.size}px`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </span>
+      ) : null}
       <span className="onboarding-logo-halo" />
+      <AstroLogoMark className="onboarding-logo-base" />
       <span className="chat-welcome-mark onboarding-logo-mark">
         <span className="chat-welcome-mark-glow" />
         <span className="chat-welcome-illust">
@@ -214,6 +286,7 @@ export function FirstRunOnboarding({
   initialStep = "intro",
   onComplete,
   previewProviders,
+  disableIntroAdvance = false,
 }: FirstRunOnboardingProps) {
   const { locale, setLocale } = useI18n();
   const { mode, setMode } = useTheme();
@@ -221,6 +294,8 @@ export function FirstRunOnboarding({
   const copy = COPY[locale];
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [direction, setDirection] = useState(1);
+  const [agentName, setAgentName] = useState("Astro");
+  const [currentAgentName, setCurrentAgentName] = useState("Astro");
   const [providersState, setProvidersState] =
     useState<ProvidersStateDto | null>(
       previewProviders
@@ -242,7 +317,19 @@ export function FirstRunOnboarding({
     useState<PermissionPreset>("ask_for_approval");
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState("");
+  const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(
+    () =>
+      initialStep === "complete"
+        ? {
+            agent: "Astro",
+            provider: `${previewProviders?.[0]?.display_name ?? copy.provider} · ${previewProviders?.[0]?.model ?? "—"}`,
+            workspace: copy.defaultWorkspace,
+            permission: copy.ask,
+          }
+        : null,
+  );
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const agentNameTouchedRef = useRef(false);
 
   const providers = useMemo(
     () =>
@@ -253,7 +340,6 @@ export function FirstRunOnboarding({
   );
   const selectedProvider =
     providers.find((provider) => provider.id === selectedProviderId) ?? null;
-
   const persistStep = useCallback((next: OnboardingStep) => {
     if (!isTauri() || next === "intro" || next === "complete") return;
     void invoke("save_onboarding_progress", { step: next }).catch((error) => {
@@ -271,7 +357,7 @@ export function FirstRunOnboarding({
   );
 
   useEffect(() => {
-    if (step !== "intro") return;
+    if (step !== "intro" || disableIntroAdvance) return;
     const timer = window.setTimeout(
       () => goTo("personalize"),
       reducedMotion ? 450 : 2200,
@@ -284,18 +370,12 @@ export function FirstRunOnboarding({
       window.clearTimeout(timer);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [goTo, reducedMotion, step]);
+  }, [disableIntroAdvance, goTo, reducedMotion, step]);
 
   useEffect(() => {
     if (step === "intro" || step === "complete") return;
     window.requestAnimationFrame(() => headingRef.current?.focus());
   }, [step]);
-
-  useEffect(() => {
-    if (step !== "complete") return;
-    const timer = window.setTimeout(onComplete, reducedMotion ? 250 : 950);
-    return () => window.clearTimeout(timer);
-  }, [onComplete, reducedMotion, step]);
 
   useEffect(() => {
     if (previewProviders || !isTauri()) return;
@@ -306,6 +386,27 @@ export function FirstRunOnboarding({
       })
       .catch((error) => {
         if (!disposed) setProviderMessage(String(error));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [previewProviders]);
+
+  useEffect(() => {
+    if (previewProviders || !isTauri()) return;
+    let disposed = false;
+    void invoke<AppConfigSlice>("get_config")
+      .then((config) => {
+        if (disposed) return;
+        const active = config.agents.find(
+          (agent) => agent.id === config.active_agent_id,
+        );
+        if (!active?.name) return;
+        setCurrentAgentName(active.name);
+        if (!agentNameTouchedRef.current) setAgentName(active.name);
+      })
+      .catch((error) => {
+        console.warn("agent identity load failed", error);
       });
     return () => {
       disposed = true;
@@ -418,24 +519,62 @@ export function FirstRunOnboarding({
     setFinishing(true);
     setFinishError("");
     try {
+      let projectLabel = workspacePath
+        ? inferProjectName(workspacePath)
+        : copy.defaultWorkspace;
+      let providerLabel = `${selectedProvider?.display_name ?? copy.provider} · ${model}`;
       if (!previewProviders && isTauri()) {
-        await invoke("set_permission_preset", {
-          preset: permissionPreset,
-          confirmed: false,
-        });
+        if (agentName.trim()) {
+          await invoke("set_default_agent_name", { name: agentName.trim() });
+        }
+        const permission = await invoke<{ preset: string }>(
+          "set_permission_preset",
+          {
+            preset: permissionPreset,
+            confirmed: false,
+          },
+        );
+        let projects = await invoke<ProjectDto[]>("list_projects");
         if (workspacePath) {
-          const projects = await invoke<ProjectDto[]>("list_projects");
-          const alreadyExists = projects.some((project) =>
+          const existing = projects.find((project) =>
             project.roots.includes(workspacePath),
           );
-          if (!alreadyExists) {
-            await invoke<ProjectDto>("create_project", {
+          if (!existing) {
+            const created = await invoke<ProjectDto>("create_project", {
               name: inferProjectName(workspacePath),
               roots: [workspacePath],
             });
+            projects = [...projects, created];
+            projectLabel = created.name;
+          } else {
+            projectLabel = existing.name;
           }
         }
+        const currentProviders = await invoke<ProvidersStateDto>(
+          "get_providers_state",
+        );
+        const activeProvider = currentProviders.providers.find(
+          (provider) => provider.id === currentProviders.active_provider_id,
+        );
+        if (activeProvider) {
+          providerLabel = `${activeProvider.display_name} · ${activeProvider.model}`;
+        }
+        setHealthSummary({
+          agent: agentName.trim() || currentAgentName,
+          provider: providerLabel,
+          workspace: projectLabel,
+          permission:
+            permission.preset === "approve_for_me" ? copy.approve : copy.ask,
+        });
         await invoke<OnboardingStateDto>("complete_onboarding");
+      } else {
+        setHealthSummary({
+          agent: agentName.trim() || currentAgentName,
+          provider: providerLabel,
+          workspace: projectLabel,
+          permission:
+            permissionPreset === "approve_for_me" ? copy.approve : copy.ask,
+        });
       }
       setStep("complete");
     } catch (error) {
@@ -446,6 +585,15 @@ export function FirstRunOnboarding({
 
   const variants = slideVariants(direction, reducedMotion);
   const currentIndex = Math.max(0, stepIndex(step));
+  const enterAstro = (prompt?: string) => {
+    if (prompt) storeOnboardingStarterPrompt(prompt);
+    onComplete();
+  };
+  const starterTasks = [
+    { label: copy.starterReview, Icon: Code2 },
+    { label: copy.starterPlan, Icon: ListTodo },
+    { label: copy.starterExplore, Icon: MessageCircle },
+  ];
 
   return (
     <main className="onboarding-root" data-step={step}>
@@ -592,6 +740,23 @@ export function FirstRunOnboarding({
                       ))}
                     </div>
                   </div>
+
+                  <label className="onboarding-agent-name">
+                    <span className="onboarding-setting-label">
+                      <Bot size={18} aria-hidden />
+                      <span>{copy.agentName}</span>
+                    </span>
+                    <input
+                      value={agentName}
+                      maxLength={64}
+                      placeholder={copy.agentNamePlaceholder}
+                      autoComplete="off"
+                      onChange={(event) => {
+                        agentNameTouchedRef.current = true;
+                        setAgentName(event.target.value);
+                      }}
+                    />
+                  </label>
                 </>
               ) : null}
 
@@ -825,9 +990,45 @@ export function FirstRunOnboarding({
                     {copy.completeTitle}
                   </h1>
                   <p>{copy.completeSub}</p>
-                  <Button variant="primary" size="lg" onClick={onComplete}>
+                  {healthSummary ? (
+                    <div className="onboarding-health-grid" role="status">
+                      {[
+                        [copy.healthAgent, healthSummary.agent],
+                        [copy.healthModel, healthSummary.provider],
+                        [copy.healthWorkspace, healthSummary.workspace],
+                        [copy.healthPermission, healthSummary.permission],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <Check size={15} aria-hidden />
+                          <span>
+                            <small>{label}</small>
+                            <strong>{value}</strong>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="onboarding-starters">
+                    <h2>{copy.starterTitle}</h2>
+                    {starterTasks.map(({ label, Icon }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => enterAstro(label)}
+                      >
+                        <Icon size={17} aria-hidden />
+                        <span>{label}</span>
+                        <ChevronRight size={15} aria-hidden />
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => enterAstro()}
+                  >
                     {copy.enter}
-                    <ChevronRight size={17} aria-hidden />
+                    <ChevronRight size={15} aria-hidden />
                   </Button>
                 </div>
               ) : null}

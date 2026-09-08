@@ -7,6 +7,8 @@ import {
   providerConfigInput,
   providerIsReady,
   providerRequiresApiKey,
+  storeOnboardingStarterPrompt,
+  takeOnboardingStarterPrompt,
 } from "./onboarding.ts";
 
 const provider: ProviderDto = {
@@ -63,4 +65,29 @@ test("infers project names on unix and windows paths", () => {
   assert.equal(inferProjectName("/Users/me/code/astro"), "astro");
   assert.equal(inferProjectName("C:\\work\\nova"), "nova");
   assert.equal(inferProjectName(""), "Workspace");
+});
+
+test("starter prompt is consumed exactly once", () => {
+  const values = new Map<string, string>();
+  const previousWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      sessionStorage: {
+        setItem: (key: string, value: string) => values.set(key, value),
+        getItem: (key: string) => values.get(key) ?? null,
+        removeItem: (key: string) => values.delete(key),
+      },
+    },
+  });
+  try {
+    storeOnboardingStarterPrompt("  Review this project  ");
+    assert.equal(takeOnboardingStarterPrompt(), "Review this project");
+    assert.equal(takeOnboardingStarterPrompt(), null);
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: previousWindow,
+    });
+  }
 });

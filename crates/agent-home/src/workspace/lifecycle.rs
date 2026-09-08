@@ -133,6 +133,81 @@ fn read_agent_display_name(ws: &Path, fallback: &str) -> String {
     fallback.to_string()
 }
 
+fn identity_line_is_name(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('-') {
+        return false;
+    }
+    let Some((key, _)) = trimmed.trim_start_matches('-').trim().split_once(':') else {
+        return false;
+    };
+    key.trim()
+        .trim_matches('*')
+        .trim()
+        .eq_ignore_ascii_case("name")
+}
+
+fn replace_identity_name(text: &str, name: &str) -> String {
+    let new_line = format!("- **Name:** {name}");
+    let mut replaced = false;
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        if identity_line_is_name(line) {
+            if !replaced {
+                lines.push(new_line.clone());
+                replaced = true;
+            }
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    if !replaced {
+        let insert_at = lines
+            .iter()
+            .position(|line| line.trim_start().starts_with('#'))
+            .map_or(0, |index| index + 1);
+        lines.insert(insert_at, new_line);
+    }
+    let mut result = lines.join("\n");
+    result.push('\n');
+    result
+}
+
+/// 更新单专家模式下默认 Agent 的显示名称。
+///
+/// `IDENTITY.md` 是 UI 列表的首选事实源，`config.json` 也同步更新，避免重启后显示不一致。
+pub fn set_default_agent_display_name(base: &Path, name: &str) -> anyhow::Result<AgentInfo> {
+    let name = name.trim();
+    anyhow::ensure!(!name.is_empty(), "Agent 名称不能为空");
+    anyhow::ensure!(name.chars().count() <= 64, "Agent 名称不能超过 64 个字符");
+    anyhow::ensure!(
+        !name.chars().any(char::is_control),
+        "Agent 名称不能包含控制字符"
+    );
+
+    let id = DEFAULT_AGENT_ID;
+    let workspace = ensure_agent_space(base, id, Some(name))?;
+    let identity_path = workspace.join("IDENTITY.md");
+    let identity = fs::read_to_string(&identity_path)?;
+    fs::write(&identity_path, replace_identity_name(&identity, name))?;
+
+    let mut config = AgentRuntimeConfig::load(base, id)
+        .or_else(|_| write_agent_config(base, id, name, false))?;
+    let previous_config_name = config.name.clone();
+    config.name = name.to_string();
+    if let Err(error) = config.save(base) {
+        let _ = fs::write(&identity_path, identity);
+        config.name = previous_config_name;
+        let _ = config.save(base);
+        return Err(error);
+    }
+
+    list_agents(base)
+        .into_iter()
+        .find(|agent| agent.id == id)
+        .ok_or_else(|| anyhow::anyhow!("更新后无法读取默认 Agent"))
+}
+
 /// Agent 记忆空间元信息（`workspace` / `workspace-*`），供 UI 列举与切换
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AgentInfo {
@@ -708,6 +783,33 @@ mod tests {
             ima.vibe.as_deref(),
             Some("找文档翻到崩溃？说句话我秒级定位")
         );
+    }
+
+    #[test]
+    fn default_agent_display_name_updates_identity_and_runtime_config() {
+        let dir = TempDir::new().unwrap();
+        ensure_agent_space(dir.path(), DEFAULT_AGENT_ID, Some("Astro")).unwrap();
+
+        let updated = set_default_agent_display_name(dir.path(), "Nova").unwrap();
+        assert_eq!(updated.name, "Nova");
+
+        let identity = fs::read_to_string(
+            agent_workspace_dir(dir.path(), DEFAULT_AGENT_ID).join("IDENTITY.md"),
+        )
+        .unwrap();
+        assert!(identity.contains("- **Name:** Nova"));
+        assert_eq!(
+            AgentRuntimeConfig::load(dir.path(), DEFAULT_AGENT_ID)
+                .unwrap()
+                .name,
+            "Nova"
+        );
+    }
+
+    #[test]
+    fn default_agent_display_name_rejects_multiline_input() {
+        let dir = TempDir::new().unwrap();
+        assert!(set_default_agent_display_name(dir.path(), "Nova\nInjected").is_err());
     }
 
     #[test]

@@ -284,6 +284,7 @@ pub fn run() {
             commands::agent::list_agents,
             commands::agent::create_agent,
             commands::agent::set_active_agent,
+            commands::agent::set_default_agent_name,
             commands::agent::set_pending_agent_icon,
             commands::agent::clear_pending_agent_icon,
             commands::agent::list_daily_memory,

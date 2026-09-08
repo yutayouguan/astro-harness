@@ -36,7 +36,7 @@ const providers: ProviderDto[] = [
 function Preview({
   step,
 }: {
-  step: "intro" | "personalize" | "provider" | "workspace";
+  step: "intro" | "personalize" | "provider" | "workspace" | "complete";
 }) {
   return (
     <ThemeProvider>
@@ -44,6 +44,7 @@ function Preview({
         <FirstRunOnboarding
           initialStep={step}
           previewProviders={providers}
+          disableIntroAdvance={step === "intro"}
           onComplete={() => undefined}
         />
       </LocaleProvider>
@@ -64,3 +65,4 @@ export const Intro: Story = { args: { step: "intro" } };
 export const Personalize: Story = { args: { step: "personalize" } };
 export const Provider: Story = { args: { step: "provider" } };
 export const Workspace: Story = { args: { step: "workspace" } };
+export const Complete: Story = { args: { step: "complete" } };
