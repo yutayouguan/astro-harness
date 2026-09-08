@@ -164,6 +164,11 @@ impl AgentLoop {
             None => self.project_root(),
         };
         let ws = self.resolve_workspace_dir();
+        // Explicit static contexts (including isolated review) own their identity.
+        if self.config.static_override.is_none() {
+            static_ctx.identity =
+                std::fs::read_to_string(ws.join("IDENTITY.md")).unwrap_or_default();
+        }
         if let Some(content) = load_agent_instructions(project_root.as_deref(), &ws) {
             static_ctx.agent_md = content;
         }
@@ -376,6 +381,37 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn workspace_identity_is_loaded_without_overriding_explicit_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let config = super::super::Config::with_defaults(dir.path().to_path_buf());
+        let ws = dir.path().join("workspace");
+        std::fs::write(ws.join("IDENTITY.md"), "WORKSPACE_IDENTITY").unwrap();
+        let normal = AgentLoop::with_session_id(config.clone(), "identity-default".into())
+            .await
+            .unwrap();
+        let prompt = normal.build_prompt_contract().await;
+        assert!(prompt.base_instructions.contains("WORKSPACE_IDENTITY"));
+        assert!(prompt
+            .context
+            .iter()
+            .all(|item| !item.text().contains("WORKSPACE_IDENTITY")));
+
+        let mut explicit_config = config;
+        explicit_config.static_override = Some(StaticContext {
+            soul: "EXPLICIT_SOUL".into(),
+            identity: "EXPLICIT_IDENTITY".into(),
+            ..Default::default()
+        });
+        let explicit = AgentLoop::with_session_id(explicit_config, "identity-explicit".into())
+            .await
+            .unwrap();
+        let prompt = explicit.build_prompt_contract().await;
+        assert!(prompt.base_instructions.contains("EXPLICIT_IDENTITY"));
+        assert!(!prompt.base_instructions.contains("WORKSPACE_IDENTITY"));
+    }
 
     #[tokio::test]
     async fn checkpoint_is_thread_scoped_and_survives_runtime_recreation() {

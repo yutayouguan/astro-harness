@@ -6,9 +6,9 @@
 /// 每轮必带的静态上下文（人设、精炼记忆、用户档案等）。
 #[derive(Debug, Clone, Default)]
 pub struct StaticContext {
-    /// SOUL 层：核心价值观与行为准则（通常来自 `SOUL.md`）。
+    /// SOUL 层：人格与表达风格（通常来自 `SOUL.md`）。
     pub soul: String,
-    /// IDENTITY 层：对外身份与语气设定。
+    /// IDENTITY 层：对外身份、服务目标与职责范围。
     pub identity: String,
     /// AGENTS 层：工作空间工作方式（`AGENTS.md`）。
     pub agent_md: String,
