@@ -30,7 +30,7 @@ type DevtoolsSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 const DEFAULT_WAIT_MS: u64 = 8_000;
 const MAX_WAIT_MS: u64 = 30_000;
 const MAX_SNAPSHOT_CHARS: usize = 20_000;
-const DEFAULT_BROWSER_HOME_PAGE: &str = "https://example.com/";
+const DEFAULT_BROWSER_HOME_PAGE: &str = "";
 const DEFAULT_VIEWPORT_WIDTH: u32 = 1280;
 const DEFAULT_VIEWPORT_HEIGHT: u32 = 800;
 
@@ -60,9 +60,11 @@ impl Default for BrowserSettings {
 
 impl BrowserSettings {
     fn normalized(mut self) -> anyhow::Result<Self> {
-        self.home_page = normalize_http_url(&self.home_page)?;
-        if is_loopback_url(&self.home_page) && !self.allow_loopback {
-            anyhow::bail!("the configured home page requires local development access");
+        if !self.home_page.trim().is_empty() {
+            self.home_page = normalize_http_url(&self.home_page)?;
+            if is_loopback_url(&self.home_page) && !self.allow_loopback {
+                anyhow::bail!("the configured home page requires local development access");
+            }
         }
         self.viewport_width = self.viewport_width.clamp(320, 1_600);
         self.viewport_height = self.viewport_height.clamp(240, 1_400);
@@ -1437,17 +1439,34 @@ pub async fn desktop_control(
             let url = args
                 .url
                 .filter(|url| !url.trim().is_empty())
-                .unwrap_or_else(|| load_browser_settings(memory_dir).home_page);
-            open_for_session(
-                session_id,
-                memory_dir,
-                BrowserOpenArgs {
-                    url,
-                    wait_ms: args.wait_ms,
-                    new_tab: true,
-                },
-            )
-            .await
+                .or_else(|| {
+                    let home = load_browser_settings(memory_dir).home_page;
+                    if home.trim().is_empty() { None } else { Some(home) }
+                });
+            match url {
+                Some(url) => {
+                    open_for_session(
+                        session_id,
+                        memory_dir,
+                        BrowserOpenArgs {
+                            url,
+                            wait_ms: args.wait_ms,
+                            new_tab: true,
+                        },
+                    )
+                    .await
+                }
+                None => {
+                    Ok(serde_json::json!({
+                        "astro_browser": true,
+                        "url": "",
+                        "title": "",
+                        "status": "connected",
+                        "tabs": [],
+                    })
+                    .to_string())
+                }
+            }
         }
         "switch_tab" => {
             let args: BrowserTabArgs = serde_json::from_value(args)?;
