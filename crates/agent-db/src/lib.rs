@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteSynchronous};
@@ -89,10 +89,10 @@ impl AstroDb {
         // journal_mode/auto_vacuum 是数据库文件级设置，不能放在池选项里。
         // SQLx 会在每条新连接上重放连接选项；多个池并发打开同一文件时，
         // 重复执行 journal_mode=WAL 会竞争排他锁并按 busy_timeout 串行等待。
-        let init_lock = database_init_lock(path);
-        let init_guard = init_lock.lock().await;
-        initialize_database_file(path).await?;
-        drop(init_guard);
+        // OnceCell 在进程生命期内保留成功状态；初始化失败则仍可重试。
+        database_initializer(path)
+            .get_or_try_init(|| initialize_database_file(path))
+            .await?;
 
         let opts = SqliteConnectOptions::new()
             .filename(path)
@@ -136,24 +136,23 @@ impl AstroDb {
     }
 }
 
-fn database_init_lock(path: &Path) -> Arc<tokio::sync::Mutex<()>> {
-    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Weak<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+fn database_initializer(path: &Path) -> Arc<tokio::sync::OnceCell<()>> {
+    static INITIALIZERS: OnceLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::OnceCell<()>>>>> =
+        OnceLock::new();
     let key = path
         .parent()
         .and_then(|parent| parent.canonicalize().ok())
         .and_then(|parent| path.file_name().map(|name| parent.join(name)))
         .unwrap_or_else(|| path.to_path_buf());
-    let mut locks = LOCKS
+    let mut initializers = INITIALIZERS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    locks.retain(|_, lock| lock.strong_count() > 0);
-    if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
-        return lock;
-    }
-    let lock = Arc::new(tokio::sync::Mutex::new(()));
-    locks.insert(key, Arc::downgrade(&lock));
-    lock
+    Arc::clone(
+        initializers
+            .entry(key)
+            .or_insert_with(|| Arc::new(tokio::sync::OnceCell::new())),
+    )
 }
 
 async fn initialize_database_file(path: &Path) -> DbResult<()> {
@@ -308,6 +307,9 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("temp database directory");
         let db = AstroDb::new(&dir);
         let spec = DbSpec::new("concurrent", "shared.db");
+        let path = spec.path(&dir);
+        let initializer = database_initializer(&path);
+        assert!(initializer.get().is_none());
 
         let (first, second, third, fourth) = tokio::time::timeout(Duration::from_secs(8), async {
             tokio::join!(
@@ -325,6 +327,8 @@ mod tests {
             third.expect("third pool"),
             fourth.expect("fourth pool"),
         ];
+        assert!(initializer.get().is_some());
+        assert!(Arc::ptr_eq(&initializer, &database_initializer(&path)));
 
         for pool in &pools {
             let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")

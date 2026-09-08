@@ -5705,7 +5705,7 @@ mod tests {
 
         // Keep the command integration honest: activation must happen before the task can block
         // on readiness, otherwise the state assertions above do not describe `start_chat`.
-        let source = include_str!("../commands/chat.rs");
+        let source = include_str!("../commands/chat/core.rs");
         let activation = source
             .find("let activation = bridge.activate(sid2.clone()).await;")
             .expect("start_chat activation marker");
