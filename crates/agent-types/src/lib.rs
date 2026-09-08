@@ -75,7 +75,9 @@ pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCreden
 pub use desktop_pet::{
     desktop_pet_root, desktop_pet_state_path, notify_desktop_pet_changed, read_desktop_pet_state,
     set_desktop_pet_change_handler, update_desktop_pet_state, write_desktop_pet_state,
-    DesktopPetState,
+    DesktopPetManifest, DesktopPetState, DESKTOP_PET_V2_CELL_HEIGHT, DESKTOP_PET_V2_CELL_WIDTH,
+    DESKTOP_PET_V2_COLUMNS, DESKTOP_PET_V2_HEIGHT, DESKTOP_PET_V2_ROWS,
+    DESKTOP_PET_V2_SPRITE_VERSION, DESKTOP_PET_V2_USED_COLUMNS, DESKTOP_PET_V2_WIDTH,
 };
 pub use interaction_mode::InteractionMode;
 pub use memory_citation::MemoryCitation;

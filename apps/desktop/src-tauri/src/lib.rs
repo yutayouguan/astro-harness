@@ -265,6 +265,7 @@ pub fn run() {
             commands::wallpaper::get_system_wallpaper,
             commands::desktop_pet::get_desktop_pet_state,
             commands::desktop_pet::import_desktop_pet_photo,
+            commands::desktop_pet::import_desktop_pet_package,
             commands::desktop_pet::generate_desktop_pet,
             commands::desktop_pet::set_desktop_pet_enabled,
             commands::desktop_pet::set_desktop_pet_scale,

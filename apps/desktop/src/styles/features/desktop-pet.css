@@ -50,6 +50,15 @@ html[data-window-surface="desktop-pet"] #root {
   pointer-events: none;
 }
 
+.desktop-pet-character--canvas {
+  align-self: end;
+  height: auto;
+  max-height: 100%;
+  aspect-ratio: 192 / 208;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .desktop-pet-placeholder {
   width: 72%;
   aspect-ratio: 1;
@@ -360,6 +369,41 @@ html[data-window-surface="desktop-pet"] #root {
     filter 160ms ease;
 }
 
+.desktop-pet-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.desktop-pet-import-package {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 13px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--settings-panel-bg, white) 76%, transparent);
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 150ms ease, transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.desktop-pet-import-package:hover {
+  background: color-mix(in srgb, var(--accent, #7069d6) 8%, var(--settings-panel-bg, white));
+}
+
+.desktop-pet-import-package:active {
+  transform: scale(0.97);
+}
+
+.desktop-pet-import-package:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .desktop-pet-generate:disabled,
 .desktop-pet-photo-picker:disabled {
   cursor: not-allowed;
@@ -393,6 +437,35 @@ html[data-window-surface="desktop-pet"] #root {
   height: 100%;
   max-height: 310px;
   object-fit: contain;
+}
+
+.desktop-pet-preview-canvas {
+  width: min(78%, 230px);
+  height: auto;
+  aspect-ratio: 192 / 208;
+  filter: drop-shadow(0 14px 20px rgb(42 34 66 / 18%));
+}
+
+.desktop-pet-animation-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -4px;
+  font-size: 0.74rem;
+}
+
+.desktop-pet-animation-meta span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--accent, #7069d6);
+  background: color-mix(in srgb, var(--accent, #7069d6) 12%, transparent);
+  font-weight: 720;
+}
+
+.desktop-pet-animation-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-pet-preview > div {
@@ -488,6 +561,10 @@ html[data-window-surface="desktop-pet"] #root {
   }
 
   .desktop-pet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-pet-action-row {
     grid-template-columns: 1fr;
   }
 }

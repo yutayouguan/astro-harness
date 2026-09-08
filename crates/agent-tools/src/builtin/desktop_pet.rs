@@ -159,6 +159,9 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
     let model = clean_optional(args.model);
     let updated = types::update_desktop_pet_state(&ctx.memory_dir, |state| {
         state.pet_path = Some(pet_path_value);
+        state.sprite_version_number = None;
+        state.display_name = None;
+        state.description = None;
         if let Some(source_path) = source_path_value {
             state.source_path = Some(source_path);
         }

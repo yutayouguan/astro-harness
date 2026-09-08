@@ -16,6 +16,8 @@ const PET_EVENT: &str = "desktop-pet-changed";
 const MAX_SOURCE_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_SOURCE_DIMENSION: u32 = 8192;
 const MAX_DECODE_ALLOC: u64 = 128 * 1024 * 1024;
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
+const MAX_ATLAS_BYTES: u64 = 50 * 1024 * 1024;
 const BASE_WINDOW_WIDTH: f64 = 300.0;
 const BASE_WINDOW_HEIGHT: f64 = 340.0;
 
@@ -90,6 +92,167 @@ fn validate_source_path(source_path: &str) -> Result<ValidatedPetImage, String> 
     }
     let bytes = fs::read(&source).map_err(|error| format!("无法读取宠物照片：{error}"))?;
     validate_image_bytes(bytes)
+}
+
+fn validate_pet_id(id: &str) -> Result<&str, String> {
+    let id = id.trim();
+    if id.is_empty()
+        || id.len() > 80
+        || !id.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return Err("宠物包 id 只能包含字母、数字、- _ .".to_string());
+    }
+    Ok(id)
+}
+
+fn validate_manifest_copy(value: &str, field: &str, max_chars: usize) -> Result<(), String> {
+    let value = value.trim();
+    if value.is_empty() || value.chars().count() > max_chars || value.chars().any(char::is_control)
+    {
+        return Err(format!("pet.json 的 {field} 无效"));
+    }
+    Ok(())
+}
+
+fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
+    if bytes.is_empty() || bytes.len() as u64 > MAX_ATLAS_BYTES {
+        return Err("动画图集为空或超过 50 MB".to_string());
+    }
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| "无法识别动画图集格式".to_string())?;
+    let extension = match reader
+        .format()
+        .ok_or_else(|| "无法识别动画图集格式".to_string())?
+    {
+        ImageFormat::Png => "png",
+        ImageFormat::WebP => "webp",
+        _ => return Err("动画图集仅支持 PNG 或 WebP".to_string()),
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(types::DESKTOP_PET_V2_WIDTH);
+    limits.max_image_height = Some(types::DESKTOP_PET_V2_HEIGHT);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let image = reader
+        .decode()
+        .map_err(|_| "无法解码动画图集".to_string())?
+        .to_rgba8();
+    if image.dimensions() != (types::DESKTOP_PET_V2_WIDTH, types::DESKTOP_PET_V2_HEIGHT) {
+        return Err(format!(
+            "v2 图集必须是 {}x{}",
+            types::DESKTOP_PET_V2_WIDTH,
+            types::DESKTOP_PET_V2_HEIGHT
+        ));
+    }
+    for (row, used_columns) in types::DESKTOP_PET_V2_USED_COLUMNS.iter().enumerate() {
+        for column in 0..types::DESKTOP_PET_V2_COLUMNS {
+            let start_x = column * types::DESKTOP_PET_V2_CELL_WIDTH;
+            let start_y = row as u32 * types::DESKTOP_PET_V2_CELL_HEIGHT;
+            let populated = (start_y..start_y + types::DESKTOP_PET_V2_CELL_HEIGHT).any(|y| {
+                (start_x..start_x + types::DESKTOP_PET_V2_CELL_WIDTH)
+                    .any(|x| image.get_pixel(x, y)[3] != 0)
+            });
+            if column < *used_columns && !populated {
+                return Err(format!("v2 图集第 {} 行第 {} 格为空", row + 1, column + 1));
+            }
+            if column >= *used_columns && populated {
+                return Err(format!("v2 图集第 {} 行未使用格必须全透明", row + 1));
+            }
+        }
+    }
+    Ok(extension)
+}
+
+fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPetStateDto, String> {
+    let metadata = fs::metadata(manifest_path).map_err(|_| "找不到 pet.json".to_string())?;
+    if !metadata.is_file() || metadata.len() > MAX_MANIFEST_BYTES {
+        return Err("pet.json 无效或过大".to_string());
+    }
+    let manifest_bytes =
+        fs::read(manifest_path).map_err(|error| format!("无法读取 pet.json：{error}"))?;
+    let manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("pet.json 格式无效：{error}"))?;
+    let pet_id = validate_pet_id(&manifest.id)?.to_string();
+    validate_manifest_copy(&manifest.display_name, "displayName", 80)?;
+    validate_manifest_copy(&manifest.description, "description", 500)?;
+    if manifest.sprite_version_number != types::DESKTOP_PET_V2_SPRITE_VERSION {
+        return Err("仅支持 spriteVersionNumber: 2 的动画桌宠".to_string());
+    }
+    let manifest_parent = manifest_path
+        .parent()
+        .ok_or_else(|| "pet.json 缺少父目录".to_string())?
+        .canonicalize()
+        .map_err(|_| "pet.json 父目录不存在".to_string())?;
+    let relative_sheet = Path::new(manifest.spritesheet_path.trim());
+    if relative_sheet.as_os_str().is_empty() || relative_sheet.is_absolute() {
+        return Err("spritesheetPath 必须是宠物包内的相对路径".to_string());
+    }
+    let source_sheet = manifest_parent
+        .join(relative_sheet)
+        .canonicalize()
+        .map_err(|_| "找不到宠物动画图集".to_string())?;
+    if !source_sheet.starts_with(&manifest_parent) || !source_sheet.is_file() {
+        return Err("动画图集必须位于宠物包目录内".to_string());
+    }
+    let sheet_bytes =
+        fs::read(&source_sheet).map_err(|error| format!("无法读取动画图集：{error}"))?;
+    let extension = validate_v2_atlas(&sheet_bytes)?;
+
+    let pets_root = pet_dir_at(base).join("pets");
+    fs::create_dir_all(&pets_root).map_err(|error| format!("无法创建桌宠库：{error}"))?;
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+    let package_name = format!("{pet_id}-{}", &nonce[..8]);
+    let temporary = pets_root.join(format!(".{package_name}.tmp"));
+    let destination = pets_root.join(&package_name);
+    fs::create_dir_all(&temporary).map_err(|error| format!("无法准备宠物包：{error}"))?;
+    let copied_sheet_name = format!("spritesheet.{extension}");
+    let copied_sheet = temporary.join(&copied_sheet_name);
+    let managed_manifest = types::DesktopPetManifest {
+        id: pet_id,
+        display_name: manifest.display_name.trim().to_string(),
+        description: manifest.description.trim().to_string(),
+        spritesheet_path: copied_sheet_name,
+        ..manifest
+    };
+    let import_result = (|| -> Result<(), String> {
+        fs::write(&copied_sheet, &sheet_bytes)
+            .map_err(|error| format!("无法复制动画图集：{error}"))?;
+        fs::write(
+            temporary.join("pet.json"),
+            serde_json::to_vec_pretty(&managed_manifest).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| format!("无法保存宠物清单：{error}"))?;
+        fs::rename(&temporary, &destination).map_err(|error| format!("无法安装宠物包：{error}"))?;
+        Ok(())
+    })();
+    if let Err(error) = import_result {
+        let _ = fs::remove_dir_all(&temporary);
+        return Err(error);
+    }
+
+    let pet_path = destination.join(&managed_manifest.spritesheet_path);
+    let updated = types::update_desktop_pet_state(base, |state| {
+        state.pet_path = Some(pet_path.to_string_lossy().into_owned());
+        state.enabled = true;
+        state.provider = None;
+        state.model = None;
+        state.sprite_version_number = Some(types::DESKTOP_PET_V2_SPRITE_VERSION);
+        state.display_name = Some(managed_manifest.display_name.clone());
+        state.description = Some(managed_manifest.description.clone());
+        state.updated_at = chrono::Utc::now().to_rfc3339();
+        Ok(())
+    });
+    match updated {
+        Ok(state) => Ok(state),
+        Err(error) => {
+            let _ = fs::remove_dir_all(&destination);
+            Err(format!("无法应用动画桌宠：{error}"))
+        }
+    }
 }
 
 fn store_asset(
@@ -295,6 +458,18 @@ pub fn import_desktop_pet_photo(
 }
 
 #[tauri::command]
+pub fn import_desktop_pet_package(
+    app: AppHandle,
+    manifest_path: String,
+) -> Result<DesktopPetStateDto, String> {
+    let state =
+        import_animated_pet_at(&home::default_memory_dir(), Path::new(manifest_path.trim()))?;
+    ensure_window(&app, &state)?;
+    emit_state(&app, &state);
+    Ok(state)
+}
+
+#[tauri::command]
 pub async fn generate_desktop_pet(
     app: AppHandle,
     description: Option<String>,
@@ -342,6 +517,9 @@ pub async fn generate_desktop_pet(
         state.enabled = true;
         state.provider = Some(generated.provider);
         state.model = Some(generated.model);
+        state.sprite_version_number = None;
+        state.display_name = None;
+        state.description = None;
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
     });
@@ -422,6 +600,35 @@ mod tests {
         bytes.into_inner()
     }
 
+    fn valid_v2_atlas(populate_unused_cell: bool) -> Vec<u8> {
+        let mut image = RgbaImage::from_pixel(
+            types::DESKTOP_PET_V2_WIDTH,
+            types::DESKTOP_PET_V2_HEIGHT,
+            Rgba([0, 0, 0, 0]),
+        );
+        for (row, used_columns) in types::DESKTOP_PET_V2_USED_COLUMNS.iter().enumerate() {
+            for column in 0..*used_columns {
+                image.put_pixel(
+                    column * types::DESKTOP_PET_V2_CELL_WIDTH + 8,
+                    row as u32 * types::DESKTOP_PET_V2_CELL_HEIGHT + 8,
+                    Rgba([120, 65, 35, 255]),
+                );
+            }
+        }
+        if populate_unused_cell {
+            image.put_pixel(
+                7 * types::DESKTOP_PET_V2_CELL_WIDTH + 8,
+                8,
+                Rgba([120, 65, 35, 255]),
+            );
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
+
     #[test]
     fn validates_and_stores_pet_assets_inside_app_home() {
         let temp = tempfile::tempdir().unwrap();
@@ -467,5 +674,62 @@ mod tests {
         .to_rgba8();
         assert_eq!(output.get_pixel(0, 0)[3], 0);
         assert_eq!(output.get_pixel(6, 6)[3], 255);
+    }
+
+    #[test]
+    fn imports_a_valid_codex_v2_pet_package() {
+        let temp = tempfile::tempdir().unwrap();
+        let package = temp.path().join("package");
+        let astro = temp.path().join("astro");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(package.join("spritesheet.png"), valid_v2_atlas(false)).unwrap();
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec_pretty(&types::DesktopPetManifest {
+                id: "momo".into(),
+                display_name: "Momo".into(),
+                description: "A calm orange cat".into(),
+                sprite_version_number: 2,
+                spritesheet_path: "spritesheet.png".into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let state = import_animated_pet_at(&astro, &package.join("pet.json")).unwrap();
+        assert!(state.enabled);
+        assert_eq!(state.sprite_version_number, Some(2));
+        assert_eq!(state.display_name.as_deref(), Some("Momo"));
+        assert!(Path::new(state.pet_path.as_deref().unwrap()).is_file());
+    }
+
+    #[test]
+    fn rejects_populated_unused_v2_cells() {
+        let error = validate_v2_atlas(&valid_v2_atlas(true)).unwrap_err();
+        assert!(error.contains("未使用格"), "{error}");
+    }
+
+    #[test]
+    fn rejects_a_spritesheet_outside_the_selected_package() {
+        let temp = tempfile::tempdir().unwrap();
+        let package = temp.path().join("package");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(temp.path().join("outside.png"), valid_v2_atlas(false)).unwrap();
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec_pretty(&types::DesktopPetManifest {
+                id: "escape".into(),
+                display_name: "Escape".into(),
+                description: "Must remain inside the package".into(),
+                sprite_version_number: 2,
+                spritesheet_path: "../outside.png".into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = import_animated_pet_at(&temp.path().join("astro"), &package.join("pet.json"))
+            .unwrap_err();
+        assert!(error.contains("必须位于宠物包目录内"), "{error}");
     }
 }

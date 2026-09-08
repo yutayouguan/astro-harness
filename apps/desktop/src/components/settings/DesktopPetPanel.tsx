@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Eye,
   EyeOff,
+  FolderInput,
   ImagePlus,
   Loader2,
   PawPrint,
@@ -11,8 +12,10 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 
 import conceptImage from "../../assets/generated/desktop-pet-concept.png";
+import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 
@@ -25,6 +28,9 @@ export type DesktopPetState = {
   updatedAt: string;
   provider: string | null;
   model: string | null;
+  spriteVersionNumber: number | null;
+  displayName: string | null;
+  description: string | null;
 };
 
 const COPY = {
@@ -50,6 +56,9 @@ const COPY = {
     generatedHint: "可直接拖动桌宠改变它在屏幕上的位置",
     empty: "上传照片后即可生成",
     provider: "生成模型",
+    importAnimated: "导入动画桌宠",
+    importAnimatedHint: "选择 Codex v2 宠物包中的 pet.json",
+    animatedBadge: "动画 v2",
   },
   en: {
     eyebrow: "ASTRO DESKTOP COMPANION",
@@ -74,6 +83,9 @@ const COPY = {
     generatedHint: "Drag the pet directly to move it around your screen",
     empty: "Upload a photo to start creating",
     provider: "Generated with",
+    importAnimated: "Import animated pet",
+    importAnimatedHint: "Choose pet.json from a Codex v2 pet package",
+    animatedBadge: "Animated v2",
   },
 } as const;
 
@@ -86,6 +98,9 @@ const EMPTY_STATE: DesktopPetState = {
   updatedAt: "",
   provider: null,
   model: null,
+  spriteVersionNumber: null,
+  displayName: null,
+  description: null,
 };
 
 function errorMessage(error: unknown): string {
@@ -95,6 +110,7 @@ function errorMessage(error: unknown): string {
 export default function DesktopPetPanel({ active }: { active: boolean }) {
   const { locale } = useI18n();
   const copy = COPY[locale];
+  const reducedMotion = useReducedMotion();
   const [state, setState] = useState<DesktopPetState>(EMPTY_STATE);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState<"load" | "upload" | "generate" | null>(
@@ -173,6 +189,31 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
       setState(
         await invoke<DesktopPetState>("generate_desktop_pet", {
           description: description.trim() || null,
+        }),
+      );
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function importAnimatedPackage() {
+    if (busy) return;
+    setError("");
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: copy.importAnimated,
+        filters: [{ name: "pet.json", extensions: ["json"] }],
+      });
+      if (typeof selected !== "string") return;
+      setBusy("upload");
+      setState(
+        await invoke<DesktopPetState>("import_desktop_pet_package", {
+          manifestPath: selected,
         }),
       );
     } catch (cause) {
@@ -269,19 +310,31 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               disabled={busy != null}
             />
           </label>
-          <button
-            type="button"
-            className="desktop-pet-generate"
-            onClick={() => void generate()}
-            disabled={!state.sourcePath || busy != null}
-          >
-            {busy === "generate" ? (
-              <Loader2 className="desktop-pet-spinner" size={17} />
-            ) : (
-              <Sparkles size={17} />
-            )}
-            {busy === "generate" ? copy.creating : copy.create}
-          </button>
+          <div className="desktop-pet-action-row">
+            <button
+              type="button"
+              className="desktop-pet-generate"
+              onClick={() => void generate()}
+              disabled={!state.sourcePath || busy != null}
+            >
+              {busy === "generate" ? (
+                <Loader2 className="desktop-pet-spinner" size={17} />
+              ) : (
+                <Sparkles size={17} />
+              )}
+              {busy === "generate" ? copy.creating : copy.create}
+            </button>
+            <button
+              type="button"
+              className="desktop-pet-import-package"
+              title={copy.importAnimatedHint}
+              onClick={() => void importAnimatedPackage()}
+              disabled={busy != null}
+            >
+              <FolderInput size={17} />
+              {copy.importAnimated}
+            </button>
+          </div>
           {error ? (
             <p className="desktop-pet-error" role="alert">
               {error}
@@ -300,7 +353,15 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
             </div>
           </header>
           <div className="desktop-pet-preview" data-empty={!petSrc}>
-            {petSrc ? (
+            {petSrc && state.spriteVersionNumber === 2 ? (
+              <DesktopPetCanvas
+                src={petSrc}
+                state="idle"
+                className="desktop-pet-preview-canvas"
+                label={state.displayName || copy.generated}
+                reducedMotion={Boolean(reducedMotion)}
+              />
+            ) : petSrc ? (
               <img src={petSrc} alt={copy.generated} />
             ) : (
               <div>
@@ -309,6 +370,12 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               </div>
             )}
           </div>
+          {state.spriteVersionNumber === 2 ? (
+            <div className="desktop-pet-animation-meta">
+              <span>{copy.animatedBadge}</span>
+              <strong>{state.displayName || copy.generated}</strong>
+            </div>
+          ) : null}
           {state.provider && state.model ? (
             <p className="desktop-pet-model">
               {copy.provider}: {state.provider} · {state.model}

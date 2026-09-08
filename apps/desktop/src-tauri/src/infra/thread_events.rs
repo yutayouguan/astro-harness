@@ -22,6 +22,7 @@ use crate::commands::chat::{
 const SNAPSHOT_EVENT: &str = "thread_snapshot";
 const SESSION_EVENT: &str = "session_event";
 const SESSION_STATUS_CHANGED_EVENT: &str = "session_status_changed";
+const DESKTOP_PET_ACTIVITY_CHANGED_EVENT: &str = "desktop_pet_activity_changed";
 const REALTIME_CONVERSATION_EVENT: &str = "realtime_conversation_event";
 pub(crate) const THREAD_EVENTS_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const PROVISIONAL_EVENT_BUFFER_CAPACITY: usize = 128;
@@ -44,6 +45,14 @@ struct RealtimeConversationEventDto {
     session_id: String,
     kind: String,
     payload: serde_json::Value,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPetActivityChangedDto {
+    session_id: String,
+    state: String,
+    ts_ms: i64,
 }
 
 fn session_status_registry() -> &'static std::sync::Mutex<HashMap<String, SessionStatusChangedDto>>
@@ -1969,11 +1978,39 @@ pub(crate) fn emit_chat_events(app: &AppHandle, thread_id: &str, events: Vec<Cha
     let event_name = format!("chat_stream_{thread_id}");
     for event in events {
         let is_done = matches!(event, ChatStreamEvent::Done);
+        if let Some(state) = desktop_pet_activity_for_event(&event) {
+            let _ = app.emit(
+                DESKTOP_PET_ACTIVITY_CHANGED_EVENT,
+                DesktopPetActivityChangedDto {
+                    session_id: thread_id.to_string(),
+                    state: state.to_string(),
+                    ts_ms: now_ts_ms(),
+                },
+            );
+        }
         let _ = app.emit(&event_name, event);
         if is_done {
             crate::commands::evolution_run::spawn_maybe_auto_evolution(app.clone());
             crate::commands::evolution_run::spawn_maybe_curator(app.clone());
         }
+    }
+}
+
+fn desktop_pet_activity_for_event(event: &ChatStreamEvent) -> Option<&'static str> {
+    match event {
+        ChatStreamEvent::ToolCall { name, phase, .. } if phase == "started" => {
+            let name = name.to_ascii_lowercase();
+            (name.contains("review") || name.contains("inspect") || name.contains("audit"))
+                .then_some("review")
+        }
+        ChatStreamEvent::RunFinished { outcome_type, .. } => match outcome_type.as_str() {
+            "success" => Some("jumping"),
+            "error" => Some("failed"),
+            "hitl_waiting" => Some("waiting"),
+            "interrupt" => Some("idle"),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -3017,6 +3054,54 @@ mod tests {
                 "{mapped:?}"
             );
         }
+    }
+
+    #[test]
+    fn review_tool_start_projects_desktop_pet_review_state() {
+        let event = ChatStreamEvent::ToolCall {
+            id: "review-1".into(),
+            name: "code_review".into(),
+            arguments_json: "{}".into(),
+            result: String::new(),
+            web_action: None,
+            web_page_title: None,
+            phase: "started".into(),
+            batch_id: None,
+            execution_mode: None,
+            media: Vec::new(),
+            file_changes: Vec::new(),
+        };
+        assert_eq!(desktop_pet_activity_for_event(&event), Some("review"));
+        let ordinary = ChatStreamEvent::ToolCall {
+            id: "terminal-1".into(),
+            name: "terminal".into(),
+            arguments_json: "{}".into(),
+            result: String::new(),
+            web_action: None,
+            web_page_title: None,
+            phase: "started".into(),
+            batch_id: None,
+            execution_mode: None,
+            media: Vec::new(),
+            file_changes: Vec::new(),
+        };
+        assert_eq!(desktop_pet_activity_for_event(&ordinary), None);
+        assert_eq!(
+            desktop_pet_activity_for_event(&ChatStreamEvent::RunFinished {
+                run_id: "turn-1".into(),
+                outcome_type: "success".into(),
+                interrupts_json: "[]".into(),
+            }),
+            Some("jumping")
+        );
+        assert_eq!(
+            desktop_pet_activity_for_event(&ChatStreamEvent::RunFinished {
+                run_id: "turn-2".into(),
+                outcome_type: "interrupt".into(),
+                interrupts_json: "[]".into(),
+            }),
+            Some("idle")
+        );
     }
 
     #[test]

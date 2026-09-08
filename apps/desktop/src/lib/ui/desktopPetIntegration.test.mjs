@@ -43,6 +43,7 @@ test("desktop pet commands cover import, generation, persistence and window stat
   for (const command of [
     "get_desktop_pet_state",
     "import_desktop_pet_photo",
+    "import_desktop_pet_package",
     "generate_desktop_pet",
     "set_desktop_pet_enabled",
     "set_desktop_pet_scale",
@@ -52,6 +53,7 @@ test("desktop pet commands cover import, generation, persistence and window stat
     assert.match(panel, new RegExp(command));
   }
   assert.match(backend, /types::desktop_pet_root\(base\)/);
+  assert.match(backend, /DESKTOP_PET_V2_USED_COLUMNS/);
   assert.match(backend, /WebviewUrl::App\("index\.html\?surface=desktop-pet"/);
   assert.match(backend, /always_on_top\(state\.always_on_top\)/);
 });
@@ -61,4 +63,6 @@ test("personalization sends the uploaded photo through the shared image edit pip
   assert.match(provider, /if edit_mode \{ "edits" \} else \{ "generations" \}/);
   assert.match(provider, /form\.part\("image\[\]", part\)/);
   assert.match(provider, /MAX_INPUT_IMAGE_BYTES/);
+  assert.match(panel, /import_desktop_pet_package/);
+  assert.match(surface, /<DesktopPetCanvas/);
 });

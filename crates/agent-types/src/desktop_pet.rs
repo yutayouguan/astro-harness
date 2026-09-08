@@ -6,6 +6,25 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
+pub const DESKTOP_PET_V2_SPRITE_VERSION: u32 = 2;
+pub const DESKTOP_PET_V2_COLUMNS: u32 = 8;
+pub const DESKTOP_PET_V2_ROWS: u32 = 11;
+pub const DESKTOP_PET_V2_CELL_WIDTH: u32 = 192;
+pub const DESKTOP_PET_V2_CELL_HEIGHT: u32 = 208;
+pub const DESKTOP_PET_V2_WIDTH: u32 = DESKTOP_PET_V2_COLUMNS * DESKTOP_PET_V2_CELL_WIDTH;
+pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL_HEIGHT;
+pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPetManifest {
+    pub id: String,
+    pub display_name: String,
+    pub description: String,
+    pub sprite_version_number: u32,
+    pub spritesheet_path: String,
+}
+
 type DesktopPetChangeHandler = Arc<dyn Fn() + Send + Sync + 'static>;
 static DESKTOP_PET_CHANGE_HANDLER: OnceLock<RwLock<Option<DesktopPetChangeHandler>>> =
     OnceLock::new();
@@ -21,6 +40,9 @@ pub struct DesktopPetState {
     pub updated_at: String,
     pub provider: Option<String>,
     pub model: Option<String>,
+    pub sprite_version_number: Option<u32>,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
 }
 
 impl Default for DesktopPetState {
@@ -34,6 +56,9 @@ impl Default for DesktopPetState {
             updated_at: String::new(),
             provider: None,
             model: None,
+            sprite_version_number: None,
+            display_name: None,
+            description: None,
         }
     }
 }
@@ -146,6 +171,7 @@ mod tests {
         let raw = fs::read_to_string(desktop_pet_state_path(temp.path())).unwrap();
         assert!(raw.contains("\"petPath\""));
         assert!(raw.contains("\"alwaysOnTop\""));
+        assert!(raw.contains("\"spriteVersionNumber\""));
     }
 
     #[test]
