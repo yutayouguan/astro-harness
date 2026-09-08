@@ -4159,7 +4159,7 @@ export default function ChatView({
                     viewBox="0 0 44 44"
                     aria-hidden
                   >
-                    <path d="M 22 0 A 22 22 0 0 1 43.52 17.43" pathLength={1} />
+                    <path d="M 22 0 A 22 22 0 0 1 44 22" pathLength={1} />
                   </svg>
                   <span className="composer-expand-glyph" aria-hidden>
                     <Maximize2

@@ -219,7 +219,7 @@ test("composer exposes an accessible hover-revealed input height control", async
 
   assert.match(source, /className="composer-expand-btn"/);
   assert.match(source, /className="composer-expand-indicator"/);
-  assert.match(source, /d="M 22 0 A 22 22 0 0 1 43\.52 17\.43"/);
+  assert.match(source, /d="M 22 0 A 22 22 0 0 1 44 22"/);
   assert.match(source, /className="composer-expand-glyph"/);
   assert.match(source, /aria-expanded=\{composerManuallyExpanded\}/);
   assert.match(source, /className="composer-expand-icon is-expand"/);
@@ -256,6 +256,10 @@ test("composer exposes an accessible hover-revealed input height control", async
   assert.match(
     styles,
     /\.composer-expand-btn\s*\{[\s\S]*?width:\s*calc\(var\(--composer-corner-radius\) \* 2\);[\s\S]*?height:\s*calc\(var\(--composer-corner-radius\) \* 2\);/,
+  );
+  assert.match(
+    styles,
+    /\.composer-expand-btn::before\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px;/,
   );
 });
 
