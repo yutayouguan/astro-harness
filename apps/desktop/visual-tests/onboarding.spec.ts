@@ -254,7 +254,7 @@ for (const [message, title] of [
     await page.getByRole("button", { name: "修改配置", exact: true }).click();
     if (title === "密钥或访问权限有问题") await expect(page.getByLabel("API Key", { exact: true })).toBeFocused();
     if (title === "模型或部署不存在") await expect(page.getByLabel("默认模型", { exact: true })).toBeFocused();
-    if (title === "连接测试超时" || title === "暂时无法连接服务") await expect(page.getByLabel("服务地址", { exact: true })).toBeFocused();
+    if (title === "连接测试超时" || title === "暂时无法连接服务") await expect(page.getByLabel("服务地址（base_url）", { exact: true })).toBeFocused();
     await page.unroute("**/__onboarding_mock/responses");
     await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: true, model: "qa-small", latency_ms: 1, message: "ok" } }));
     await page.getByRole("button", { name: "重试连接", exact: true }).click();
@@ -457,11 +457,33 @@ test("welcome and wizard reuse one moving brand element", async ({ page }) => {
   expect(await node!.evaluate(el => el.isConnected)).toBe(true);
 });
 
+test("base_url is directly editable and edits invalidate model verification", async ({ page }, testInfo) => {
+  await installTransport(page);
+  await startProvider(page);
+  const address = page.getByLabel("服务地址（base_url）", { exact: true });
+  await expect(address).toBeVisible();
+  await expect(address).toBeEditable();
+  await expect(address).toHaveValue("http://127.0.0.1/mock/v1");
+  await expect(page.locator(".onboarding-provider-form details")).toHaveCount(0);
+  await expect(page.getByText("高级连接设置", { exact: true })).toHaveCount(0);
+  await verifyProvider(page);
+  await address.fill("http://127.0.0.1/updated/v1");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
+  await loadModels(page);
+  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("qa.providers")!).providers[0]);
+  expect(saved.endpoint).toBe("http://127.0.0.1/updated/v1");
+  await page.locator(".onboarding-provider-form").screenshot({
+    path: testInfo.outputPath("visible-base-url.png"), animations: "disabled",
+  });
+});
+
 test("credential URL is not saved and cannot be tested", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);
-  await page.getByText("高级连接设置", { exact: true }).click();
-  await page.getByLabel("服务地址", { exact: true }).fill("https://example.com?api_key=qa-must-not-persist");
+  await page.getByLabel("服务地址（base_url）", { exact: true }).fill("https://example.com?api_key=qa-must-not-persist");
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("暂时无法连接服务");

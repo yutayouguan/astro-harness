@@ -456,8 +456,7 @@
 }
 
 .onboarding-provider-form > label,
-.onboarding-provider-field,
-.onboarding-advanced label {
+.onboarding-provider-field {
   display: grid;
   gap: 7px;
   color: var(--ink-secondary, var(--color-text-secondary));
@@ -492,21 +491,6 @@
 
 .onboarding-provider-select .select-menu-trigger {
   min-height: 44px;
-}
-
-.onboarding-advanced {
-  margin-top: -2px;
-}
-
-.onboarding-advanced summary {
-  width: max-content;
-  color: var(--ink-tertiary, var(--color-text-muted));
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.onboarding-advanced[open] label {
-  margin-top: 12px;
 }
 
 .onboarding-test-button {

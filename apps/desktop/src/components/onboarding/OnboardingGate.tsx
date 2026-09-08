@@ -956,6 +956,23 @@ export function FirstRunOnboarding({
                         />
                       </div>
 
+                      <label>
+                        <span>{copy.endpoint}</span>
+                        <input
+                          ref={endpointInputRef}
+                          value={endpoint}
+                          disabled={
+                            providerStatus === "testing" ||
+                            modelsStatus === "loading"
+                          }
+                          spellCheck={false}
+                          onChange={(event) => {
+                            invalidateModelList();
+                            setEndpoint(event.target.value);
+                          }}
+                        />
+                      </label>
+
                       {selectedProvider &&
                       providerRequiresApiKey(selectedProvider) ? (
                         <label>
@@ -1027,26 +1044,6 @@ export function FirstRunOnboarding({
                           }}
                         />
                       </div>
-
-                      <details className="onboarding-advanced">
-                        <summary>{copy.advanced}</summary>
-                        <label>
-                          <span>{copy.endpoint}</span>
-                          <input
-                            ref={endpointInputRef}
-                            value={endpoint}
-                            disabled={
-                              providerStatus === "testing" ||
-                              modelsStatus === "loading"
-                            }
-                            spellCheck={false}
-                            onChange={(event) => {
-                              invalidateModelList();
-                              setEndpoint(event.target.value);
-                            }}
-                          />
-                        </label>
-                      </details>
 
                       <p className="onboarding-test-cost">{copy.testCost}</p>
                       <button
@@ -1122,9 +1119,6 @@ export function FirstRunOnboarding({
                                 )
                                 ?.focus();
                             else {
-                              const details =
-                                endpointInputRef.current?.closest("details");
-                              if (details) details.open = true;
                               endpointInputRef.current?.focus();
                             }
                           }}
