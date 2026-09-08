@@ -812,6 +812,13 @@ fn save_state(state: &ProvidersState) -> Result<(), String> {
         let _ = fs::remove_file(&temporary);
         return Err(error.to_string());
     }
+    #[cfg(target_os = "windows")]
+    if path.exists() {
+        if let Err(error) = fs::remove_file(&path) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error.to_string());
+        }
+    }
     if let Err(error) = fs::rename(&temporary, &path) {
         let _ = fs::remove_file(&temporary);
         return Err(error.to_string());

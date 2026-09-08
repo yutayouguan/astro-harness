@@ -378,10 +378,12 @@ export function useRealtimeConversation({
           });
         }
       },
-    ).then((stop) => {
-      if (disposed) stop();
-      else unlisten = stop;
-    }).catch(() => {});
+    )
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => {});
     return () => {
       disposed = true;
       attemptRef.current += 1;

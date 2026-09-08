@@ -59,12 +59,8 @@ fn next_session_status_ts_ms() -> i64 {
     let mut previous = LAST_TS_MS.load(Ordering::Relaxed);
     loop {
         let next = now.max(previous.saturating_add(1));
-        match LAST_TS_MS.compare_exchange_weak(
-            previous,
-            next,
-            Ordering::SeqCst,
-            Ordering::Relaxed,
-        ) {
+        match LAST_TS_MS.compare_exchange_weak(previous, next, Ordering::SeqCst, Ordering::Relaxed)
+        {
             Ok(_) => return next,
             Err(current) => previous = current,
         }
@@ -6213,6 +6209,43 @@ mod tests {
         let first = next_session_status_ts_ms();
         let second = next_session_status_ts_ms();
         assert!(second > first);
+    }
+
+    #[test]
+    fn session_status_snapshot_returns_the_latest_value() {
+        let session_id = format!("snapshot-{}", uuid::Uuid::new_v4());
+        let first = SessionStatusChangedDto {
+            session_id: session_id.clone(),
+            status: "active".into(),
+            active_flags: vec!["waitingOnUserInput".into()],
+            error: None,
+            ts_ms: next_session_status_ts_ms(),
+        };
+        let latest = SessionStatusChangedDto {
+            session_id: session_id.clone(),
+            status: "idle".into(),
+            active_flags: Vec::new(),
+            error: None,
+            ts_ms: next_session_status_ts_ms(),
+        };
+        {
+            let mut statuses = session_status_registry().lock().unwrap();
+            statuses.insert(session_id.clone(), first);
+            statuses.insert(session_id.clone(), latest.clone());
+        }
+
+        let snapshot = session_status_snapshot();
+        let restored = snapshot
+            .iter()
+            .find(|status| status.session_id == session_id)
+            .expect("status should be present in snapshot");
+        assert_eq!(restored.status, latest.status);
+        assert_eq!(restored.ts_ms, latest.ts_ms);
+
+        session_status_registry()
+            .lock()
+            .unwrap()
+            .remove(&session_id);
     }
 
     #[test]

@@ -35,10 +35,12 @@ export function useAgentsChanged(
     let cancelled = false;
     void listenAgentsChanged((payload) => {
       if (!cancelled) onChangeRef.current(payload);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
       unlisten?.();

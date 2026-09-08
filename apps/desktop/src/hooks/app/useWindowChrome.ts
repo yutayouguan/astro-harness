@@ -8,12 +8,15 @@ export function useWindowChrome() {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
       return;
     }
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     try {
       const win = getCurrentWindow();
       void win
         .isMaximized()
-        .then(setWindowMaximized)
+        .then((maximized) => {
+          if (!disposed) setWindowMaximized(maximized);
+        })
         .catch(() => {});
       void win
         .onResized(() => {
@@ -23,13 +26,15 @@ export function useWindowChrome() {
             .catch(() => {});
         })
         .then((fn) => {
-          unlisten = fn;
+          if (disposed) fn();
+          else unlisten = fn;
         })
         .catch(() => {});
     } catch {
       // browser preview or Tauri internals not ready
     }
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, []);
