@@ -817,22 +817,25 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 
 .composer-expand-indicator {
   position: absolute;
-  inset: 6px;
+  inset: 5px;
   display: block;
-  border: 2px solid transparent;
-  border-top-color: color-mix(in srgb, var(--ink) 54%, transparent);
-  border-right-color: color-mix(in srgb, var(--ink) 54%, transparent);
-  border-radius: 50%;
   opacity: 0.88;
-  transform: rotate(-14deg) scale(0.92);
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 54%, transparent);
+  stroke-width: 2.2px;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transform: scale(0.92);
   transform-origin: center;
   transition:
     opacity 140ms ease,
+    stroke-dashoffset 180ms ease,
     transform 220ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .composer-expand-btn[aria-expanded="true"] .composer-expand-indicator {
-  transform: rotate(166deg) scale(0.92);
+  transform: rotate(180deg) scale(0.92);
 }
 
 .composer-expand-glyph {
@@ -861,7 +864,8 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"]) .composer {
 .composer-expand-btn:hover .composer-expand-indicator,
 .composer-expand-btn:focus-visible .composer-expand-indicator {
   opacity: 0;
-  transform: rotate(76deg) scale(0.64);
+  stroke-dashoffset: 1;
+  transform: rotate(28deg) scale(0.68);
 }
 
 .composer-expand-btn[aria-expanded="false"]:hover

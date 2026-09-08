@@ -4149,7 +4149,13 @@ export default function ChatView({
                     );
                   }}
                 >
-                  <span className="composer-expand-indicator" aria-hidden />
+                  <svg
+                    className="composer-expand-indicator"
+                    viewBox="0 0 28 28"
+                    aria-hidden
+                  >
+                    <path d="M 5 3 A 20 20 0 0 1 24.56 18.84" pathLength={1} />
+                  </svg>
                   <span className="composer-expand-glyph" aria-hidden>
                     <Maximize2
                       className="composer-expand-icon is-expand"
