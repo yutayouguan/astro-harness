@@ -17,10 +17,26 @@ use super::schedule::{compute_next_run, ensure_custom_start};
 
 static STORE_LOCK: Mutex<()> = Mutex::new(());
 
-fn lock_store() -> anyhow::Result<MutexGuard<'static, ()>> {
-    STORE_LOCK
+struct StoreLockGuard {
+    _process: MutexGuard<'static, ()>,
+    _file: fs::File,
+}
+
+fn lock_store(root: &std::path::Path) -> anyhow::Result<StoreLockGuard> {
+    let process = STORE_LOCK
         .lock()
-        .map_err(|error| anyhow::anyhow!("cron store lock poisoned: {error}"))
+        .map_err(|error| anyhow::anyhow!("cron store lock poisoned: {error}"))?;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(root.join("jobs.lock"))?;
+    file.lock()?;
+    Ok(StoreLockGuard {
+        _process: process,
+        _file: file,
+    })
 }
 
 /// `jobs.json` 顶层结构
@@ -56,7 +72,7 @@ impl CronStore {
 
     /// 列出全部任务（加载时补全缺省 title / agent_id）
     pub fn list(&self) -> anyhow::Result<Vec<CronJob>> {
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         Ok(self
             .load_unlocked()?
             .jobs
@@ -100,7 +116,7 @@ impl CronStore {
         let next =
             compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let job = CronJob {
             id: Uuid::new_v4().to_string(),
@@ -146,7 +162,7 @@ impl CronStore {
         let next =
             compute_next_run(&schedule, now)?.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let mut updated = None;
         for job in &mut file.jobs {
@@ -171,7 +187,7 @@ impl CronStore {
 
     /// 按 id 或前缀删除任务；未找到返回 `Ok(false)`
     pub fn remove(&self, id_or_prefix: &str) -> anyhow::Result<bool> {
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let before = file.jobs.len();
         file.jobs
@@ -191,7 +207,7 @@ impl CronStore {
     ) -> anyhow::Result<bool> {
         let fired_at = fired_at
             .unwrap_or_else(|| Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let mut found = false;
         for job in &mut file.jobs {
@@ -210,7 +226,7 @@ impl CronStore {
 
     /// 启用或禁用任务；启用时会补算缺失的 `next_run_at`。
     pub fn set_enabled(&self, id_or_prefix: &str, enabled: bool) -> anyhow::Result<bool> {
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let mut found = false;
         for job in &mut file.jobs {
@@ -236,7 +252,7 @@ impl CronStore {
     /// 扫描到期任务：更新 next_run，返回已触发的任务（不写 output JSON）
     pub fn claim_due(&self) -> anyhow::Result<Vec<CronJob>> {
         let now = Local::now();
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         let mut file = self.load_unlocked()?;
         let mut fired = Vec::new();
 
@@ -300,7 +316,7 @@ impl CronStore {
     /// 从磁盘加载 `jobs.json`；不存在或空文件返回空列表
     #[cfg(test)]
     pub(crate) fn load(&self) -> anyhow::Result<JobsFile> {
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         self.load_unlocked()
     }
 
@@ -340,7 +356,7 @@ impl CronStore {
     /// 原子写入 `jobs.json`（先写 `.json.tmp` 再 rename）
     #[cfg(test)]
     pub(crate) fn save(&self, file: &JobsFile) -> anyhow::Result<()> {
-        let _guard = lock_store()?;
+        let _guard = lock_store(&self.root)?;
         self.save_unlocked(file)
     }
 
