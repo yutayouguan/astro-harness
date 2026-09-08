@@ -51,7 +51,7 @@ import {
   type OnboardingStep,
 } from "../../lib/ui/onboarding";
 import { ProviderBrandIcon } from "../icons/ProviderIcons";
-import { Button } from "../ui";
+import { Button, SelectMenu } from "../ui";
 import { OnboardingLogo, OnboardingBrandMotion } from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
 import { ConnectionIssue } from "./ConnectionIssue";
@@ -160,7 +160,7 @@ export function FirstRunOnboarding({
   const apiKeyRef = useRef<HTMLInputElement>(null);
   const modelInputRef = useRef<HTMLInputElement>(null);
   const endpointInputRef = useRef<HTMLInputElement>(null);
-  const providerSelectRef = useRef<HTMLSelectElement>(null);
+  const providerSelectRef = useRef<HTMLDivElement>(null);
   const identityLoadedRef = useRef(false);
   const verified = useRef<{
     id: string;
@@ -804,28 +804,24 @@ export function FirstRunOnboarding({
 
                   {providers.length > 0 ? (
                     <div className="onboarding-provider-form">
-                      <label>
+                      <div
+                        className="onboarding-provider-field"
+                        ref={providerSelectRef}
+                      >
                         <span>{copy.provider}</span>
-                        <div className="onboarding-select-wrap">
-                          {selectedProvider ? (
-                            <ProviderBrandIcon kind={selectedProvider.kind} />
-                          ) : null}
-                          <select
-                            ref={providerSelectRef}
-                            value={selectedProviderId}
-                            disabled={providerStatus === "testing"}
-                            onChange={(event) =>
-                              selectProvider(event.target.value)
-                            }
-                          >
-                            {providers.map((provider) => (
-                              <option key={provider.id} value={provider.id}>
-                                {provider.display_name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
+                        <SelectMenu
+                          className="onboarding-provider-select"
+                          aria-label={copy.provider}
+                          value={selectedProviderId}
+                          disabled={providerStatus === "testing"}
+                          onChange={selectProvider}
+                          options={providers.map((provider) => ({
+                            value: provider.id,
+                            label: provider.display_name,
+                            icon: <ProviderBrandIcon kind={provider.kind} />,
+                          }))}
+                        />
+                      </div>
 
                       {selectedProvider &&
                       providerRequiresApiKey(selectedProvider) ? (
@@ -932,12 +928,19 @@ export function FirstRunOnboarding({
                               modelInputRef.current?.focus();
                             else if (connectionIssue === "credentials")
                               (
-                                apiKeyRef.current ?? providerSelectRef.current
+                                apiKeyRef.current ??
+                                providerSelectRef.current?.querySelector<HTMLButtonElement>(
+                                  ".select-menu-trigger",
+                                )
                               )?.focus();
                             else if (
                               ["quota", "rate_limit"].includes(connectionIssue)
                             )
-                              providerSelectRef.current?.focus();
+                              providerSelectRef.current
+                                ?.querySelector<HTMLButtonElement>(
+                                  ".select-menu-trigger",
+                                )
+                                ?.focus();
                             else {
                               const details =
                                 endpointInputRef.current?.closest("details");

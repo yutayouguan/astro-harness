@@ -48,6 +48,13 @@ test("motion and glass provide accessibility fallbacks", () => {
   assert.match(styles, /@media \(prefers-contrast: more\)/);
 });
 
+test("provider picker uses the shared SelectMenu and no native select", () => {
+  assert.match(gate, /<SelectMenu/);
+  assert.match(gate, /onChange=\{selectProvider\}/);
+  assert.doesNotMatch(gate, /<select\b/);
+  assert.doesNotMatch(styles, /onboarding-select-wrap/);
+});
+
 test("registered commands support progress, completion, and settings reset", () => {
   for (const command of [
     "get_onboarding_state",

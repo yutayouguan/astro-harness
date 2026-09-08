@@ -386,3 +386,48 @@ test("credential URL is not saved and cannot be tested", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("");
   expect(await page.evaluate(() => localStorage.getItem("qa.state"))).not.toContain("qa-must-not-persist");
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`provider picker reuses the shared menu · ${theme}`, async ({ page }) => {
+    await page.addInitScript(theme => {
+      localStorage.setItem("astro-theme-mode", theme);
+      localStorage.setItem("astro-locale", "zh");
+    }, theme);
+    await page.setViewportSize({ width: theme === "dark" ? 390 : 1100, height: 850 });
+    await page.goto("/iframe.html?id=app-first-run-onboarding--provider&viewMode=story");
+    const picker = page.getByRole("button", { name: "模型服务", exact: true });
+    await expect(picker).toBeVisible({ timeout: 30000 });
+    await expect(page.locator(".onboarding-provider-form select")).toHaveCount(0);
+    await picker.click();
+    const menu = page.getByRole("listbox", { name: "模型服务", exact: true });
+    await expect(menu).toBeVisible();
+    await expect(page.getByRole("option", { name: "OpenAI", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("option", { name: "Google Gemini", exact: true }).locator("svg")).toHaveCount(1);
+    const placement = await menu.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const root = document.querySelector(".onboarding-root")!;
+      return { left: rect.left, right: rect.right, viewport: innerWidth,
+        onTop: Number(getComputedStyle(element).zIndex) > Number(getComputedStyle(root).zIndex),
+        portaled: element.parentElement === document.body };
+    });
+    expect(placement.onTop).toBe(true);
+    expect(placement.portaled).toBe(true);
+    expect(placement.left).toBeGreaterThanOrEqual(0);
+    expect(placement.right).toBeLessThanOrEqual(placement.viewport);
+    await page.getByRole("option", { name: "Google Gemini", exact: true }).click();
+    await expect(menu).toHaveCount(0);
+    await expect(picker).toContainText("Google Gemini");
+    await expect(page.getByLabel("默认模型", { exact: true })).toHaveValue("gemini-3.1-pro");
+    await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+    await picker.press("ArrowDown");
+    await expect(menu).toBeVisible();
+    await picker.press("Home");
+    await picker.press("Enter");
+    await expect(picker).toContainText("OpenAI");
+    await expect(menu).toHaveCount(0);
+    await picker.press("ArrowDown");
+    await picker.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(picker).toBeFocused();
+  });
+}

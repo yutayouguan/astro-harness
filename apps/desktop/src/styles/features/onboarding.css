@@ -456,6 +456,7 @@
 }
 
 .onboarding-provider-form > label,
+.onboarding-provider-field,
 .onboarding-advanced label {
   display: grid;
   gap: 7px;
@@ -464,8 +465,7 @@
   font-weight: 650;
 }
 
-.onboarding-provider-form input,
-.onboarding-provider-form select {
+.onboarding-provider-form input {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
@@ -481,29 +481,17 @@
     box-shadow 160ms ease;
 }
 
-.onboarding-provider-form input:focus,
-.onboarding-provider-form select:focus {
+.onboarding-provider-form input:focus {
   border-color: color-mix(in srgb, var(--tone) 62%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 13%, transparent);
 }
 
-.onboarding-select-wrap {
-  position: relative;
+.onboarding-provider-select {
+  --select-tone-soft: color-mix(in srgb, var(--tone) 12%, transparent);
 }
 
-.onboarding-select-wrap > svg {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 13px;
-  width: 18px;
-  height: 18px;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
-.onboarding-select-wrap select {
-  padding-left: 42px;
+.onboarding-provider-select .select-menu-trigger {
+  min-height: 44px;
 }
 
 .onboarding-advanced {
@@ -976,7 +964,6 @@
   .onboarding-card,
   .onboarding-choice-grid button,
   .onboarding-provider-form input,
-  .onboarding-provider-form select,
   .onboarding-folder-picker,
   .onboarding-permissions > label {
     border-color: currentColor;

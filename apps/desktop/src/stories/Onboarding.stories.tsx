@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FirstRunOnboarding } from "../components/onboarding/OnboardingGate";
 import { LocaleProvider } from "../i18n/LocaleContext";
 import { ThemeProvider } from "../hooks/app/useTheme";
+import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import type { ProviderDto } from "../types";
 
 const providers: ProviderDto[] = [
@@ -40,14 +41,16 @@ function Preview({
 }) {
   return (
     <ThemeProvider>
-      <LocaleProvider>
-        <FirstRunOnboarding
-          initialStep={step}
-          previewProviders={providers}
-          disableIntroAdvance={step === "intro"}
-          onComplete={() => undefined}
-        />
-      </LocaleProvider>
+      <MorphiconProvider>
+        <LocaleProvider>
+          <FirstRunOnboarding
+            initialStep={step}
+            previewProviders={providers}
+            disableIntroAdvance={step === "intro"}
+            onComplete={() => undefined}
+          />
+        </LocaleProvider>
+      </MorphiconProvider>
     </ThemeProvider>
   );
 }
