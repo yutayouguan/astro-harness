@@ -1,7 +1,7 @@
 //! 辅助模型设置 Tauri 命令：`auxiliary.*` 五类任务路由的读取/写入/重置。
 //!
 //! `provider` 为 `"auto"` 时跟随会话主模型；显式值保存 **UI Provider ID**
-//! （`providers.json` 条目 `id`），由 `auxiliary_resolver` 在运行时解析为具体
+//! （`config.toml [desktop.providers]` 条目 `id`），由 `auxiliary_resolver` 在运行时解析为具体
 //! 后端凭据。本文件只负责设置面的读写与展示，不做任何网络/凭据解析副作用。
 
 use serde::Serialize;

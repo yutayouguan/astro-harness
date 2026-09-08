@@ -12,9 +12,6 @@ use crate::agent_id::normalize_optional as normalize_agent_id;
 use crate::models::InstalledSkill;
 use crate::skill::{LoadedSkill, SkillMetadata};
 
-/// 启用状态文件名（位于 Agent / 全局配置目录）。
-const STATE_FILE: &str = "skills-enabled.json";
-
 /// 解析本机 Astro 数据根目录。
 fn memory_dir() -> PathBuf {
     std::env::var("ASTRO_MEMORY_DIR")
@@ -41,45 +38,16 @@ fn active_agent_id() -> Option<String> {
         .and_then(|v| v.get("id").and_then(|x| x.as_str()).map(|s| s.to_string()))
 }
 
-/// 启用状态文件路径（按 Agent 或全局）。
-fn state_path_for(agent_id: Option<&str>) -> PathBuf {
+/// Global and Agent-specific switches share config.toml.
+fn load_enabled_state(agent_id: Option<&str>) -> Result<HashMap<String, bool>> {
     let base = memory_dir();
-    match normalize_agent_id(agent_id) {
-        Some(id) => home::agent_config_dir(&base, &id).join(STATE_FILE),
-        None => base.join(STATE_FILE),
+    if let Some(id) = agent_id {
+        let id = home::settings::migration::canonical_agent_id(id);
+        if let Some(state) = home::settings::read(&base, &["desktop", "agent_skills", &id])? {
+            return Ok(state);
+        }
     }
-}
-
-/// 加载技能启用表；Agent 级缺失时回退全局。
-fn load_enabled_state(agent_id: Option<&str>) -> HashMap<String, bool> {
-    let path = state_path_for(agent_id);
-    let path = if !path.exists() && agent_id.is_some() {
-        memory_dir().join(STATE_FILE)
-    } else {
-        path
-    };
-    if !path.exists() {
-        return HashMap::new();
-    }
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-/// 持久化技能启用表；默认 Agent 同步写全局副本。
-fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> Result<()> {
-    let path = state_path_for(agent_id);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    let json = serde_json::to_string_pretty(state)?;
-    fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
-    if normalize_agent_id(agent_id).as_deref() == Some(home::DEFAULT_AGENT_ID) {
-        let global = memory_dir().join(STATE_FILE);
-        let _ = fs::write(&global, serde_json::to_string_pretty(state)?);
-    }
-    Ok(())
+    Ok(home::settings::read(&base, &["desktop", "skills"])?.unwrap_or_default())
 }
 
 /// Astro 管理范围：`~/.astro/skills` + 当前 Agent 工作区 skills
@@ -422,25 +390,27 @@ fn scan_project(agent_id: Option<&str>, project_root: Option<&Path>) -> Vec<Inst
         root.join(".agents/skills"),
         root.join(".cursor/skills"),
     ];
-    let mut state = load_enabled_state(agent_id);
+    let mut state = match load_enabled_state(agent_id) {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::warn!(%error, "skill settings unavailable");
+            return Vec::new();
+        }
+    };
     let mut dirty = false;
     let mut out = scan_roots(&roots, agent_id, "project", &mut state, &mut dirty, true);
-    if dirty {
-        let _ = save_enabled_state(agent_id, &state);
-    }
+    // Discovery defaults are not user configuration; persist only explicit toggles.
     out.sort_by_key(|skill| skill.name.to_lowercase());
     out
 }
 
-/// 技能 id 是否落在指定根路径之下。
+/// 扫描 Astro 管理的技能根。
 fn id_belongs_to_roots(id: &str, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|r| {
-        let prefix = format!("{}/", r.to_string_lossy());
-        id.starts_with(&prefix) || id == r.to_string_lossy().as_ref()
+    roots.iter().any(|root| {
+        id == root.to_string_lossy() || id.starts_with(&format!("{}/", root.to_string_lossy()))
     })
 }
 
-/// 扫描 Astro 管理的技能根。
 fn scan_astro(agent_id: Option<&str>) -> Vec<InstalledSkill> {
     scan_astro_for_workspace(agent_id, crate::workspace_override().as_deref())
 }
@@ -449,27 +419,16 @@ fn scan_astro_for_workspace(
     agent_id: Option<&str>,
     workspace_override: Option<&Path>,
 ) -> Vec<InstalledSkill> {
-    let mut state = load_enabled_state(agent_id);
+    let mut state = match load_enabled_state(agent_id) {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::warn!(%error, "skill settings unavailable");
+            return Vec::new();
+        }
+    };
     let mut dirty = false;
     let roots = astro_skill_roots_for_workspace(agent_id, workspace_override);
     let mut out = scan_roots(&roots, agent_id, "global", &mut state, &mut dirty, true);
-
-    let seen: std::collections::HashSet<_> = out.iter().map(|s| s.id.clone()).collect();
-    let before = state.len();
-    state.retain(|id, _| {
-        if id_belongs_to_roots(id, &roots) {
-            seen.contains(id)
-        } else {
-            // keep machine / other keys untouched
-            true
-        }
-    });
-    if state.len() != before {
-        dirty = true;
-    }
-    if dirty {
-        let _ = save_enabled_state(agent_id, &state);
-    }
 
     out.sort_by_key(|a| a.name.to_lowercase());
     out
@@ -649,9 +608,28 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<()> {
 
 /// 为指定 Agent（或全局）写入技能启用开关。
 pub fn set_enabled_for_agent(agent_id: Option<&str>, id: &str, enabled: bool) -> Result<()> {
-    let mut state = load_enabled_state(agent_id);
-    state.insert(id.to_string(), enabled);
-    save_enabled_state(agent_id, &state)
+    let base = memory_dir();
+    let agent = agent_id.map(home::settings::migration::canonical_agent_id);
+    home::settings::update(&base, |doc| {
+        let specific = agent
+            .as_ref()
+            .map(|agent| home::settings::get(doc, &["desktop", "agent_skills", agent]))
+            .transpose()?
+            .flatten();
+        let mut state: HashMap<String, bool> = specific
+            .or(home::settings::get(doc, &["desktop", "skills"])?)
+            .unwrap_or_default();
+        state.insert(id.into(), enabled);
+        if let Some(agent) = agent.as_ref() {
+            home::settings::put(doc, &["desktop", "agent_skills", agent], &state)?;
+            if agent == "default" {
+                home::settings::put(doc, &["desktop", "skills"], &state)?;
+            }
+        } else {
+            home::settings::put(doc, &["desktop", "skills"], &state)?;
+        }
+        Ok(())
+    })
 }
 
 /// 将本机技能软链到当前 Agent 的 `workspace/skills/{name}`
@@ -1188,6 +1166,18 @@ mod tests {
     use crate::ENV_TEST_LOCK;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn explicit_skill_switches_live_in_global_toml() {
+        let dir = tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        set_enabled_for_agent(None, "/skills/test-one", false).unwrap();
+        set_enabled_for_agent(None, "/skills/test-two", true).unwrap();
+        let loaded = load_enabled_state(None).unwrap();
+        assert_eq!(loaded.get("/skills/test-one"), Some(&false));
+        assert_eq!(loaded.get("/skills/test-two"), Some(&true));
+        assert!(!dir.path().join("skills-enabled.json").exists());
+    }
 
     fn machine_skill(source_dir: &str, folder: &str, name: &str) -> InstalledSkill {
         InstalledSkill {

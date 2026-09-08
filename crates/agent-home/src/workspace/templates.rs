@@ -51,8 +51,6 @@ pub(crate) const ENSURED_DIRS: &[&str] = &[
 pub(crate) const STATE_FILES: &[(&str, &str)] = &[
     // 不预建 [mcp_servers]；统一配置文件由各设置域按需增量写入。
     ("config.toml", "# Astro configuration\n"),
-    ("skills-enabled.json", "{\n}\n"),
-    ("tools-enabled.json", "{\n}\n"),
     ("models.json", "{\n  \"providers\": {}\n}\n"),
     ("memory/dreaming.json", "{\n  \"enabled\": false\n}\n"),
     ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),

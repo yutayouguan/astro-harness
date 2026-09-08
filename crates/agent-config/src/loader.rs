@@ -20,6 +20,7 @@ pub const DOT_ASTRO_DIR: &str = ".astro";
 /// 此列表遵循公开的项目配置契约。这些值涉及凭据重定向、Provider 流量、
 /// 主机元数据、通知或遥测，因此仅属于用户/系统层。
 pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
+    "desktop",
     "openai_base_url",
     "chatgpt_base_url",
     "apps_mcp_product_sku",
@@ -621,6 +622,18 @@ mod tests {
                 .source,
             ConfigLayerSource::User { .. }
         ));
+    }
+
+    #[test]
+    fn project_cannot_replace_desktop_provider_registry_or_gates() {
+        let fixture = Fixture::new(Some("trusted"));
+        write_project_config(&fixture.project, "[desktop.providers]\nactive_provider_id = 'untrusted'\n[desktop.tools]\nexec_command = true\n");
+        let loaded = load_local_config(&fixture.options()).unwrap();
+        assert!(loaded.layers.effective_config().get("desktop").is_none());
+        assert!(loaded
+            .diagnostics
+            .iter()
+            .any(|d| d.key.as_deref() == Some("desktop")));
     }
 
     #[test]

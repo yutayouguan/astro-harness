@@ -1,16 +1,14 @@
 //! Agent 工具集开关的持久化与运行时校验。
 //!
-//! 全局配置位于 `~/.astro/tools-enabled.json`；各 Agent 可覆写于
+//! 全局配置位于 `config.toml [desktop.tools]`；各 Agent 可覆写于
 //! `AgentRuntimeConfig.tools_enabled`。缺失条目默认启用（`true`）。
 //! 工具调用前通过 [`is_tool_call_allowed`] 检查对应工具集是否开启。
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 
 use crate::{
     active_agent_id, agent_workspace_dir, default_memory_dir, ensure_default_workspace_dirs,
-    AgentRuntimeConfig, DEFAULT_AGENT_ID,
 };
 
 /// 与前端 `AGENT_TOOLS` id 对齐的已知工具集标识列表。
@@ -45,142 +43,116 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "todo",
 ];
 
-/// 全局工具开关配置文件路径（`~/.astro/tools-enabled.json`）。
+/// Global editable tool gates live in config.toml [desktop.tools].
 pub fn tools_enabled_path() -> PathBuf {
-    default_memory_dir().join("tools-enabled.json")
+    crate::settings::path(&default_memory_dir())
 }
 
-/// 规范化 Agent 键：去空白、`"default"` 映射为 [`DEFAULT_AGENT_ID`]；空则返回 `None`。
-fn normalize_agent_key(agent_id: Option<&str>) -> Option<String> {
-    agent_id.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
-        if s == "default" {
-            DEFAULT_AGENT_ID.to_string()
-        } else {
-            s.to_string()
-        }
-    })
+pub fn load_tools_enabled() -> anyhow::Result<HashMap<String, bool>> {
+    Ok(crate::settings::read(&default_memory_dir(), &["desktop", "tools"])?.unwrap_or_default())
 }
 
-/// 读取全局工具开关；文件不存在或解析失败时返回空 map。
-pub fn load_tools_enabled() -> HashMap<String, bool> {
-    let path = tools_enabled_path();
-    if !path.exists() {
-        return HashMap::new();
-    }
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
-}
-
-/// 原子写入全局工具开关（临时文件 + `rename`）。
-pub fn save_tools_enabled(state: &HashMap<String, bool>) -> anyhow::Result<()> {
-    ensure_default_workspace_dirs()?;
-    let path = tools_enabled_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, serde_json::to_string_pretty(state)?)?;
-    fs::rename(&tmp, &path)?;
-    Ok(())
-}
-
-/// 从 JSON 对象提取 `string → bool` 映射；非对象类型返回空 map。
-fn map_from_json(value: &serde_json::Value) -> HashMap<String, bool> {
-    match value {
-        serde_json::Value::Object(map) => map
-            .iter()
-            .filter_map(|(k, v)| v.as_bool().map(|b| (k.clone(), b)))
-            .collect(),
-        _ => HashMap::new(),
-    }
-}
-
-/// 读取指定 Agent 的工具开关；无专属配置时回退全局 [`load_tools_enabled`]。
-pub fn load_tools_enabled_for_agent(agent_id: Option<&str>) -> HashMap<String, bool> {
+pub fn load_tools_enabled_for_agent(
+    agent_id: Option<&str>,
+) -> anyhow::Result<HashMap<String, bool>> {
     let base = default_memory_dir();
-    if let Some(id) = normalize_agent_key(agent_id) {
-        if let Ok(cfg) = AgentRuntimeConfig::load(&base, &id) {
-            if let Some(ref tools) = cfg.tools_enabled {
-                return map_from_json(tools);
-            }
+    if let Some(id) = agent_id {
+        let id = crate::settings::migration::canonical_agent_id(id);
+        if let Some(tools) =
+            crate::settings::read(&base, &["desktop", "agents", &id, "tools_enabled"])?
+        {
+            return Ok(tools);
         }
     }
     load_tools_enabled()
 }
 
-/// 写入指定 Agent 的工具开关；`agent_id` 为 `None` 时写全局配置。
-///
-/// 默认 Agent 同时写入全局 `tools-enabled.json`，供无 Agent 专属配置时的回退读取。
+fn edit_tools(
+    agent_id: Option<&str>,
+    supplied: &HashMap<String, bool>,
+    replace: bool,
+    fill_defaults: bool,
+) -> anyhow::Result<HashMap<String, bool>> {
+    ensure_default_workspace_dirs()?;
+    let base = default_memory_dir();
+    let id = agent_id.map(crate::settings::migration::canonical_agent_id);
+    crate::settings::update(&base, |doc| {
+        let mut state: HashMap<String, bool> = if replace {
+            HashMap::new()
+        } else {
+            let specific = id
+                .as_ref()
+                .map(|id| crate::settings::get(doc, &["desktop", "agents", id, "tools_enabled"]))
+                .transpose()?
+                .flatten();
+            specific
+                .or(crate::settings::get(doc, &["desktop", "tools"])?)
+                .unwrap_or_default()
+        };
+        state.extend(supplied.clone());
+        if fill_defaults {
+            for key in KNOWN_TOOLSET_IDS {
+                state.entry((*key).into()).or_insert(true);
+            }
+        }
+        if let Some(id) = id.as_ref() {
+            let mut config = crate::settings::get::<serde_json::Value>(doc, &["desktop", "agents", id])?
+                .unwrap_or_else(|| serde_json::json!({"id":id,"name":if id == "default" { "Astro" } else { id.as_str() }, "created_at":chrono::Local::now().to_rfc3339()}));
+            config["tools_enabled"] = serde_json::to_value(&state)?;
+            crate::settings::put(doc, &["desktop", "agents", id], &config)?;
+            if id == "default" {
+                crate::settings::put(doc, &["desktop", "tools"], &state)?;
+            }
+        } else {
+            crate::settings::put(doc, &["desktop", "tools"], &state)?;
+        }
+        Ok(state)
+    })
+}
+
+pub fn save_tools_enabled(state: &HashMap<String, bool>) -> anyhow::Result<()> {
+    edit_tools(None, state, true, false).map(|_| ())
+}
+
 pub fn save_tools_enabled_for_agent(
     agent_id: Option<&str>,
     state: &HashMap<String, bool>,
 ) -> anyhow::Result<()> {
-    ensure_default_workspace_dirs()?;
-    let base = default_memory_dir();
-    if let Some(id) = normalize_agent_key(agent_id) {
-        let mut cfg = AgentRuntimeConfig::load(&base, &id).unwrap_or_else(|_| {
-            let name = if id == DEFAULT_AGENT_ID {
-                "Astro".to_string()
-            } else {
-                id.clone()
-            };
-            AgentRuntimeConfig {
-                id: id.clone(),
-                name,
-                inherit_from: None,
-                provider_id: None,
-                model: None,
-                temperature: None,
-                max_turns: None,
-                additional_params: None,
-                tools_enabled: None,
-                created_at: chrono::Local::now().to_rfc3339(),
-            }
-        });
-        cfg.tools_enabled = Some(serde_json::to_value(state)?);
-        cfg.save(&base)?;
-        if id == DEFAULT_AGENT_ID {
-            save_tools_enabled(state)?;
-        }
-        return Ok(());
-    }
-    save_tools_enabled(state)
+    edit_tools(agent_id, state, true, false).map(|_| ())
 }
 
-/// 确保全局已知工具集均有配置条目（缺失默认 `true`），必要时写盘。
+/// UI updates only supplied keys; read/merge/write is one transaction.
+pub fn patch_tools_enabled_for_agent(
+    agent_id: Option<&str>,
+    state: &HashMap<String, bool>,
+) -> anyhow::Result<()> {
+    edit_tools(agent_id, state, false, true).map(|_| ())
+}
+
 pub fn sync_tools_enabled_defaults() -> anyhow::Result<HashMap<String, bool>> {
     sync_tools_enabled_defaults_for_agent(None)
 }
 
-/// 确保指定 Agent 的已知工具集均有配置条目（缺失默认 `true`），必要时写盘。
 pub fn sync_tools_enabled_defaults_for_agent(
     agent_id: Option<&str>,
 ) -> anyhow::Result<HashMap<String, bool>> {
-    ensure_default_workspace_dirs()?;
-    let mut state = load_tools_enabled_for_agent(agent_id);
-    let mut dirty = false;
-    for id in KNOWN_TOOLSET_IDS {
-        if !state.contains_key(*id) {
-            state.insert((*id).to_string(), true);
-            dirty = true;
-        }
-    }
-    if dirty {
-        save_tools_enabled_for_agent(agent_id, &state)?;
+    let mut state = load_tools_enabled_for_agent(agent_id)?;
+    for key in KNOWN_TOOLSET_IDS {
+        state.entry((*key).into()).or_insert(true);
     }
     Ok(state)
 }
 
-/// 检查工具集是否启用；读取当前活跃 Agent 配置，缺失条目视为 `true`。
 pub fn is_toolset_enabled(toolset: &str) -> bool {
     let base = default_memory_dir();
     let agent = active_agent_id(&base);
-    load_tools_enabled_for_agent(Some(&agent))
-        .get(toolset)
-        .copied()
-        .unwrap_or(true)
+    match load_tools_enabled_for_agent(Some(&agent)) {
+        Ok(state) => state.get(toolset).copied().unwrap_or(true),
+        Err(error) => {
+            tracing::warn!(%error, "tool configuration unavailable; denying toolset");
+            false
+        }
+    }
 }
 
 /// 将具体工具调用名映射为工具集 id（与前端开关及 [`KNOWN_TOOLSET_IDS`] 对应）。
@@ -302,11 +274,10 @@ mod tests {
         agent.insert("memory".into(), false);
         save_tools_enabled_for_agent(Some("other"), &agent).unwrap();
 
-        let loaded = load_tools_enabled_for_agent(Some("other"));
+        let loaded = load_tools_enabled_for_agent(Some("other")).unwrap();
         assert_eq!(loaded.get("memory"), Some(&false));
 
-        let raw = fs::read_to_string(dir.path().join("tools-enabled.json")).unwrap();
-        let map: HashMap<String, bool> = serde_json::from_str(&raw).unwrap();
+        let map = load_tools_enabled().unwrap();
         assert_eq!(map.get("memory"), Some(&true));
     }
 

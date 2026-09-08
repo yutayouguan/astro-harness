@@ -8,6 +8,8 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 项目 `.astro/` 仅存放项目特有配置（例如显式配置的 `config.toml`、自定义 Agent 定义）。没有项目特有配置时无需创建该目录；读取工作规则或打开项目不得为此创建 `.astro/`。既有项目配置不得因规则路径调整而删除。
 
+Provider 注册信息、工具/Skill 开关和 Agent 默认设置统一在全局 `config.toml` 的 `desktop` 段读写；数据库、rollout、缓存和使用统计仍是运行数据。旧 JSON 必须通过显式迁移导入，运行时不双写或回退；参见 `docs/global-settings.md`。写 TOML 时使用 `home::settings` 的同一文件锁和分段更新，不覆盖其他配置段。
+
 ## Project Overview
 
 Astro Agent（阿童木）— 本地 AI 桌面工作站。技术栈：**Rust workspace + Tauri 2 + React/Vite**。

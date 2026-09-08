@@ -1,11 +1,8 @@
-//! Agent 运行时配置结构体——无 SQLite 依赖，纯 JSON 文件 I/O。
+//! Agent defaults in config.toml [desktop.agents.<id>]. No JSON fallback.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::paths::agent_config_dir;
-
-/// 单个 Agent 的运行时配置，持久化于 `agents/{id}/config.json`。
+/// 单个 Agent 的运行时配置，持久化于 `config.toml [desktop.agents.<id>]`。
 ///
 /// 为 null 的字段表示「继承全局默认」或由上层 Builder 回退；工作区 Markdown 不在此文件。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -32,7 +29,7 @@ pub struct AgentRuntimeConfig {
     /// Provider 扩展参数（reasoning / vendor extras），对齐 Rig additional_params
     #[serde(default)]
     pub additional_params: Option<serde_json::Value>,
-    /// 为 null 时使用全局 `tools-enabled.json`
+    /// 为 null 时使用全局 `desktop.tools`
     #[serde(default)]
     pub tools_enabled: Option<serde_json::Value>,
     /// ISO 8601 创建时间（本地时区 RFC3339）
@@ -41,27 +38,44 @@ pub struct AgentRuntimeConfig {
 }
 
 impl AgentRuntimeConfig {
-    /// 该 Agent 的 `config.json` 绝对路径
-    pub fn path(base: &Path, agent_id: &str) -> PathBuf {
-        agent_config_dir(base, agent_id).join("config.json")
+    /// Shared configuration file; existence of this file does not imply an agent section exists.
+    pub fn path(base: &Path, _agent_id: &str) -> PathBuf {
+        crate::settings::path(base)
+    }
+
+    pub fn load_optional(base: &Path, agent_id: &str) -> anyhow::Result<Option<Self>> {
+        let id = crate::settings::migration::canonical_agent_id(agent_id);
+        crate::settings::read::<serde_json::Value>(base, &["desktop", "agents", &id])?
+            .map(crate::settings::agent_from_wire)
+            .transpose()
     }
 
     /// 从磁盘加载配置；文件不存在时返回错误
     pub fn load(base: &Path, agent_id: &str) -> anyhow::Result<Self> {
-        let path = Self::path(base, agent_id);
-        if !path.is_file() {
-            anyhow::bail!("Agent 配置不存在: {}", path.display());
-        }
-        let text = fs::read_to_string(&path)?;
-        Ok(serde_json::from_str(&text)?)
+        Self::load_optional(base, agent_id)?.ok_or_else(|| {
+            anyhow::anyhow!("Agent configuration section does not exist: {agent_id}")
+        })
     }
 
-    /// 将配置写回 `agents/{id}/config.json`（自动创建目录）
+    pub(crate) fn update_name(base: &Path, agent_id: &str, name: &str) -> anyhow::Result<()> {
+        let id = crate::settings::migration::canonical_agent_id(agent_id);
+        crate::settings::update(base, |doc| {
+            let mut value =
+                crate::settings::get::<serde_json::Value>(doc, &["desktop", "agents", &id])?
+                    .ok_or_else(|| anyhow::anyhow!("agent configuration is missing"))?;
+            value["name"] = serde_json::Value::String(name.into());
+            crate::settings::put(doc, &["desktop", "agents", &id], &value)
+        })
+    }
+
+    /// 将配置写回 `config.toml [desktop.agents.<id>]`（自动创建目录）
     pub fn save(&self, base: &Path) -> anyhow::Result<()> {
-        let dir = agent_config_dir(base, &self.id);
-        fs::create_dir_all(&dir)?;
-        let path = dir.join("config.json");
-        fs::write(&path, format!("{}\n", serde_json::to_string_pretty(self)?))?;
-        Ok(())
+        let mut config = self.clone();
+        config.id = crate::settings::migration::canonical_agent_id(&self.id);
+        crate::settings::write(
+            base,
+            &["desktop", "agents", &config.id],
+            &crate::settings::agent_to_wire(&config)?,
+        )
     }
 }

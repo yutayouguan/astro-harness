@@ -5,12 +5,13 @@ Astro 本机根（默认 `~/.astro` / `ASTRO_MEMORY_DIR`）：路径解析、日
 ## 核心职责
 
 - **路径约定** -- 统一解析 `~/.astro/` 下的 agents / sessions / cron / workflows / teams 等目录结构，跨平台（macOS / Windows / Linux）
-- **Agent 生命周期** -- 创建/删除/列表/切换 Agent，生成可读 slug ID（`{slug}--{hex}`），管理 SOUL.md / config.json / tools_enabled.json
-- **工具开关** -- `tools_enabled.json` 热加载，支持 per-agent 覆盖、toolset 粒度启停、`is_tool_call_allowed()` 实时校验
+- **Agent 生命周期** -- 管理身份文件与 `config.toml [desktop.agents.<id>]` 默认设置
+- **工具开关** -- `config.toml [desktop.tools]` 热加载，支持 per-agent 覆盖、toolset 粒度启停、`is_tool_call_allowed()` 实时校验
+- **统一设置** -- `settings` 提供分段读写、跨进程锁、原子替换与显式 JSON 迁移；说明见 [全局设置](../../docs/global-settings.md)
 - **Agent 图标** -- 多种图标来源（Lucide / 自定义 SVG / 待确认队列），自动 Lucide 图标推荐
 - **日志基础设施** -- `init_logging()` 初始化 tracing-subscriber + 文件 appender，`query_agent_logs()` 结构化日志查询
 - **内容扫描** -- `scan_memory_content()` 扫描 MEMORY.md 等文件内容
-- **模板脚手架** -- Agent 工作区的 SOUL.md / MEMORY.md / config.json 模板生成
+- **模板脚手架** -- 工作区 Markdown 与全局 TOML Agent 默认段初始化，不再生成可编辑 JSON 副本
 - **测试工具** -- `AstroMemoryDirGuard` 安全地串行化环境变量覆盖
 
 ## 模块结构

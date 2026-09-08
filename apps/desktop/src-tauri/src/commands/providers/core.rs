@@ -225,7 +225,7 @@ impl ProviderKind {
     }
 }
 
-/// 单条聊天后备引用（写入 `providers.json`）。
+/// 单条聊天后备引用（写入 `config.toml [desktop.providers]`）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProviderFallbackEntry {
     pub provider_id: String,
@@ -679,11 +679,6 @@ pub struct ProviderTestResult {
     pub message: String,
 }
 
-/// providers.json 路径。
-fn providers_path() -> PathBuf {
-    home::default_memory_dir().join("providers.json")
-}
-
 /// 模型缓存文件路径。
 fn models_path() -> PathBuf {
     let dir = home::default_memory_dir().join("cache");
@@ -785,12 +780,7 @@ fn persist_provider_models(
 
 /// 将 TOML 自定义 provider 声明的模型注入 models.json 缓存。
 fn sync_custom_provider_models() {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home)
-        .join(".astro")
-        .join("config.toml");
+    let config_path = home::settings::path(&home::default_memory_dir());
     let custom = providers::custom::load_custom_providers(&config_path);
     if custom.is_empty() {
         return;
@@ -866,14 +856,16 @@ fn sync_custom_provider_models() {
 
 /// 加载全部 Provider 配置状态。
 fn load_state() -> Result<ProvidersState, String> {
-    let path = providers_path();
-    if !path.exists() {
+    let state = home::settings::read::<ProvidersState>(
+        &home::default_memory_dir(),
+        &["desktop", "providers"],
+    )
+    .map_err(|error| error.to_string())?;
+    let Some(mut state) = state else {
         let mut state = ProvidersState::with_defaults();
         merge_toml_custom_providers(&mut state);
         return Ok(state);
-    }
-    let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let mut state: ProvidersState = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    };
     let mut changed = state.ensure_unique_ids();
     if state.ensure_builtin_kinds() {
         changed = true;
@@ -897,12 +889,7 @@ fn load_state() -> Result<ProvidersState, String> {
 /// 以 `toml:<id>` 作为 provider ID，避免与 UI 手动添加的 `prov-*` ID 碰撞。
 /// 已存在同 ID 的条目时跳过（用户可能在 UI 中修改过）。
 fn merge_toml_custom_providers(state: &mut ProvidersState) {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home)
-        .join(".astro")
-        .join("config.toml");
+    let config_path = home::settings::path(&home::default_memory_dir());
     let custom = providers::custom::load_custom_providers(&config_path);
     for (id, cfg) in &custom {
         let toml_id = format!("toml:{id}");
@@ -935,35 +922,12 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
 
 /// 保存 Provider 配置状态。
 fn save_state(state: &ProvidersState) -> Result<(), String> {
-    let path = providers_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let raw = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    let temporary = path.with_extension(format!(
-        "json.{}.{}.tmp",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or(0)
-    ));
-    if let Err(error) = fs::write(&temporary, raw) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error.to_string());
-    }
-    #[cfg(target_os = "windows")]
-    if path.exists() {
-        if let Err(error) = fs::remove_file(&path) {
-            let _ = fs::remove_file(&temporary);
-            return Err(error.to_string());
-        }
-    }
-    if let Err(error) = fs::rename(&temporary, &path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error.to_string());
-    }
-    Ok(())
+    home::settings::write(
+        &home::default_memory_dir(),
+        &["desktop", "providers"],
+        state,
+    )
+    .map_err(|error| error.to_string())
 }
 
 /// `resolve_api_key`。
@@ -1368,7 +1332,7 @@ pub(crate) fn find_provider_by_backend(backend_id: &str) -> Result<ProviderConfi
     })
 }
 
-/// 从 providers.json + keyring 展开主目标与聊天后备链（含 primary）。
+/// 从 config.toml 的 desktop.providers + keyring 展开主目标与聊天后备链（含 primary）。
 ///
 /// - primary：与 `resolve_chat_credentials` 相同的查找规则；`model` 空则用条目默认模型
 /// - fallback：跳过禁用、无 Key（ollama 除外）、缺失条目；去重与上限由 `expand_model_targets` 负责
@@ -2181,6 +2145,41 @@ pub async fn test_provider_models(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_provider_configuration_respects_astro_memory_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        fs::write(home::settings::path(dir.path()), "[custom_providers.config_path_test]\nbase_url = 'http://127.0.0.1:4321/v1'\ndefault_model = 'local-model'\n").unwrap();
+        let state = load_state().unwrap();
+        let provider = state
+            .providers
+            .iter()
+            .find(|p| p.id == "toml:config_path_test")
+            .unwrap();
+        assert_eq!(provider.model, "local-model");
+    }
+
+    #[test]
+    fn provider_preferences_round_trip_through_toml_without_json_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        fs::write(home::settings::path(dir.path()), "# keep\n[mcp_servers]\n").unwrap();
+        let mut state = ProvidersState::with_defaults();
+        state.active_provider_id = Some(state.providers[0].id.clone());
+        state.providers[0].endpoint = "http://127.0.0.1:4321/v1".into();
+        save_state(&state).unwrap();
+        let restored: ProvidersState = home::settings::read(dir.path(), &["desktop", "providers"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.active_provider_id, state.active_provider_id);
+        assert_eq!(restored.providers[0].endpoint, state.providers[0].endpoint);
+        assert!(fs::read_to_string(home::settings::path(dir.path()))
+            .unwrap()
+            .contains("# keep"));
+        assert!(!dir.path().join("providers.json").exists());
+        assert!(!dir.path().join("models/providers.json").exists());
+    }
 
     #[test]
     fn parses_new_kinds() {
