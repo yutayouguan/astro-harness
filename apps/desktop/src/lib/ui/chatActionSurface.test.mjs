@@ -218,9 +218,11 @@ test("composer exposes an accessible hover-revealed input height control", async
   const styles = await readFile(markdownCssUrl, "utf8");
 
   assert.match(source, /className="composer-expand-btn"/);
+  assert.match(source, /className="composer-expand-indicator"/);
+  assert.match(source, /className="composer-expand-glyph"/);
   assert.match(source, /aria-expanded=\{composerManuallyExpanded\}/);
-  assert.match(source, /<Maximize2 size=\{18\}/);
-  assert.match(source, /<Minimize2 size=\{18\}/);
+  assert.match(source, /className="composer-expand-icon is-expand"/);
+  assert.match(source, /className="composer-expand-icon is-collapse"/);
   assert.match(
     source,
     /const capsuleComposerHasRichContent =\s*composerManuallyExpanded \|\|/,
@@ -228,10 +230,14 @@ test("composer exposes an accessible hover-revealed input height control", async
   assert.match(source, /Math\.min\(Math\.max\(el\.scrollHeight, 220\), 360\)/);
   assert.match(messages, /"chat\.composerExpand": "展开输入框"/);
   assert.match(messages, /"chat\.composerCollapse": "收起输入框"/);
-  assert.match(styles, /\.composer-expand-btn::before/);
+  assert.match(styles, /\.composer-expand-indicator/);
   assert.match(
     styles,
-    /\.composer-expand-btn:hover svg,[\s\S]*?opacity:\s*1;[\s\S]*?transform:\s*scale\(1\);/,
+    /\.composer-expand-btn:hover \.composer-expand-indicator,[\s\S]*?opacity:\s*0;[\s\S]*?rotate\(76deg\) scale\(0\.64\);/,
+  );
+  assert.match(
+    styles,
+    /\.composer-expand-btn\[aria-expanded="false"\]:hover[\s\S]*?\.composer-expand-icon\.is-expand,[\s\S]*?opacity:\s*1;[\s\S]*?rotate\(0\) scale\(1\);/,
   );
   assert.match(
     styles,
@@ -240,6 +246,10 @@ test("composer exposes an accessible hover-revealed input height control", async
   assert.match(
     styles,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.composer-expand-btn/,
+  );
+  assert.match(
+    styles,
+    /\.composer-input\s*\{[\s\S]*?transition:[\s\S]*?height 220ms/,
   );
 });
 

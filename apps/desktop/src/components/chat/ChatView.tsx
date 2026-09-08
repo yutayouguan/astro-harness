@@ -4149,11 +4149,19 @@ export default function ChatView({
                     );
                   }}
                 >
-                  {composerManuallyExpanded ? (
-                    <Minimize2 size={18} strokeWidth={2.2} aria-hidden />
-                  ) : (
-                    <Maximize2 size={18} strokeWidth={2.2} aria-hidden />
-                  )}
+                  <span className="composer-expand-indicator" aria-hidden />
+                  <span className="composer-expand-glyph" aria-hidden>
+                    <Maximize2
+                      className="composer-expand-icon is-expand"
+                      size={18}
+                      strokeWidth={2.2}
+                    />
+                    <Minimize2
+                      className="composer-expand-icon is-collapse"
+                      size={18}
+                      strokeWidth={2.2}
+                    />
+                  </span>
                 </button>
               </div>
             )}
