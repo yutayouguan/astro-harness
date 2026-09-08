@@ -187,7 +187,7 @@ pub async fn reject_pending_memory_write(app: AppHandle, id: String) -> Result<(
     Ok(())
 }
 
-/// 记忆面板开关状态（从 `config.yaml` 读取）。
+/// 记忆面板开关状态（从 `config.toml` 读取）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySettingsDto {

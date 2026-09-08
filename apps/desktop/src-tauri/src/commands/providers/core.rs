@@ -681,12 +681,12 @@ pub struct ProviderTestResult {
 
 /// providers.json 路径。
 fn providers_path() -> PathBuf {
-    home::default_memory_dir().join("providers.json")
+    home::providers_path(&home::default_memory_dir())
 }
 
 /// 模型缓存文件路径。
 fn models_path() -> PathBuf {
-    let dir = home::default_memory_dir().join("cache");
+    let dir = home::models_cache_dir(&home::default_memory_dir());
     let _ = std::fs::create_dir_all(&dir);
     dir.join("models.json")
 }
@@ -785,12 +785,7 @@ fn persist_provider_models(
 
 /// 将 TOML 自定义 provider 声明的模型注入 models.json 缓存。
 fn sync_custom_provider_models() {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home)
-        .join(".astro")
-        .join("config.toml");
+    let config_path = home::config_path(&home::default_memory_dir());
     let custom = providers::custom::load_custom_providers(&config_path);
     if custom.is_empty() {
         return;
@@ -897,12 +892,7 @@ fn load_state() -> Result<ProvidersState, String> {
 /// 以 `toml:<id>` 作为 provider ID，避免与 UI 手动添加的 `prov-*` ID 碰撞。
 /// 已存在同 ID 的条目时跳过（用户可能在 UI 中修改过）。
 fn merge_toml_custom_providers(state: &mut ProvidersState) {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    let config_path = std::path::PathBuf::from(home)
-        .join(".astro")
-        .join("config.toml");
+    let config_path = home::config_path(&home::default_memory_dir());
     let custom = providers::custom::load_custom_providers(&config_path);
     for (id, cfg) in &custom {
         let toml_id = format!("toml:{id}");

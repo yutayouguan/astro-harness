@@ -16,26 +16,17 @@ use crate::skill::{LoadedSkill, SkillMetadata};
 const STATE_FILE: &str = "skills-enabled.json";
 
 /// 解析本机 Astro 数据根目录。
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 /// Agent 工作区目录（默认 Agent 为 `workspace`，其余为 `workspace-{id}`）。
 fn agent_workspace(agent_id: &str) -> PathBuf {
     home::agent_workspace_dir(&memory_dir(), agent_id)
 }
 
-/// 读取 `active-agent.json` 中的当前 Agent id。
+/// 读取 `agents/active.json` 中的当前 Agent id。
 fn active_agent_id() -> Option<String> {
     let base = memory_dir();
-    fs::read_to_string(base.join("active-agent.json"))
+    fs::read_to_string(home::active_agent_path(&base))
         .ok()
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
         .and_then(|v| v.get("id").and_then(|x| x.as_str()).map(|s| s.to_string()))
@@ -46,7 +37,7 @@ fn state_path_for(agent_id: Option<&str>) -> PathBuf {
     let base = memory_dir();
     match normalize_agent_id(agent_id) {
         Some(id) => home::agent_config_dir(&base, &id).join(STATE_FILE),
-        None => base.join(STATE_FILE),
+        None => home::skills_enabled_path(&base),
     }
 }
 
@@ -54,7 +45,7 @@ fn state_path_for(agent_id: Option<&str>) -> PathBuf {
 fn load_enabled_state(agent_id: Option<&str>) -> HashMap<String, bool> {
     let path = state_path_for(agent_id);
     let path = if !path.exists() && agent_id.is_some() {
-        memory_dir().join(STATE_FILE)
+        home::skills_enabled_path(&memory_dir())
     } else {
         path
     };
@@ -76,7 +67,10 @@ fn save_enabled_state(agent_id: Option<&str>, state: &HashMap<String, bool>) -> 
     let json = serde_json::to_string_pretty(state)?;
     fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
     if normalize_agent_id(agent_id).as_deref() == Some(home::DEFAULT_AGENT_ID) {
-        let global = memory_dir().join(STATE_FILE);
+        let global = home::skills_enabled_path(&memory_dir());
+        if let Some(parent) = global.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let _ = fs::write(&global, serde_json::to_string_pretty(state)?);
     }
     Ok(())
@@ -88,7 +82,7 @@ fn astro_skill_roots_for_workspace(
     workspace_override: Option<&Path>,
 ) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    let astro = memory_dir().join("skills");
+    let astro = home::skills_dir(&memory_dir());
     let _ = fs::create_dir_all(&astro);
     roots.push(astro);
 
@@ -1341,11 +1335,8 @@ mod tests {
         assert!(list.iter().any(|s| s.name == "demo-skill-xyz"));
 
         // active agent for load_skill_by_name
-        fs::write(
-            dir.path().join("active-agent.json"),
-            r#"{"id":"workspace"}"#,
-        )
-        .unwrap();
+        fs::create_dir_all(dir.path().join("agents")).unwrap();
+        fs::write(home::active_agent_path(dir.path()), r#"{"id":"workspace"}"#).unwrap();
         let loaded = load_skill_by_name("demo-skill-xyz").unwrap();
         assert!(loaded.content.contains("# Hello"));
         assert_eq!(loaded.metadata.description, "test desc");
@@ -1364,11 +1355,8 @@ mod tests {
         .unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
-        fs::write(
-            dir.path().join("active-agent.json"),
-            r#"{"id":"workspace"}"#,
-        )
-        .unwrap();
+        fs::create_dir_all(dir.path().join("agents")).unwrap();
+        fs::write(home::active_agent_path(dir.path()), r#"{"id":"workspace"}"#).unwrap();
 
         let installed = list_installed_for_agent(Some("workspace"), Some("astro"))
             .into_iter()
@@ -1397,11 +1385,8 @@ mod tests {
         fs::write(skill_dir.join("logo.png"), [0u8, 1, 2, 3]).unwrap();
         std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
-        fs::write(
-            dir.path().join("active-agent.json"),
-            r#"{"id":"workspace"}"#,
-        )
-        .unwrap();
+        fs::create_dir_all(dir.path().join("agents")).unwrap();
+        fs::write(home::active_agent_path(dir.path()), r#"{"id":"workspace"}"#).unwrap();
 
         let bundle = list_skill_files("bundle-skill").unwrap();
         assert_eq!(bundle.name, "bundle-skill");

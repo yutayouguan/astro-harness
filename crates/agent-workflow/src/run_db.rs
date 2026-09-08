@@ -135,9 +135,7 @@ impl WorkflowRunDb {
     }
 
     pub async fn open_default() -> Result<Self> {
-        let path = home::default_memory_dir()
-            .join("workflows")
-            .join("workflow.db");
+        let path = home::workflow_db_path(&home::default_memory_dir());
         Self::new(path).await
     }
 

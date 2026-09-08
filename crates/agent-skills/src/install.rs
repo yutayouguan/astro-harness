@@ -16,16 +16,7 @@ use crate::origins::{fill_origin_remote_baseline, find_origin, upsert_origin};
 const SKILLHUB_API: &str = "https://api.skillhub.cn";
 
 /// 解析本机 Astro 数据根目录（`ASTRO_MEMORY_DIR` / `~/.astro`）。
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 /// Agent 运行时生成或演化 Skill 的工作区目录；不用于在线市场安装。
 pub fn agent_workspace_skills_dir(agent_id: Option<&str>) -> Result<PathBuf> {

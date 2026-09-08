@@ -1,4 +1,4 @@
-//! 上下文卫生配置：读写 `config.yaml` 的 `compression:` 段。
+//! 上下文卫生配置：读写 `config.toml` 的 `compression:` 段。
 
 use serde::{Deserialize, Serialize};
 

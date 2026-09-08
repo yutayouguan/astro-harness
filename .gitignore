@@ -30,6 +30,7 @@ apps/desktop/*.tsbuildinfo
 # Logs & temp
 *.log
 *.tmp
+__pycache__/
 .cache/
 
 # Local model catalog dumps (use ~/.astro/openrouter-model-meta.json)

@@ -102,10 +102,7 @@ pub fn default_memory_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".astro"))
 }
 
-/// 数据库目录：`{base}/data/`（state.db、usage.db、subagents 等）
-pub fn data_dir(base: &Path) -> PathBuf {
-    base.join("data")
-}
+use crate::layout::{artifacts_dir, cron_dir, sessions_dir, usage_dir};
 
 pub const SESSION_DB_FILENAME: &str = "state.db";
 pub const USAGE_DB_FILENAME: &str = "usage.db";
@@ -116,32 +113,34 @@ pub const CRON_RUN_DB_FILENAME: &str = "cron_v1.db";
 
 /// 会话、消息与 FTS 投影的 canonical SQLite 路径。
 pub fn session_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(SESSION_DB_FILENAME)
+    sessions_dir(base).join(SESSION_DB_FILENAME)
 }
 
 /// 用量事件库的 canonical SQLite 路径。
 pub fn usage_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(USAGE_DB_FILENAME)
+    usage_dir(base).join(USAGE_DB_FILENAME)
 }
 
 /// Agent Graph、mailbox 与状态库的 canonical SQLite 路径。
 pub fn subagents_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(SUBAGENTS_DB_FILENAME)
+    sessions_dir(base)
+        .join("subagents")
+        .join(SUBAGENTS_DB_FILENAME)
 }
 
 /// 文件空间索引的 canonical SQLite 路径。
 pub fn artifacts_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(ARTIFACTS_DB_FILENAME)
+    artifacts_dir(base).join(ARTIFACTS_DB_FILENAME)
 }
 
 /// Knowledge Content FTS 的 canonical SQLite 路径。
 pub fn knowledge_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(KNOWLEDGE_DB_FILENAME)
+    artifacts_dir(base).join(KNOWLEDGE_DB_FILENAME)
 }
 
 /// Cron 运行记录的 canonical SQLite 路径。
 pub fn cron_run_db_path(base: &Path) -> PathBuf {
-    data_dir(base).join(CRON_RUN_DB_FILENAME)
+    cron_dir(base).join(CRON_RUN_DB_FILENAME)
 }
 
 /// 会话 rollout 目录：`{base}/sessions/rollouts/`
@@ -149,7 +148,7 @@ pub fn rollouts_dir(base: &Path) -> PathBuf {
     base.join("sessions").join("rollouts")
 }
 
-/// 记忆子系统目录：`{base}/memory/`（dreaming、audit、pending、learning）
+/// 记忆子系统目录：`{base}/memory/`（dreaming、pending）。
 pub fn memory_subsystem_dir(base: &Path) -> PathBuf {
     base.join("memory")
 }
@@ -329,43 +328,11 @@ pub fn list_daily_memory_dates(workspace: &Path) -> Vec<String> {
 ///
 /// 适用于轻量工具（MCP 配置读写、日志初始化等），不需要完整工作区初始化。
 pub fn ensure_workspace_dirs(base: &Path) -> anyhow::Result<()> {
-    fs::create_dir_all(base)?;
-    fs::create_dir_all(base.join("agents"))?;
-    fs::create_dir_all(data_dir(base))?;
-    // 迁移：旧版本默认 Agent 配置目录为 agents/workspace，
-    // 新版本改为 agents/default 以避免与工作区内容目录 workspace/ 歧义。
-    let old_config = base.join("agents").join(DEFAULT_AGENT_ID);
-    let new_config = base.join("agents").join(DEFAULT_AGENT_CONFIG_DIR);
-    if old_config.is_dir() && !new_config.exists() {
-        let _ = fs::rename(&old_config, &new_config);
+    crate::layout::require_current_layout(base)?;
+    for relative in crate::layout::DOMAIN_DIRS {
+        fs::create_dir_all(base.join(relative))?;
     }
-
-    // 迁移：记忆相关 → memory/
-    let memory_dir = base.join("memory");
-    migrate_file(base, "dreaming.json", &memory_dir);
-    migrate_dir(base, "audit", &memory_dir);
-    migrate_dir(base, "learning", &memory_dir);
-    migrate_dir(base, "pending", &memory_dir);
-
     Ok(())
-}
-
-fn migrate_file(old_parent: &Path, name: &str, new_parent: &Path) {
-    let old = old_parent.join(name);
-    let new = new_parent.join(name);
-    if old.is_file() && !new.exists() {
-        let _ = fs::create_dir_all(new_parent);
-        let _ = fs::rename(&old, &new);
-    }
-}
-
-fn migrate_dir(old_parent: &Path, name: &str, new_parent: &Path) {
-    let old = old_parent.join(name);
-    let new = new_parent.join(name);
-    if old.is_dir() && !new.exists() {
-        let _ = fs::create_dir_all(new_parent);
-        let _ = fs::rename(&old, &new);
-    }
 }
 
 /// 确保默认工作区基础目录存在（不初始化 SQLite）。
@@ -377,15 +344,43 @@ pub fn ensure_default_workspace_dirs() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     #[test]
-    fn canonical_database_paths_share_data_directory() {
+    fn canonical_database_paths_belong_to_their_domains() {
         let base = Path::new("/tmp/astro-home");
-        let expected = base.join("data");
+        let expected = base.join("sessions");
         assert_eq!(session_db_path(base), expected.join("state.db"));
-        assert_eq!(usage_db_path(base), expected.join("usage.db"));
-        assert_eq!(subagents_db_path(base), expected.join("subagents-v2.db"));
-        assert_eq!(artifacts_db_path(base), expected.join("artifacts.db"));
-        assert_eq!(knowledge_db_path(base), expected.join("knowledge.db"));
-        assert_eq!(cron_run_db_path(base), expected.join("cron_v1.db"));
+        assert_eq!(usage_db_path(base), base.join("usage/usage.db"));
+        assert_eq!(
+            subagents_db_path(base),
+            base.join("sessions/subagents/subagents-v2.db")
+        );
+        assert_eq!(artifacts_db_path(base), base.join("artifacts/artifacts.db"));
+        assert_eq!(knowledge_db_path(base), base.join("artifacts/knowledge.db"));
+        assert_eq!(
+            cron_run_db_path(base),
+            base.join("automation/cron/cron_v1.db")
+        );
+    }
+
+    #[test]
+    fn initialization_never_moves_or_recreates_retired_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("dreaming.json"), "old").unwrap();
+        ensure_workspace_dirs(dir.path()).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("dreaming.json")).unwrap(),
+            "old"
+        );
+        for retired in [
+            "data",
+            "cache",
+            "cron",
+            "workflows",
+            "uploads",
+            "learning",
+            "audit",
+        ] {
+            assert!(!dir.path().join(retired).exists(), "recreated {retired}");
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
-/// 一条完整工作流定义，持久化在 `~/.astro/workflows/workflows.json`
+/// 一条完整工作流定义，持久化在 `~/.astro/automation/workflows/workflows.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workflow {
     pub id: String,

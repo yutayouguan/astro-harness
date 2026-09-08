@@ -8,8 +8,9 @@ use tempfile::TempDir;
 
 fn write_approval_config(dir: &std::path::Path) {
     fs::write(
-        dir.join("config.yaml"),
-        "memory:\n  write_approval: true\n  memory_char_limit: 2200\n",
+        dir.join("config.toml"),
+        r#""memory" = { "write_approval" = true, "memory_char_limit" = 2200 }
+"#,
     )
     .unwrap();
 }

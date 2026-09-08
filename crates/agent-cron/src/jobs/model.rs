@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::schedule::{compute_next_run, ensure_custom_start};
 
-/// 定时任务定义，持久化在 `~/.astro/cron/jobs.json`
+/// 定时任务定义，持久化在 `~/.astro/automation/cron/jobs.json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CronJob {
     /// 唯一 id（UUID 字符串）

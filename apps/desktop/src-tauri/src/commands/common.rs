@@ -4,7 +4,7 @@
 pub(crate) async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&home::data_dir(&root))
+    session::SessionStore::open_sessions_dir(&home::sessions_dir(&root))
         .await
         .map_err(|e| e.to_string())
 }

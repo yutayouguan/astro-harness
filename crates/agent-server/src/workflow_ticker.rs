@@ -13,9 +13,7 @@ static NEXT_RUN: std::sync::Mutex<Option<HashMap<String, chrono::DateTime<Local>
     std::sync::Mutex::new(None);
 
 fn state_file() -> PathBuf {
-    home::default_memory_dir()
-        .join("workflows")
-        .join("schedule_state.json")
+    home::workflows_dir(&home::default_memory_dir()).join("schedule_state.json")
 }
 
 fn load_state() -> HashMap<String, String> {

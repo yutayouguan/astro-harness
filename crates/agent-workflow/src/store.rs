@@ -30,7 +30,7 @@ impl WorkflowStore {
     }
 
     pub fn open_default() -> Result<Self> {
-        let root = home::default_memory_dir().join("workflows");
+        let root = home::workflows_dir(&home::default_memory_dir());
         Self::open(root)
     }
 

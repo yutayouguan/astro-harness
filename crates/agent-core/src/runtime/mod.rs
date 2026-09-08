@@ -601,8 +601,10 @@ impl Session {
         agent_control: Arc<subagents::AgentControl>,
         agent_path: subagents::AgentPath,
     ) -> anyhow::Result<Self> {
-        let sessions: Box<dyn ConversationStore> =
-            Box::new(SessionStore::open_sessions_dir(&home::data_dir(&config.memory_dir)).await?);
+        home::require_current_layout(&config.memory_dir)?;
+        let sessions: Box<dyn ConversationStore> = Box::new(
+            SessionStore::open_sessions_dir(&home::sessions_dir(&config.memory_dir)).await?,
+        );
         Self::from_memory_with_agent_control_and_store(
             config,
             session_id,
@@ -3299,8 +3301,9 @@ mod tests {
         assert!(n.contains("memory"));
 
         fs::write(
-            dir.path().join("config.yaml"),
-            "learning:\n  nudge_enabled: false\n",
+            dir.path().join("config.toml"),
+            r#""learning" = { "nudge_enabled" = false }
+"#,
         )
         .unwrap();
         assert!(AgentLoop::compute_learning_nudge(dir.path(), 9).is_none());

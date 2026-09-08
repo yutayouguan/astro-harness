@@ -1,7 +1,7 @@
 //! 首次启动时写入随应用编译发布的内置 Skills。
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 一次播种运行的结果汇总。
 #[derive(Debug, Default, Clone)]
@@ -40,7 +40,7 @@ pub struct KnownSkillHubSource {
     pub install_ref: &'static str,
     pub version: &'static str,
     pub updated_at: i64,
-    /// 需在 `skills-lock.json` 中精确匹配的 GitHub 上游；内置 Skill 为 `None`。
+    /// 需在 `skills/lock.json` 中精确匹配的 GitHub 上游；内置 Skill 为 `None`。
     pub lock_source: Option<&'static str>,
 }
 
@@ -164,16 +164,7 @@ pub fn seed_bundled_skills() -> SeedReport {
 }
 
 /// 解析本机 Astro 数据根目录。
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 #[cfg(test)]
 mod tests {

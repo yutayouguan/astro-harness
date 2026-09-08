@@ -1,16 +1,13 @@
 //! Agent 表情符号与头像资源的存储与 `IDENTITY.md` 同步。
 //!
 //! 图标文件写入各 Agent 工作区 `assets/` 目录，`IDENTITY.md` 记录相对路径。
-//! 创建 Agent 前可通过 `cache/pending-agent-icons/` 暂存图标，创建后一次性应用。
+//! 创建 Agent 前可通过 `agents/pending-icons/` 暂存图标，创建后一次性应用。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Agent 工作区内图标资源子目录名。
 const ASSETS_DIR: &str = "assets";
-/// 数据根目录下暂存待应用图标的缓存子目录名。
-const PENDING_DIR: &str = "pending-agent-icons";
-
 /// Agent 图标类型：表情符号图片或头像图片。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentIconKind {
@@ -62,7 +59,7 @@ fn sanitize_ext(file_name: &str) -> String {
 
 /// 返回数据根目录下待应用图标的缓存目录路径。
 pub fn pending_icons_dir(base: &Path) -> PathBuf {
-    base.join("cache").join(PENDING_DIR)
+    crate::pending_agent_icons_dir(base)
 }
 
 /// 将 `IDENTITY.md` 中的图标字段解析为可读路径或 URL。
@@ -129,7 +126,7 @@ pub fn write_agent_icon(
     Ok(rel)
 }
 
-/// 将图标暂存到 `cache/pending-agent-icons/`，供新建 Agent 后批量应用。
+/// 将图标暂存到 `agents/pending-icons/`，供新建 Agent 后批量应用。
 ///
 /// 同 kind 的旧暂存文件会被替换。空文件或超过 8MB 时报错。
 pub fn set_pending_agent_icon(

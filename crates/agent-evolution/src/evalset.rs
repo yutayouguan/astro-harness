@@ -1,6 +1,6 @@
 //! 标注评测集：用户从历史挑例子，标注 task + 期望要点 + 通过/失败。
 //!
-//! 存 `{base}/learning/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配
+//! 存 `{base}/evolution/evalset.jsonl`。进化打分时，若候选技能有匹配
 //! 例子，则让 judge 针对具体 task+expectations 做 grounded 评分（0–1），比泛化
 //! judge 更客观；无匹配则回退泛化 judge（由调用方处理）。
 //!
@@ -63,11 +63,9 @@ impl EvalExample {
     }
 }
 
-/// `{base}/learning/evolution/evalset.jsonl`
+/// `{base}/evolution/evalset.jsonl`
 pub fn evalset_path(base: &Path) -> PathBuf {
-    base.join("learning")
-        .join("evolution")
-        .join("evalset.jsonl")
+    home::evolution_dir(base).join("evalset.jsonl")
 }
 
 /// 追加一条例子（append-only JSONL）。

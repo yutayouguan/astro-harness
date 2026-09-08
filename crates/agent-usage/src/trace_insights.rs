@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use types::truncate_chars;
 
 use crate::db::{period_window, UsageDb, UsagePeriod};
-use home::{data_dir, default_memory_dir};
+use home::{default_memory_dir, sessions_dir};
 use session::SessionStore;
 
 /// 列表默认条数
@@ -102,7 +102,7 @@ pub async fn query_trace_insights(q: TraceInsightsQuery) -> anyhow::Result<Trace
         .list_trace_sessions(&start, &end, agent.as_deref(), TRACE_LIST_LIMIT)
         .await?;
 
-    let sessions_dir = data_dir(&default_memory_dir());
+    let sessions_dir = sessions_dir(&default_memory_dir());
     let store = SessionStore::open_sessions_dir(&sessions_dir).await.ok();
 
     let mut traces = Vec::with_capacity(summaries.len());
@@ -894,7 +894,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let _env = AstroMemoryDirGuard::set(dir.path());
 
-        let sessions = data_dir(dir.path());
+        let sessions = sessions_dir(dir.path());
         std::fs::create_dir_all(&sessions).unwrap();
         let store = SessionStore::open(&sessions.join("state.db"))
             .await

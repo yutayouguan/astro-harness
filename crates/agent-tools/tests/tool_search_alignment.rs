@@ -11,7 +11,7 @@ async fn search_returns_full_schema_without_mutating_deferred_dynamic_tool() {
     let workspace = dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let memory = RwLock::new(memory::MemoryManager::new(dir.path().to_path_buf()).unwrap());
-    let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+    let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("sessions"))
         .await
         .unwrap();
     let targets = tools::ImageGenTargets::default();

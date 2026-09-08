@@ -32,7 +32,7 @@ pub struct AgentRuntimeConfig {
     /// Provider 扩展参数（reasoning / vendor extras），对齐 Rig additional_params
     #[serde(default)]
     pub additional_params: Option<serde_json::Value>,
-    /// 为 null 时使用全局 `tools-enabled.json`
+    /// 为 null 时使用全局 `tools/enabled.json`
     #[serde(default)]
     pub tools_enabled: Option<serde_json::Value>,
     /// ISO 8601 创建时间（本地时区 RFC3339）

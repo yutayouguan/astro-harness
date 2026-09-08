@@ -4,8 +4,8 @@
 
 ## 核心职责
 
-1. **事件持久化** -- 在 `~/.astro/data/usage.db`（WAL 模式，schema v4）记录 tool / skill / mcp / cron / llm 五类用量事件，支持按月/季/年时间窗的 KPI 聚合、时间序列与多维排行查询。
-2. **工具集与技能计数** -- 以 `~/.astro/agents/{id}/usage-stats.json` 维护 per-agent 的工具集调用次数和技能调用次数，通过互斥锁保证进程内并发安全。
+1. **事件持久化** -- 在 `~/.astro/usage/usage.db`（WAL 模式，schema v4）记录 tool / skill / mcp / cron / llm 五类用量事件，支持按月/季/年时间窗的 KPI 聚合、时间序列与多维排行查询。
+2. **工具集与技能计数** -- 以 `~/.astro/usage/agents/{id}/stats.json` 维护 per-agent 的工具集调用次数和技能调用次数，通过互斥锁保证进程内并发安全。
 3. **路由感知费用估算** -- 结合官方文档定价快照（OpenAI / Anthropic / Google 等）与 OpenRouter `/models` API 缓存（24h TTL），为每次 LLM 调用输出 USD 估价或 `included` / `unknown` 状态。
 4. **调用链 Tracing** -- 按 `session_id` 聚合用量事件并尝试从 `state.db` 会话消息重建 LangSmith 风格 span 链（含 input/output、耗时、parent 关系），为前端可观测性面板提供数据。
 5. **Eval 导出** -- 将单会话 Trace 导出为 JSONL 格式（一行一条记录），便于离线评测与 DSPy 集成。

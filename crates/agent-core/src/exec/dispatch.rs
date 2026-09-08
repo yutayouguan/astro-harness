@@ -970,7 +970,7 @@ async fn fork_parent_session(
     child_session_id: &str,
     fork_turns: &Option<String>,
 ) -> anyhow::Result<ForkedSessionGuard> {
-    let sessions_dir = home::data_dir(memory_dir);
+    let sessions_dir = home::sessions_dir(memory_dir);
     let sessions = session::SessionStore::open_sessions_dir(&sessions_dir).await?;
     let recent_turns = parse_fork_turns(fork_turns.as_deref())?;
     sessions
@@ -1028,7 +1028,8 @@ async fn validate_recovered_runtime_setup(
     thread: &subagents::AgentThreadV2,
     runtime: &SpawnRuntimeV2Request,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await?;
+    let sessions =
+        session::SessionStore::open_sessions_dir(&home::sessions_dir(memory_dir)).await?;
     let stored = sessions
         .get_session(&thread.session_id)
         .await?
@@ -1308,20 +1309,21 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
     ) -> anyhow::Result<AgentThreadDetailV2> {
         let control = self.control(root_session_id).await?;
         let thread = control.resolve_desktop_target(target).await?;
-        let messages = session::SessionStore::open_sessions_dir(&home::data_dir(&self.memory_dir))
-            .await?
-            .get_response_items(&thread.session_id)
-            .await?
-            .into_iter()
-            .map(|message| AgentThreadMessageV2 {
-                id: message.id,
-                session_id: message.session_id,
-                item: message.item,
-                timestamp: message.timestamp,
-                token_count: message.token_count,
-                finish_reason: message.finish_reason,
-            })
-            .collect();
+        let messages =
+            session::SessionStore::open_sessions_dir(&home::sessions_dir(&self.memory_dir))
+                .await?
+                .get_response_items(&thread.session_id)
+                .await?
+                .into_iter()
+                .map(|message| AgentThreadMessageV2 {
+                    id: message.id,
+                    session_id: message.session_id,
+                    item: message.item,
+                    timestamp: message.timestamp,
+                    token_count: message.token_count,
+                    finish_reason: message.finish_reason,
+                })
+                .collect();
         Ok(AgentThreadDetailV2 { thread, messages })
     }
 
@@ -1822,7 +1824,7 @@ mod tests {
         let memory_dir = dir.path().join("memory");
         let dispatch = dispatch(&dir).await;
         let child = committed_child(&dispatch, "worker").await;
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -1913,7 +1915,7 @@ mod tests {
     async fn desktop_cold_followup_recovers_from_exact_live_root_session() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2154,7 +2156,7 @@ mod tests {
     async fn desktop_close_partial_failure_keeps_parent_open_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2284,7 +2286,7 @@ mod tests {
     async fn desktop_close_active_runtime_waits_for_shutdown_ack_and_cleanup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2337,7 +2339,7 @@ mod tests {
     async fn close_timeout_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2394,13 +2396,13 @@ mod tests {
         let manager = Arc::new(AgentRuntimeManager::default());
         let mut dispatch_a = dispatch_for_root(&dir_a, "root-a", Arc::clone(&manager)).await;
         let dispatch_b = dispatch_for_root(&dir_b, "root-b", Arc::clone(&manager)).await;
-        session::SessionStore::open_sessions_dir(&memory_a.join("data"))
+        session::SessionStore::open_sessions_dir(&memory_a.join("sessions"))
             .await
             .unwrap()
             .ensure_session("root-a", "test")
             .await
             .unwrap();
-        session::SessionStore::open_sessions_dir(&memory_b.join("data"))
+        session::SessionStore::open_sessions_dir(&memory_b.join("sessions"))
             .await
             .unwrap()
             .ensure_session("root-b", "test")
@@ -2460,7 +2462,7 @@ mod tests {
     async fn same_root_close_lock_wait_is_bounded_by_the_caller_deadline() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2517,7 +2519,7 @@ mod tests {
     async fn caller_cancellation_after_starting_close_keeps_background_convergence_owner() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2587,7 +2589,7 @@ mod tests {
     async fn close_retries_after_old_generation_completes_before_atomic_signal() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2678,7 +2680,7 @@ mod tests {
     async fn close_rejects_previously_admitted_handoff_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2752,7 +2754,7 @@ mod tests {
     async fn close_cancels_starting_followup_without_missing_its_state_change() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2823,7 +2825,7 @@ mod tests {
     async fn cancelled_close_after_terminate_keeps_admission_closed_until_runner_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2865,7 +2867,7 @@ mod tests {
     async fn leaf_timeout_never_requests_parent_shutdown_before_leaf_ack() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3017,7 +3019,7 @@ mod tests {
     async fn desktop_interrupt_is_ack_driven_and_reports_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3282,7 +3284,7 @@ mod tests {
     async fn desktop_followup_reuses_runtime_manager_handoff() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3338,7 +3340,7 @@ mod tests {
     async fn spawn_commits_only_after_preflight_and_starts_the_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3376,7 +3378,7 @@ mod tests {
     async fn spawn_start_hook_fires_once_after_acceptance_and_not_for_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3439,7 +3441,7 @@ mod tests {
     async fn subagent_stop_keep_going_continues_the_same_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3489,7 +3491,7 @@ mod tests {
     async fn stop_hook_observes_each_terminal_turn_and_close_does_not_duplicate_it() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3563,7 +3565,7 @@ mod tests {
     async fn interrupted_and_errored_turns_emit_stop_at_turn_end_not_close() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3661,7 +3663,7 @@ mod tests {
     async fn spawn_preflight_failure_rolls_back_path_row_edge_and_runtime_request() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3733,7 +3735,7 @@ mod tests {
     async fn spawn_accepts_durable_start_even_when_provider_errors_immediately() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3778,7 +3780,7 @@ mod tests {
     async fn runtime_admission_failure_rolls_back_committed_pending_spawn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3842,7 +3844,7 @@ mod tests {
     async fn startup_status_failure_removes_forked_session_and_all_spawn_state() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3898,7 +3900,7 @@ mod tests {
     async fn cancelling_spawn_before_startup_acceptance_rolls_back_every_artifact() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4036,7 +4038,7 @@ mod tests {
     async fn cancelling_spawn_after_permit_before_turn_started_releases_identity() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4136,7 +4138,7 @@ mod tests {
     async fn interrupt_waits_for_runner_ack_and_returns_previous_status() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4683,7 +4685,7 @@ mod tests {
     async fn active_followup_returns_after_queue_admission_before_turn_completion() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4736,7 +4738,7 @@ mod tests {
     async fn active_followup_consumed_at_sampling_boundary_does_not_start_empty_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4860,7 +4862,7 @@ mod tests {
             "name = \"reviewer\"\ndescription = \"review\"\ndeveloper_instructions = \"review\"\nmodel = \"openai:original-model\"\n",
         )
         .unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -4994,7 +4996,7 @@ mod tests {
     async fn cold_followup_rejects_missing_descriptor_provider_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5073,7 +5075,7 @@ mod tests {
     async fn spawn_rejects_cross_provider_model_without_matching_credentials() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5139,7 +5141,7 @@ mod tests {
             "name = \"leaf\"\ndescription = \"leaf\"\ndeveloper_instructions = \"leaf\"\n[[skills.config]]\npath = \"skills/leaf/SKILL.md\"\nenabled = true\n",
         )
         .unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5247,7 +5249,7 @@ mod tests {
     async fn cold_followup_rejects_sibling_runtime_material_without_ghosts() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5353,7 +5355,7 @@ mod tests {
     async fn followup_retry_delivers_old_marker_and_new_message_in_order() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5498,7 +5500,7 @@ mod tests {
     async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5633,7 +5635,7 @@ mod tests {
     async fn idle_followup_reports_runtime_start_failure_instead_of_triggered_success() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5723,7 +5725,7 @@ mod tests {
     async fn concurrent_cold_followups_recover_once_and_share_one_starting_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5830,7 +5832,7 @@ mod tests {
     async fn post_claim_setup_failure_is_shared_cleaned_and_retryable() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -5928,7 +5930,7 @@ mod tests {
     async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -6011,7 +6013,7 @@ mod tests {
     async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -6150,7 +6152,7 @@ mod tests {
     async fn shutdown_rejects_pending_followup_without_starting_a_new_generation() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -6225,7 +6227,7 @@ mod tests {
     async fn followup_rechecks_shutdown_atomically_before_enqueue_and_admission() {
         let dir = tempfile::tempdir().unwrap();
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions

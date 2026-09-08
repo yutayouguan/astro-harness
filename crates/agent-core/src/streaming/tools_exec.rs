@@ -697,7 +697,9 @@ fn affected_write_paths(name: &str, _args: &serde_json::Value) -> Vec<String> {
         "memory" => "agent/MEMORY.md or USER.md",
         "skills" => "skills directory",
         "pin_context" => "workspace/pinned-context.json",
-        "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => "~/.astro/cron/jobs.json",
+        "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => {
+            "~/.astro/automation/cron/jobs.json"
+        }
         "persona_create" => "~/.astro/agents",
         "image_gen" => "workspace/images",
         "video_gen" => "workspace/videos",

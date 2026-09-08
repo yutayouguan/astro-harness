@@ -58,11 +58,9 @@ pub struct CurateReport {
     pub suggestions: Vec<CurateSuggestion>,
 }
 
-/// `{base}/learning/evolution/curator-last.json`
+/// `{base}/evolution/curator-last.json`
 pub fn curator_last_path(base: &Path) -> PathBuf {
-    base.join("learning")
-        .join("evolution")
-        .join("curator-last.json")
+    home::evolution_dir(base).join("curator-last.json")
 }
 
 fn skill_bytes(skill_id: &str) -> Option<usize> {

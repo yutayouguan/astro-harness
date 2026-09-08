@@ -1,4 +1,4 @@
-//! 加载 `~/.astro/config.yaml`（或 `ASTRO_MEMORY_DIR`）。
+//! 加载 `~/.astro/config.toml`（或 `ASTRO_MEMORY_DIR`）。
 
 use std::collections::HashMap;
 use std::fs;
@@ -14,16 +14,11 @@ pub struct AstroConfig {
 
 /// 数据根目录：`$ASTRO_MEMORY_DIR` 或 `~/.astro`。
 pub fn default_astro_root() -> PathBuf {
-    if let Ok(dir) = std::env::var("ASTRO_MEMORY_DIR") {
-        return PathBuf::from(dir);
-    }
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".astro")
+    home::default_memory_dir()
 }
 
 pub fn config_path(root: &Path) -> PathBuf {
-    root.join("config.yaml")
+    home::config_path(root)
 }
 
 pub fn load_config(root: &Path) -> anyhow::Result<AstroConfig> {
@@ -32,7 +27,7 @@ pub fn load_config(root: &Path) -> anyhow::Result<AstroConfig> {
         return Ok(AstroConfig::default());
     }
     let text = fs::read_to_string(&path)?;
-    let cfg: AstroConfig = serde_yaml::from_str(&text)?;
+    let cfg: AstroConfig = toml::from_str(&text)?;
     Ok(cfg)
 }
 
@@ -49,8 +44,9 @@ mod tests {
     fn parse_hooks_block() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "hooks:\n  PostToolUse: \"echo hi\"\n  AgentEnd: \"true\"\n",
+            dir.path().join("config.toml"),
+            r#""hooks" = { "PostToolUse" = "echo hi", "AgentEnd" = "true" }
+"#,
         )
         .unwrap();
         let cfg = load_config(dir.path()).unwrap();

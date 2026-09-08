@@ -10,6 +10,7 @@ schemars = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 agent-db = { path = "../agent-db" }
+home = { path = "../agent-home" }
 async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"

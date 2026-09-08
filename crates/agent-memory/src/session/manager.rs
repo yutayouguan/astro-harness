@@ -36,7 +36,7 @@ pub struct MemoryManager {
     pub memory: MemoryStore,
     /// 用户档案存储（live + snapshot）。
     pub user: MemoryStore,
-    /// 从 `{base_dir}/config.yaml` 加载的记忆配置。
+    /// 从 `{base_dir}/config.toml` 加载的记忆配置。
     pub config: MemoryConfig,
 }
 
@@ -138,7 +138,7 @@ impl MemoryManager {
 
     /// 从磁盘重载 MEMORY / USER 到 live，并同步 snapshot（供换 session / 显式 refresh）。
     ///
-    /// 同时重读 `config.yaml` 的 `memory:` 段，使 `write_approval` 等开关即时生效。
+    /// 同时重读 `config.toml` 的 `memory:` 段，使 `write_approval` 等开关即时生效。
     pub fn refresh_memory_snapshot(&mut self) -> anyhow::Result<()> {
         self.config = load_memory_config(&self.base_dir);
         self.memory.reload()?;
@@ -391,8 +391,9 @@ mod tests {
     fn for_agent_opens_stores_with_config_limits() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "memory:\n  memory_char_limit: 80\n  user_char_limit: 60\n",
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_char_limit" = 80, "user_char_limit" = 60 }
+"#,
         )
         .unwrap();
         let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
@@ -412,12 +413,8 @@ mod tests {
     fn prompt_snapshot_respects_enabled_flags_and_truncates_daily() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-memory:
-  memory_enabled: false
-  user_profile_enabled: true
-  daily_prompt_max_chars: 10
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_enabled" = false, "user_profile_enabled" = true, "daily_prompt_max_chars" = 10 }
 "#,
         )
         .unwrap();

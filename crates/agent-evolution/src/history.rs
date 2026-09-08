@@ -1,6 +1,6 @@
 //! 进化可观测：记录 run 与提案采纳结果，聚合统计。
 //!
-//! 追加式 JSONL：`{base}/learning/evolution/history.jsonl`。
+//! 追加式 JSONL：`{base}/evolution/history.jsonl`。
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -69,11 +69,9 @@ pub enum HistoryEvent {
     },
 }
 
-/// `{base}/learning/evolution/history.jsonl`
+/// `{base}/evolution/history.jsonl`
 pub fn history_path(base: &Path) -> PathBuf {
-    base.join("learning")
-        .join("evolution")
-        .join("history.jsonl")
+    home::evolution_dir(base).join("history.jsonl")
 }
 
 fn now() -> String {

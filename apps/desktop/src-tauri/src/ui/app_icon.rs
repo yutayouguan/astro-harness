@@ -56,7 +56,7 @@ pub fn icon_image(variant: &str) -> tauri::Result<Image<'static>> {
 
 /// 持久化文件路径：`{memory_dir}/app-icon.json`。
 fn app_icon_path() -> PathBuf {
-    home::default_memory_dir().join("app-icon.json")
+    home::app_icon_path(&home::default_memory_dir())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

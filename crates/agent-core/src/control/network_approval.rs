@@ -462,7 +462,12 @@ mod tests {
     #[test]
     fn persist_amendment_updates_session_cache_on_success() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#"
+"#,
+        )
+        .unwrap();
         let service = NetworkApprovalService::new();
 
         service
@@ -487,7 +492,12 @@ mod tests {
     #[test]
     fn persist_amendment_rejects_builtin_profiles() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#"
+"#,
+        )
+        .unwrap();
         let service = NetworkApprovalService::new();
 
         let result = service.persist_amendment(
@@ -505,7 +515,12 @@ mod tests {
     #[test]
     fn persist_amendment_rejects_wildcard_hosts() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#"
+"#,
+        )
+        .unwrap();
         let service = NetworkApprovalService::new();
 
         let result = service.persist_amendment(
@@ -523,7 +538,12 @@ mod tests {
     #[test]
     fn persist_deny_amendment_enters_deny_cache() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.yaml"), "").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#"
+"#,
+        )
+        .unwrap();
         let service = NetworkApprovalService::new();
 
         service
@@ -549,7 +569,12 @@ mod tests {
     #[test]
     fn persist_amendment_preserves_other_yaml_keys() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("config.yaml"), "approvals:\n  mode: user\n").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#""approvals" = { "mode" = "user" }
+"#,
+        )
+        .unwrap();
         let service = NetworkApprovalService::new();
 
         service
@@ -563,8 +588,8 @@ mod tests {
             )
             .unwrap();
 
-        let text = std::fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("mode: user"), "other keys lost: {text}");
+        let text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(text.contains("mode = \"user\""), "other keys lost: {text}");
         assert!(
             text.contains("api.example.com"),
             "amendment missing: {text}"

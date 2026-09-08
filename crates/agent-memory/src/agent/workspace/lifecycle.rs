@@ -23,7 +23,7 @@ fn initialize_session_store(sessions_dir: &Path) -> anyhow::Result<()> {
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     let mut report = home::ensure_workspace(base)?;
 
-    let sessions_dir = home::data_dir(base);
+    let sessions_dir = home::sessions_dir(base);
     initialize_session_store(&sessions_dir)?;
 
     let bundled = skills::seed_bundled_into(base);

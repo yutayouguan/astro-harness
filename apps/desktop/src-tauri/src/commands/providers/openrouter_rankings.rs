@@ -116,7 +116,7 @@ fn request_lock() -> &'static tokio::sync::Mutex<()> {
 }
 
 fn cache_path(spec: &RequestSpec, source: RankingSource) -> PathBuf {
-    let dir = home::default_memory_dir().join("cache");
+    let dir = home::models_cache_dir(&home::default_memory_dir());
     let _ = fs::create_dir_all(&dir);
     dir.join(format!("{}.json", spec.cache_stem(source)))
 }

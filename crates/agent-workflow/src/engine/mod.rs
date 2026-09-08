@@ -91,7 +91,7 @@ struct StoredProvider {
 /// persisted provider IDs to backend IDs/endpoints and obtain credentials from
 /// the provider's documented environment variables.
 fn environment_provider_configs() -> HashMap<String, RuntimeProviderConfig> {
-    let path = home::default_memory_dir().join("providers.json");
+    let path = home::providers_path(&home::default_memory_dir());
     let Ok(raw) = std::fs::read_to_string(path) else {
         return HashMap::new();
     };

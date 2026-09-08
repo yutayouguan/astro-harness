@@ -1,4 +1,4 @@
-//! 从 `{base}/config.yaml` 加载记忆相关配置（`memory:` / `auxiliary:` 段）。
+//! 从 `{base}/config.toml` 加载记忆相关配置（`memory:` / `auxiliary:` 段）。
 //!
 //! 与 hooks 共用同一路径；本模块只反序列化关心的段，忽略其余键。
 //! 写回开关时用 [`serde_yaml::Value`] 合并，保留 hooks 等其余键。
@@ -32,7 +32,7 @@ fn default_auto() -> String {
     "auto".to_string()
 }
 
-/// 记忆子系统配置（`config.yaml` 的 `memory:` 段）。
+/// 记忆子系统配置（`config.toml` 的 `memory:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct MemoryConfig {
     /// 是否向 prompt 注入长期记忆快照。
@@ -98,7 +98,7 @@ fn default_complex_threshold() -> usize {
     5
 }
 
-/// 运行时学习闭环配置（`config.yaml` 的 `learning:` 段）。
+/// 运行时学习闭环配置（`config.toml` 的 `learning:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct LearningConfig {
     /// 复杂任务后是否在下一轮注入 nudge。
@@ -122,7 +122,7 @@ impl Default for LearningConfig {
     }
 }
 
-/// 命令审批规则（`config.yaml` 的 `command_approvals:` 段）。
+/// 命令审批规则（`config.toml` 的 `command_approvals:` 段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandTypeRule {
     /// 可执行程序族，例如 `curl`。不包含参数，匹配时忽略大小写。
@@ -258,7 +258,7 @@ fn default_keep_tail_bubbles() -> usize {
     3
 }
 
-/// 上下文卫生配置（`config.yaml` 的 `compression:` 段）。
+/// 上下文卫生配置（`config.toml` 的 `compression:` 段）。
 ///
 /// 驱动 Run 内 Soft/Medium/Hard、mid-run、Gateway recommend、会话 `/compact` keep_tail。
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -335,7 +335,7 @@ impl Default for CompressionConfig {
     }
 }
 
-/// 辅助模型配置（`config.yaml` 的 `auxiliary:` 段）。
+/// 辅助模型配置（`config.toml` 的 `auxiliary:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 pub struct AuxiliaryConfig {
     /// 回合结束后是否自动跑 memory background review（默认关闭，避免意外产生费用）。
@@ -415,7 +415,7 @@ fn default_min_judge_score() -> f32 {
     0.6
 }
 
-/// 离线进化门禁（`config.yaml` 的 `evolution.gates` 段）。
+/// 离线进化门禁（`config.toml` 的 `evolution.gates` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct EvolutionGates {
     /// 候选变体须通过测试。
@@ -460,7 +460,7 @@ impl Default for EvolutionGates {
     }
 }
 
-/// 离线进化配置（`config.yaml` 的 `evolution:` 段）。
+/// 离线进化配置（`config.toml` 的 `evolution:` 段）。
 ///
 /// 与 `auxiliary`（在线便宜辅助）分离：进化为离线批量、可接受慢与贵；
 /// `reflection` 应显式指向强模型，`judge` 可省或走中等模型。
@@ -488,7 +488,7 @@ fn default_post_approval_cooldown_secs() -> u64 {
     172_800 // 48h
 }
 
-/// GEPA-lite 遗传搜索参数（`config.yaml` 的 `evolution.search` 段）。
+/// GEPA-lite 遗传搜索参数（`config.toml` 的 `evolution.search` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct EvolutionSearch {
     /// 迭代代数。
@@ -571,7 +571,7 @@ fn default_auto_max_runs_per_day() -> u32 {
     3
 }
 
-/// 自动触发进化（`config.yaml` 的 `evolution.auto` 段）。
+/// 自动触发进化（`config.toml` 的 `evolution.auto` 段）。
 ///
 /// 默认关闭；开启后在 Chat Done 时尝试跑一次便宜的单轮 reflect，
 /// 产物只入待审提案，绝不自动写入技能。
@@ -619,7 +619,7 @@ fn default_curator_max_enqueue() -> usize {
     5
 }
 
-/// 技能策展（`config.yaml` 的 `evolution.curator` 段）。
+/// 技能策展（`config.toml` 的 `evolution.curator` 段）。
 ///
 /// 默认关闭；手动可随时跑。开启后仅表示「允许按 interval 提示/自动报告」，
 /// **默认不自动入队提案**（入队需显式 enqueue）。
@@ -656,7 +656,7 @@ impl Default for EvolutionCurator {
     }
 }
 
-/// 外部 Python DSPy 引擎对接配置（`config.yaml` 的 `evolution.dspy` 段）。
+/// 外部 Python DSPy 引擎对接配置（`config.toml` 的 `evolution.dspy` 段）。
 ///
 /// 默认关闭；需用户自备 Python + 依赖（见 `evolution-dspy/`）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -686,7 +686,7 @@ impl Default for EvolutionDspy {
     }
 }
 
-/// 离线进化配置（`config.yaml` 的 `evolution:` 段）。
+/// 离线进化配置（`config.toml` 的 `evolution:` 段）。
 #[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 pub struct EvolutionConfig {
     /// 离线进化总开关（默认关）。
@@ -769,7 +769,7 @@ struct FileConfig {
 }
 
 fn read_file_config(base: &Path) -> FileConfig {
-    let path = base.join("config.yaml");
+    let path = base.join("config.toml");
     if !path.is_file() {
         return FileConfig::default();
     }
@@ -784,7 +784,7 @@ fn read_file_config(base: &Path) -> FileConfig {
             return FileConfig::default();
         }
     };
-    match serde_yaml::from_str::<FileConfig>(&text) {
+    match toml::from_str::<FileConfig>(&text) {
         Ok(file) => file,
         Err(e) => {
             warn!(
@@ -797,22 +797,22 @@ fn read_file_config(base: &Path) -> FileConfig {
     }
 }
 
-/// 从 `{base}/config.yaml` 加载记忆配置；文件缺失或无 `memory:` 段时返回默认值。
+/// 从 `{base}/config.toml` 加载记忆配置；文件缺失或无 `memory:` 段时返回默认值。
 pub fn load_memory_config(base: &Path) -> MemoryConfig {
     read_file_config(base).memory.unwrap_or_default()
 }
 
-/// 从 `{base}/config.yaml` 加载辅助模型配置。
+/// 从 `{base}/config.toml` 加载辅助模型配置。
 pub fn load_auxiliary_config(base: &Path) -> AuxiliaryConfig {
     read_file_config(base).auxiliary.unwrap_or_default()
 }
 
-/// 从 `{base}/config.yaml` 加载学习闭环配置。
+/// 从 `{base}/config.toml` 加载学习闭环配置。
 pub fn load_learning_config(base: &Path) -> LearningConfig {
     read_file_config(base).learning.unwrap_or_default()
 }
 
-/// 从 `{base}/config.yaml` 加载离线进化配置。
+/// 从 `{base}/config.toml` 加载离线进化配置。
 pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
     let mut cfg = read_file_config(base).evolution.unwrap_or_default();
     // 产品不变量：进化产物只经人工审批，忽略 yaml 中的 false。
@@ -820,7 +820,7 @@ pub fn load_evolution_config(base: &Path) -> EvolutionConfig {
     cfg
 }
 
-/// 从 `{base}/config.yaml` 加载命令审批白名单。
+/// 从 `{base}/config.toml` 加载命令审批白名单。
 pub fn load_command_approval_config(base: &Path) -> CommandApprovalConfig {
     read_file_config(base).command_approvals.unwrap_or_default()
 }
@@ -846,7 +846,8 @@ pub fn set_permission_preset(
     preset: PermissionPreset,
 ) -> anyhow::Result<LoadedPermissionSettings> {
     let selection = preset.selection();
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     ensure_mapping_path(&mut root, &["permissions"])?.insert(
         serde_yaml::Value::String("default_profile".into()),
         serde_yaml::Value::String(selection.profile_id.clone()),
@@ -874,7 +875,7 @@ pub fn set_permission_preset(
             ),
         );
     }
-    save_yaml_root(base, &root)?;
+    save_config_root(base, &root)?;
     Ok(load_permission_settings(base))
 }
 
@@ -931,7 +932,7 @@ fn load_explicit_permissions(
     }
 }
 
-/// 从 `{base}/config.yaml` 加载上下文卫生配置。
+/// 从 `{base}/config.toml` 加载上下文卫生配置。
 pub fn load_compression_config(base: &Path) -> CompressionConfig {
     read_file_config(base).compression.unwrap_or_default()
 }
@@ -1009,10 +1010,11 @@ pub fn set_compression_config(
     base: &Path,
     cfg: &CompressionConfig,
 ) -> anyhow::Result<CompressionConfig> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["compression"])?;
     write_compression_mapping(map, cfg);
-    save_yaml_root(base, &root)?;
+    save_config_root(base, &root)?;
     Ok(load_compression_config(base))
 }
 
@@ -1021,13 +1023,13 @@ pub fn reset_compression_config(base: &Path) -> anyhow::Result<CompressionConfig
     set_compression_config(base, &CompressionConfig::default())
 }
 
-fn config_yaml_path(base: &Path) -> std::path::PathBuf {
-    base.join("config.yaml")
+fn config_toml_path(base: &Path) -> std::path::PathBuf {
+    home::config_path(base)
 }
 
-/// 读入已有 `config.yaml` 为 Value；缺失则空 Mapping。
-fn load_yaml_root(base: &Path) -> anyhow::Result<serde_yaml::Value> {
-    let path = config_yaml_path(base);
+/// 读入已有 `config.toml` 为 Value；缺失则空 Mapping。
+fn load_config_root(base: &Path) -> anyhow::Result<serde_yaml::Value> {
+    let path = config_toml_path(base);
     if !path.is_file() {
         return Ok(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
     }
@@ -1035,18 +1037,15 @@ fn load_yaml_root(base: &Path) -> anyhow::Result<serde_yaml::Value> {
     if text.trim().is_empty() {
         return Ok(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
     }
-    Ok(serde_yaml::from_str(&text)?)
+    Ok(serde_yaml::to_value(toml::from_str::<toml::Value>(&text)?)?)
 }
 
-/// 原子写回 `config.yaml`。
-fn save_yaml_root(base: &Path, root: &serde_yaml::Value) -> anyhow::Result<()> {
+/// 原子写回 `config.toml`。
+fn save_config_root(base: &Path, root: &serde_yaml::Value) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
-    let path = config_yaml_path(base);
-    let tmp = path.with_extension("yaml.tmp");
-    let text = serde_yaml::to_string(root)?;
-    fs::write(&tmp, text)?;
-    fs::rename(&tmp, &path)?;
-    Ok(())
+    let path = config_toml_path(base);
+    let text = toml::to_string_pretty(&toml::Value::try_from(root)?)?;
+    home::config_file::write_config_file(&path, &text)
 }
 
 /// 确保 `root[seg…]` 为 Mapping，返回最内层可变 Mapping。
@@ -1059,7 +1058,7 @@ fn ensure_mapping_path<'a>(
     }
     let mut cur = root
         .as_mapping_mut()
-        .ok_or_else(|| anyhow::anyhow!("config.yaml root must be a mapping"))?;
+        .ok_or_else(|| anyhow::anyhow!("config.toml root must be a mapping"))?;
     for &seg in segs {
         let key = serde_yaml::Value::String(seg.to_string());
         if !cur.contains_key(&key) || !cur.get(&key).is_some_and(|v| v.is_mapping()) {
@@ -1071,30 +1070,32 @@ fn ensure_mapping_path<'a>(
         cur = cur
             .get_mut(&key)
             .and_then(|v| v.as_mapping_mut())
-            .ok_or_else(|| anyhow::anyhow!("config.yaml segment `{seg}` is not a mapping"))?;
+            .ok_or_else(|| anyhow::anyhow!("config.toml segment `{seg}` is not a mapping"))?;
     }
     Ok(cur)
 }
 
 /// 设置嵌套布尔键（如 `memory.write_approval`），保留文件中其它键。
 fn set_nested_bool(base: &Path, parents: &[&str], key: &str, value: bool) -> anyhow::Result<()> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
         serde_yaml::Value::String(key.to_string()),
         serde_yaml::Value::Bool(value),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 fn set_nested_string(base: &Path, parents: &[&str], key: &str, value: &str) -> anyhow::Result<()> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
         serde_yaml::Value::String(key.to_string()),
         serde_yaml::Value::String(value.to_string()),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 fn route_to_value(route: &AuxiliaryRoute) -> serde_yaml::Value {
@@ -1116,13 +1117,14 @@ fn set_nested_route(
     key: &str,
     route: &AuxiliaryRoute,
 ) -> anyhow::Result<()> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
         serde_yaml::Value::String(key.to_string()),
         route_to_value(route),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 /// 设置 `memory.write_approval` 并返回最新配置。
@@ -1137,7 +1139,8 @@ pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<Comm
     if entry.is_empty() {
         return Ok(load_command_approval_config(base));
     }
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_allowlist".to_string());
     let list = match map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
@@ -1152,7 +1155,7 @@ pub fn add_command_to_allowlist(base: &Path, entry: &str) -> anyhow::Result<Comm
         .any(|v| v.as_str().map(|s| s == entry).unwrap_or(false));
     if !exists {
         list.push(serde_yaml::Value::String(entry.to_string()));
-        save_yaml_root(base, &root)?;
+        save_config_root(base, &root)?;
     }
     Ok(load_command_approval_config(base))
 }
@@ -1163,14 +1166,15 @@ pub fn remove_command_from_allowlist(
     entry: &str,
 ) -> anyhow::Result<CommandApprovalConfig> {
     let entry = entry.trim();
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_allowlist".to_string());
     if let Some(list) = map.get_mut(&key).and_then(|v| v.as_sequence_mut()) {
         let before = list.len();
         list.retain(|v| v.as_str().map(|s| s != entry).unwrap_or(true));
         if list.len() != before {
-            save_yaml_root(base, &root)?;
+            save_config_root(base, &root)?;
         }
     }
     Ok(load_command_approval_config(base))
@@ -1190,7 +1194,8 @@ pub fn add_command_type_to_allowlist(
         command_family: family,
         risk: risk.to_string(),
     };
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_type_allowlist".to_string());
     let list = match map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
@@ -1203,7 +1208,7 @@ pub fn add_command_type_to_allowlist(
     let value = serde_yaml::to_value(&normalized)?;
     if !list.contains(&value) {
         list.push(value);
-        save_yaml_root(base, &root)?;
+        save_config_root(base, &root)?;
     }
     Ok(load_command_approval_config(base))
 }
@@ -1215,7 +1220,8 @@ pub fn remove_command_type_from_allowlist(
 ) -> anyhow::Result<CommandApprovalConfig> {
     let family = rule.command_family.trim();
     let risk = rule.risk.trim();
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["command_approvals"])?;
     let key = serde_yaml::Value::String("command_type_allowlist".to_string());
     if let Some(list) = map.get_mut(&key).and_then(|value| value.as_sequence_mut()) {
@@ -1228,7 +1234,7 @@ pub fn remove_command_type_from_allowlist(
                 .unwrap_or(true)
         });
         if list.len() != before {
-            save_yaml_root(base, &root)?;
+            save_config_root(base, &root)?;
         }
     }
     Ok(load_command_approval_config(base))
@@ -1258,7 +1264,8 @@ pub fn amend_network_domain(
         "builtin profile {profile_id} cannot be amended"
     );
 
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let profile_map = ensure_mapping_path(
         &mut root,
         &["permissions", "profiles", profile_id, "network"],
@@ -1289,7 +1296,7 @@ pub fn amend_network_domain(
         serde_yaml::Value::String(host),
         serde_yaml::Value::String(action_str.into()),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 /// 设置 `memory.auto_refresh_on_update` 并返回最新配置。
@@ -1319,7 +1326,8 @@ pub fn set_auxiliary_route(
 
 /// 将所有辅助路由重置为 `auto/auto` 并返回最新辅助配置。
 pub fn reset_all_auxiliary_routes(base: &Path) -> anyhow::Result<AuxiliaryConfig> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["auxiliary"])?;
     let default_route = AuxiliaryRoute::default();
     for kind in AuxiliaryKind::ALL {
@@ -1328,30 +1336,32 @@ pub fn reset_all_auxiliary_routes(base: &Path) -> anyhow::Result<AuxiliaryConfig
             route_to_value(&default_route),
         );
     }
-    save_yaml_root(base, &root)?;
+    save_config_root(base, &root)?;
     Ok(load_auxiliary_config(base))
 }
 
 /// 设置嵌套浮点键（如 `evolution.gates.min_judge_score`）。
 fn set_nested_f64(base: &Path, parents: &[&str], key: &str, value: f64) -> anyhow::Result<()> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
         serde_yaml::Value::String(key.to_string()),
         serde_yaml::Value::Number(serde_yaml::Number::from(value)),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 /// 设置嵌套无符号整数键（如 `evolution.gates.max_skill_bytes`）。
 fn set_nested_usize(base: &Path, parents: &[&str], key: &str, value: usize) -> anyhow::Result<()> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, parents)?;
     map.insert(
         serde_yaml::Value::String(key.to_string()),
         serde_yaml::Value::Number(serde_yaml::Number::from(value as u64)),
     );
-    save_yaml_root(base, &root)
+    save_config_root(base, &root)
 }
 
 /// 设置 `evolution.enabled` 并返回最新配置。
@@ -1372,7 +1382,8 @@ pub fn set_evolution_route(
 
 /// 将两条进化路由重置为 `auto/auto` 并返回最新配置。
 pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig> {
-    let mut root = load_yaml_root(base)?;
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
     let map = ensure_mapping_path(&mut root, &["evolution"])?;
     let default_route = AuxiliaryRoute::default();
     for kind in EvolutionRouteKind::ALL {
@@ -1381,7 +1392,7 @@ pub fn reset_all_evolution_routes(base: &Path) -> anyhow::Result<EvolutionConfig
             route_to_value(&default_route),
         );
     }
-    save_yaml_root(base, &root)?;
+    save_config_root(base, &root)?;
     Ok(load_evolution_config(base))
 }
 
@@ -1596,6 +1607,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shared_toml_updates_preserve_unrelated_domains() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            home::config_path(dir.path()),
+            "[mcp_servers.demo]\ncommand = 'server'\n[custom]\nrevision = 7\n",
+        )
+        .unwrap();
+        std::thread::scope(|scope| {
+            scope.spawn(|| set_write_approval(dir.path(), true).unwrap());
+            scope.spawn(|| set_evolution_enabled(dir.path(), true).unwrap());
+        });
+        let root: toml::Value =
+            toml::from_str(&fs::read_to_string(home::config_path(dir.path())).unwrap()).unwrap();
+        assert_eq!(root["memory"]["write_approval"].as_bool(), Some(true));
+        assert_eq!(root["evolution"]["enabled"].as_bool(), Some(true));
+        assert_eq!(
+            root["mcp_servers"]["demo"]["command"].as_str(),
+            Some("server")
+        );
+        assert_eq!(root["custom"]["revision"].as_integer(), Some(7));
+        assert!(!dir.path().join("config.yaml").exists());
+    }
+
+    #[test]
     fn defaults_when_file_missing() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = load_memory_config(dir.path());
@@ -1623,20 +1658,12 @@ mod tests {
     }
 
     #[test]
-    fn compression_yaml_overrides_and_roundtrip() {
+    fn compression_toml_overrides_and_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-hooks:
-  enabled: true
-compression:
-  enabled: false
-  soft_ratio: 0.35
-  medium_ratio: 0.55
-  hard_ratio: 0.75
-  tool_results_limit: 8
-  keep_tail_bubbles: 5
+            dir.path().join("config.toml"),
+            r#""hooks" = { "enabled" = true }
+"compression" = { "enabled" = false, "soft_ratio" = 0.35, "medium_ratio" = 0.55, "hard_ratio" = 0.75, "tool_results_limit" = 8, "keep_tail_bubbles" = 5 }
 "#,
         )
         .unwrap();
@@ -1661,9 +1688,9 @@ compression:
         assert_eq!(saved.soft_head_chars, 1_200);
         assert_eq!(saved.keep_tail_bubbles, 5);
 
-        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("hooks:"));
-        assert!(text.contains("enabled: true"));
+        let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(text.contains("[hooks]"));
+        assert!(text.contains("enabled = true"));
 
         let reset = reset_compression_config(dir.path()).unwrap();
         assert_eq!(reset, CompressionConfig::default());
@@ -1772,7 +1799,12 @@ compression:
     #[test]
     fn evolution_set_enabled_route_and_gates_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("config.yaml"), "hooks:\n  enabled: true\n").unwrap();
+        fs::write(
+            dir.path().join("config.toml"),
+            r#""hooks" = { "enabled" = true }
+"#,
+        )
+        .unwrap();
 
         let cfg = set_evolution_enabled(dir.path(), true).unwrap();
         assert!(cfg.enabled);
@@ -1808,8 +1840,8 @@ compression:
         assert!((cfg.gates.min_judge_score - 0.75).abs() < 1e-6);
 
         // 保留无关键
-        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("enabled: true"));
+        let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(text.contains("enabled = true"));
 
         let cfg = reset_all_evolution_routes(dir.path()).unwrap();
         assert_eq!(cfg.reflection, AuxiliaryRoute::default());
@@ -1819,15 +1851,11 @@ compression:
     }
 
     #[test]
-    fn learning_yaml_overrides() {
+    fn learning_toml_overrides() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-learning:
-  nudge_enabled: false
-  complex_task_tool_threshold: 8
-  unused_skill_days: 14
+            dir.path().join("config.toml"),
+            r#""learning" = { "nudge_enabled" = false, "complex_task_tool_threshold" = 8, "unused_skill_days" = 14 }
 "#,
         )
         .unwrap();
@@ -1838,28 +1866,13 @@ learning:
     }
 
     #[test]
-    fn yaml_overrides_and_ignores_hooks() {
+    fn toml_overrides_and_ignores_hooks() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-hooks:
-  PostToolUse: "echo hi"
-memory:
-  memory_enabled: false
-  memory_char_limit: 100
-  user_char_limit: 50
-  write_approval: true
-  daily_prompt_max_chars: 32
-  unknown_key: ignored
-auxiliary:
-  dreaming:
-    provider: openai
-    model: gpt-4o-mini
-  background_review:
-    provider: auto
-    model: cheap-review
-  background_review_enabled: true
+            dir.path().join("config.toml"),
+            r#""hooks" = { "PostToolUse" = "echo hi" }
+"memory" = { "memory_enabled" = false, "memory_char_limit" = 100, "user_char_limit" = 50, "write_approval" = true, "daily_prompt_max_chars" = 32, "unknown_key" = "ignored" }
+"auxiliary" = { "dreaming" = { "provider" = "openai", "model" = "gpt-4o-mini" }, "background_review" = { "provider" = "auto", "model" = "cheap-review" }, "background_review_enabled" = true }
 "#,
         )
         .unwrap();
@@ -1901,16 +1914,18 @@ auxiliary:
     fn set_write_approval_preserves_other_keys() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "hooks:\n  PostToolUse: \"echo hi\"\nmemory:\n  memory_char_limit: 99\n",
+            dir.path().join("config.toml"),
+            r#""hooks" = { "PostToolUse" = "echo hi" }
+"memory" = { "memory_char_limit" = 99 }
+"#,
         )
         .unwrap();
         let cfg = set_write_approval(dir.path(), true).unwrap();
         assert!(cfg.write_approval);
         assert_eq!(cfg.memory_char_limit, 99);
-        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
+        let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(text.contains("PostToolUse"));
-        assert!(text.contains("write_approval: true"));
+        assert!(text.contains("write_approval = true"));
         assert!(text.contains("99"));
     }
 
@@ -1919,8 +1934,8 @@ auxiliary:
         let dir = tempfile::tempdir().unwrap();
         let aux = set_background_review_enabled(dir.path(), true).unwrap();
         assert!(aux.background_review_enabled);
-        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("background_review_enabled: true"));
+        let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(text.contains("background_review_enabled = true"));
     }
 
     #[test]
@@ -1962,8 +1977,10 @@ auxiliary:
     fn canonical_approval_fields_apply_without_custom_profiles() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "approval_policy: on-request\napprovals_reviewer: auto_review\n",
+            dir.path().join("config.toml"),
+            r#""approval_policy" = "on-request"
+"approvals_reviewer" = "auto_review"
+"#,
         )
         .unwrap();
 
@@ -1981,8 +1998,10 @@ auxiliary:
     fn permission_preset_roundtrips_and_preserves_unrelated_config() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "memory:\n  memory_char_limit: 41\npermissions:\n  profiles: {}\n",
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_char_limit" = 41 }
+"permissions" = { "profiles" = {  } }
+"#,
         )
         .unwrap();
         let loaded = set_permission_preset(dir.path(), PermissionPreset::ApproveForMe).unwrap();
@@ -2013,8 +2032,9 @@ auxiliary:
     fn removed_approval_mode_is_not_migrated() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "approvals:\n  mode: smart\n  command_allowlist:\n    - git status\n",
+            dir.path().join("config.toml"),
+            r#""approvals" = { "mode" = "smart", "command_allowlist" = ["git status"] }
+"#,
         )
         .unwrap();
         let loaded = load_permission_settings(dir.path());
@@ -2027,20 +2047,11 @@ auxiliary:
     fn explicit_profiles_keep_approval_dimensions_separate() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: project-edit
-  profiles:
-    project-edit:
-      extends: ":workspace"
-      filesystem:
-        workspace_roots:
-          "**/*.env": deny
-approval_policy: on-request
-approvals_reviewer: auto_review
-network_proxy:
-  enabled: false
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "project-edit", "profiles" = { "project-edit" = { "extends" = ":workspace", "filesystem" = { "workspace_roots" = { "**/*.env" = "deny" } } } } }
+"approval_policy" = "on-request"
+"approvals_reviewer" = "auto_review"
+"network_proxy" = { "enabled" = false }
 "#,
         )
         .unwrap();
@@ -2059,15 +2070,8 @@ network_proxy:
     fn invalid_profiles_and_unenforced_domain_rules_fail_closed() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: a
-  profiles:
-    a:
-      extends: b
-    b:
-      extends: a
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "a", "profiles" = { "a" = { "extends" = "b" }, "b" = { "extends" = "a" } } }
 "#,
         )
         .unwrap();
@@ -2080,19 +2084,9 @@ permissions:
             .any(|item| { item.code == PermissionDiagnosticCode::InvalidProfileConfig }));
 
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: project-net
-  profiles:
-    project-net:
-      extends: ":workspace"
-      network:
-        enabled: true
-        domains:
-          api.openai.com: allow
-network_proxy:
-  enabled: false
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "project-net", "profiles" = { "project-net" = { "extends" = ":workspace", "network" = { "enabled" = true, "domains" = { "api.openai.com" = "allow" } } } } }
+"network_proxy" = { "enabled" = false }
 "#,
         )
         .unwrap();
@@ -2108,25 +2102,9 @@ network_proxy:
     fn network_header_injections_parse_without_exposing_values_in_debug() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: project-net
-  profiles:
-    project-net:
-      extends: ":workspace"
-      network:
-        enabled: true
-        domains:
-          api.example.com: allow
-        header_injections:
-          - host: api.example.com
-            methods: [POST]
-            path_prefixes: [/console/v1]
-            headers:
-              x-managed-source: secret-value
-network_proxy:
-  enabled: true
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "project-net", "profiles" = { "project-net" = { "extends" = ":workspace", "network" = { "enabled" = true, "domains" = { "api.example.com" = "allow" }, "header_injections" = [{ "host" = "api.example.com", "methods" = ["POST"], "path_prefixes" = ["/console/v1"], "headers" = { "x-managed-source" = "secret-value" } }] } } } }
+"network_proxy" = { "enabled" = true }
 "#,
         )
         .unwrap();
@@ -2149,11 +2127,9 @@ network_proxy:
     fn removed_sandbox_keys_do_not_change_explicit_profiles() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: ":read-only"
-sandbox_mode: danger-full-access
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = ":read-only" }
+"sandbox_mode" = "danger-full-access"
 "#,
         )
         .unwrap();
@@ -2166,8 +2142,9 @@ sandbox_mode: danger-full-access
     fn append_allowlist_dedups_and_preserves() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "memory:\n  memory_char_limit: 42\n",
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_char_limit" = 42 }
+"#,
         )
         .unwrap();
         add_command_to_allowlist(dir.path(), "rm -rf /tmp/x").unwrap();
@@ -2199,8 +2176,10 @@ sandbox_mode: danger-full-access
     fn set_route_preserves_unrelated_yaml() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "hooks:\n  enabled: true\nmemory:\n  write_approval: true\n",
+            dir.path().join("config.toml"),
+            r#""hooks" = { "enabled" = true }
+"memory" = { "write_approval" = true }
+"#,
         )
         .unwrap();
         set_auxiliary_route(
@@ -2212,9 +2191,9 @@ sandbox_mode: danger-full-access
             },
         )
         .unwrap();
-        let text = fs::read_to_string(dir.path().join("config.yaml")).unwrap();
-        assert!(text.contains("enabled: true"));
-        assert!(text.contains("write_approval: true"));
+        let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(text.contains("enabled = true"));
+        assert!(text.contains("write_approval = true"));
         assert_eq!(load_auxiliary_config(dir.path()).compaction.model, "small");
     }
 

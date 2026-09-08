@@ -6,6 +6,7 @@ description = "Astro 三套 Hook 体系：Plugin / Gateway / Shell"
 
 [dependencies]
 agent-config = { path = "../agent-config" }
+home = { path = "../agent-home" }
 agent-protocol = { path = "../agent-protocol" }
 tokio = { workspace = true }
 serde = { workspace = true }
@@ -16,7 +17,6 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 serde_yaml = "0.9"
 toml = "0.8"
-dirs = "5"
 regex = "1"
 sha2 = "0.10"
 

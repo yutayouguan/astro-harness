@@ -1568,7 +1568,8 @@ async fn ensure_interrupted_history_boundary(
     session_id: &str,
     content: &str,
 ) -> anyhow::Result<()> {
-    let sessions = session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await?;
+    let sessions =
+        session::SessionStore::open_sessions_dir(&home::sessions_dir(memory_dir)).await?;
     let messages = sessions.get_response_items(session_id).await?;
     if messages
         .last()
@@ -2185,7 +2186,7 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         let user_messages = sessions
@@ -2282,7 +2283,7 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         let user_messages = sessions
@@ -2440,7 +2441,7 @@ mod tests {
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2525,8 +2526,8 @@ mod tests {
         drop(initial_control);
 
         let memory_dir = dir.path().join("memory");
-        let state_path = memory_dir.join("data/state.db");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let state_path = home::session_db_path(&memory_dir);
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -2862,7 +2863,7 @@ mod tests {
             "assistant".into(),
             "user".into()
         ]));
-        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         assert_eq!(
@@ -2906,7 +2907,7 @@ mod tests {
             Some(RunnerEvent::TurnInterrupted { .. })
         ));
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
                 .await
                 .unwrap()
                 .get_response_items(&thread.session_id)
@@ -3137,7 +3138,7 @@ mod tests {
             }
         );
         assert_eq!(
-            session::SessionStore::open_sessions_dir(&dir.path().join("memory/data"))
+            session::SessionStore::open_sessions_dir(&dir.path().join("memory/sessions"))
                 .await
                 .unwrap()
                 .get_response_items(&thread.session_id)
@@ -3530,7 +3531,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -3798,7 +3799,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (control, thread) = setup(&dir, "worker").await;
         let memory_dir = dir.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions

@@ -45,7 +45,7 @@ use crate::{
 
 async fn open_sessions(memory_dir: &std::path::Path) -> Result<session::SessionStore, String> {
     memory::ensure_workspace(memory_dir).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir))
+    session::SessionStore::open_sessions_dir(&home::sessions_dir(memory_dir))
         .await
         .map_err(|e| e.to_string())
 }
@@ -2833,7 +2833,7 @@ impl AstroService for AstroServiceImpl {
 
     /// 按名称加载 Skill 正文（可选附带 `params_json`），以流形式返回 output → done。
     ///
-    /// 若 `tools-enabled.json` 中 `skills=false`，返回 error 事件。
+    /// 若 `tools/enabled.json` 中 `skills=false`，返回 error 事件。
     async fn execute_skill(
         &self,
         request: Request<SkillRequest>,
@@ -2848,7 +2848,7 @@ impl AstroService for AstroServiceImpl {
                 let _ = tx
                     .send(Ok(SkillEvent {
                         payload: Some(proto::skill_event::Payload::Error(
-                            "技能工具已禁用（tools-enabled.json → skills=false）".into(),
+                            "技能工具已禁用（tools/enabled.json → skills=false）".into(),
                         )),
                     }))
                     .await;

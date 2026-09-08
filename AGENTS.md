@@ -71,7 +71,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Threads：持久化 Agent Graph/mailbox/status、自定义 agent TOML、root-scoped 控制面与恢复。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
 | `crates/agent-delegate` | `worktree` | 显式桌面多任务用的 git worktree 工具；Subagent 不会隐式创建 worktree。 |
-| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、agent config YAML、tool-enable gates。无 SQLite。 |
+| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、全局 TOML 与 Agent JSON 配置、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
 | `crates/agent-sandbox` | `sandbox` | 派生进程平台沙箱、typed denial、audit 与 attempt-scoped `SandboxPolicy`；managed network 只放行已绑定代理的精确 loopback port。 |
 | `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络边界：host allow/deny、本地地址防御、DNS rebinding 防御、decision attribution 与 attempt-scoped loopback HTTP/1 CONNECT listener；已接入前台 terminal/code_exec，plain HTTP/SOCKS 尚未实现。 |
@@ -105,8 +105,8 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`data/cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
-| `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger、AI、Media、FlowControl、DataProcessing、Action），DAG 执行引擎、变量解析、运行 DB。持久化 `~/.astro/workflows/workflows.json`。 |
+| `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`automation/cron/cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
+| `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger、AI、Media、FlowControl、DataProcessing、Action），DAG 执行引擎、变量解析、运行 DB。持久化 `~/.astro/automation/workflows/workflows.json`。 |
 
 ### extensions/ — 可插拔扩展
 
@@ -162,7 +162,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 ### Managed subprocess network
 
-只有显式在 `~/.astro/config.yaml` 里开启 `network_proxy.enabled` 并让选中 custom
+只有显式在 `~/.astro/config.toml` 里开启 `network_proxy.enabled` 并让选中 custom
 profile 自身 `network.enabled=true` 时，前台 `terminal action=run` 与 `code_exec`
 才把流量收回受管代理，执行以下 attempt-scoped 链路：
 
@@ -222,7 +222,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 ### Agent Threads
 
-`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/data/subagents-v2.db`，真实对话写入 `~/.astro/data/state.db`；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。root-scoped `AgentControl` 共享最新 service tier，子孙 Agent 的新 turn 在 OpenAI/Codex backend 上继承该 tier，不支持的 backend 不透传。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
+`crates/agent-subagents` 是唯一 Subagent 模型。模型只有六个工具：`spawn_agent`、`list_agents`、`send_message`、`followup_task`、`wait_agent`、`interrupt_agent`。`send_message` 只入队，`followup_task` 入队并触发/恢复 turn，`wait_agent` 等待任意 mailbox/final/steer 活动。read 真实 Session 时间线和递归 close 只是 Desktop 控制面操作，不是模型工具。状态固定为 `PendingInit` / `Running` / `Interrupted` / `Completed` / `Errored` / `Shutdown`。Agent Graph/mailbox/status 写入 `~/.astro/sessions/subagents/subagents-v2.db`，真实对话写入 `~/.astro/sessions/state.db`；旧 V1 表仅在迁移时转为只读历史归档。凭证只在内存中传递，权限继承父任务且自定义 agent 仅可收窄，不隐式创建 git worktree。root-scoped `AgentControl` 共享最新 service tier，子孙 Agent 的新 turn 在 OpenAI/Codex backend 上继承该 tier，不支持的 backend 不透传。自定义 agent 和设置只从 `~/.astro/agents/*.toml`、`<project>/.astro/agents/*.toml`、`~/.astro/config.toml` 和可信项目的 `<project>/.astro/config.toml` 加载，project 定义优先；`.codex` 不作为 Astro 配置输入。
 
 ### 可视化工作流引擎
 
@@ -232,23 +232,36 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 ```
 ~/.astro/
-  agents/{agent_id}/
-    SOUL.md            # Agent 人格
-    MEMORY.md          # 项目记忆（快照）
-    USER.md            # 用户画像（快照）
-    config.json        # AgentRuntimeConfig
-    tools_enabled.json # tool gate 热加载
-  data/
+  config.toml          # 唯一全局配置入口（原 YAML 已退役）
+  .env                 # 凭证环境入口
+  agents/              # *.toml 自定义 Agent；default/config.json 运行时配置
+  models/              # providers.json 与 cache/ 模型元数据、定价
+  tools/enabled.json   # 全局 tool gate
+  skills/              # 技能包、enabled.json、origins.json、lock.json、backups/
+  sessions/
     state.db           # ResponseItem、会话、FTS5、线程检查点（schema v23）
-    artifacts.db       # 文件空间索引
-    knowledge.db       # 知识内容 FTS
-    subagents-v2.db    # Agent Graph、mailbox、状态事件与恢复元数据
-    usage.db           # 用量和成本事件
-    cron_v1.db         # Cron 运行记录
-  sessions/rollouts/   # append-only 事件事实源
-  cron/                # jobs.json
-  workflows/workflows.json
+    rollouts/          # append-only 事件事实源
+    tool_spills/       # 大工具输出
+    subagents/subagents-v2.db # Agent Graph、mailbox、状态事件
+  artifacts/           # artifacts.db、knowledge.db、uploads/
+  usage/               # usage.db 与 agents/{id}/stats.json
+  automation/
+    cron/              # jobs.json、cron_v1.db、output/
+    workflows/         # workflows.json、workflow.db、schedule_state.json、backups/
+  memory/              # dreaming.json、pending/；不含安全审计
+  evolution/           # 学习、决策、进化记录与 dspy/.venv
+  security/            # audit/、locks/
+  browser/             # 浏览器配置及登录 profile，不是可随意删除的缓存
+  ui/                  # onboarding.json、图标、壁纸、主题、桌宠
+  logs/                # 运行日志
+  workspace/           # SOUL.md、USER.md、MEMORY.md、AGENTS.md、日记与生成物
+  backups/             # 离线迁移备份与清单
 ```
+
+路径统一使用 `home::layout`（由 `home` 顶层导出）；禁止业务模块重拼领域路径。
+新运行时不读写旧目录，也不在启动时搬迁数据。旧安装必须离线迁移；发现旧布局或
+未完成迁移时拒绝初始化，避免生成空的平行数据库。详细布局与迁移边界见
+`docs/home-layout.md`。项目根 `AGENTS.md` 和项目 `.astro/config.toml` 的边界不变。
 
 ## Key Invariants
 

@@ -1,7 +1,7 @@
 //! 定时任务调度：定义、持久化、到期扫描与工具分发。
 //!
 //! 职责：
-//! - 将任务定义持久化到 `~/.astro/cron/jobs.json`
+//! - 将任务定义持久化到 `~/.astro/automation/cron/jobs.json`
 //! - 解析 `every:` / `custom:` / 五段 cron 调度表达式并计算下次运行时间
 //! - `claim_due` / `tick` 扫描到期任务并推进 `next_run_at`
 //! - 为 Agent 工具与 Extractor 提供自然语言 → 结构化任务的入口

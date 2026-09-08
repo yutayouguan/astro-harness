@@ -607,11 +607,8 @@ fn write_toml_value(path: &Path, value: &toml::Value) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("toml.tmp");
     let rendered = toml::to_string_pretty(value)?;
-    fs::write(&tmp, format!("{rendered}\n"))?;
-    fs::rename(&tmp, path)?;
-    Ok(())
+    home::config_file::write_config_file(path, &format!("{rendered}\n"))
 }
 
 fn merge_servers(
@@ -731,6 +728,7 @@ pub fn save_mcp_servers_scoped(
         }
         _ => mcp_config_path_global(),
     };
+    let _guard = home::config_file::lock_config_file(&path)?;
     let mut root = read_toml_value(&path)?;
     let table = root
         .as_table_mut()
@@ -776,6 +774,7 @@ pub fn persist_discovered_layered(
     ensure_default_workspace_dirs()?;
     let path = mcp_config_path_global();
 
+    let _guard = home::config_file::lock_config_file(&path)?;
     let mut root = read_toml_value(&path)?;
     let root_table = root
         .as_table_mut()

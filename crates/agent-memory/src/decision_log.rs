@@ -1,6 +1,6 @@
 //! DecisionLog：工具失败、用户纠错、关键选择的结构化日志。
 //!
-//! Append-only JSONL：`{base}/learning/decisions.jsonl`。
+//! Append-only JSONL：`{base}/evolution/learning/decisions.jsonl`。
 //! 默认 LearningMode ≈ Propose（不自动改记忆）；本模块只记一笔。
 
 use std::fs::{self, OpenOptions};
@@ -59,10 +59,10 @@ impl DecisionEntry {
 }
 
 fn learning_dir(base: &Path) -> PathBuf {
-    base.join("memory").join("learning")
+    home::learning_dir(base)
 }
 
-/// `{base}/learning/decisions.jsonl`
+/// `{base}/evolution/learning/decisions.jsonl`
 pub fn decisions_path(base: &Path) -> PathBuf {
     learning_dir(base).join("decisions.jsonl")
 }

@@ -31,33 +31,10 @@ pub(crate) const TEMPLATE_MEMORY: &str = r#"# MEMORY.md — 长期精炼记忆
 "#;
 
 /// 数据根下需要确保存在的目录（相对 `~/.astro`）
-pub(crate) const ENSURED_DIRS: &[&str] = &[
-    "workspace",
-    "agents",
-    "data",
-    "memory",
-    "sessions/rollouts",
-    "skills",
-    "cron",
-    "cron/output",
-    "logs",
-    "uploads",
-    "cache/images",
-    "cache/videos",
-    "cache/audio",
-];
+pub(crate) const ENSURED_DIRS: &[&str] = crate::layout::DOMAIN_DIRS;
 
 /// 数据根下需要确保存在的空状态文件。
-pub(crate) const STATE_FILES: &[(&str, &str)] = &[
-    // 不预建 [mcp_servers]；统一配置文件由各设置域按需增量写入。
-    ("config.toml", "# Astro configuration\n"),
-    ("skills-enabled.json", "{\n}\n"),
-    ("tools-enabled.json", "{\n}\n"),
-    ("models.json", "{\n  \"providers\": {}\n}\n"),
-    ("memory/dreaming.json", "{\n  \"enabled\": false\n}\n"),
-    ("cron/jobs.json", "{\n  \"jobs\": []\n}\n"),
-    ("active-agent.json", "{\n  \"id\": \"workspace\"\n}\n"),
-];
+pub(crate) const STATE_FILES: &[(&str, &str)] = crate::layout::INITIAL_STATE_FILES;
 
 /// 将模板占位符替换为实际 id 与显示名
 pub(crate) fn render_template(template: &str, agent_id: &str, display_name: &str) -> String {

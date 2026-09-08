@@ -468,7 +468,7 @@ mod path_tests {
         std::fs::write(outside.join("secret.mp4"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&dir.path().join("sessions"))
             .await
             .unwrap();
         let memory = std::sync::RwLock::new(memory);

@@ -233,7 +233,7 @@ async fn build_transcripts(
     if session_ids.is_empty() {
         return Vec::new();
     }
-    let store = match session::SessionStore::open_sessions_dir(&home::data_dir(base)).await {
+    let store = match session::SessionStore::open_sessions_dir(&home::sessions_dir(base)).await {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
@@ -1511,8 +1511,7 @@ fn resolve_dspy_python(cfg_bin: &str) -> String {
     if !c.is_empty() {
         return c.to_string();
     }
-    let venv = default_memory_dir()
-        .join("evolution-dspy")
+    let venv = home::dspy_dir(&default_memory_dir())
         .join(".venv")
         .join("bin")
         .join("python");
@@ -1575,7 +1574,7 @@ pub async fn setup_evolution_dspy<R: tauri::Runtime>(app: AppHandle<R>) -> Resul
         &memory::load_evolution_config(&base).dspy.project_path,
     )
     .ok_or_else(|| "找不到 evolution-dspy 项目目录".to_string())?;
-    let venv = base.join("evolution-dspy").join(".venv");
+    let venv = home::dspy_dir(&base).join(".venv");
     if let Some(parent) = venv.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -1649,10 +1648,7 @@ pub async fn run_evolution_dspy<R: tauri::Runtime>(
 
     // 导出输入到临时目录
     let run_id: String = uuid::Uuid::new_v4().to_string().chars().take(8).collect();
-    let dir = base
-        .join("learning")
-        .join("evolution")
-        .join(format!("dspy-run-{run_id}"));
+    let dir = home::evolution_dir(&base).join(format!("dspy-run-{run_id}"));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("skill.md"), loaded.content.as_bytes()).map_err(|e| e.to_string())?;
 
@@ -1809,7 +1805,7 @@ async fn collect_eval_import_candidates(
         .filter_map(|e| e.source_session.clone())
         .collect();
 
-    let store = session::SessionStore::open_sessions_dir(&home::data_dir(base))
+    let store = session::SessionStore::open_sessions_dir(&home::sessions_dir(base))
         .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
 
@@ -1891,7 +1887,7 @@ pub async fn import_eval_from_session(
         return Err("该会话已导入评测集".into());
     }
 
-    let store = session::SessionStore::open_sessions_dir(&home::data_dir(&base))
+    let store = session::SessionStore::open_sessions_dir(&home::sessions_dir(&base))
         .await
         .map_err(|e| format!("打开会话库失败: {e}"))?;
     let task = session_user_task(&store, &session_id)

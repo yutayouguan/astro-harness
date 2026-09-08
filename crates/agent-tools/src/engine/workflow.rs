@@ -314,7 +314,7 @@ impl ToolExecutor for WorkflowRuntime {
             });
         }
         let provider_configs = provider_configs_from_context(ctx);
-        let workflow_db_path = ctx.memory_dir.join("workflows").join("workflow.db");
+        let workflow_db_path = home::workflow_db_path(&ctx.memory_dir);
         let owner_session_id = ctx.session_id.clone();
         let workflow_snapshots = Arc::clone(&self.workflow_snapshots);
         Box::pin(async move {
@@ -468,7 +468,7 @@ impl ToolExecutor for RunControlRuntime {
             .unwrap_or_default()
             .trim()
             .to_string();
-        let workflow_db_path = ctx.memory_dir.join("workflows").join("workflow.db");
+        let workflow_db_path = home::workflow_db_path(&ctx.memory_dir);
         let owner_session_id = ctx.session_id.clone();
         Box::pin(async move {
             anyhow::ensure!(!run_id.is_empty(), "run_id 不能为空");
@@ -556,7 +556,7 @@ pub fn register_workflow_tools(
     if !registry.is_toolset_enabled(WORKFLOW_TOOLSET) {
         return Ok(0);
     }
-    let workflows = WorkflowStore::open(memory_dir.join("workflows"))?.list()?;
+    let workflows = WorkflowStore::open(home::workflows_dir(memory_dir))?.list()?;
     let workflow_snapshots = Arc::new(
         workflows
             .iter()
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn registers_only_enabled_non_disabled_workflows() {
         let root = tempfile::tempdir().unwrap();
-        let store = WorkflowStore::open(root.path().join("workflows")).unwrap();
+        let store = WorkflowStore::open(home::workflows_dir(root.path())).unwrap();
         let mut callable = store
             .create(NewWorkflow {
                 name: "Callable".into(),
@@ -826,7 +826,7 @@ mod tests {
     #[tokio::test]
     async fn registered_workflow_executes_with_structured_result() {
         let root = tempfile::tempdir().expect("tempdir");
-        let store = WorkflowStore::open(root.path().join("workflows")).expect("workflow store");
+        let store = WorkflowStore::open(home::workflows_dir(root.path())).expect("workflow store");
         let mut workflow = store
             .create(NewWorkflow {
                 name: "Callable".into(),
@@ -856,7 +856,7 @@ mod tests {
         let memory = RwLock::new(
             memory::MemoryManager::new(root.path().to_path_buf()).expect("memory manager"),
         );
-        let sessions = session::SessionStore::open_sessions_dir(&root.path().join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&root.path().join("sessions"))
             .await
             .expect("session store");
         let targets = crate::ImageGenTargets::default();
@@ -1038,9 +1038,12 @@ mod tests {
     #[test]
     fn disabled_workflow_toolset_skips_disk_catalog() {
         let root = tempfile::tempdir().expect("tempdir");
-        std::fs::create_dir_all(root.path().join("workflows")).expect("workflow directory");
-        std::fs::write(root.path().join("workflows/workflows.json"), "{invalid")
-            .expect("invalid workflow fixture");
+        std::fs::create_dir_all(home::workflows_dir(root.path())).expect("workflow directory");
+        std::fs::write(
+            root.path().join("automation/workflows/workflows.json"),
+            "{invalid",
+        )
+        .expect("invalid workflow fixture");
         let mut registry = ToolRegistry::new();
         registry.set_enabled_map(HashMap::from([(WORKFLOW_TOOLSET.to_string(), false)]));
 

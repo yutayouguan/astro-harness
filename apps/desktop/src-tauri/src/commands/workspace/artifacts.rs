@@ -8,7 +8,7 @@ use std::collections::HashMap;
 async fn open_sessions() -> Result<session::SessionStore, String> {
     let root = default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    session::SessionStore::open_sessions_dir(&home::data_dir(&root))
+    session::SessionStore::open_sessions_dir(&home::sessions_dir(&root))
         .await
         .map_err(|e| e.to_string())
 }
@@ -298,7 +298,7 @@ pub async fn save_chat_upload(
         return Err("无效的文件名".into());
     }
 
-    let dir = mem.join("uploads").join(&session_id);
+    let dir = home::uploads_dir(&mem).join(&session_id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&safe);
     let bytes = base64::engine::general_purpose::STANDARD

@@ -3,7 +3,7 @@
 //! 不变量：
 //! - `ResponseItem` / DB `item_json` 始终保留全文（审计、FTS、UI）
 //! - `compressed_content` 可改为 spill / prune 视图，供 Provider 读取
-//! - 落盘路径：`{memory_dir}/data/tool_spills/{session_id}/{item_key}.txt`
+//! - 落盘路径：`{memory_dir}/sessions/tool_spills/{session_id}/{item_key}.txt`
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,9 +22,7 @@ pub const PRUNE_MIN_CHARS: usize = 200;
 const PREVIEW_CHARS: usize = 800;
 
 pub fn spill_file_path(memory_dir: &Path, session_id: &str, message_id: i64) -> PathBuf {
-    memory_dir
-        .join("data")
-        .join("tool_spills")
+    home::tool_spills_dir(memory_dir)
         .join(session_id)
         .join(format!("{message_id}.txt"))
 }
@@ -60,9 +58,7 @@ pub fn write_tool_spill_with_key(
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')),
         "invalid tool spill item key"
     );
-    let path = memory_dir
-        .join("data")
-        .join("tool_spills")
+    let path = home::tool_spills_dir(memory_dir)
         .join(session_id)
         .join(format!("{item_key}.txt"));
     if let Some(parent) = path.parent() {

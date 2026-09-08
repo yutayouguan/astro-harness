@@ -1,5 +1,7 @@
 # Astro Agent 文档
 
+本机数据目录、唯一 TOML 配置入口及离线迁移边界见 [本机数据的领域布局](home-layout.md)。
+
 Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。
 
 Agent 运行时统一采用 **Agent = Model + Harness** 的定义。架构入口见 [Agent Harness 总体架构](03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，Responses-only 与原生历史契约见 [Responses 原生 Agent 运行时架构](03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。Subagent 的两阶段入口分别是 [Subagent 系统设计](03-系统设计阶段/02-核心功能模块/05-Subagent系统设计.md) 和 [Subagent 详细设计](04-详细设计阶段/01-核心引擎层/06-Subagent详细设计.md)。

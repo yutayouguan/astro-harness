@@ -17,7 +17,7 @@ pub(crate) async fn dispatch_runtime(
 ) -> anyhow::Result<types::ToolOutput> {
     if !allowed {
         let toolset = home::tool_name_to_toolset(name);
-        anyhow::bail!("工具已禁用（tools-enabled.json → {toolset}=false）: {name}");
+        anyhow::bail!("工具已禁用（tools/enabled.json → {toolset}=false）: {name}");
     }
 
     let agent_id = ctx.agent_id();
@@ -94,7 +94,7 @@ mod permission_tests {
         f: impl FnOnce(&ToolContext<'_>),
     ) {
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions"))
             .await
             .unwrap();
         let manager = std::sync::RwLock::new(manager);

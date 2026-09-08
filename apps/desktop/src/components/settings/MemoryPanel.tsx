@@ -42,7 +42,7 @@ type Props = {
   sessionId?: string | null;
 };
 
-/** `config.yaml` 记忆开关（Tauri camelCase） */
+/** `config.toml` 记忆开关（Tauri camelCase） */
 type MemorySettings = {
   writeApproval: boolean;
   backgroundReviewEnabled: boolean;

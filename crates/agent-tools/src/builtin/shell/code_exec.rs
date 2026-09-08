@@ -363,7 +363,7 @@ mod tests {
     async fn code_exec_adds_proxy_after_secret_scrub() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -391,7 +391,7 @@ mod tests {
     async fn code_exec_managed_network_denial_is_typed() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -432,7 +432,7 @@ print(sock.recv(4096).decode())"#;
     async fn code_exec_without_managed_network_keeps_proxy_marker_absent() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -481,7 +481,7 @@ print(sock.recv(4096).decode())"#;
     async fn rejects_unknown_language() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -499,7 +499,7 @@ print(sock.recv(4096).decode())"#;
     async fn large_stdout_is_truncated() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -531,7 +531,7 @@ print(sock.recv(4096).decode())"#;
         let dir = tempfile::tempdir().unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -560,7 +560,7 @@ print(sock.recv(4096).decode())"#;
     async fn concurrent_same_language_no_clobber() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -583,7 +583,7 @@ print(sock.recv(4096).decode())"#;
         std::env::set_var("ASTRO_CODE_EXEC_TEST_SECRET_TOKEN", "should-not-leak");
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -610,7 +610,7 @@ print(sock.recv(4096).decode())"#;
     async fn timeout_cleans_temp_script() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();
@@ -645,7 +645,7 @@ print(sock.recv(4096).decode())"#;
     async fn shell_language_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let targets = ImageGenTargets::default();

@@ -1,6 +1,6 @@
 //! Agent 工具集开关的持久化与运行时校验。
 //!
-//! 全局配置位于 `~/.astro/tools-enabled.json`；各 Agent 可覆写于
+//! 全局配置位于 `~/.astro/tools/enabled.json`；各 Agent 可覆写于
 //! `AgentRuntimeConfig.tools_enabled`。缺失条目默认启用（`true`）。
 //! 工具调用前通过 [`is_tool_call_allowed`] 检查对应工具集是否开启。
 
@@ -45,9 +45,9 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "todo",
 ];
 
-/// 全局工具开关配置文件路径（`~/.astro/tools-enabled.json`）。
+/// 全局工具开关配置文件路径（`~/.astro/tools/enabled.json`）。
 pub fn tools_enabled_path() -> PathBuf {
-    default_memory_dir().join("tools-enabled.json")
+    crate::global_tools_path(&default_memory_dir())
 }
 
 /// 规范化 Agent 键：去空白、`"default"` 映射为 [`DEFAULT_AGENT_ID`]；空则返回 `None`。
@@ -112,7 +112,7 @@ pub fn load_tools_enabled_for_agent(agent_id: Option<&str>) -> HashMap<String, b
 
 /// 写入指定 Agent 的工具开关；`agent_id` 为 `None` 时写全局配置。
 ///
-/// 默认 Agent 同时写入全局 `tools-enabled.json`，供无 Agent 专属配置时的回退读取。
+/// 默认 Agent 同时写入全局 `tools/enabled.json`，供无 Agent 专属配置时的回退读取。
 pub fn save_tools_enabled_for_agent(
     agent_id: Option<&str>,
     state: &HashMap<String, bool>,
@@ -305,7 +305,7 @@ mod tests {
         let loaded = load_tools_enabled_for_agent(Some("other"));
         assert_eq!(loaded.get("memory"), Some(&false));
 
-        let raw = fs::read_to_string(dir.path().join("tools-enabled.json")).unwrap();
+        let raw = fs::read_to_string(crate::global_tools_path(dir.path())).unwrap();
         let map: HashMap<String, bool> = serde_json::from_str(&raw).unwrap();
         assert_eq!(map.get("memory"), Some(&true));
     }

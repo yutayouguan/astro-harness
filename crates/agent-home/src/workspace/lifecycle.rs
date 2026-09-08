@@ -41,7 +41,7 @@ pub fn write_agent_config(
 
     // 若继承：保留 persona 工具开关快照；MCP 始终来自统一 config.toml。
     if inherit && id != DEFAULT_AGENT_ID {
-        if let Ok(tools) = fs::read_to_string(base.join("tools-enabled.json")) {
+        if let Ok(tools) = fs::read_to_string(crate::global_tools_path(base)) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&tools) {
                 cfg.tools_enabled = Some(v);
             }
@@ -567,9 +567,9 @@ pub fn ensure_agent_space(
 /// ├── config.toml                ← 全局设置、项目信任与 MCP
 /// ├── agents/*.toml              ← 全局自定义 Agent 角色
 /// ├── workspace/                 ← 默认 Agent 工作区
-/// ├── workspace-{id}/            ← 其他 Agent 工作区（同构）
-/// ├── agents/{id}/config.json    ← 每 Agent 的运行时配置
-/// └── active-agent.json
+/// ├── agents/default/config.json ← 单专家运行时配置
+/// ├── agents/active.json         ← 当前专家标识
+/// └── 各领域目录                 ← 见 home::layout::DOMAIN_DIRS
 /// ```
 pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
     ensure_workspace_dirs(base)?;
@@ -678,33 +678,36 @@ mod tests {
         for (name, _) in CORE_FILES {
             assert!(ws.join(name).is_file(), "missing workspace/{name}");
         }
-        assert!(dir.path().join("active-agent.json").is_file());
+        assert!(crate::active_agent_path(dir.path()).is_file());
         assert_eq!(
             report.created_files.len(),
             CORE_FILES.len() + STATE_FILES.len()
         );
-        assert!(report.created_files.iter().any(|f| f == "cron/jobs.json"));
-        assert!(report.created_files.iter().any(|f| f == "models.json"));
         assert!(report
             .created_files
             .iter()
-            .any(|f| f == "skills-enabled.json"));
+            .any(|f| f == "automation/cron/jobs.json"));
+        assert!(!dir.path().join("models.json").exists());
         assert!(report
             .created_files
             .iter()
-            .any(|f| f == "tools-enabled.json"));
+            .any(|f| f == "skills/enabled.json"));
+        assert!(report
+            .created_files
+            .iter()
+            .any(|f| f == "tools/enabled.json"));
         assert!(report.created_files.iter().any(|f| f == "config.toml"));
         assert!(report
             .created_files
             .iter()
-            .any(|f| f == "active-agent.json"));
+            .any(|f| f == "agents/active.json"));
         assert_eq!(report.workspace_dir, ws);
         assert_eq!(report.ensured_dirs.len(), ENSURED_DIRS.len());
-        assert!(dir.path().join("cron/jobs.json").is_file());
-        assert!(dir.path().join("cron/output").is_dir());
-        assert!(dir.path().join("models.json").is_file());
-        assert!(dir.path().join("skills-enabled.json").is_file());
-        assert!(dir.path().join("tools-enabled.json").is_file());
+        assert!(dir.path().join("automation/cron/jobs.json").is_file());
+        assert!(dir.path().join("automation/cron/output").is_dir());
+        assert!(!dir.path().join("models.json").exists());
+        assert!(dir.path().join("skills/enabled.json").is_file());
+        assert!(crate::global_tools_path(dir.path()).is_file());
         assert!(dir.path().join("config.toml").is_file());
     }
 

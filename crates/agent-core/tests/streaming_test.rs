@@ -1796,7 +1796,7 @@ async fn cold_start_preserves_native_responses_media_content() {
         internal_chat_message_metadata_passthrough: None,
     };
     {
-        let store = session::SessionStore::open_sessions_dir(&path.join("data"))
+        let store = session::SessionStore::open_sessions_dir(&path.join("sessions"))
             .await
             .unwrap();
         session::store::rebuild_response_items_from_rollout(
@@ -1885,7 +1885,7 @@ async fn multi_turn_persists_reasoning_and_tool_activities() {
         item.unwrap();
     }
 
-    let store = session::SessionStore::open(&dir.path().join("data/state.db"))
+    let store = session::SessionStore::open(&home::session_db_path(dir.path()))
         .await
         .unwrap();
     let hist = store.get_response_items("persist-session").await.unwrap();

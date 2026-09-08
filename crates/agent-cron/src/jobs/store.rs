@@ -59,10 +59,10 @@ impl CronStore {
         Ok(Self { root })
     }
 
-    /// 打开默认 `~/.astro/cron`（会先确保工作区存在）
+    /// 打开默认 `~/.astro/automation/cron`（会先确保工作区存在）
     pub fn open_default() -> anyhow::Result<Self> {
         ensure_default_workspace_dirs()?;
-        Self::open(default_memory_dir().join("cron"))
+        Self::open(home::cron_dir(&default_memory_dir()))
     }
 
     /// `jobs.json` 路径
@@ -394,7 +394,7 @@ impl CronStore {
     }
 }
 
-/// 默认 cron 根目录：`~/.astro/cron`
+/// 默认 cron 根目录：`~/.astro/automation/cron`
 pub fn cron_dir() -> PathBuf {
-    default_memory_dir().join("cron")
+    home::cron_dir(&default_memory_dir())
 }

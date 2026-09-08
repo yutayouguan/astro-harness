@@ -506,7 +506,7 @@ mod tests {
         fs::create_dir_all(&workspace).unwrap();
         tiny_png(&workspace.join("generated.png"));
         let memory = RwLock::new(memory::MemoryManager::new(temp.path().to_path_buf()).unwrap());
-        let sessions = session::SessionStore::open_sessions_dir(&temp.path().join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&temp.path().join("sessions"))
             .await
             .unwrap();
         let targets = crate::ImageGenTargets::default();

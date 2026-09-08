@@ -121,7 +121,6 @@ pub async fn verify_onboarding_provider(
         verification_token,
     })
 }
-const ONBOARDING_FILE: &str = "onboarding.json";
 const VALID_STEPS: &[&str] = &["intro", "personalize", "provider", "workspace", "complete"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,7 +208,7 @@ impl OnboardingStateDto {
 }
 
 fn state_path(base: &Path) -> PathBuf {
-    base.join(ONBOARDING_FILE)
+    home::onboarding_path(base)
 }
 
 /// 旧安装不应在升级后被强制拉回首次引导。
@@ -281,7 +280,8 @@ async fn load_at(base: &Path) -> Result<OnboardingStateDto, String> {
 }
 
 fn write_at(base: &Path, mut state: OnboardingStateDto) -> Result<OnboardingStateDto, String> {
-    fs::create_dir_all(base).map_err(|error| format!("无法创建 Astro 数据目录：{error}"))?;
+    fs::create_dir_all(home::ui_dir(base))
+        .map_err(|error| format!("无法创建 Astro 数据目录：{error}"))?;
     state.version = ONBOARDING_VERSION;
     state.should_show = !state.completed;
     state.inferred_existing_install = false;
@@ -289,7 +289,8 @@ fn write_at(base: &Path, mut state: OnboardingStateDto) -> Result<OnboardingStat
     let bytes = serde_json::to_vec_pretty(&state)
         .map_err(|error| format!("无法序列化首次启动状态：{error}"))?;
     let path = state_path(base);
-    let temporary = base.join(format!("onboarding-{}.tmp", uuid::Uuid::new_v4().simple()));
+    let temporary =
+        home::ui_dir(base).join(format!("onboarding-{}.tmp", uuid::Uuid::new_v4().simple()));
     let saved = (|| -> std::io::Result<()> {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
@@ -414,7 +415,8 @@ mod tests {
     #[tokio::test]
     async fn generated_bootstrap_files_do_not_hide_first_run() {
         let temp = tempfile::tempdir().unwrap();
-        fs::write(temp.path().join("providers.json"), "{}").unwrap();
+        fs::create_dir_all(home::models_dir(temp.path())).unwrap();
+        fs::write(home::providers_path(temp.path()), "{}").unwrap();
         fs::write(temp.path().join("config.toml"), "").unwrap();
         let database = home::session_db_path(temp.path());
         session::SessionStore::open(&database).await.unwrap();

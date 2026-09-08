@@ -1,6 +1,6 @@
 //! 自动触发进化的成本护栏与运行状态。
 //!
-//! 状态文件：`{base}/learning/evolution/auto_state.json`。
+//! 状态文件：`{base}/evolution/auto_state.json`。
 //! 本模块只做「能不能跑 / 记一次跑完」的纯逻辑；真正调用模型由 Tauri 侧负责。
 //! 自动路径**只允许单轮 reflect**，绝不跑遗传搜索 / DSPy，也绝不自动写入技能。
 
@@ -79,11 +79,9 @@ pub struct AutoState {
     pub runs_today_date: Option<String>,
 }
 
-/// `{base}/learning/evolution/auto_state.json`
+/// `{base}/evolution/auto_state.json`
 pub fn auto_state_path(base: &Path) -> PathBuf {
-    base.join("learning")
-        .join("evolution")
-        .join("auto_state.json")
+    home::evolution_dir(base).join("auto_state.json")
 }
 
 /// 读取状态；缺失或损坏时返回默认。

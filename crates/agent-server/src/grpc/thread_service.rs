@@ -958,7 +958,7 @@ mod tests {
         let dir = TempDir::new().expect("tempdir");
         memory::ensure_workspace(dir.path()).expect("workspace");
         let thread_id = "legacy-sqlite-history";
-        let store = session::SessionStore::open_sessions_dir(&home::data_dir(dir.path()))
+        let store = session::SessionStore::open_sessions_dir(&home::sessions_dir(dir.path()))
             .await
             .expect("session store");
         store

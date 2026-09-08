@@ -214,7 +214,7 @@ struct PricingCacheFile {
 }
 
 fn openrouter_pricing_cache_path() -> PathBuf {
-    let dir = default_memory_dir().join("cache");
+    let dir = home::models_cache_dir(&default_memory_dir());
     let _ = std::fs::create_dir_all(&dir);
     dir.join(OPENROUTER_PRICING_CACHE_FILE)
 }

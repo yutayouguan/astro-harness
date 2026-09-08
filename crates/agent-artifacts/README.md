@@ -52,7 +52,7 @@ pub struct KnowledgeDb { conn: Connection, path: PathBuf }
 
 | 方法 | 说明 |
 |---|---|
-| `open(path)` / `open_default()` | 打开知识库（默认 `~/.astro/data/knowledge.db`） |
+| `open(path)` / `open_default()` | 打开知识库（默认 `~/.astro/artifacts/knowledge.db`） |
 | `register(title, path, body, status)` | 登记文档并写入 FTS 正文；同 path 则更新 |
 | `search(query, limit)` | FTS 检索，MATCH 失败时回退 LIKE 子串搜索 |
 | `list(limit)` | 按时间倒序列出文档 |

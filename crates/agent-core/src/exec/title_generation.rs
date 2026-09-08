@@ -167,7 +167,7 @@ pub async fn maybe_generate_session_title(
 
 async fn open_store(memory_dir: &std::path::Path) -> anyhow::Result<session::SessionStore> {
     memory::ensure_workspace(memory_dir)?;
-    session::SessionStore::open_sessions_dir(&home::data_dir(memory_dir)).await
+    session::SessionStore::open_sessions_dir(&home::sessions_dir(memory_dir)).await
 }
 
 async fn complete_title_response(

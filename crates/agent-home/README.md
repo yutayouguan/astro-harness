@@ -1,61 +1,41 @@
 # home
 
-Astro 本机根（默认 `~/.astro` / `ASTRO_MEMORY_DIR`）：路径解析、日志、Agent 配置层（图标 / 工具开关 / 内容扫描）。刻意不引入 SQLite 依赖，供轻量 crate 直接使用。
+Astro 本机数据根（默认 `~/.astro` / `ASTRO_MEMORY_DIR`）的路径、初始化、配置写锁、
+日志与工作区模板。不依赖 SQLite，也不在初始化时搬移旧数据。
 
-## 核心职责
+## 路径入口
 
-- **路径约定** -- 统一解析 `~/.astro/` 下的 agents / sessions / cron / workflows / teams 等目录结构，跨平台（macOS / Windows / Linux）
-- **Agent 生命周期** -- 创建/删除/列表/切换 Agent，生成可读 slug ID（`{slug}--{hex}`），管理 SOUL.md / config.json / tools_enabled.json
-- **工具开关** -- `tools_enabled.json` 热加载，支持 per-agent 覆盖、toolset 粒度启停、`is_tool_call_allowed()` 实时校验
-- **Agent 图标** -- 多种图标来源（Lucide / 自定义 SVG / 待确认队列），自动 Lucide 图标推荐
-- **日志基础设施** -- `init_logging()` 初始化 tracing-subscriber + 文件 appender，`query_agent_logs()` 结构化日志查询
-- **内容扫描** -- `scan_memory_content()` 扫描 MEMORY.md 等文件内容
-- **模板脚手架** -- Agent 工作区的 SOUL.md / MEMORY.md / config.json 模板生成
-- **测试工具** -- `AstroMemoryDirGuard` 安全地串行化环境变量覆盖
+领域路径集中在 `layout.rs`，数据库路径在 `workspace/paths.rs`，统一从 `home` 导出。
+业务模块使用 `providers_path`、`sessions_dir`、`session_db_path`、`cron_dir`、
+`workflow_db_path`、`uploads_dir`、`security_audit_dir` 等函数，不重拼领域目录。
+完整目录、迁移与历史保护契约见 [本机领域布局](../../docs/home-layout.md)。
 
-## 模块结构
+- `default_memory_dir()`：解析本机数据根。
+- `ensure_workspace_dirs(base)`：拒绝旧布局/未完成迁移，仅确保领域目录。
+- `ensure_workspace(base)`：补齐缺失的默认状态和提示词，不覆盖已有个性化内容。
+- `agent_config_dir(base, id)`：当前单专家模式的 `agents/default/` 运行时 JSON 配置。
+- `agent_workspace_dir(base, id)`：工作区内容目录，包含人格、用户记忆、日记及生成物。
+- `config_file::lock_config_file(path)`：跨进程配置写锁，必须持有到读改写完成。
+- `config_file::write_config_file(path, text)`：在锁内执行私有临时文件写入、同步与替换。
 
-| 文件 | 职责 |
-|------|------|
-| `lib.rs` | 顶层 re-exports |
-| `workspace/paths.rs` | 路径解析核心：`astro_data_root()` / `agent_dir()` / `sessions_dir()` / `user_home_dir()` / `user_downloads_dir()`，Agent ID 生成（slug + hex） |
-| `workspace/lifecycle.rs` | Agent 生命周期（26KB）：创建/删除/列表/切换/重命名，`active_agent_id()` / `set_active_agent()` |
-| `workspace/agent_config.rs` | `AgentRuntimeConfig` -- Agent 运行时配置 JSON 的序列化结构 |
-| `workspace/templates.rs` | 模板脚手架：SOUL.md / MEMORY.md / USER.md / config.json 默认内容生成 |
-| `workspace/generated.rs` | 生成式配置 -- Agent 自动生成的元数据管理 |
-| `config/tools_enabled.rs` | 工具开关：加载/保存 `tools_enabled.json`、toolset 默认同步、`is_tool_call_allowed()` / `is_toolset_enabled()` |
-| `config/agent_icons.rs` | Agent 图标管理：写入/读取/待确认队列、`resolve_icon_field()` |
-| `config/auto_icon.rs` | Lucide 自动图标：`suggest_lucide_icon_id()` / `apply_auto_lucide_icon()` / SVG 字节查找 |
-| `config/scan.rs` | 内容安全扫描：`scan_memory_content()` |
-| `infra/logging.rs` | `init_logging()` / `logs_dir()` -- tracing 初始化与日志目录 |
-| `infra/log_query.rs` | `query_agent_logs()` / `AgentLogQuery` / `AgentLogLine` -- 结构化日志查询 |
-| `infra/tool_calls.rs` | `record_tool_call()` -- 工具调用记录 |
-| `test_env.rs` | `AstroMemoryDirGuard` -- 测试环境安全串行化 `ASTRO_MEMORY_DIR` |
+## 其他职责
 
-## 核心类型与 API
+| 模块 | 职责 |
+| --- | --- |
+| `workspace/agent_config.rs` | `AgentRuntimeConfig` 序列化及持久化 |
+| `workspace/lifecycle.rs` | 工作区模板和 Agent 生命周期 |
+| `workspace/templates.rs` | SOUL / USER / AGENTS / TOOLS 等模板 |
+| `config/tools_enabled.rs` | `tools/enabled.json` 全局默认值与 Agent 覆写 |
+| `config/agent_icons.rs` | Agent 图标与 `agents/pending-icons/` 暂存 |
+| `infra/logging.rs`、`infra/log_query.rs` | 按日运行日志与结构化查询 |
+| `infra/tool_calls.rs` | `security/audit/agents/{id}/tool-calls.jsonl` |
+| `test_env.rs` | `AstroMemoryDirGuard` 串行覆盖并恢复测试数据根 |
 
-- `astro_data_root()` -- 解析数据根目录（`ASTRO_MEMORY_DIR` > `~/.astro`）
-- `agent_dir(agent_id)` -- 单个 Agent 的工作区目录
-- `DEFAULT_AGENT_ID` -- 默认 Agent ID（`"default"`）
-- `AgentRuntimeConfig` -- Agent 运行时配置结构体
-- `load_tools_enabled()` / `save_tools_enabled()` -- 工具开关 JSON 读写
-- `is_tool_call_allowed(name)` -- 判断工具调用是否被允许
-- `KNOWN_TOOLSET_IDS` -- 已知 toolset ID 列表
-- `AstroMemoryDirGuard` -- 测试辅助：RAII 式环境变量覆盖与恢复
+项目规则读取只使用项目根 `AGENTS.md`，不得为了读取规则创建项目 `.astro/`。
+项目显式配置与全局数据目录是不同作用域。
 
-## Crate 关系
-
-| 方向 | crate |
-|------|-------|
-| 无内部依赖 | 本 crate 不依赖 workspace 内其他 crate（刻意避免 rusqlite） |
-| 被依赖 | `mcp`、`skills`、`agent`、`tools`、`memory`、`server` 等几乎所有 crate 均依赖本 crate 获取路径和配置 |
-
-## 测试
+## 验证
 
 ```bash
-# 全部测试（单元测试分布在各源文件的 #[cfg(test)] 中）
 cargo test -p home
-
-# 单个测试
-cargo test -p home test_slug_generation -- --nocapture
 ```

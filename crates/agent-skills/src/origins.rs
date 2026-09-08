@@ -1,4 +1,4 @@
-//! 技能安装来源持久化（`skill-origins.json`）。
+//! 技能安装来源持久化（`skills/origins.json`）。
 
 use std::fs;
 use std::path::PathBuf;
@@ -13,7 +13,6 @@ use crate::models::{SkillOriginRecord, SkillOriginsFile, StoreSkill, StoreSkillD
 use crate::seed::KNOWN_SKILLHUB_SOURCES;
 use crate::store::fetch_detail_strict;
 
-const ORIGINS_FILE: &str = "skill-origins.json";
 const ORIGINS_VERSION: u32 = 3;
 static ORIGINS_FILE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -24,16 +23,7 @@ fn lock_origins_file() -> Result<MutexGuard<'static, ()>> {
 }
 
 /// 解析本机 Astro 数据根目录。
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 fn valid_scope(scope: Option<&str>) -> Option<&str> {
     match scope.map(str::trim) {
@@ -51,9 +41,9 @@ fn origin_key(agent_id: Option<&str>, scope: &str, folder: &str) -> (String, Str
     )
 }
 
-/// `skill-origins.json` 路径。
+/// `skills/origins.json` 路径。
 pub fn origins_path() -> PathBuf {
-    memory_dir().join(ORIGINS_FILE)
+    home::skill_origins_path(&memory_dir())
 }
 
 fn load_origins_unlocked() -> Result<SkillOriginsFile> {
@@ -114,7 +104,7 @@ fn locked_upstream_matches(base: &std::path::Path, folder: &str, expected: Optio
     let Some(expected) = expected else {
         return true;
     };
-    let Ok(body) = fs::read_to_string(base.join("skills-lock.json")) else {
+    let Ok(body) = fs::read_to_string(home::skill_lock_path(base)) else {
         return false;
     };
     let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
@@ -130,7 +120,7 @@ fn locked_upstream_matches(base: &std::path::Path, folder: &str, expected: Optio
 
 /// 为可由 SkillHub 更新的已知 Skill 建立一次性基线。
 ///
-/// 外部安装的 Skill 必须同时匹配 `skills-lock.json` 中的上游，避免仅凭同名误认领。
+/// 外部安装的 Skill 必须同时匹配 `skills/lock.json` 中的上游，避免仅凭同名误认领。
 /// 用户已安装或更新过的来源记录优先，不会被基线覆盖。
 pub fn ensure_known_skillhub_origins(agent_id: Option<&str>) -> Result<()> {
     let _guard = lock_origins_file()?;
@@ -393,7 +383,7 @@ mod tests {
             .unwrap();
         }
         fs::write(
-            dir.path().join("skills-lock.json"),
+            home::skill_lock_path(dir.path()),
             r#"{
   "version": 1,
   "skills": {
@@ -446,7 +436,7 @@ mod tests {
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(skill_dir.join("SKILL.md"), "# custom").unwrap();
         fs::write(
-            dir.path().join("skills-lock.json"),
+            home::skill_lock_path(dir.path()),
             r#"{"skills":{"find-skills":{"source":"someone/custom"}}}"#,
         )
         .unwrap();

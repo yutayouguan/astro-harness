@@ -1,6 +1,6 @@
 //! 提案队列：进化候选落盘为待审提案；审批后写入 Agent skills 目录。
 //!
-//! 路径：`{base}/learning/evolution/proposals/{id}.json`。
+//! 路径：`{base}/evolution/proposals/{id}.json`。
 //! apply 语义对齐 `skills` 工具：新建写 SKILL.md、patch 唯一替换；仅限 agent
 //! skills 目录（`skills::install::agent_workspace_skills_dir`）。
 
@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{CandidateKind, SkillCandidate};
 use crate::reflect::valid_skill_id;
 
-/// `{base}/learning/evolution/proposals`
+/// `{base}/evolution/proposals`
 pub fn proposals_dir(base: &Path) -> PathBuf {
-    base.join("learning").join("evolution").join("proposals")
+    home::evolution_dir(base).join("proposals")
 }
 
 fn proposal_path(base: &Path, id: &str) -> PathBuf {

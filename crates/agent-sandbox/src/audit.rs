@@ -163,7 +163,7 @@ fn truncate(value: &str) -> String {
 }
 
 fn audit_dir(base: &Path) -> PathBuf {
-    base.join("audit")
+    home::security_audit_dir(base)
 }
 
 pub fn sandbox_audit_path(base: &Path) -> PathBuf {

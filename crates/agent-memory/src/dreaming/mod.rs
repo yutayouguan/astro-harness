@@ -26,8 +26,6 @@ use home::{
     agent_workspace_dir, daily_memory_path, list_agents, list_daily_memory_dates, AgentInfo,
 };
 
-/// 入梦全局状态文件：`{base}/memory/dreaming.json`
-const STATE_FILE: &str = "memory/dreaming.json";
 /// 单次最多处理的日记天数
 const MAX_DIARIES_PER_RUN: usize = 7;
 /// 送入模型的日记总字符上限（粗略）
@@ -152,7 +150,7 @@ pub struct DreamAgentReport {
 
 /// `dreaming.json` 的绝对路径
 pub fn dreaming_state_path(base: &Path) -> PathBuf {
-    base.join(STATE_FILE)
+    home::dreaming_state_path(base)
 }
 
 /// 加载入梦状态；文件缺失或解析失败返回默认值
@@ -166,8 +164,8 @@ pub fn load_dreaming_state(base: &Path) -> DreamingState {
 
 /// 原子写入入梦状态（`.json.tmp` → rename）
 pub fn save_dreaming_state(base: &Path, state: &DreamingState) -> anyhow::Result<()> {
-    fs::create_dir_all(base)?;
     let path = dreaming_state_path(base);
+    fs::create_dir_all(path.parent().expect("dreaming domain parent"))?;
     let tmp = path.with_extension("json.tmp");
     let raw = serde_json::to_string_pretty(state)?;
     fs::write(&tmp, raw)?;
@@ -663,8 +661,9 @@ mod tests {
         let dir = tempdir().unwrap();
         ensure_workspace(dir.path()).unwrap();
         fs::write(
-            dir.path().join("config.yaml"),
-            "memory:\n  memory_char_limit: 30\n",
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_char_limit" = 30 }
+"#,
         )
         .unwrap();
         let agent = default_agent(dir.path());

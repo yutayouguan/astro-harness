@@ -334,7 +334,7 @@ fn parse_reasoning_meta(
 
 /// OpenRouter 元数据缓存文件路径。
 fn cache_path() -> PathBuf {
-    let dir = home::default_memory_dir().join("cache");
+    let dir = home::models_cache_dir(&home::default_memory_dir());
     let _ = std::fs::create_dir_all(&dir);
     dir.join("openrouter-model-meta.json")
 }
@@ -528,7 +528,7 @@ fn sync_usage_pricing_cache(value: &serde_json::Value) {
         "fetched_at": fetched_at,
         "models": models,
     });
-    let cache_dir = home::default_memory_dir().join("cache");
+    let cache_dir = home::models_cache_dir(&home::default_memory_dir());
     let _ = std::fs::create_dir_all(&cache_dir);
     let path = cache_dir.join("openrouter-model-pricing.json");
     let tmp = path.with_extension("json.tmp");

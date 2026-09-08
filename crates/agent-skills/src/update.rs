@@ -14,16 +14,7 @@ use crate::origins::{find_origin, load_origins};
 use crate::preview::preview_skill_update;
 
 /// 解析本机 Astro 数据根目录（`ASTRO_MEMORY_DIR` / `~/.astro`）。
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 fn origin_hint(record: &SkillOriginRecord) -> InstallOriginHint {
     InstallOriginHint {
@@ -48,7 +39,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 将技能目录拷贝到 `~/.astro/skill-backups/{agent}/{folder}/{timestamp}/`。
+/// 将技能目录拷贝到 `~/.astro/skills/backups/{agent}/{folder}/{timestamp}/`。
 pub fn backup_skill_dir(
     agent_id: Option<&str>,
     scope: &str,
@@ -63,8 +54,7 @@ pub fn backup_skill_dir(
     }
 
     let timestamp = chrono::Utc::now().timestamp();
-    let backup_root = memory_dir()
-        .join("skill-backups")
+    let backup_root = home::skill_backups_dir(&memory_dir())
         .join(&agent)
         .join(folder)
         .join(timestamp.to_string());
@@ -291,9 +281,7 @@ mod tests {
             fs::read_to_string(backup_path.join("extra.txt")).unwrap(),
             "payload"
         );
-        assert!(backup_path
-            .components()
-            .any(|c| c.as_os_str() == "skill-backups"));
+        assert!(backup_path.components().any(|c| c.as_os_str() == "backups"));
     }
 
     #[tokio::test]

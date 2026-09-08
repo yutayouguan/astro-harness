@@ -888,7 +888,7 @@ mod tests {
     fn v2_default_database_path_is_canonical() {
         let path = v2_default_db_path();
         assert_eq!(path.file_name().unwrap(), "subagents-v2.db");
-        assert_eq!(path.parent().unwrap().file_name().unwrap(), "data");
+        assert_eq!(path.parent().unwrap().file_name().unwrap(), "subagents");
     }
 
     #[tokio::test]

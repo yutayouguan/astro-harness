@@ -100,7 +100,7 @@ mod tests {
         let workspace = dir.path().join("ws");
         std::fs::create_dir_all(&workspace).unwrap();
         let memory = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let memory = std::sync::RwLock::new(memory);

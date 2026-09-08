@@ -798,7 +798,7 @@ mod path_tests {
         std::fs::write(outside.join("secret.txt"), b"x").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let memory = std::sync::RwLock::new(memory);
@@ -842,7 +842,7 @@ mod path_tests {
         std::fs::write(ws.join("ok.txt"), b"ok").unwrap();
 
         let memory = MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory.base_dir.join("sessions"))
             .await
             .unwrap();
         let memory = std::sync::RwLock::new(memory);

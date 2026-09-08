@@ -1,4 +1,4 @@
-//! Shell Hooks：`config.yaml` 的 `hooks:` 映射，异步执行命令。
+//! Shell Hooks：`config.toml` 的 `hooks:` 映射，异步执行命令。
 
 use std::collections::HashMap;
 use std::path::Path;

@@ -347,7 +347,7 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).await.unwrap()[0].sequence;
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -462,7 +462,7 @@ mod tests {
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
         {
-            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
                 .await
                 .unwrap();
             sessions
@@ -527,7 +527,7 @@ mod tests {
                 .delivered,
             0
         );
-        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap()
             .get_response_items(&thread.session_id)
@@ -593,7 +593,7 @@ mod tests {
         let marker = format!("{MAILBOX_FINISH_PREFIX}{sequence}");
         let memory_dir = temp.path().join("memory");
         {
-            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+            let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
                 .await
                 .unwrap();
             sessions
@@ -647,7 +647,7 @@ mod tests {
                 .delivered,
             0
         );
-        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let stored = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap()
             .get_response_items("root-v2")
@@ -726,7 +726,7 @@ mod tests {
         let sequence = graph.pending_for(&thread.thread_id, 0).await.unwrap()[0].sequence;
         let marker = format!("agent-mailbox-through:{sequence}");
         let memory_dir = temp.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -833,7 +833,7 @@ mod tests {
         .await
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions
@@ -936,7 +936,7 @@ mod tests {
         .await
         .unwrap();
         let memory_dir = temp.path().join("memory");
-        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&memory_dir.join("sessions"))
             .await
             .unwrap();
         sessions

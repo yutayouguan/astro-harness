@@ -1,6 +1,6 @@
 //! Agent 工具调用的 JSONL 审计日志（轻量落盘，失败可忽略）。
 //!
-//! 每次工具发起调用时追加一行 JSON 到 `~/.astro/agents/{id}/tool-calls.jsonl`，
+//! 每次工具发起调用时追加一行 JSON 到 `~/.astro/security/audit/agents/{id}/tool-calls.jsonl`，
 //! 记录时间戳、工具名与参数。侧重保留原始调用轨迹。
 
 use std::fs;
@@ -10,7 +10,7 @@ use crate::workspace::default_memory_dir;
 
 /// 返回指定 Agent 的工具调用日志文件路径。
 fn tool_calls_path(agent_id: &str) -> PathBuf {
-    default_memory_dir()
+    crate::security_audit_dir(&default_memory_dir())
         .join("agents")
         .join(agent_id)
         .join("tool-calls.jsonl")

@@ -1,7 +1,7 @@
 //! 会话持久化：单库 `SessionStore`（sessions / response_items / FTS5）与上下文召回。
 //!
 //! 与精炼记忆（`MEMORY.md`）无关；数据路径由调用方传入（通常
-//! `{ASTRO_MEMORY_DIR|~/.astro}/data/state.db`）。
+//! `{ASTRO_MEMORY_DIR|~/.astro}/sessions/state.db`）。
 
 pub mod context_recall;
 pub mod format;

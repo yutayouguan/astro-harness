@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::agent_id::normalize as normalize_agent_id;
 use crate::installed::reveal_path_in_file_manager;
 
-/// 单次技能目录备份条目（`~/.astro/skill-backups/{agent}/{folder}/{timestamp}/`）。
+/// 单次技能目录备份条目（`~/.astro/skills/backups/{agent}/{folder}/{timestamp}/`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillBackupEntry {
     pub agent_id: String,
@@ -22,19 +22,10 @@ pub struct SkillBackupEntry {
     pub created_at: Option<i64>,
 }
 
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
 fn backups_root() -> PathBuf {
-    memory_dir().join("skill-backups")
+    home::skill_backups_dir(&memory_dir())
 }
 
 fn dir_mtime_secs(path: &Path) -> Option<i64> {
@@ -146,8 +137,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn mkdir_backup(base: &Path, agent: &str, folder: &str, timestamp: &str) {
-        let p = base
-            .join("skill-backups")
+        let p = home::skill_backups_dir(base)
             .join(agent)
             .join(folder)
             .join(timestamp);

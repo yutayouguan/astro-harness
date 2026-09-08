@@ -11,20 +11,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::installed::list_enabled_for_prompt;
 
-fn memory_dir() -> PathBuf {
-    std::env::var("ASTRO_MEMORY_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .map(|h| PathBuf::from(h).join(".astro"))
-        })
-        .unwrap_or_else(|_| PathBuf::from(".astro"))
-}
+use home::default_memory_dir as memory_dir;
 
-/// `{base}/learning/skill-usage.json`
+/// `{base}/evolution/learning/skill-usage.json`
 pub fn skill_usage_path(base: &Path) -> PathBuf {
-    base.join("learning").join("skill-usage.json")
+    home::learning_dir(base).join("skill-usage.json")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

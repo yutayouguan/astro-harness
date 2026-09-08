@@ -134,7 +134,7 @@ pub struct StoreSkillDetail {
     pub verified: Option<bool>,
 }
 
-/// 技能安装来源记录（`skill-origins.json` 单条）。
+/// 技能安装来源记录（`skills/origins.json` 单条）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkillOriginRecord {
     pub folder: String,

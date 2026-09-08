@@ -21,7 +21,7 @@ pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
 pub struct ToolContext<'a> {
     /// 当前 Agent 的记忆管理器；只在同步 memory/context/persona 操作期间短暂加锁。
     pub memory: &'a RwLock<MemoryManager>,
-    /// 共享会话库（`{memory_dir}/data/state.db`），供 `search` 使用。
+    /// 共享会话库（`{memory_dir}/sessions/state.db`），供 `search` 使用。
     pub sessions: &'a dyn ConversationStore,
     /// Agent 根目录（`~/.astro`），用于定位 `agents/{id}/` 等全局路径。
     pub memory_dir: PathBuf,
@@ -228,19 +228,9 @@ mod tests {
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
         std::fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: network-only
-  profiles:
-    network-only:
-      extends: ":workspace"
-      network:
-        enabled: true
-        domains:
-          example.com: allow
-network_proxy:
-  enabled: true
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "network-only", "profiles" = { "network-only" = { "extends" = ":workspace", "network" = { "enabled" = true, "domains" = { "example.com" = "allow" } } } } }
+"network_proxy" = { "enabled" = true }
 "#,
         )
         .unwrap();
@@ -259,16 +249,8 @@ network_proxy:
         let workspace = dir.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
         std::fs::write(
-            dir.path().join("config.yaml"),
-            r#"
-permissions:
-  default_profile: restricted-files
-  profiles:
-    restricted-files:
-      extends: ":workspace"
-      filesystem:
-        paths:
-          /tmp/secret: deny
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = "restricted-files", "profiles" = { "restricted-files" = { "extends" = ":workspace", "filesystem" = { "paths" = { "/tmp/secret" = "deny" } } } } }
 "#,
         )
         .unwrap();
@@ -292,7 +274,7 @@ permissions:
         std::fs::create_dir_all(&workspace).unwrap();
         memory::set_permission_preset(dir.path(), types::PermissionPreset::ReadOnly).unwrap();
         let manager = memory::MemoryManager::new(dir.path().to_path_buf()).unwrap();
-        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("data"))
+        let sessions = session::SessionStore::open_sessions_dir(&manager.base_dir.join("sessions"))
             .await
             .unwrap();
         let manager = std::sync::RwLock::new(manager);

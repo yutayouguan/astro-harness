@@ -425,7 +425,8 @@ impl ArtifactDb {
         .execute(&self.pool)
         .await?;
 
-        let mut roots: Vec<(PathBuf, Option<String>)> = vec![(memory_root.join("uploads"), None)];
+        let mut roots: Vec<(PathBuf, Option<String>)> =
+            vec![(home::uploads_dir(memory_root), None)];
         if let Ok(entries) = std::fs::read_dir(memory_root) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
@@ -623,9 +624,9 @@ mod tests {
     #[tokio::test]
     async fn register_reconcile_and_list_by_category() {
         let root = TempDir::new().unwrap();
-        let uploads = root.path().join("uploads");
+        let uploads = home::uploads_dir(root.path());
         fs::create_dir_all(&uploads).unwrap();
-        fs::create_dir_all(home::data_dir(root.path())).unwrap();
+        fs::create_dir_all(home::sessions_dir(root.path())).unwrap();
 
         let upload_path = uploads.join("photo.png");
         fs::write(&upload_path, b"fake-png").unwrap();
@@ -676,7 +677,7 @@ mod tests {
     #[tokio::test]
     async fn artifact_db_impls_sqlite_store() {
         let root = TempDir::new().unwrap();
-        fs::create_dir_all(home::data_dir(root.path())).unwrap();
+        fs::create_dir_all(home::sessions_dir(root.path())).unwrap();
         let path = artifacts_db_path(root.path());
         let db = ArtifactDb::new(path).await.unwrap();
         let _pool: &SqlitePool = SqliteStore::pool(&db);

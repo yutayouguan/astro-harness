@@ -120,7 +120,7 @@ async fn register_and_list_by_category() {
 async fn reconcile_adds_and_marks_missing() {
     let dir = tempdir().unwrap();
     let memory_root = dir.path().to_path_buf();
-    let uploads = memory_root.join("uploads").join("sess-a");
+    let uploads = home::uploads_dir(&memory_root).join("sess-a");
     let workspace = memory_root.join("workspace");
     std::fs::create_dir_all(&uploads).unwrap();
     std::fs::create_dir_all(&workspace).unwrap();
@@ -161,7 +161,7 @@ async fn reconcile_adds_and_marks_missing() {
 async fn reconcile_registers_uploaded_memory_template() {
     let dir = tempdir().unwrap();
     let memory_root = dir.path().to_path_buf();
-    let uploads = memory_root.join("uploads").join("sess-a");
+    let uploads = home::uploads_dir(&memory_root).join("sess-a");
     std::fs::create_dir_all(&uploads).unwrap();
 
     let memory_md = uploads.join("MEMORY.md");

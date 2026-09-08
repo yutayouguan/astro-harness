@@ -53,7 +53,7 @@ fn kind_to_backend(kind: &str) -> &str {
 }
 
 fn load_providers_file() -> Option<ProvidersFile> {
-    let path = default_memory_dir().join("providers.json");
+    let path = home::providers_path(&default_memory_dir());
     let raw = std::fs::read_to_string(&path).ok()?;
     serde_json::from_str(&raw).ok()
 }

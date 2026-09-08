@@ -7,8 +7,7 @@ use tokio::sync::Mutex;
 
 use home::tool_name_to_toolset;
 use home::{
-    agent_config_dir, default_memory_dir, ensure_default_workspace_dirs, normalize_agent_id,
-    DEFAULT_AGENT_ID,
+    default_memory_dir, ensure_default_workspace_dirs, normalize_agent_id, DEFAULT_AGENT_ID,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -51,7 +50,10 @@ impl AgentUsageStats {
 fn usage_path(agent_id: &str) -> PathBuf {
     let base = default_memory_dir();
     let id = normalize_agent_id(agent_id);
-    agent_config_dir(&base, &id).join("usage-stats.json")
+    home::usage_dir(&base)
+        .join("agents")
+        .join(&id)
+        .join("stats.json")
 }
 
 fn normalize_key(agent_id: Option<&str>) -> String {

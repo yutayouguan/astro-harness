@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 types = { path = "../agent-types" }
+home = { path = "../agent-home" }
 network-proxy = { path = "../agent-network-proxy" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

@@ -268,7 +268,7 @@ pub async fn primary_model_target_for_session(
 ) -> Result<types::ModelTarget, String> {
     let root = home::default_memory_dir();
     memory::ensure_workspace(&root).map_err(|e| e.to_string())?;
-    let store = session::SessionStore::open_sessions_dir(&home::data_dir(&root))
+    let store = session::SessionStore::open_sessions_dir(&home::sessions_dir(&root))
         .await
         .map_err(|e| e.to_string())?;
     let billing = store

@@ -2,7 +2,7 @@
 //!
 //! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，同时持有可调用工具的
 //! [`ToolEntry`] 和 [`crate::CoreToolRuntime`]，并按当前 Agent 的 `tools_enabled`（或全局
-//! `~/.astro/tools-enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
+//! `~/.astro/tools/enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
 use std::collections::{HashMap, HashSet};
@@ -29,7 +29,7 @@ inventory::collect!(BuiltinToolRegistrar);
 /// 工具注册表：以工具名为键的全局索引。
 ///
 /// 同时维护 toolset 级别的启用映射；MCP 工具（`mcp__` 前缀）的开关在注册阶段
-/// 已过滤，不走 `tools-enabled.json`。
+/// 已过滤，不走 `tools/enabled.json`。
 /// 动态工具 handler（MCP 工具等运行时注册的异步调用闭包）。
 ///
 /// 动态工具不需要 `ToolContext` — MCP 工具通过捕获的
@@ -222,7 +222,7 @@ impl ToolRegistry {
 
     /// 从磁盘重新加载指定 Agent 的 toolset 启用表并覆盖 `enabled` 映射。
     ///
-    /// `agent_id` 为 `None` 时读全局 `~/.astro/tools-enabled.json`；否则读
+    /// `agent_id` 为 `None` 时读全局 `~/.astro/tools/enabled.json`；否则读
     /// `AgentRuntimeConfig.tools_enabled`（缺失时回退全局），与前端
     /// `save_tools_enabled_for_agent` 对齐。
     pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
@@ -365,7 +365,7 @@ impl ToolRegistry {
 
     /// 返回当前会话可用的工具：toolset 已启用且 `check_fn` 通过（若有）。
     ///
-    /// MCP toolset 不受 `tools-enabled.json` 门控，仅依赖注册时的过滤逻辑。
+    /// MCP toolset 不受 `tools/enabled.json` 门控，仅依赖注册时的过滤逻辑。
     pub fn available_tools(&self) -> Vec<&ToolEntry> {
         self.tools
             .values()

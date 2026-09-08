@@ -65,7 +65,7 @@ Astro Agent 记忆子系统：管理精炼记忆（MEMORY.md）、用户档案�
 
 ## 配置体系
 
-`config.rs` 从 `{base_dir}/config.yaml` 加载多维度运行时配置：
+`config.rs` 从 `{base_dir}/config.toml` 加载多维度运行时配置：
 
 | 配置类型 | 说明 |
 |----------|------|

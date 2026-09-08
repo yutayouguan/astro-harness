@@ -130,7 +130,7 @@ fn usage_db_path_under_memory_dir() {
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    assert_eq!(usage_db_path(), dir.path().join("data/usage.db"));
+    assert_eq!(usage_db_path(), dir.path().join("usage/usage.db"));
     std::env::remove_var("ASTRO_MEMORY_DIR");
 }
 
@@ -401,7 +401,7 @@ fn estimate_usage_cost_reads_openrouter_cache_file() {
     use usage::{estimate_usage_cost, CostStatus, UsageTokens};
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    let cache_dir = dir.path().join("cache");
+    let cache_dir = home::models_cache_dir(dir.path());
     std::fs::create_dir_all(&cache_dir).unwrap();
     let cache = cache_dir.join("openrouter-model-pricing.json");
     std::fs::write(

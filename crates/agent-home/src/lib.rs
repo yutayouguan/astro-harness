@@ -4,12 +4,15 @@
 //! 供不需要持久化存储的 crate（如 `mcp`）直接依赖，避免引入 SQLite。
 
 pub mod config;
+pub mod config_file;
 pub mod infra;
+pub mod layout;
 pub mod test_env;
 pub mod workspace;
 
 // ─── flat re-exports ─────────────────────────────────────────────────────────
 
+pub use layout::*;
 pub use workspace::*;
 
 pub use infra::log_query::{
