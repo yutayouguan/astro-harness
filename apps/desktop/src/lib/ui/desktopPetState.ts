@@ -11,6 +11,9 @@ export type DesktopPetState = {
   spriteVersionNumber: number | null;
   displayName: string | null;
   description: string | null;
+  followWallpaper: boolean;
+  lastWallpaperPath: string | null;
+  scenes: Array<{ id: string; name: string }>;
 };
 
 export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
@@ -26,6 +29,9 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   spriteVersionNumber: null,
   displayName: null,
   description: null,
+  followWallpaper: false,
+  lastWallpaperPath: null,
+  scenes: [],
 };
 
 export function acceptDesktopPetState(

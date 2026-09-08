@@ -26,6 +26,8 @@ pub enum DesktopPetAction {
     Show,
     Hide,
     Configure,
+    SaveScene,
+    ApplyScene,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -33,7 +35,7 @@ pub enum DesktopPetAction {
 pub struct DesktopPetArgs {
     /// status 查看；apply 应用 image_gen 结果；show/hide 显示或隐藏；configure 调整显示。
     pub action: DesktopPetAction,
-    /// apply 必填：image_gen 返回的工作区相对路径或授权根内绝对路径。
+    /// apply 必填，save_scene 可选：image_gen 返回的授权本地路径；save_scene 仅保存预览，不替换当前桌宠。
     #[serde(default)]
     pub image_path: Option<String>,
     /// apply 可选：生成所依据的原始宠物照片路径，用于设置页保留来源预览。
@@ -51,6 +53,20 @@ pub struct DesktopPetArgs {
     /// apply 可选：记录实际图片模型。
     #[serde(default)]
     pub model: Option<String>,
+    /// save_scene 可选壁纸；使用授权根内 image_gen 输出路径。缺省只收藏当前桌宠。
+    #[serde(default)]
+    pub wallpaper_path: Option<String>,
+    /// save_scene 必填场景名称。
+    #[serde(default)]
+    pub name: Option<String>,
+    /// apply_scene 必填；save_scene 指定已有 id 时只更新该场景的壁纸。
+    #[serde(default)]
+    pub scene_id: Option<String>,
+    /// apply_scene: all 整套并开启联动；pet 仅桌宠并关闭联动；wallpaper 仅壁纸；linked 按联动设置。
+    #[serde(default)]
+    pub mode: Option<types::pet_scene::SceneApplyMode>,
+    #[serde(default)]
+    pub follow_wallpaper: Option<bool>,
 }
 
 struct ValidatedImage {
@@ -62,7 +78,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "desktop_pet".to_string(),
         toolset: "desktop_pet".to_string(),
-        description: "Apply an image_gen result as Astro's desktop pet, inspect its state, show or hide it, and adjust scale or always-on-top behavior. Use action=apply only with an existing authorized local image path; this tool does not generate images itself."
+        description: "Apply an image_gen result as Astro's desktop pet, inspect its state and saved scenes, show/hide/configure it. save_scene saves the current pet with an optional wallpaperPath without switching; apply_scene applies a saved scene by sceneId and mode. This tool never generates images itself."
             .to_string(),
         schema: schema_for_args::<DesktopPetArgs>(),
         check_fn: None,
@@ -94,6 +110,15 @@ fn handle(
     let state = match action {
         DesktopPetAction::Status => read_state(ctx)?,
         DesktopPetAction::Apply => apply(ctx, parsed)?,
+        DesktopPetAction::SaveScene => save_scene(ctx, parsed)?,
+        DesktopPetAction::ApplyScene => types::pet_scene::apply_scene(
+            &ctx.memory_dir,
+            parsed
+                .scene_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("缺少 sceneId"))?,
+            parsed.mode.unwrap_or(types::pet_scene::SceneApplyMode::All),
+        )?,
         DesktopPetAction::Show => update_state(ctx, |state| {
             let path = state
                 .pet_path
@@ -109,11 +134,16 @@ fn handle(
         })?,
         DesktopPetAction::Configure => {
             anyhow::ensure!(
-                parsed.scale.is_some() || parsed.always_on_top.is_some(),
-                "configure 需要 scale 或 alwaysOnTop"
+                parsed.scale.is_some()
+                    || parsed.always_on_top.is_some()
+                    || parsed.follow_wallpaper.is_some(),
+                "configure 需要 scale、alwaysOnTop 或 followWallpaper"
             );
             update_state(ctx, |state| {
                 apply_display_options(state, parsed.scale, parsed.always_on_top);
+                if let Some(follow) = parsed.follow_wallpaper {
+                    state.follow_wallpaper = follow;
+                }
                 Ok(())
             })?
         }
@@ -128,6 +158,92 @@ fn handle(
 
 fn read_state(ctx: &ToolContext<'_>) -> anyhow::Result<types::DesktopPetState> {
     types::read_desktop_pet_state(&ctx.memory_dir)
+}
+
+fn save_scene(
+    ctx: &ToolContext<'_>,
+    args: DesktopPetArgs,
+) -> anyhow::Result<types::DesktopPetState> {
+    let current = read_state(ctx)?;
+    let existing_scene = args.scene_id.is_some();
+    let scene = if let Some(id) = args.scene_id {
+        current
+            .scenes
+            .into_iter()
+            .find(|s| s.id == id)
+            .ok_or_else(|| anyhow::anyhow!("场景不存在"))?
+    } else {
+        let name = args
+            .name
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("save_scene 需要 name"))?;
+        anyhow::ensure!(
+            !name.trim().is_empty()
+                && name.chars().count() <= 80
+                && !name.chars().any(char::is_control),
+            "场景名称应为 1–80 个字符"
+        );
+        anyhow::ensure!(current.scenes.len() < 100, "场景收藏已达 100 个上限");
+        let pet = if let Some(image_path) = args.image_path.as_deref() {
+            let image = read_authorized_image(ctx, image_path)?;
+            let source = args
+                .source_path
+                .as_deref()
+                .map(|p| read_authorized_image(ctx, p))
+                .transpose()?;
+            let bytes = normalize_pet_image(&image.bytes)?;
+            let path = store_asset(&ctx.memory_dir, "pet", &bytes, "png")?;
+            let source_path = source
+                .map(|image| store_asset(&ctx.memory_dir, "source", &image.bytes, image.extension))
+                .transpose()?;
+            types::pet_scene::PetIdentity {
+                pet_path: path.to_string_lossy().into_owned(),
+                source_path: source_path.map(|p| p.to_string_lossy().into_owned()),
+                sprite_version_number: None,
+                display_name: Some(name.into()),
+                description: None,
+                provider: clean_optional(args.provider),
+                model: clean_optional(args.model),
+            }
+        } else {
+            types::pet_scene::PetIdentity::from_state(&current)?
+        };
+        types::pet_scene::PetScene {
+            id: format!("pet-{}", uuid::Uuid::new_v4().simple()),
+            name: args
+                .name
+                .ok_or_else(|| anyhow::anyhow!("save_scene 需要 name"))?,
+            pet,
+            style: None,
+            wallpaper_source_path: None,
+        }
+    };
+    scene.validate()?;
+    // Resolve and validate authorization before changing the library.
+    let wallpaper = args
+        .wallpaper_path
+        .as_deref()
+        .map(|p| -> anyhow::Result<_> {
+            let path = resolve_authorized_source(ctx, p)?;
+            let bytes = types::desktop_pet::read_limited_pet_file(&path, MAX_IMAGE_BYTES)?;
+            Ok((path, bytes))
+        })
+        .transpose()?;
+    let mut state = if existing_scene {
+        read_state(ctx)?
+    } else {
+        types::pet_scene::save_scene(&ctx.memory_dir, scene.clone())?
+    };
+    if let Some((path, bytes)) = wallpaper {
+        state = super::pet_scene::attach_wallpaper(
+            &ctx.memory_dir,
+            &scene,
+            &bytes,
+            Some(path.to_string_lossy().into_owned()),
+        )?;
+    }
+    types::notify_desktop_pet_changed();
+    Ok(state)
 }
 
 fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::DesktopPetState> {
@@ -166,6 +282,7 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
     let model = clean_optional(args.model);
     let updated = types::update_desktop_pet_state(&ctx.memory_dir, |state| {
         state.pet_path = Some(pet_path_value);
+        state.follow_wallpaper = false;
         state.sprite_version_number = None;
         state.display_name = None;
         state.description = None;
@@ -503,6 +620,48 @@ mod tests {
         let applied = image::open(pet_path).unwrap().to_rgba8();
         assert_eq!(applied.get_pixel(0, 0)[3], 0);
         assert_eq!(applied.get_pixel(6, 6)[3], 255);
+
+        let previous_pet = state.pet_path.clone();
+        handle(
+            &mut ctx,
+            "desktop_pet",
+            &serde_json::json!({
+                "action": "save_scene", "imagePath": "pet.png", "name": "Preview scene"
+            }),
+        )
+        .unwrap();
+        let saved = types::read_desktop_pet_state(temp.path()).unwrap();
+        assert_eq!(
+            saved.pet_path, previous_pet,
+            "saving a generated preview must not apply it"
+        );
+        assert_eq!(saved.scenes.len(), 1);
+        let id = saved.scenes[0].id.clone();
+        handle(
+            &mut ctx,
+            "desktop_pet",
+            &serde_json::json!({
+                "action": "save_scene", "sceneId": id, "wallpaperPath": "pet.png"
+            }),
+        )
+        .unwrap();
+        let saved = types::read_desktop_pet_state(temp.path()).unwrap();
+        assert!(saved.scenes[0].style.is_some());
+        assert_eq!(saved.pet_path, previous_pet);
+        handle(
+            &mut ctx,
+            "desktop_pet",
+            &serde_json::json!({
+                "action": "apply_scene", "sceneId": id, "mode": "all"
+            }),
+        )
+        .unwrap();
+        let applied = types::read_desktop_pet_state(temp.path()).unwrap();
+        assert!(applied.follow_wallpaper && applied.enabled);
+        assert_eq!(
+            applied.pet_path.as_deref(),
+            Some(applied.scenes[0].pet.pet_path.as_str())
+        );
     }
 
     #[tokio::test]

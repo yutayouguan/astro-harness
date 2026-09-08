@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { readMorphiconPrefs } from "../../lib/ui/morphiconPrefs";
 import {
@@ -14,7 +20,8 @@ export const UI_STYLE_RESET_EVENT = "astro:ui-style-reset";
 
 function isTauriRuntime(): boolean {
   return Boolean(
-    (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__,
+    (window as unknown as { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__,
   );
 }
 
@@ -28,22 +35,27 @@ export function useActiveUiStyle() {
   const [style, setStyle] = useState<ActiveUiStyle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const appliedTokensRef = useRef<string[]>([]);
+  const refreshSequence = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!isTauriRuntime()) return;
+    const sequence = ++refreshSequence.current;
     try {
       const next = await invoke<ActiveUiStyle | null>("get_active_ui_style");
+      if (sequence !== refreshSequence.current) return;
       setStyle((current) =>
         current?.revision === next?.revision ? current : next,
       );
       setError(null);
     } catch (cause) {
+      if (sequence !== refreshSequence.current) return;
       setStyle(null);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }, []);
 
   const reset = useCallback(async () => {
+    refreshSequence.current++;
     setStyle(null);
     window.dispatchEvent(new Event(UI_STYLE_RESET_EVENT));
     if (!isTauriRuntime()) return;
@@ -57,18 +69,24 @@ export function useActiveUiStyle() {
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
-    const onReset = () => setStyle(null);
+    const onReset = () => {
+      refreshSequence.current++;
+      setStyle(null);
+    };
     void refresh();
-    void listen(UI_STYLE_CHANGED_EVENT, () => void refresh()).then((stop) => {
-      if (disposed) stop();
-      else unlisten = stop;
-    }).catch(() => {});
+    void listen(UI_STYLE_CHANGED_EVENT, () => void refresh())
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => {});
     const timer = window.setInterval(onVisible, REFRESH_MS);
     window.addEventListener("focus", onVisible);
     window.addEventListener(UI_STYLE_RESET_EVENT, onReset);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
+      refreshSequence.current++;
       unlisten?.();
       window.clearInterval(timer);
       window.removeEventListener("focus", onVisible);
@@ -108,7 +126,10 @@ export function useActiveUiStyle() {
         apply();
       }
     });
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => {
       observer.disconnect();
       for (const token of appliedTokensRef.current) {

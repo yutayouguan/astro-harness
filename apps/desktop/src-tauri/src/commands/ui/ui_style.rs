@@ -48,9 +48,16 @@ fn reset_active_style_at(base: &Path) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn get_active_ui_style() -> Result<Option<UiStyleManifest>, String> {
-    tokio::task::spawn_blocking(|| active_style_at(&home::default_memory_dir()))
-        .await
-        .map_err(|error| format!("读取界面样式任务失败：{error}"))?
+    tokio::task::spawn_blocking(|| {
+        let base = home::default_memory_dir();
+        // Recover a scene's durable wallpaper outbox before presenting the active theme.
+        if let Err(error) = types::read_desktop_pet_state(&base) {
+            tracing::warn!(%error, "pet scene recovery failed; keeping independent wallpaper available");
+        }
+        active_style_at(&base)
+    })
+    .await
+    .map_err(|error| format!("读取界面样式任务失败：{error}"))?
 }
 
 #[tauri::command]

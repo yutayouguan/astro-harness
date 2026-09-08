@@ -230,6 +230,8 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let pet_path = destination.join(&managed_manifest.spritesheet_path);
     let updated = types::update_desktop_pet_state(base, |state| {
         state.pet_path = Some(pet_path.to_string_lossy().into_owned());
+        state.source_path = None;
+        state.follow_wallpaper = false;
         state.enabled = true;
         state.provider = None;
         state.model = None;
@@ -269,22 +271,6 @@ fn store_asset(
 
 fn remove_uniform_edge_background(bytes: &[u8]) -> Result<Vec<u8>, String> {
     tools::builtin::desktop_pet::normalize_pet_image(bytes).map_err(|error| error.to_string())
-}
-
-fn validate_generation_target(
-    state: &DesktopPetStateDto,
-    expected_source: &str,
-    expected_pet: &Option<String>,
-) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        state.source_path.as_deref() == Some(expected_source),
-        "生成期间宠物照片已更换，请重新生成"
-    );
-    anyhow::ensure!(
-        &state.pet_path == expected_pet,
-        "生成期间已应用另一个桌宠，当前结果未覆盖它"
-    );
-    Ok(())
 }
 
 fn window_size(scale: f64) -> LogicalSize<f64> {
@@ -365,7 +351,7 @@ fn sync_window<R: Runtime>(app: &AppHandle<R>) -> Result<DesktopPetStateDto, Str
     Ok(latest)
 }
 
-fn present_committed_state(
+pub(super) fn present_committed_state(
     app: &AppHandle,
     committed: DesktopPetStateDto,
 ) -> Result<DesktopPetStateDto, String> {
@@ -477,20 +463,12 @@ pub async fn import_desktop_pet_package(
     present_committed_state(&app, state)
 }
 
-#[tauri::command]
-pub async fn generate_desktop_pet(
-    app: AppHandle,
-    description: Option<String>,
-) -> Result<DesktopPetStateDto, String> {
-    let base = home::default_memory_dir();
-    let state = load_state_at(&base)?;
-    let source_path = state
-        .source_path
-        .clone()
-        .ok_or_else(|| "请先上传宠物照片".to_string())?;
-    let previous_pet_path = state.pet_path.clone();
-    let image = validate_source_path(&source_path)?;
-    let details = description.unwrap_or_default();
+pub(super) async fn generate_pet_identity(
+    base: &Path,
+    source_path: &str,
+    details: &str,
+) -> Result<types::pet_scene::PetIdentity, String> {
+    let image = validate_source_path(source_path)?;
     if details.chars().count() > 2_000 {
         return Err("桌宠风格描述不能超过 2000 个字符".to_string());
     }
@@ -515,28 +493,16 @@ pub async fn generate_desktop_pet(
     .await?;
     let generated_image = validate_image_bytes(generated.data)?;
     let transparent = remove_uniform_edge_background(&generated_image.bytes)?;
-    let pet_path = store_asset(&base, "pet", &transparent, "png")?;
-    let pet_path_string = pet_path.to_string_lossy().into_owned();
-    let updated = types::update_desktop_pet_state(&base, |state| {
-        validate_generation_target(state, &source_path, &previous_pet_path)?;
-        state.pet_path = Some(pet_path_string);
-        state.enabled = true;
-        state.provider = Some(generated.provider);
-        state.model = Some(generated.model);
-        state.sprite_version_number = None;
-        state.display_name = None;
-        state.description = None;
-        state.updated_at = chrono::Utc::now().to_rfc3339();
-        Ok(())
-    });
-    let state = match updated {
-        Ok(state) => state,
-        Err(error) => {
-            let _ = fs::remove_file(&pet_path);
-            return Err(error.to_string());
-        }
-    };
-    present_committed_state(&app, state)
+    let pet_path = store_asset(base, "pet", &transparent, "png")?;
+    Ok(types::pet_scene::PetIdentity {
+        pet_path: pet_path.to_string_lossy().into_owned(),
+        source_path: Some(source_path.to_string()),
+        provider: Some(generated.provider),
+        model: Some(generated.model),
+        sprite_version_number: None,
+        display_name: None,
+        description: Some(details.to_string()),
+    })
 }
 
 #[tauri::command]
@@ -660,21 +626,6 @@ mod tests {
         fs::write(&path, "corrupt-state").unwrap();
         assert!(load_state_at(temp.path()).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "corrupt-state");
-    }
-
-    #[test]
-    fn late_generation_does_not_replace_a_newly_selected_pet() {
-        let state = DesktopPetStateDto {
-            source_path: Some("source.png".into()),
-            pet_path: Some("new-pet.png".into()),
-            scale: 1.2,
-            ..DesktopPetStateDto::default()
-        };
-        assert!(
-            validate_generation_target(&state, "source.png", &Some("old-pet.png".into())).is_err()
-        );
-        assert!(validate_generation_target(&state, "source.png", &state.pet_path).is_ok());
-        assert!(validate_generation_target(&state, "other-source.png", &state.pet_path).is_err());
     }
 
     #[test]

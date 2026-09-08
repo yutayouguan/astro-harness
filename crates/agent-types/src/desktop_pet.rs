@@ -46,6 +46,12 @@ pub struct DesktopPetState {
     pub sprite_version_number: Option<u32>,
     pub display_name: Option<String>,
     pub description: Option<String>,
+    pub follow_wallpaper: bool,
+    pub last_wallpaper_path: Option<String>,
+    pub scenes: Vec<crate::pet_scene::PetScene>,
+    /// Durable outbox: recovered before reads, so a crash cannot lose a scene wallpaper apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_scene_style: Option<crate::UiStyleManifest>,
 }
 
 impl Default for DesktopPetState {
@@ -63,6 +69,10 @@ impl Default for DesktopPetState {
             sprite_version_number: None,
             display_name: None,
             description: None,
+            follow_wallpaper: false,
+            last_wallpaper_path: None,
+            scenes: Vec::new(),
+            pending_scene_style: None,
         }
     }
 }
@@ -128,13 +138,27 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
     if !path.try_exists()? {
         return Ok(DesktopPetState::default());
     }
-    let bytes = read_limited_pet_file(&path, 64 * 1024)?;
-    let state = serde_json::from_slice(&bytes)?;
+    let bytes = read_limited_pet_file(&path, 1024 * 1024)?;
+    let mut state: DesktopPetState = serde_json::from_slice(&bytes)?;
     validate_state(&state)?;
+    if let Some(style) = state.pending_scene_style.as_ref() {
+        crate::pet_scene::publish_style(base, style)?;
+        state.pending_scene_style = None;
+        write_desktop_pet_state_unlocked(base, &state)?;
+    }
     Ok(state)
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    anyhow::ensure!(state.scenes.len() <= 100, "场景收藏已达 100 个上限");
+    let mut ids = std::collections::HashSet::new();
+    for scene in &state.scenes {
+        scene.validate()?;
+        anyhow::ensure!(ids.insert(&scene.id), "场景 id 重复");
+    }
+    if let Some(style) = &state.pending_scene_style {
+        style.validate().map_err(anyhow::Error::msg)?;
+    }
     anyhow::ensure!(
         state.scale.is_finite() && (0.65..=1.35).contains(&state.scale),
         "桌宠大小必须在 0.65..=1.35 之间"
@@ -162,7 +186,9 @@ fn write_desktop_pet_state_unlocked(base: &Path, state: &DesktopPetState) -> any
     let root = desktop_pet_root(base);
     let path = desktop_pet_state_path(base);
     let mut temporary = tempfile::NamedTempFile::new_in(&root)?;
-    temporary.write_all(&serde_json::to_vec_pretty(state)?)?;
+    let bytes = serde_json::to_vec_pretty(state)?;
+    anyhow::ensure!(bytes.len() <= 1024 * 1024, "桌宠场景配置过大");
+    temporary.write_all(&bytes)?;
     temporary.as_file().sync_all()?;
     // persist replaces atomically on Windows too, without deleting the old state first.
     temporary.persist(&path).map_err(|error| error.error)?;

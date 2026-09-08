@@ -15,6 +15,7 @@ import { useReducedMotion } from "framer-motion";
 
 import conceptImage from "../../assets/generated/desktop-pet-concept.png";
 import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
+import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 
@@ -93,7 +94,15 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     clearError,
   } = useDesktopPetState(active);
   const [description, setDescription] = useState("");
-  const [phase, setPhase] = useState<"upload" | "generate" | null>(null);
+  const [sceneName, setSceneName] = useState("");
+  const [withWallpaper, setWithWallpaper] = useState(false);
+  const [sceneDescription, setSceneDescription] = useState("");
+  const [includePet, setIncludePet] = useState(false);
+  const [notice, setNotice] = useState("");
+  const zh = locale === "zh";
+  const [phase, setPhase] = useState<
+    "upload" | "generate" | "wallpaper" | null
+  >(null);
   const [localError, setLocalError] = useState("");
   const [scaleDraft, setScaleDraft] = useState<number | null>(null);
   const scaleCommit = useRef<number | null>(null);
@@ -101,6 +110,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
   const error = localError || stateError;
   useEffect(() => {
     setScaleDraft(null);
+    setLocalError("");
   }, [state.revision]);
 
   async function choosePhoto() {
@@ -132,12 +142,32 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     if (!state.sourcePath || busy) return;
     setPhase("generate");
     setLocalError("");
+    setNotice("");
     try {
-      await mutate("generate_desktop_pet", {
+      const saved = await mutate("create_pet_scene", {
+        name: sceneName.trim() || (zh ? "我的宠物场景" : "My companion scene"),
         description: description.trim() || null,
+        useCurrent: false,
       });
-    } catch {
-      // The shared controller owns errors; a failed request must not restore old state.
+      setNotice(
+        zh
+          ? "桌宠已保存到下方场景收藏，请预览后应用。"
+          : "Pet saved below. Preview your scene before applying.",
+      );
+      if (withWallpaper) {
+        setPhase("wallpaper");
+        const sceneId = saved.scenes[saved.scenes.length - 1]?.id;
+        if (!sceneId) throw new Error("Missing saved scene");
+        await mutate("generate_pet_scene_wallpaper", {
+          sceneId,
+          description:
+            sceneDescription.trim() ||
+            (zh ? "温暖安静的森林小屋" : "A warm peaceful woodland home"),
+          includePet,
+        });
+      }
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
     } finally {
       setPhase(null);
     }
@@ -256,6 +286,80 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               disabled={busy != null}
             />
           </label>
+          <label className="desktop-pet-field">
+            <span>{zh ? "场景名称" : "Scene name"}</span>
+            <input
+              value={sceneName}
+              maxLength={80}
+              disabled={busy != null}
+              placeholder={
+                zh
+                  ? "例如：奶糖的森林小屋"
+                  : "For example: Mochi's woodland home"
+              }
+              onChange={(e) => setSceneName(e.currentTarget.value)}
+            />
+          </label>
+          <label className="desktop-pet-toggle-row">
+            <span>
+              <strong>
+                {zh ? "同时生成配套壁纸" : "Generate a matching wallpaper"}
+              </strong>
+              <small>
+                {zh
+                  ? "会额外调用一次图片模型；只用于 Astro 应用背景。"
+                  : "One additional image request. Astro background only."}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={withWallpaper}
+              disabled={busy != null}
+              onChange={(e) => setWithWallpaper(e.currentTarget.checked)}
+            />
+          </label>
+          <details
+            className="pet-scene-options"
+            open={withWallpaper || undefined}
+          >
+            <summary>
+              {zh
+                ? "配套壁纸选项（也用于下方重试）"
+                : "Wallpaper options (also used for retries)"}
+            </summary>
+            <label className="desktop-pet-field">
+              <span>{zh ? "场景描述" : "Scene description"}</span>
+              <textarea
+                value={sceneDescription}
+                maxLength={2000}
+                disabled={busy != null}
+                placeholder={
+                  zh
+                    ? "森林小屋、海边日落、星空花园…"
+                    : "Woodland home, sunset beach, starry garden…"
+                }
+                onChange={(e) => setSceneDescription(e.currentTarget.value)}
+              />
+            </label>
+            <label className="desktop-pet-toggle-row">
+              <span>
+                <strong>
+                  {zh ? "壁纸中包含宠物肖像" : "Include a pet portrait"}
+                </strong>
+                <small>
+                  {zh
+                    ? "默认只生成环境，避免与悬浮桌宠重复。"
+                    : "Environment-only by default, to avoid duplicating the floating pet."}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={includePet}
+                disabled={busy != null}
+                onChange={(e) => setIncludePet(e.currentTarget.checked)}
+              />
+            </label>
+          </details>
           <div className="desktop-pet-action-row">
             <button
               type="button"
@@ -263,12 +367,18 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               onClick={() => void generate()}
               disabled={!state.sourcePath || busy != null}
             >
-              {busy === "generate" ? (
+              {phase === "generate" || phase === "wallpaper" ? (
                 <Loader2 className="desktop-pet-spinner" size={17} />
               ) : (
                 <Sparkles size={17} />
               )}
-              {busy === "generate" ? copy.creating : copy.create}
+              {phase === "wallpaper"
+                ? zh
+                  ? "正在生成配套壁纸…"
+                  : "Creating matching wallpaper…"
+                : phase === "generate"
+                  ? copy.creating
+                  : copy.create}
             </button>
             <button
               type="button"
@@ -286,6 +396,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               {error}
             </p>
           ) : null}
+          {notice && <p role="status">{notice}</p>}
         </section>
 
         <section className="prefs-card desktop-pet-card">
@@ -396,6 +507,15 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           </div>
         </section>
       </div>
+      <PetSceneLibrary
+        state={state}
+        mutate={mutate}
+        busy={busy != null}
+        zh={zh}
+        name={sceneName}
+        description={sceneDescription}
+        includePet={includePet}
+      />
     </section>
   );
 }

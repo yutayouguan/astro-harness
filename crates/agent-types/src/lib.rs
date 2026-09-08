@@ -9,6 +9,7 @@ pub mod desktop_pet;
 pub mod error;
 pub mod grpc_addr;
 pub mod interaction_mode;
+pub mod pet_scene;
 pub mod media;
 pub mod memory_citation;
 pub mod model_profile;

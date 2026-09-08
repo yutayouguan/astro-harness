@@ -1,4 +1,5 @@
 export type WallpaperMode = "color" | "wallpaper";
+export const WALLPAPER_STORAGE_KEY = "astro-wallpaper-prefs.v1";
 export type WallpaperFit = "cover" | "contain" | "stretch";
 
 export type WallpaperAsset = {

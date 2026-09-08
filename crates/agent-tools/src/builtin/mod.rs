@@ -8,6 +8,7 @@ pub mod desktop_pet;
 pub mod hitl;
 pub mod media;
 pub mod memory;
+pub mod pet_scene;
 pub mod present;
 pub mod shell;
 pub mod ui_style;

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_WALLPAPER_PREFS,
@@ -8,19 +9,28 @@ import {
   applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
+  WALLPAPER_STORAGE_KEY,
   type WallpaperAsset,
   type WallpaperFit,
   type WallpaperMode,
   type WallpaperPrefs,
 } from "../../lib/ui/wallpaper";
-import { UI_STYLE_RESET_EVENT } from "./useActiveUiStyle";
+import {
+  UI_STYLE_RESET_EVENT,
+  UI_STYLE_CHANGED_EVENT,
+} from "./useActiveUiStyle";
+import type { ActiveUiStyle } from "../../lib/ui/activeUiStyle";
+import {
+  createWallpaperSync,
+  sceneWallpaperAsset,
+} from "../../lib/ui/petScene";
 
-const STORAGE_KEY = "astro-wallpaper-prefs.v1";
 const SYSTEM_WALLPAPER_POLL_MS = 15_000;
+const WALLPAPER_RESET_COMPLETE = "astro:wallpaper-reset-complete";
 
 function readStored(): WallpaperPrefs {
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
+    const value = localStorage.getItem(WALLPAPER_STORAGE_KEY);
     return value
       ? normalizeWallpaperPrefs(JSON.parse(value) as unknown)
       : { ...DEFAULT_WALLPAPER_PREFS };
@@ -31,7 +41,7 @@ function readStored(): WallpaperPrefs {
 
 function persist(prefs: WallpaperPrefs) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    localStorage.setItem(WALLPAPER_STORAGE_KEY, JSON.stringify(prefs));
   } catch {
     // WebView 存储不可用时仍保留本次运行状态。
   }
@@ -40,9 +50,13 @@ function persist(prefs: WallpaperPrefs) {
 function deactivateGeneratedStyle() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(UI_STYLE_RESET_EVENT));
-  void invoke("reset_active_ui_style").catch(() => {
-    // 文件态样式不可用时，仍允许修改当前 WebView 的手动壁纸。
-  });
+  void invoke("reset_active_ui_style")
+    .then(() => {
+      window.dispatchEvent(new Event(WALLPAPER_RESET_COMPLETE));
+    })
+    .catch(() => {
+      // 文件态样式不可用时，仍允许修改当前 WebView 的手动壁纸。
+    });
 }
 
 export type WallpaperController = {
@@ -84,6 +98,9 @@ export function useWallpaper(): WallpaperController {
   const systemSyncInFlight = useRef(false);
   const generationRequest = useRef<string | null>(null);
   const cancelledGenerationRequests = useRef(new Set<string>());
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+  const sceneSync = useRef<ReturnType<typeof createWallpaperSync> | null>(null);
 
   const update = useCallback(
     (recipe: (current: WallpaperPrefs) => WallpaperPrefs) => {
@@ -105,6 +122,80 @@ export function useWallpaper(): WallpaperController {
     },
     [update],
   );
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    let requestVersion = 0;
+    const report = (cause: unknown) => {
+      if (!disposed) setError(String(cause));
+    };
+    const sync = createWallpaperSync(
+      (path) => invoke("sync_pet_scene_wallpaper", { path }),
+      report,
+    );
+    sceneSync.current = sync;
+    const syncCurrent = () =>
+      sync.request(
+        prefsRef.current.mode === "wallpaper"
+          ? (prefsRef.current.current?.path ?? null)
+          : null,
+      );
+    const refresh = async () => {
+      const version = ++requestVersion;
+      try {
+        const style = await invoke<ActiveUiStyle | null>("get_active_ui_style");
+        if (disposed || version !== requestVersion) return;
+        const asset = style && sceneWallpaperAsset(style);
+        if (asset)
+          update((current) =>
+            current.current?.path === asset.path &&
+            !current.followSystemWallpaper
+              ? current
+              : addRecentWallpaper(current, asset),
+          );
+        syncCurrent();
+      } catch (cause) {
+        report(cause);
+      }
+    };
+    // Subscribe before the initial snapshot, so chat-driven scene activation is not missed.
+    void listen(UI_STYLE_CHANGED_EVENT, () => void refresh())
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else {
+          stop = unlisten;
+          void refresh();
+        }
+      })
+      .catch(report);
+    const onResetComplete = () => {
+      requestVersion++;
+      syncCurrent();
+    };
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const timer = window.setInterval(refreshVisible, SYSTEM_WALLPAPER_POLL_MS);
+    window.addEventListener("focus", refreshVisible);
+    window.addEventListener(WALLPAPER_RESET_COMPLETE, onResetComplete);
+    return () => {
+      disposed = true;
+      stop?.();
+      sync.dispose();
+      sceneSync.current = null;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+      window.removeEventListener(WALLPAPER_RESET_COMPLETE, onResetComplete);
+    };
+  }, [update]);
+
+  useEffect(() => {
+    sceneSync.current?.request(
+      prefs.mode === "wallpaper" ? (prefs.current?.path ?? null) : null,
+    );
+  }, [prefs.mode, prefs.current?.path]);
 
   const setMode = useCallback(
     (mode: WallpaperMode) => {
@@ -184,6 +275,7 @@ export function useWallpaper(): WallpaperController {
   );
   const cycleRecent = useCallback(() => {
     setError(null);
+    deactivateGeneratedStyle();
     update(cycleRecentWallpaper);
   }, [update]);
 

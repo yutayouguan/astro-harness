@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
-description: 从用户描述或上传的宠物照片生成专属 Astro 桌面宠物并立即应用。用户说“生成桌宠”“把这张照片做成桌面宠物”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 2
+description: 从用户照片生成 Astro 桌宠、可选配套壁纸、保存和切换宠物场景。用户说“生成桌宠”“配套宠物壁纸”“宠物场景”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
+astro_bundled_rev: 3
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 
@@ -32,12 +32,24 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 
 ## 应用到桌面
 
+### 场景套装与预览
+
+- 配套壁纸是可选的额外图片请求，用户没有选择时不生成。只作用于 Astro 应用背景，不修改系统桌面壁纸。
+- 生成新宠物后优先调用 `desktop_pet action=save_scene`，传 `name`、原样的 `imagePath`，可附 `sourcePath`、`provider`、`model`。这只收藏并提供预览，不替换当前桌宠。返回 `state.scenes` 中新场景的 `id`，后续原样用作 `sceneId`。
+- 用户需要配套壁纸时，再调用 `image_gen`，以刚生成的宠物图片作为 `reference_images`；横向构图、相同画风与配色，中心安静、右下留白。默认只画生活环境，不重复画宠物；用户选择肖像壁纸时才包含同一只宠物。
+- 壁纸成功后调用 `desktop_pet action=save_scene`，传已有 `sceneId` 与 `wallpaperPath` 绑定，不重复创建宠物。壁纸失败时保留场景并报告真实原因；重试只生成壁纸，不重新生成宠物。
+- 用户确认应用后调用 `desktop_pet action=apply_scene`，传 `sceneId` 和 `mode`：`all` 整套并开启联动；`pet` 仅桌宠并关闭联动；`wallpaper` 仅壁纸；`linked` 根据现有联动设置切换。没有壁纸的场景仅可用 `pet`。
+- `desktop_pet action=status` 可查看收藏。切换已有场景不调用 `image_gen`。`configure followWallpaper=true/false` 控制联动；未绑定壁纸保留当前桌宠，关闭的桌宠不会因普通壁纸切换自动显示。
+- 用户明确要求“生成并应用整套”时，可完成生成后直接 `apply_scene`；仅“生成”则先预览。
+
+### 直接应用已有图片
+
 1. 使用 `image_gen` 原样返回的图片路径，不猜测文件名。
 2. 调用 `desktop_pet action=apply`，将路径放入 `imagePath`。如果使用了用户照片，同时把原图路径放入 `sourcePath`；`image_gen` 返回了 `provider` / `model` 时也原样传入。
 3. 默认启用桌宠并保持置顶；用户指定大小时将比例换算到 `scale` 的 `0.65..1.35` 范围。
 4. 成功后简短报告桌宠已显示，以及实际使用的形象方向；不要重复输出内部绝对路径。
 
-用户明确说“生成桌宠”“设为桌宠”“换成这个桌宠”即表示允许生成后立即应用，不需要二次确认。
+用户明确说“设为桌宠”“换成这个桌宠”时可直接应用，不需要二次确认。
 
 ## 管理现有桌宠
 

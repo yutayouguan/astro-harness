@@ -54,13 +54,16 @@ test("desktop pet commands cover import, generation, persistence and window stat
     "get_desktop_pet_state",
     "import_desktop_pet_photo",
     "import_desktop_pet_package",
-    "generate_desktop_pet",
     "set_desktop_pet_enabled",
     "set_desktop_pet_scale",
     "set_desktop_pet_always_on_top",
   ]) {
     assert.match(commands, new RegExp(`commands::desktop_pet::${command}`));
     assert.match(panel + controller, new RegExp(command));
+  }
+  for (const command of ["create_pet_scene", "generate_pet_scene_wallpaper"]) {
+    assert.match(commands, new RegExp(`commands::pet_scene::${command}`));
+    assert.match(panel, new RegExp(command));
   }
   assert.match(backend, /types::desktop_pet_root\(base\)/);
   assert.match(backend, /DESKTOP_PET_V2_USED_COLUMNS/);
