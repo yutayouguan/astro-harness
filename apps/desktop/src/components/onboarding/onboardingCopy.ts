@@ -57,6 +57,11 @@ export const COPY = {
     chooseFolder: "选择工作目录",
     changeFolder: "更换目录",
     defaultWorkspace: "使用默认工作空间",
+    workspaceConfirm:
+      "请确认工作空间路径。确认无误后点击“完成设置”，也可以更换目录。",
+    workspaceLoading: "正在读取默认工作空间路径…",
+    workspaceLoadFailed: "无法确认默认工作空间路径",
+    workspaceRetry: "重新读取路径",
     permission: "执行权限",
     ask: "执行前询问",
     askSub: "推荐。涉及写入或高风险操作时先征得你的同意。",
@@ -140,6 +145,11 @@ export const COPY = {
     chooseFolder: "Choose workspace",
     changeFolder: "Change folder",
     defaultWorkspace: "Use default workspace",
+    workspaceConfirm:
+      "Confirm the workspace path, then choose Finish setup. You can also change the folder.",
+    workspaceLoading: "Loading the default workspace path…",
+    workspaceLoadFailed: "Could not confirm the default workspace path",
+    workspaceRetry: "Reload workspace path",
     permission: "Execution permissions",
     ask: "Ask before acting",
     askSub: "Recommended. Astro asks before writes or higher-risk actions.",

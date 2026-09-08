@@ -67,6 +67,8 @@ const STEP_ORDER: OnboardingStep[] = ["personalize", "provider", "workspace"];
 type PermissionPreset = "ask_for_approval" | "approve_for_me";
 type ProviderStatus = "idle" | "testing" | "success" | "error";
 type AppConfigSlice = {
+  default_workspace_dir: string;
+  default_workspace_display_path: string;
   active_agent_id: string;
   agents: Array<{ id: string; name: string }>;
 };
@@ -85,6 +87,7 @@ type HealthSummary = {
   agent: string;
   provider: string;
   workspace: string;
+  workspacePath: string;
   permission: string;
   modelStatus: "verified" | "unavailable" | "demo";
   sandboxAvailable: boolean;
@@ -153,6 +156,19 @@ export function FirstRunOnboarding({
   const [workspacePath, setWorkspacePath] = useState(
     initialDraft.workspace_path,
   );
+  const [defaultWorkspace, setDefaultWorkspace] = useState<{
+    path: string;
+    displayPath: string;
+  } | null>(
+    previewProviders
+      ? { path: "~/.astro/workspace", displayPath: "~/.astro/workspace" }
+      : null,
+  );
+  const [workspaceLoadError, setWorkspaceLoadError] = useState(false);
+  const [configRetry, setConfigRetry] = useState(0);
+  const effectiveWorkspacePath = workspacePath || defaultWorkspace?.path || "";
+  const displayedWorkspacePath =
+    workspacePath || defaultWorkspace?.displayPath || "";
   const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>(
     initialDraft.permission_preset,
   );
@@ -190,6 +206,7 @@ export function FirstRunOnboarding({
             agent: "Astro",
             provider: `${previewProviders?.[0]?.display_name ?? copy.provider} · ${previewProviders?.[0]?.model ?? "—"}`,
             workspace: copy.defaultWorkspace,
+            workspacePath: previewProviders ? "~/.astro/workspace" : "",
             permission: copy.ask,
             modelStatus: "demo",
             sandboxAvailable: true,
@@ -321,9 +338,20 @@ export function FirstRunOnboarding({
   useEffect(() => {
     if (previewProviders || !isTauri()) return;
     let disposed = false;
+    setWorkspaceLoadError(false);
     void withDeadline(invoke<AppConfigSlice>("get_config"))
       .then((config) => {
         if (disposed) return;
+        if (
+          !config.default_workspace_dir?.trim() ||
+          !config.default_workspace_display_path?.trim()
+        ) {
+          throw new Error("Default workspace path unavailable");
+        }
+        setDefaultWorkspace({
+          path: config.default_workspace_dir,
+          displayPath: config.default_workspace_display_path,
+        });
         const active = config.agents.find(
           (agent) => agent.id === config.active_agent_id,
         );
@@ -333,12 +361,12 @@ export function FirstRunOnboarding({
         if (!agentNameTouchedRef.current) setAgentName(active.name);
       })
       .catch(() => {
-        if (!disposed) setProgressError(true);
+        if (!disposed) setWorkspaceLoadError(true);
       });
     return () => {
       disposed = true;
     };
-  }, [previewProviders]);
+  }, [previewProviders, configRetry]);
 
   useEffect(() => {
     if (providers.length === 0) return;
@@ -608,6 +636,7 @@ export function FirstRunOnboarding({
 
   const finish = async () => {
     if (finishing) return;
+    if (!effectiveWorkspacePath) return;
     if (
       !previewProviders &&
       (!verified.current || providerStatus !== "success")
@@ -639,21 +668,21 @@ export function FirstRunOnboarding({
           confirmed: false,
         });
         const projects = await invoke<ProjectDto[]>("list_projects");
-        if (workspacePath) {
-          const existing = projects.find((project) =>
-            project.roots.includes(workspacePath),
-          );
-          if (!existing) {
-            const created = await invoke<ProjectDto>("create_project", {
-              name: inferProjectName(workspacePath),
-              roots: [workspacePath],
-            });
-            localStorage.setItem("astro.activeProjectId", created.id);
-            projectLabel = created.name;
-          } else {
-            localStorage.setItem("astro.activeProjectId", existing.id);
-            projectLabel = existing.name;
-          }
+        const existing = projects.find((project) =>
+          project.roots.includes(effectiveWorkspacePath),
+        );
+        if (!existing) {
+          if (!workspacePath)
+            throw new Error("Default workspace project is unavailable");
+          const created = await invoke<ProjectDto>("create_project", {
+            name: inferProjectName(workspacePath),
+            roots: [workspacePath],
+          });
+          localStorage.setItem("astro.activeProjectId", created.id);
+          projectLabel = created.name;
+        } else {
+          localStorage.setItem("astro.activeProjectId", existing.id);
+          projectLabel = existing.name;
         }
         const currentProviders = await withDeadline(
           invoke<ProvidersStateDto>("get_providers_state"),
@@ -668,6 +697,7 @@ export function FirstRunOnboarding({
           agent: agentName.trim() || currentAgentName,
           provider: providerLabel,
           workspace: projectLabel,
+          workspacePath: displayedWorkspacePath,
           permission:
             permission.preset === "approve_for_me" ? copy.approve : copy.ask,
           modelStatus: providerIsReady(activeProvider)
@@ -687,6 +717,7 @@ export function FirstRunOnboarding({
           agent: agentName.trim() || currentAgentName,
           provider: providerLabel,
           workspace: projectLabel,
+          workspacePath: displayedWorkspacePath,
           permission:
             permissionPreset === "approve_for_me" ? copy.approve : copy.ask,
           modelStatus: "demo",
@@ -1196,12 +1227,40 @@ export function FirstRunOnboarding({
                           ? inferProjectName(workspacePath)
                           : copy.defaultWorkspace}
                       </strong>
-                      <small>{workspacePath || copy.chooseFolder}</small>
+                      <small title={effectiveWorkspacePath}>
+                        {displayedWorkspacePath ||
+                          (workspaceLoadError
+                            ? copy.workspaceLoadFailed
+                            : copy.workspaceLoading)}
+                      </small>
                     </span>
                     <span className="onboarding-folder-action">
                       {workspacePath ? copy.changeFolder : copy.chooseFolder}
                     </span>
                   </button>
+                  <p className="onboarding-workspace-confirm">
+                    {copy.workspaceConfirm}
+                  </p>
+                  {workspaceLoadError && !workspacePath && (
+                    <div className="onboarding-workspace-error" role="alert">
+                      <span>{copy.workspaceLoadFailed}</span>
+                      <Button
+                        size="sm"
+                        onClick={() => setConfigRetry((value) => value + 1)}
+                      >
+                        {copy.workspaceRetry}
+                      </Button>
+                    </div>
+                  )}
+                  {workspacePath && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setWorkspacePath("")}
+                    >
+                      {copy.defaultWorkspace}
+                    </Button>
+                  )}
 
                   <fieldset className="onboarding-permissions">
                     <legend>
@@ -1313,6 +1372,7 @@ export function FirstRunOnboarding({
                         <span>
                           <small>{copy.healthWorkspace}</small>
                           <strong>{healthSummary.workspace}</strong>
+                          <small>{healthSummary.workspacePath}</small>
                         </span>
                       </div>
                       <div
@@ -1373,8 +1433,9 @@ export function FirstRunOnboarding({
                       variant="primary"
                       busy={finishing}
                       disabled={
-                        !previewProviders &&
-                        (providerStatus !== "success" || !verified.current)
+                        !effectiveWorkspacePath ||
+                        (!previewProviders &&
+                          (providerStatus !== "success" || !verified.current))
                       }
                       busyLabel={copy.finishing}
                       onClick={() => void finish()}

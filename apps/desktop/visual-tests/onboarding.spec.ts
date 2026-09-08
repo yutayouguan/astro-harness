@@ -107,8 +107,12 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
             state.active_provider_id = null;
             localStorage.setItem("qa.providers", JSON.stringify(state)); return state;
           }
-          case "get_config": return { agents: [{ id: "default", name: agentName }], active_agent_id: "default",
-            workspace_dir: "/tmp/qa-default", memory_dir: "/tmp/qa-home", grpc_address: "" };
+          case "get_config":
+            if (localStorage.getItem("qa.failWorkspaceConfig")) throw Error("configuration unavailable");
+            return { agents: [{ id: "default", name: agentName }], active_agent_id: "default",
+              workspace_dir: "/tmp/qa-default", memory_dir: "/tmp/qa-home", grpc_address: "",
+              default_workspace_dir: "/tmp/qa-default",
+              default_workspace_display_path: "/tmp/qa-default" };
           case "set_default_agent_name": agentName = args.name; return { id: "default", name: agentName };
           case "get_permission_settings":
           case "set_permission_preset": return { preset: args.preset ?? "ask_for_approval", sandboxHealth: { status: "available", backend: "qa" } };
@@ -224,7 +228,7 @@ test("restart restores draft but requires model verification again", async ({ pa
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "继续", exact: true }).click();
-  await expect(page.getByText("/tmp/qa-workspace", { exact: true })).toBeVisible();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-workspace");
   await expect(page.getByRole("radio", { name: /自动处理常规操作/ })).toBeChecked();
   await page.getByRole("button", { name: "完成设置", exact: true }).click();
   await expect(page.getByText("Nova", { exact: true })).toBeVisible();
@@ -378,6 +382,49 @@ test("state read error provides retry but no bypass", async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem("qa.corrupt"));
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await expect(page.getByRole("button", { name: "跳过动画", exact: true })).toBeVisible();
+});
+
+test("workspace uses the backend path and activates that project after confirmation", async ({ page }, testInfo) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-default");
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveAttribute("title", "/tmp/qa-default");
+  await expect(page.getByText(/请确认工作空间路径/)).toBeVisible();
+  await page.getByRole("button", { name: /使用默认工作空间/ }).click();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-workspace");
+  await page.getByRole("button", { name: "使用默认工作空间", exact: true }).click();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-default");
+  await page.evaluate(() => localStorage.setItem("astro.activeProjectId", "stale-project"));
+  await page.getByRole("button", { name: "完成设置", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "一切准备就绪", exact: true })).toBeVisible();
+  await expect(page.locator(".onboarding-health-grid")).toContainText("/tmp/qa-default");
+  expect(await page.evaluate(() => localStorage.getItem("astro.activeProjectId"))).toBe("default");
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "create_project"))).toEqual([]);
+});
+
+test("unreadable default workspace cannot be confirmed until retry succeeds", async ({ page }) => {
+  await installTransport(page);
+  await page.addInitScript(() => localStorage.setItem("qa.failWorkspaceConfig", "true"));
+  await startProvider(page);
+  await verifyProvider(page);
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.locator(".onboarding-workspace-error")).toContainText("无法确认默认工作空间路径");
+  await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeDisabled();
+  await expect(page.locator(".onboarding-folder-picker small")).not.toContainText("~/.astro/workspace");
+  await page.evaluate(() => localStorage.removeItem("qa.failWorkspaceConfig"));
+  await page.getByRole("button", { name: "重新读取路径", exact: true }).click();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-default");
+  await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeEnabled();
+});
+
+test("workspace preview displays the standard default path", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("astro-locale", "zh"));
+  await page.goto("/iframe.html?id=app-first-run-onboarding--workspace&viewMode=story");
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("~/.astro/workspace");
+  await expect(page.getByText(/请确认工作空间路径/)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("workspace-path.png"), fullPage: true, animations: "disabled" });
 });
 
 test("failed progress prevents completion and supports retry", async ({ page }) => {

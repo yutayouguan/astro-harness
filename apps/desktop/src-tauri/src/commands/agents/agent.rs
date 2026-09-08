@@ -15,6 +15,8 @@ pub struct AppConfigDto {
     pub grpc_address: String,
     pub memory_dir: String,
     pub workspace_dir: String,
+    pub default_workspace_dir: String,
+    pub default_workspace_display_path: String,
     pub active_agent_id: String,
     pub agents: Vec<AgentInfoDto>,
 }
@@ -87,6 +89,7 @@ fn emit_agents_changed(app: &AppHandle, active_agent_id: &str) {
 pub async fn get_config() -> Result<AppConfigDto, String> {
     bootstrap_workspace()?;
     let root = memory_root();
+    let default_workspace = home::agent_workspace_dir(&root, home::DEFAULT_AGENT_ID);
     let agents = home::list_agents(&root)
         .into_iter()
         .map(agent_info_dto)
@@ -95,6 +98,8 @@ pub async fn get_config() -> Result<AppConfigDto, String> {
         grpc_address: default_grpc_address(),
         memory_dir: memory_dir(),
         workspace_dir: workspace_dir(),
+        default_workspace_dir: default_workspace.to_string_lossy().into_owned(),
+        default_workspace_display_path: home::display_user_path(&default_workspace),
         active_agent_id: home::active_agent_id(&root),
         agents,
     })
