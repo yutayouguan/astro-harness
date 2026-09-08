@@ -12,17 +12,17 @@ test("mergeToolCatalog preserves model and registered tool identities", () => {
     [
       {
         id: "browser",
-        name: "browser.open",
-        namespace: "browser",
+        name: "astro_browser.open",
+        namespace: "astro_browser",
         registeredName: "browser_open",
         description: "Browser tools",
         icon: "panel-top-open",
         params: [],
-        tools: ["browser.open", "browser.snapshot"],
+        tools: ["astro_browser.open", "astro_browser.snapshot"],
         functions: [
           {
-            name: "browser.open",
-            namespace: "browser",
+            name: "astro_browser.open",
+            namespace: "astro_browser",
             registeredName: "browser_open",
             description: "Open a URL",
             icon: "panel-top-open",
@@ -76,8 +76,8 @@ test("mergeToolCatalog preserves model and registered tool identities", () => {
   );
 
   const browser = tools.find((tool) => tool.id === "browser");
-  assert.equal(browser?.namespace, "browser");
-  assert.deepEqual(browser?.tools, ["browser.open", "browser.snapshot"]);
+  assert.equal(browser?.namespace, "astro_browser");
+  assert.deepEqual(browser?.tools, ["astro_browser.open", "astro_browser.snapshot"]);
   assert.equal(browser?.functions?.[0]?.registeredName, "browser_open");
 
   const image = tools.find((tool) => tool.id === "image_gen");

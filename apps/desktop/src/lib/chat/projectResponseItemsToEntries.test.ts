@@ -180,7 +180,7 @@ test("projectResponseItemsToEntries enriches browser history with a structured p
       item: {
         type: "function_call",
         call_id: "browser_1",
-        namespace: "browser",
+        namespace: "astro_browser",
         name: "snapshot",
         arguments: '{"action":"read"}',
       },
@@ -191,7 +191,7 @@ test("projectResponseItemsToEntries enriches browser history with a structured p
       item: {
         type: "function_call_output",
         call_id: "browser_1",
-        namespace: "browser",
+        namespace: "astro_browser",
         name: "snapshot",
         output: JSON.stringify({
           astro_browser: true,

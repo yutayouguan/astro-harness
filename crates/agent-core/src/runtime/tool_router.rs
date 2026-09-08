@@ -723,6 +723,102 @@ mod tests {
     }
 
     #[test]
+    fn browser_safe_namespace_round_trips_through_step_schema_and_native_calls() {
+        let mut builtins = ToolRegistry::new();
+        tools::register_all(&mut builtins);
+        let mut registry = ToolRegistry::new();
+        // Exercise real metadata and runtimes without depending on a locally
+        // installed browser or launching one during the contract test.
+        for mut entry in builtins
+            .all_tools()
+            .into_iter()
+            .filter(|entry| entry.toolset == "browser")
+            .cloned()
+        {
+            entry.check_fn = None;
+            let runtime = builtins.runtime(&entry.name).unwrap();
+            assert_eq!(runtime.tool_name(), entry.tool_name());
+            registry.register_runtime(entry, runtime);
+        }
+        assert_eq!(registry.all_tools().len(), 16);
+        let registry = Arc::new(registry);
+        for mode in [types::InteractionMode::Agent, types::InteractionMode::Plan] {
+            let router = build_tool_router(
+                &registry,
+                mode,
+                types::ToolMode::Direct,
+                false,
+                &HashSet::new(),
+            )
+            .unwrap();
+            let specs = router.model_visible_specs.as_ref();
+            assert_eq!(specs.len(), 1);
+            // Use the same typed serialization as ResponsesRequest -> HTTP.
+            let definition: providers::types::ToolDefinition =
+                serde_json::from_value(specs[0].clone()).unwrap();
+            let wire = serde_json::to_value(definition).unwrap();
+            assert_eq!(wire["type"], "namespace");
+            assert_eq!(wire["name"], "astro_browser");
+            let children = wire["tools"].as_array().unwrap();
+            assert_eq!(
+                children.len(),
+                if mode == types::InteractionMode::Plan {
+                    14
+                } else {
+                    16
+                }
+            );
+            assert!(children.iter().any(|child| child["name"] == "back"));
+            for child in children {
+                let name = child["name"].as_str().unwrap();
+                let item = serde_json::from_value(serde_json::json!({
+                    "type": "function_call",
+                    "call_id": "call_browser",
+                    "namespace": "astro_browser",
+                    "name": name,
+                    "arguments": "{}"
+                }))
+                .unwrap();
+                let call = ToolRouter::build_tool_call(&item).unwrap();
+                let registered = format!("browser_{name}");
+                assert_eq!(
+                    router.registered_name(call.namespace.as_deref(), &call.name),
+                    Some(registered.as_str())
+                );
+                assert!(router.model_can_call(call.namespace.as_deref(), &call.name));
+                assert!(router.exclusive_access(call.namespace.as_deref(), &call.name));
+                assert!(tools::check_tool_call(mode, &registered, &call.arguments).is_ok());
+                assert!(!router.has_tool(Some("browser"), name));
+            }
+            if mode == types::InteractionMode::Plan {
+                for name in ["click", "type"] {
+                    assert!(!router.model_can_call(Some("astro_browser"), name));
+                    assert!(!router.has_tool(Some("astro_browser"), name));
+                    assert!(tools::check_tool_call(
+                        mode,
+                        &format!("browser_{name}"),
+                        &serde_json::json!({})
+                    )
+                    .is_err());
+                }
+            }
+        }
+
+        let mut disabled = (*registry).clone();
+        disabled.set_enabled_map(HashMap::from([("browser".into(), false)]));
+        let router = build_tool_router(
+            &Arc::new(disabled),
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            false,
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert!(router.model_visible_specs.is_empty());
+        assert!(!router.has_tool(Some("astro_browser"), "back"));
+    }
+
+    #[test]
     fn native_namespace_identity_resolves_without_flattened_aliases() {
         let mut registry = ToolRegistry::new();
         registry.register(types::ToolEntry {

@@ -15,7 +15,7 @@ test("projects Codex-style search, open-page, and find-in-page actions", () => {
   );
   assert.deepEqual(
     deriveChatWebActivity({
-      name: "browser.open",
+      name: "astro_browser.open",
       input: '{"url":"https://example.com/start"}',
       output: '{"url":"https://example.com/final","title":"Example page"}',
     }),
@@ -43,7 +43,7 @@ test("projects Codex-style search, open-page, and find-in-page actions", () => {
 test("projects browser snapshot metadata and ignores JSON read from a file", () => {
   assert.deepEqual(
     deriveChatWebActivity({
-      name: "browser.snapshot",
+      name: "astro_browser.snapshot",
       input: '{"action":"read"}',
       output: JSON.stringify({
         astro_browser: true,
@@ -77,14 +77,14 @@ test("projects browser snapshot metadata and ignores JSON read from a file", () 
 test("rejects non-http page URLs", () => {
   assert.deepEqual(
     deriveChatWebActivity({
-      name: "browser.open",
+      name: "astro_browser.open",
       input: '{"url":"javascript:alert(1)"}',
     }),
     { action: { type: "other" } },
   );
   assert.deepEqual(
     deriveChatWebActivity({
-      name: "browser.click",
+      name: "astro_browser.click",
       input: '{"selector":"#submit"}',
       output: '{"url":"https://example.com/after-click"}',
     }),

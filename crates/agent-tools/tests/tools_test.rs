@@ -149,11 +149,11 @@ fn browser_media_generation_and_cron_use_expected_namespaces() {
     for (registered, expected) in [
         (
             "browser_open",
-            types::ToolName::namespaced("browser", "open"),
+            types::ToolName::namespaced("astro_browser", "open"),
         ),
         (
             "browser_tab_switch",
-            types::ToolName::namespaced("browser", "tab_switch"),
+            types::ToolName::namespaced("astro_browser", "tab_switch"),
         ),
         (
             "image_gen",

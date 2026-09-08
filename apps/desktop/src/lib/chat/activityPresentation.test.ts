@@ -33,7 +33,7 @@ test("classifies native tool names into visual verbs", () => {
   assert.equal(activityVisualKind(activity("media.video_gen")), "video");
   assert.equal(activityVisualKind(activity("media.music_gen")), "music");
   assert.equal(activityVisualKind(activity("media.speech_gen")), "speech");
-  assert.equal(activityVisualKind(activity("browser.snapshot")), "browse");
+  assert.equal(activityVisualKind(activity("astro_browser.snapshot")), "browse");
   assert.equal(activityVisualKind(activity("render_media")), "media");
   assert.equal(activityVisualKind(activity("custom_tool")), "tool");
 });
@@ -88,7 +88,7 @@ test("extracts compact targets for human-readable rows", () => {
 
 test("uses browser result metadata when the read call has no input target", () => {
   const value = {
-    ...activity("browser.snapshot"),
+    ...activity("astro_browser.snapshot"),
     status: "done" as const,
     input: '{"action":"read"}',
     webAction: {
@@ -118,7 +118,7 @@ test("uses browser result metadata when the read call has no input target", () =
 
 test("links only http browser targets and falls back to the active tab", () => {
   const value = {
-    ...activity("browser.snapshot"),
+    ...activity("astro_browser.snapshot"),
     input: "{}",
     webAction: {
       type: "openPage" as const,
@@ -144,7 +144,7 @@ test("links only http browser targets and falls back to the active tab", () => {
   });
   assert.equal(
     activityLinkPresentation({
-      ...activity("browser.open"),
+      ...activity("astro_browser.open"),
       input: '{"url":"javascript:alert(1)"}',
       webAction: { type: "openPage", url: "javascript:alert(1)" },
     }),

@@ -488,7 +488,9 @@ pub async fn current_origin(session_id: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-const BROWSER_NAMESPACE: &str = "browser";
+// Azure/OpenAI Responses reserve `browser` for provider-owned tools.
+// Keep our model identity separate from the stable browser_* execution keys.
+pub(crate) const BROWSER_NAMESPACE: &str = "astro_browser";
 
 pub fn register(registry: &mut ToolRegistry) {
     for (name, description, schema, icon) in [
@@ -591,6 +593,7 @@ pub fn register(registry: &mut ToolRegistry) {
     ] {
         registry.register(ToolEntry {
             name: name.to_string(),
+            model_name: Some(name.strip_prefix("browser_").expect("browser tool prefix").into()),
             toolset: "browser".to_string(),
             namespace: BROWSER_NAMESPACE.to_string(),
             description: description.to_string(),

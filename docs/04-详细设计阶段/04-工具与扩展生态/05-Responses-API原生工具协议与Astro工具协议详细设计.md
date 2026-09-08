@@ -275,13 +275,17 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 | 字段 | 语义 | Browser 示例 |
 | --- | --- | --- |
 | `id` | toolset 开关 id | `browser` |
-| `name` | 模型可见调用名 | `browser.open` |
-| `namespace` | Responses namespace | `browser` |
+| `name` | 模型可见调用名 | `astro_browser.open` |
+| `namespace` | Responses namespace | `astro_browser` |
 | `registeredName` | Rust Registry / handler 内部名 | `browser_open` |
 
 `functions[]` 同样携带这三种身份。Desktop `ToolsPanel` 使用 `id` 切换 toolset，
 用 `name` 展示真实调用名，并分开显示 namespace 与 registered name。搜索同时覆盖三者，
 因此 UI 与 Provider schema 对齐，又不会改变现有工具开关的存储键。
+
+浏览器使用应用自有 `astro_browser` 命名空间，避免 Azure/OpenAI Responses 的
+`browser` 保留域冲突（例如 `browser.back` 会被拒绝）。子工具名保持 `open`、`back`
+等短名，内部执行键与 Plan 模式权限仍使用 `browser_*`，toolset 开关仍为 `browser`。
 
 ### 4.5 ToolSearch
 
@@ -363,7 +367,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 | 类别 | 当前 Direct 工具 |
 | --- | --- |
 | Shell / 文件 | `exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
-| Browser（本机有可用浏览器时） | `browser.open`、`browser.snapshot`、`browser.click`、`browser.type`、`browser.scroll`、`browser.wait`、`browser.screenshot`、`browser.tabs`、`browser.tab_*`、`browser.back`、`browser.forward`、`browser.reload`、`browser.downloads`、`browser.close` |
+| Browser（本机有可用浏览器时） | `astro_browser.open`、`astro_browser.snapshot`、`astro_browser.click`、`astro_browser.type`、`astro_browser.scroll`、`astro_browser.wait`、`astro_browser.screenshot`、`astro_browser.tabs`、`astro_browser.tab_*`、`astro_browser.back`、`astro_browser.forward`、`astro_browser.reload`、`astro_browser.downloads`、`astro_browser.close` |
 | HITL | `ask_user`、`request_user_input_async`、`switch_mode` |
 | 上下文 / 记忆 / Skill | `context_search`、`pin_context`、`memory`、`skills`、`todo` |
 | 自动化 | `cron.add`、`cron.list`、`cron.remove`、`cron.enable`、`cron.disable`（内部注册名为 `cron_*`） |

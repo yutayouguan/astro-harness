@@ -955,7 +955,7 @@ mod tests {
     fn browser_result_projects_open_page_url_and_title() {
         let TurnItem::DynamicToolCall(item) = tool_turn_item_with_execution(
             "browser-1",
-            "browser.snapshot",
+            "astro_browser.snapshot",
             serde_json::json!({"action":"read"}),
             Some(serde_json::Value::String(
                 serde_json::json!({
@@ -981,7 +981,7 @@ mod tests {
 
         let TurnItem::DynamicToolCall(click) = tool_turn_item_with_execution(
             "browser-2",
-            "browser.click",
+            "astro_browser.click",
             serde_json::json!({"selector":"#submit"}),
             Some(serde_json::json!({"url":"https://www.bilibili.com/after"})),
             Vec::new(),

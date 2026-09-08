@@ -362,16 +362,16 @@ mod tests {
         let browser = catalog.iter().find(|item| item.id == "browser").unwrap();
         let json = serde_json::to_value(browser).unwrap();
 
-        assert_eq!(json["namespace"], "browser");
+        assert_eq!(json["namespace"], "astro_browser");
         assert_eq!(json["registeredName"], browser.registered_name);
         assert!(json.get("registered_name").is_none());
         let open = json["functions"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|function| function["name"] == "browser.open")
-            .expect("browser.open catalog function");
-        assert_eq!(open["namespace"], "browser");
+            .find(|function| function["name"] == "astro_browser.open")
+            .expect("astro_browser.open catalog function");
+        assert_eq!(open["namespace"], "astro_browser");
         assert_eq!(open["registeredName"], "browser_open");
         assert_eq!(open["exposure"], "direct");
     }
@@ -380,9 +380,9 @@ mod tests {
     fn browser_and_media_catalogs_expose_model_names_and_internal_names() {
         let catalog = builtin_catalog();
         let browser = catalog.iter().find(|item| item.id == "browser").unwrap();
-        assert_eq!(browser.namespace.as_deref(), Some("browser"));
+        assert_eq!(browser.namespace.as_deref(), Some("astro_browser"));
         assert!(browser.functions.iter().any(|function| {
-            function.name == "browser.open" && function.registered_name == "browser_open"
+            function.name == "astro_browser.open" && function.registered_name == "browser_open"
         }));
 
         let image = catalog.iter().find(|item| item.id == "image_gen").unwrap();

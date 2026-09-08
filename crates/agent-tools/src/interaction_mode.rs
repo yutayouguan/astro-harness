@@ -132,12 +132,19 @@ pub fn filter_schemas(
         .filter_map(|mut schema| {
             if schema.get("type").and_then(serde_json::Value::as_str) == Some("namespace") {
                 let namespace = schema.get("name")?.as_str()?.to_string();
+                // Browser model names use a provider-safe namespace, while mode
+                // permissions continue to use the stable internal browser_* keys.
+                let policy_namespace = if namespace == crate::browser::BROWSER_NAMESPACE {
+                    "browser"
+                } else {
+                    &namespace
+                };
                 let tools = schema.get_mut("tools")?.as_array_mut()?;
                 tools.retain(|tool| {
                     tool.get("name")
                         .and_then(serde_json::Value::as_str)
                         .is_some_and(|name| {
-                            tool_visible_in_mode(mode, &format!("{namespace}_{name}"))
+                            tool_visible_in_mode(mode, &format!("{policy_namespace}_{name}"))
                         })
                 });
                 return (!tools.is_empty()).then_some(schema);
@@ -226,7 +233,7 @@ mod tests {
     fn plan_filters_native_browser_namespace_by_registered_policy_names() {
         let schemas = vec![serde_json::json!({
             "type": "namespace",
-            "name": "browser",
+            "name": "astro_browser",
             "description": "Browser tools",
             "tools": [
                 {"type": "function", "name": "snapshot", "parameters": {}},
@@ -236,6 +243,7 @@ mod tests {
 
         let filtered = filter_schemas(InteractionMode::Plan, schemas);
         assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["name"], "astro_browser");
         assert_eq!(filtered[0]["tools"].as_array().map(Vec::len), Some(1));
         assert_eq!(filtered[0]["tools"][0]["name"], "snapshot");
     }
