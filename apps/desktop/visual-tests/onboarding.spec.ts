@@ -262,6 +262,49 @@ for (const [message, title] of [
   });
 }
 
+for (const variant of [
+  { theme: "light", width: 1100, contrast: "no-preference" },
+  { theme: "dark", width: 390, contrast: "no-preference" },
+  { theme: "light", width: 390, contrast: "more" },
+] as const) {
+  test(`connection issue uses shared actions · ${variant.theme} · ${variant.width} · ${variant.contrast}`, async ({ page }, testInfo) => {
+    await installTransport(page);
+    await page.addInitScript(theme => localStorage.setItem("astro-theme-mode", theme), variant.theme);
+    await page.emulateMedia({ reducedMotion: "reduce", contrast: variant.contrast });
+    await page.setViewportSize({ width: variant.width, height: 1000 });
+    await page.route("**/__onboarding_mock/responses", route => route.fulfill({
+      json: { ok: false, message: "401 invalid api key" },
+    }));
+    await startProvider(page);
+    await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+    await loadModels(page);
+    await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+    const card = page.getByRole("alert", { name: "密钥或访问权限有问题" });
+    await expect(card).toBeVisible();
+    await expect(card.locator(".onboarding-connection-issue__icon svg")).toHaveCount(1);
+    const edit = card.getByRole("button", { name: "修改配置", exact: true });
+    const retry = card.getByRole("button", { name: "重试连接", exact: true });
+    await expect(edit).toHaveClass(/ui-button--secondary/);
+    await expect(retry).toHaveClass(/ui-button--primary/);
+    expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const bounds = await card.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(variant.width);
+    await edit.focus();
+    await edit.press("Tab");
+    await expect(retry).toBeFocused();
+    expect(await retry.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe("none");
+    await retry.press("Shift+Tab");
+    await expect(edit).toBeFocused();
+    expect(await edit.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe("none");
+    await page.screenshot({ path: testInfo.outputPath("connection-issue-page.png"), fullPage: true, animations: "disabled" });
+    await card.screenshot({ path: testInfo.outputPath("connection-issue.png"), animations: "disabled" });
+    await edit.click();
+    await expect(page.getByLabel("API Key", { exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+  });
+}
+
 test("cancelled test ignores late success and cannot activate a model", async ({ page }) => {
   await installTransport(page);
   let release!: () => void;

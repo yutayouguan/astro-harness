@@ -1,3 +1,6 @@
+import { useId } from "react";
+import { RotateCw, Settings2, ShieldAlert } from "lucide-react";
+import { Button } from "../ui/Button";
 import type { ConnectionIssueKind } from "../../lib/ui/onboarding";
 const COPY = {
   zh: {
@@ -81,19 +84,38 @@ export function ConnectionIssue({
   onEdit?: () => void;
 }) {
   const [title, hint] = COPY[locale][kind];
+  const titleId = useId();
+  const hintId = useId();
   return (
-    <div className="onboarding-connection-issue" role="alert" data-issue={kind}>
-      <strong>{title}</strong>
-      <p>{hint}</p>
-      <div>
-        {onEdit && (
-          <button type="button" onClick={onEdit}>
-            {locale === "zh" ? "修改配置" : "Edit configuration"}
-          </button>
-        )}
-        <button type="button" onClick={onRetry}>
-          {locale === "zh" ? "重试连接" : "Retry connection"}
-        </button>
+    <div
+      className="onboarding-connection-issue"
+      role="alert"
+      data-issue={kind}
+      aria-labelledby={titleId}
+      aria-describedby={hintId}
+    >
+      <span className="onboarding-connection-issue__icon" aria-hidden="true">
+        <ShieldAlert size={18} strokeWidth={1.8} />
+      </span>
+      <div className="onboarding-connection-issue__body">
+        <strong id={titleId} className="onboarding-connection-issue__title">
+          {title}
+        </strong>
+        <p id={hintId} className="onboarding-connection-issue__hint">
+          {hint}
+        </p>
+        <div className="onboarding-connection-issue__actions">
+          {onEdit && (
+            <Button variant="secondary" onClick={onEdit}>
+              <Settings2 size={14} aria-hidden="true" />
+              {locale === "zh" ? "修改配置" : "Edit configuration"}
+            </Button>
+          )}
+          <Button variant="primary" onClick={onRetry}>
+            <RotateCw size={14} aria-hidden="true" />
+            {locale === "zh" ? "重试连接" : "Retry connection"}
+          </Button>
+        </div>
       </div>
     </div>
   );

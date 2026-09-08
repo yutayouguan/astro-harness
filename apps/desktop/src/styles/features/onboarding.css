@@ -1057,21 +1057,71 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
   color: var(--ink-secondary);
 }
 .onboarding-connection-issue {
-  border: 1px solid color-mix(in srgb, #d97706 36%, transparent);
-  border-radius: 12px;
-  padding: 12px;
-  background: color-mix(in srgb, #d97706 7%, transparent);
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border: 0.5px solid var(--surface-panel-border);
+  border-radius: 16px;
+  background: var(--surface-panel-background);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 3%, transparent);
   color: var(--ink);
+  text-align: left;
+}
+.onboarding-connection-issue__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: light-dark(#a15c0a, #f2b969);
+  background: color-mix(in srgb, #d97706 12%, transparent);
+}
+.onboarding-connection-issue__body {
+  min-width: 0;
+}
+.onboarding-connection-issue__title {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.onboarding-connection-issue__hint {
+  margin: 5px 0 0;
+  max-width: 58ch;
+  color: var(--ink-secondary);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
-.onboarding-connection-issue p {
-  margin: 6px 0;
+.onboarding-connection-issue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
 }
-.onboarding-connection-issue button {
-  margin-right: 10px;
-  padding: 6px 10px;
-  cursor: pointer;
+.onboarding-connection-issue__actions .ui-button {
+  --ui-button-accent: var(--tone);
+  max-width: 100%;
+  border-width: 0.5px;
+  white-space: normal;
+  line-height: 1.4;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .onboarding-connection-issue {
+    background: var(--shell-bg);
+  }
+}
+@media (prefers-contrast: more) {
+  .onboarding-connection-issue,
+  .onboarding-connection-issue__actions .ui-button {
+    border: 1px solid var(--ink-secondary);
+  }
+
+  .onboarding-connection-issue__hint {
+    color: var(--ink);
+  }
 }
 .onboarding-health-grid > div[data-status="pending"] {
   border-color: color-mix(in srgb, var(--ink) 18%, transparent);
