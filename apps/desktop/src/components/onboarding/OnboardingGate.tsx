@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,13 +13,10 @@ import {
   Bot,
   Check,
   ChevronRight,
-  Code2,
   FolderOpen,
   KeyRound,
   Languages,
   LoaderCircle,
-  ListTodo,
-  MessageCircle,
   Monitor,
   Moon,
   ShieldCheck,
@@ -38,8 +34,15 @@ import type {
 } from "../../types";
 import {
   ONBOARDING_RESET_EVENT,
+  EMPTY_ONBOARDING_DRAFT,
+  classifyConnectionIssue,
+  withDeadline,
+  createOnboardingWriteQueue,
+  persistableOnboardingEndpoint,
+  type ConnectionIssueKind,
+  type OnboardingDraft,
   inferProjectName,
-  normalizeOnboardingStep,
+  resumeOnboardingStep,
   providerConfigInput,
   providerIsReady,
   providerRequiresApiKey,
@@ -47,154 +50,17 @@ import {
   type OnboardingStateDto,
   type OnboardingStep,
 } from "../../lib/ui/onboarding";
-import { WelcomeLogoEffect } from "../chat/WelcomeLogoEffect";
-import { AstroLogoMark } from "../icons/AstroLogoMark";
 import { ProviderBrandIcon } from "../icons/ProviderIcons";
 import { Button } from "../ui";
+import { OnboardingLogo, OnboardingBrandMotion } from "./OnboardingBrand";
+import { StarterTaskChooser } from "./StarterTaskChooser";
+import { ConnectionIssue } from "./ConnectionIssue";
+import { COPY } from "./onboardingCopy";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 const STEP_ORDER: OnboardingStep[] = ["personalize", "provider", "workspace"];
-
-const COPY = {
-  zh: {
-    skipIntro: "跳过动画",
-    hello: "你好，我是 Astro",
-    introSub: "你的本地 AI 工作站，正在苏醒。",
-    personalizeEyebrow: "01 · 个性化",
-    personalizeTitle: "先让这里更像你的工作空间",
-    personalizeSub: "语言和外观会立即生效，之后也可以随时在设置中修改。",
-    language: "界面语言",
-    theme: "外观主题",
-    agentName: "Agent 名称（可选）",
-    agentNamePlaceholder: "Astro",
-    chinese: "中文",
-    english: "English",
-    light: "浅色",
-    dark: "深色",
-    auto: "跟随系统",
-    providerEyebrow: "02 · 连接模型",
-    providerTitle: "为 Astro 接入思考能力",
-    providerSub:
-      "选择模型服务并完成一次真实连接测试。密钥只会交给系统安全存储。",
-    provider: "模型服务",
-    apiKey: "API Key",
-    apiKeyStored: "已安全配置，可直接测试",
-    apiKeyPlaceholder: "输入 API Key",
-    model: "默认模型",
-    endpoint: "服务地址",
-    advanced: "高级连接设置",
-    test: "保存并测试连接",
-    testing: "正在验证连接",
-    testSuccess: "连接成功",
-    noProviders: "没有可用的 Responses API 模型服务。请检查安装配置。",
-    providerRequired: "请先填写 API Key。",
-    modelRequired: "请填写模型名称。",
-    workspaceEyebrow: "03 · 工作空间与安全",
-    workspaceTitle: "决定 Astro 从哪里开始工作",
-    workspaceSub:
-      "可以关联一个代码或资料目录；未选择时会使用 Astro 默认工作空间。",
-    chooseFolder: "选择工作目录",
-    changeFolder: "更换目录",
-    defaultWorkspace: "使用默认工作空间",
-    permission: "执行权限",
-    ask: "执行前询问",
-    askSub: "推荐。涉及写入或高风险操作时先征得你的同意。",
-    approve: "自动处理常规操作",
-    approveSub: "减少打断，高风险操作仍由安全策略约束。",
-    networkNote: "网络默认可用；本机、私网和云元数据地址仍受 SSRF 防护。",
-    back: "返回",
-    continue: "继续",
-    finish: "完成设置",
-    finishing: "正在完成初始化",
-    completeTitle: "一切准备就绪",
-    completeSub: "初始化检查已通过。选一个任务开始，或直接进入 Astro。",
-    healthAgent: "Agent 身份",
-    healthModel: "模型连接",
-    healthWorkspace: "工作空间",
-    healthPermission: "执行权限",
-    starterTitle: "从第一个任务开始",
-    starterReview: "分析当前项目的架构、风险和优先改进项",
-    starterPlan: "根据当前工作空间，为我制定今天最重要的三个任务",
-    starterExplore: "介绍你能在这个工作空间为我做什么，并给出建议",
-    enter: "空白开始",
-    retry: "重试",
-    loadError: "无法读取初始化状态，已直接进入 Astro。",
-  },
-  en: {
-    skipIntro: "Skip animation",
-    hello: "Hello, I'm Astro",
-    introSub: "Your local AI workstation is waking up.",
-    personalizeEyebrow: "01 · Personalize",
-    personalizeTitle: "Make this workspace feel like yours",
-    personalizeSub:
-      "Language and appearance update instantly and remain editable in Settings.",
-    language: "Interface language",
-    theme: "Appearance",
-    agentName: "Agent name (optional)",
-    agentNamePlaceholder: "Astro",
-    chinese: "中文",
-    english: "English",
-    light: "Light",
-    dark: "Dark",
-    auto: "System",
-    providerEyebrow: "02 · Connect a model",
-    providerTitle: "Give Astro its reasoning engine",
-    providerSub:
-      "Choose a provider and complete a real connection check. Keys go only to secure system storage.",
-    provider: "Model provider",
-    apiKey: "API Key",
-    apiKeyStored: "Securely configured and ready to test",
-    apiKeyPlaceholder: "Enter API Key",
-    model: "Default model",
-    endpoint: "Endpoint",
-    advanced: "Advanced connection settings",
-    test: "Save and test connection",
-    testing: "Verifying connection",
-    testSuccess: "Connection successful",
-    noProviders:
-      "No Responses API provider is available. Check the installation configuration.",
-    providerRequired: "Enter an API Key first.",
-    modelRequired: "Enter a model name.",
-    workspaceEyebrow: "03 · Workspace & safety",
-    workspaceTitle: "Choose where Astro starts working",
-    workspaceSub:
-      "Attach a code or document folder, or continue with Astro's default workspace.",
-    chooseFolder: "Choose workspace",
-    changeFolder: "Change folder",
-    defaultWorkspace: "Use default workspace",
-    permission: "Execution permissions",
-    ask: "Ask before acting",
-    askSub: "Recommended. Astro asks before writes or higher-risk actions.",
-    approve: "Handle routine actions",
-    approveSub:
-      "Fewer interruptions; higher-risk actions remain policy controlled.",
-    networkNote:
-      "Network access is available by default; local, private, and cloud metadata targets remain SSRF-protected.",
-    back: "Back",
-    continue: "Continue",
-    finish: "Finish setup",
-    finishing: "Finishing setup",
-    completeTitle: "Everything is ready",
-    completeSub:
-      "Initialization checks passed. Pick a first task or enter Astro with a blank composer.",
-    healthAgent: "Agent identity",
-    healthModel: "Model connection",
-    healthWorkspace: "Workspace",
-    healthPermission: "Execution permissions",
-    starterTitle: "Start with your first task",
-    starterReview:
-      "Analyze this project's architecture, risks, and highest-priority improvements",
-    starterPlan:
-      "Plan the three most important tasks for today from this workspace",
-    starterExplore:
-      "Explain what you can do in this workspace and recommend where to start",
-    enter: "Start blank",
-    retry: "Retry",
-    loadError: "Setup state could not be loaded, so Astro opened directly.",
-  },
-} as const;
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me";
 type ProviderStatus = "idle" | "testing" | "success" | "error";
@@ -208,6 +74,9 @@ type FirstRunOnboardingProps = {
   onComplete: () => void;
   previewProviders?: ProviderDto[];
   disableIntroAdvance?: boolean;
+  initialDraft?: OnboardingDraft;
+  handoff?: boolean;
+  onHandoffComplete?: () => void;
 };
 
 type HealthSummary = {
@@ -215,18 +84,9 @@ type HealthSummary = {
   provider: string;
   workspace: string;
   permission: string;
+  modelStatus: "verified" | "unavailable" | "demo";
+  sandboxAvailable: boolean;
 };
-
-const INTRO_PARTICLES = Array.from({ length: 28 }, (_, index) => {
-  const angle = (index / 28) * Math.PI * 2 + (index % 3) * 0.18;
-  const radius = 118 + (index % 6) * 25;
-  return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius * 0.72,
-    delay: (index % 7) * 34,
-    size: 2 + (index % 3),
-  };
-});
 
 function stepIndex(step: OnboardingStep): number {
   return STEP_ORDER.indexOf(step);
@@ -247,46 +107,14 @@ function slideVariants(direction: number, reducedMotion: boolean) {
   };
 }
 
-function OnboardingLogo({ compact = false }: { compact?: boolean }) {
-  return (
-    <div
-      className={`onboarding-logo ${compact ? "is-compact" : ""}`}
-      aria-hidden
-    >
-      {!compact ? (
-        <span className="onboarding-particle-field">
-          {INTRO_PARTICLES.map((particle, index) => (
-            <i
-              key={index}
-              style={
-                {
-                  "--particle-x": `${particle.x.toFixed(1)}px`,
-                  "--particle-y": `${particle.y.toFixed(1)}px`,
-                  "--particle-delay": `${particle.delay}ms`,
-                  "--particle-size": `${particle.size}px`,
-                } as CSSProperties
-              }
-            />
-          ))}
-        </span>
-      ) : null}
-      <span className="onboarding-logo-halo" />
-      <AstroLogoMark className="onboarding-logo-base" />
-      <span className="chat-welcome-mark onboarding-logo-mark">
-        <span className="chat-welcome-mark-glow" />
-        <span className="chat-welcome-illust">
-          <WelcomeLogoEffect />
-        </span>
-      </span>
-    </div>
-  );
-}
-
 export function FirstRunOnboarding({
   initialStep = "intro",
   onComplete,
   previewProviders,
   disableIntroAdvance = false,
+  initialDraft = EMPTY_ONBOARDING_DRAFT,
+  handoff = false,
+  onHandoffComplete,
 }: FirstRunOnboardingProps) {
   const { locale, setLocale } = useI18n();
   const { mode, setMode } = useTheme();
@@ -294,7 +122,7 @@ export function FirstRunOnboarding({
   const copy = COPY[locale];
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [direction, setDirection] = useState(1);
-  const [agentName, setAgentName] = useState("Astro");
+  const [agentName, setAgentName] = useState(initialDraft.agent_name);
   const [currentAgentName, setCurrentAgentName] = useState("Astro");
   const [providersState, setProvidersState] =
     useState<ProvidersStateDto | null>(
@@ -306,17 +134,47 @@ export function FirstRunOnboarding({
           }
         : null,
     );
-  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    initialDraft.provider_id,
+  );
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
-  const [endpoint, setEndpoint] = useState("");
+  const [model, setModel] = useState(initialDraft.model);
+  const [endpoint, setEndpoint] = useState(initialDraft.endpoint);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus>("idle");
   const [providerMessage, setProviderMessage] = useState("");
-  const [workspacePath, setWorkspacePath] = useState("");
-  const [permissionPreset, setPermissionPreset] =
-    useState<PermissionPreset>("ask_for_approval");
+  const [workspacePath, setWorkspacePath] = useState(
+    initialDraft.workspace_path,
+  );
+  const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>(
+    initialDraft.permission_preset,
+  );
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState("");
+  const [demoDraftPrepared, setDemoDraftPrepared] = useState(false);
+  const [connectionIssue, setConnectionIssue] =
+    useState<ConnectionIssueKind | null>(null);
+  const [progressError, setProgressError] = useState(false);
+  const providerRequest = useRef(0);
+  const mounted = useRef(true);
+  const writes = useRef(createOnboardingWriteQueue());
+  const apiKeyRef = useRef<HTMLInputElement>(null);
+  const modelInputRef = useRef<HTMLInputElement>(null);
+  const endpointInputRef = useRef<HTMLInputElement>(null);
+  const providerSelectRef = useRef<HTMLSelectElement>(null);
+  const identityLoadedRef = useRef(false);
+  const verified = useRef<{
+    id: string;
+    model: string;
+    endpoint: string;
+    token: string;
+  } | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      providerRequest.current += 1;
+    };
+  }, []);
   const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(
     () =>
       initialStep === "complete"
@@ -325,11 +183,15 @@ export function FirstRunOnboarding({
             provider: `${previewProviders?.[0]?.display_name ?? copy.provider} · ${previewProviders?.[0]?.model ?? "—"}`,
             workspace: copy.defaultWorkspace,
             permission: copy.ask,
+            modelStatus: "demo",
+            sandboxAvailable: true,
           }
         : null,
   );
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const agentNameTouchedRef = useRef(false);
+  const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
+    node?.focus({ preventScroll: true });
+  }, []);
+  const agentNameTouchedRef = useRef(initialDraft.agent_name !== "Astro");
 
   const providers = useMemo(
     () =>
@@ -340,28 +202,85 @@ export function FirstRunOnboarding({
   );
   const selectedProvider =
     providers.find((provider) => provider.id === selectedProviderId) ?? null;
-  const persistStep = useCallback((next: OnboardingStep) => {
-    if (!isTauri() || next === "intro" || next === "complete") return;
-    void invoke("save_onboarding_progress", { step: next }).catch((error) => {
-      console.warn("onboarding progress save failed", error);
-    });
-  }, []);
 
+  const draft: OnboardingDraft = {
+    agent_name: agentName,
+    provider_id: selectedProviderId,
+    model,
+    endpoint,
+    workspace_path: workspacePath,
+    permission_preset: permissionPreset,
+  };
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const saveProgress = useCallback(
+    (next: OnboardingStep) => {
+      if (previewProviders || !isTauri() || next === "complete")
+        return Promise.resolve();
+      const snapshot = {
+        ...draftRef.current,
+        endpoint: persistableOnboardingEndpoint(draftRef.current.endpoint),
+      };
+      return writes.current
+        .run(() =>
+          withDeadline(
+            invoke<OnboardingStateDto>("save_onboarding_progress", {
+              step: next,
+              draft: snapshot,
+            }),
+          ),
+        )
+        .then(
+          () => {
+            if (mounted.current) setProgressError(false);
+          },
+          () => {
+            if (mounted.current) setProgressError(true);
+            throw new Error("progress");
+          },
+        );
+    },
+    [previewProviders],
+  );
+  useEffect(() => {
+    if (step === "intro" || step === "complete" || finishing || handoff) return;
+    const timer = window.setTimeout(() => {
+      void saveProgress(step).catch(() => {});
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [
+    step,
+    agentName,
+    selectedProviderId,
+    model,
+    endpoint,
+    workspacePath,
+    permissionPreset,
+    saveProgress,
+    finishing,
+    handoff,
+  ]);
   const goTo = useCallback(
     (next: OnboardingStep) => {
+      if (step === "provider" && next === "personalize") {
+        providerRequest.current += 1;
+        verified.current = null;
+        setProviderStatus("idle");
+      }
       setDirection(stepIndex(next) >= stepIndex(step) ? 1 : -1);
       setStep(next);
-      persistStep(next);
     },
-    [persistStep, step],
+    [step],
   );
 
   useEffect(() => {
-    if (step !== "intro" || disableIntroAdvance) return;
-    const timer = window.setTimeout(
-      () => goTo("personalize"),
-      reducedMotion ? 450 : 2200,
-    );
+    if (step !== "intro" || handoff) return;
+    const timer = disableIntroAdvance
+      ? undefined
+      : window.setTimeout(
+          () => goTo("personalize"),
+          reducedMotion ? 200 : 2200,
+        );
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") goTo("personalize");
     };
@@ -370,22 +289,20 @@ export function FirstRunOnboarding({
       window.clearTimeout(timer);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [disableIntroAdvance, goTo, reducedMotion, step]);
-
-  useEffect(() => {
-    if (step === "intro" || step === "complete") return;
-    window.requestAnimationFrame(() => headingRef.current?.focus());
-  }, [step]);
+  }, [disableIntroAdvance, goTo, reducedMotion, step, handoff]);
 
   useEffect(() => {
     if (previewProviders || !isTauri()) return;
     let disposed = false;
-    void invoke<ProvidersStateDto>("get_providers_state")
+    void withDeadline(invoke<ProvidersStateDto>("get_providers_state"))
       .then((state) => {
         if (!disposed) setProvidersState(state);
       })
       .catch((error) => {
-        if (!disposed) setProviderMessage(String(error));
+        if (!disposed) {
+          setConnectionIssue(classifyConnectionIssue(error));
+          setProviderMessage("");
+        }
       });
     return () => {
       disposed = true;
@@ -395,18 +312,19 @@ export function FirstRunOnboarding({
   useEffect(() => {
     if (previewProviders || !isTauri()) return;
     let disposed = false;
-    void invoke<AppConfigSlice>("get_config")
+    void withDeadline(invoke<AppConfigSlice>("get_config"))
       .then((config) => {
         if (disposed) return;
         const active = config.agents.find(
           (agent) => agent.id === config.active_agent_id,
         );
         if (!active?.name) return;
+        identityLoadedRef.current = true;
         setCurrentAgentName(active.name);
         if (!agentNameTouchedRef.current) setAgentName(active.name);
       })
-      .catch((error) => {
-        console.warn("agent identity load failed", error);
+      .catch(() => {
+        if (!disposed) setProgressError(true);
       });
     return () => {
       disposed = true;
@@ -429,6 +347,9 @@ export function FirstRunOnboarding({
   }, [providers, providersState?.active_provider_id, selectedProviderId]);
 
   const selectProvider = (id: string) => {
+    providerRequest.current += 1;
+    verified.current = null;
+    setConnectionIssue(null);
     const provider = providers.find((item) => item.id === id);
     if (!provider) return;
     setSelectedProviderId(provider.id);
@@ -439,11 +360,21 @@ export function FirstRunOnboarding({
     setProviderMessage("");
   };
 
+  const cancelProviderTest = () => {
+    providerRequest.current += 1;
+    setProviderStatus("idle");
+    setProviderMessage("");
+  };
   const testProvider = async () => {
-    if (!selectedProvider) return;
+    if (!selectedProvider || providerStatus === "testing") return;
+    verified.current = null;
+    setConnectionIssue(null);
+    if (!persistableOnboardingEndpoint(endpoint)) {
+      setConnectionIssue("network");
+      return;
+    }
     if (!model.trim()) {
-      setProviderStatus("error");
-      setProviderMessage(copy.modelRequired);
+      setConnectionIssue("model");
       return;
     }
     if (
@@ -451,52 +382,83 @@ export function FirstRunOnboarding({
       !selectedProvider.has_api_key &&
       !apiKey.trim()
     ) {
-      setProviderStatus("error");
-      setProviderMessage(copy.providerRequired);
+      setConnectionIssue("credentials");
       return;
     }
+    const request = ++providerRequest.current;
+    const currentRequest = () =>
+      mounted.current && providerRequest.current === request;
+    const id = selectedProvider.id,
+      testedModel = model.trim(),
+      testedEndpoint = endpoint.trim();
     setProviderStatus("testing");
     setProviderMessage("");
+    let verificationToken: string | null = previewProviders ? "preview" : null;
     try {
-      if (previewProviders || !isTauri()) {
-        await new Promise((resolve) => window.setTimeout(resolve, 420));
-        setProviderStatus("success");
-        setProviderMessage(copy.testSuccess);
-        return;
+      if (previewProviders) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        if (!currentRequest()) return;
+      } else {
+        const next = await withDeadline(
+          invoke<ProvidersStateDto>("save_provider", {
+            provider: {
+              ...providerConfigInput(selectedProvider, testedModel),
+              endpoint: testedEndpoint,
+            },
+          }),
+        );
+        if (!currentRequest()) return;
+        setProvidersState(next);
+        if (apiKey.trim()) {
+          const keyed = await withDeadline(
+            invoke<ProvidersStateDto>("set_provider_api_key", {
+              id,
+              apiKey: apiKey.trim(),
+            }),
+          );
+          if (!currentRequest()) return;
+          setProvidersState(keyed);
+          setApiKey("");
+        }
+        const result = await withDeadline(
+          invoke<ProviderTestResult & { verification_token: string | null }>(
+            "verify_onboarding_provider",
+            {
+              id,
+              model: testedModel,
+            },
+          ),
+        );
+        if (!currentRequest()) return;
+        if (!result.ok) throw new Error(result.message);
+        if (!result.verification_token)
+          throw new Error("ONBOARDING_VERIFICATION_REQUIRED");
+        verificationToken = result.verification_token;
+        const active = await withDeadline(
+          invoke<ProvidersStateDto>("set_active_provider_model", {
+            id,
+            model: testedModel,
+          }),
+        );
+        if (!currentRequest()) return;
+        setProvidersState(active);
       }
-      const next = await invoke<ProvidersStateDto>("save_provider", {
-        provider: {
-          ...providerConfigInput(selectedProvider, model),
-          endpoint: endpoint.trim() || selectedProvider.endpoint,
-        },
-      });
-      let current = next;
-      if (apiKey.trim()) {
-        current = await invoke<ProvidersStateDto>("set_provider_api_key", {
-          id: selectedProvider.id,
-          apiKey: apiKey.trim(),
-        });
-        setApiKey("");
-      }
-      const result = await invoke<ProviderTestResult>("test_provider", {
-        id: selectedProvider.id,
-        model: model.trim(),
-      });
-      if (!result.ok) throw new Error(result.message);
-      current = await invoke<ProvidersStateDto>("set_active_provider_model", {
-        id: selectedProvider.id,
-        model: result.model,
-      });
-      setProvidersState(current);
+      if (!verificationToken)
+        throw new Error("ONBOARDING_VERIFICATION_REQUIRED");
+      verified.current = {
+        id,
+        model: testedModel,
+        endpoint: testedEndpoint,
+        token: verificationToken,
+      };
       setProviderStatus("success");
       setProviderMessage(
-        `${copy.testSuccess} · ${result.model} · ${result.latency_ms} ms`,
+        previewProviders ? copy.demoConnected : copy.testSuccess,
       );
     } catch (error) {
+      if (!currentRequest()) return;
       setProviderStatus("error");
-      setProviderMessage(
-        error instanceof Error ? error.message : String(error),
-      );
+      setConnectionIssue(classifyConnectionIssue(error));
     }
   };
 
@@ -516,6 +478,14 @@ export function FirstRunOnboarding({
 
   const finish = async () => {
     if (finishing) return;
+    if (
+      !previewProviders &&
+      (!verified.current || providerStatus !== "success")
+    ) {
+      setConnectionIssue("verification");
+      goTo("provider");
+      return;
+    }
     setFinishing(true);
     setFinishError("");
     try {
@@ -524,17 +494,21 @@ export function FirstRunOnboarding({
         : copy.defaultWorkspace;
       let providerLabel = `${selectedProvider?.display_name ?? copy.provider} · ${model}`;
       if (!previewProviders && isTauri()) {
-        if (agentName.trim()) {
+        await saveProgress("workspace");
+        if (
+          agentName.trim() &&
+          (identityLoadedRef.current || agentNameTouchedRef.current)
+        ) {
           await invoke("set_default_agent_name", { name: agentName.trim() });
         }
-        const permission = await invoke<{ preset: string }>(
-          "set_permission_preset",
-          {
-            preset: permissionPreset,
-            confirmed: false,
-          },
-        );
-        let projects = await invoke<ProjectDto[]>("list_projects");
+        const permission = await invoke<{
+          preset: string;
+          sandboxHealth?: { status: string };
+        }>("set_permission_preset", {
+          preset: permissionPreset,
+          confirmed: false,
+        });
+        const projects = await invoke<ProjectDto[]>("list_projects");
         if (workspacePath) {
           const existing = projects.find((project) =>
             project.roots.includes(workspacePath),
@@ -544,17 +518,18 @@ export function FirstRunOnboarding({
               name: inferProjectName(workspacePath),
               roots: [workspacePath],
             });
-            projects = [...projects, created];
+            localStorage.setItem("astro.activeProjectId", created.id);
             projectLabel = created.name;
           } else {
+            localStorage.setItem("astro.activeProjectId", existing.id);
             projectLabel = existing.name;
           }
         }
-        const currentProviders = await invoke<ProvidersStateDto>(
-          "get_providers_state",
-        );
-        const activeProvider = currentProviders.providers.find(
-          (provider) => provider.id === currentProviders.active_provider_id,
+        const currentProviders = await withDeadline(
+          invoke<ProvidersStateDto>("get_providers_state"),
+        ).catch(() => null);
+        const activeProvider = currentProviders?.providers.find(
+          (provider) => provider.id === currentProviders?.active_provider_id,
         );
         if (activeProvider) {
           providerLabel = `${activeProvider.display_name} · ${activeProvider.model}`;
@@ -565,8 +540,18 @@ export function FirstRunOnboarding({
           workspace: projectLabel,
           permission:
             permission.preset === "approve_for_me" ? copy.approve : copy.ask,
+          modelStatus: providerIsReady(activeProvider)
+            ? "verified"
+            : "unavailable",
+          sandboxAvailable: permission.sandboxHealth?.status === "available",
         });
-        await invoke<OnboardingStateDto>("complete_onboarding");
+        await writes.current.run(() =>
+          withDeadline(
+            invoke<OnboardingStateDto>("complete_onboarding", {
+              verificationToken: verified.current?.token,
+            }),
+          ),
+        );
       } else {
         setHealthSummary({
           agent: agentName.trim() || currentAgentName,
@@ -574,29 +559,57 @@ export function FirstRunOnboarding({
           workspace: projectLabel,
           permission:
             permissionPreset === "approve_for_me" ? copy.approve : copy.ask,
+          modelStatus: "demo",
+          sandboxAvailable: true,
         });
       }
       setStep("complete");
     } catch (error) {
-      setFinishError(error instanceof Error ? error.message : String(error));
+      setFinishError(copy.finishFailed);
       setFinishing(false);
+      if (String(error).includes("ONBOARDING_VERIFICATION_REQUIRED")) {
+        verified.current = null;
+        setProviderStatus("idle");
+        setConnectionIssue("verification");
+        goTo("provider");
+      }
     }
   };
 
   const variants = slideVariants(direction, reducedMotion);
   const currentIndex = Math.max(0, stepIndex(step));
   const enterAstro = (prompt?: string) => {
+    if (previewProviders) {
+      setDemoDraftPrepared(true);
+      return;
+    }
     if (prompt) storeOnboardingStarterPrompt(prompt);
     onComplete();
   };
-  const starterTasks = [
-    { label: copy.starterReview, Icon: Code2 },
-    { label: copy.starterPlan, Icon: ListTodo },
-    { label: copy.starterExplore, Icon: MessageCircle },
-  ];
 
   return (
-    <main className="onboarding-root" data-step={step}>
+    <main
+      className={`onboarding-root ${handoff ? "onboarding-root--handoff" : ""}`}
+      data-step={step}
+    >
+      <OnboardingBrandMotion
+        phase={handoff ? "app" : step === "intro" ? "intro" : "header"}
+        onArrive={onHandoffComplete}
+      />
+      {step !== "intro" && (
+        <div className="onboarding-brand-rail" aria-hidden>
+          <div className="onboarding-brand">
+            <div
+              className="onboarding-header-anchor"
+              data-onboarding-brand-anchor="header"
+            />
+            <span>Astro Agent</span>
+          </div>
+        </div>
+      )}
+      {previewProviders && (
+        <span className="onboarding-demo-label">{copy.demoLabel}</span>
+      )}
       <div className="onboarding-ambient" aria-hidden>
         <span />
         <span />
@@ -623,7 +636,11 @@ export function FirstRunOnboarding({
             exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
             transition={{ duration: reducedMotion ? 0.2 : 0.42 }}
           >
-            <OnboardingLogo />
+            <div
+              className="onboarding-intro-anchor"
+              data-onboarding-brand-anchor="intro"
+              aria-hidden
+            />
             <motion.div
               className="onboarding-intro-copy"
               initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
@@ -650,10 +667,7 @@ export function FirstRunOnboarding({
             }
           >
             <header className="onboarding-header" data-tauri-drag-region="true">
-              <div className="onboarding-brand">
-                <OnboardingLogo compact />
-                <span>Astro Agent</span>
-              </div>
+              <div className="onboarding-brand-placeholder" aria-hidden />
               {step !== "complete" ? (
                 <ol className="onboarding-progress" aria-label="Setup progress">
                   {STEP_ORDER.map((item, index) => (
@@ -670,6 +684,21 @@ export function FirstRunOnboarding({
             </header>
 
             <div className="onboarding-card">
+              {progressError && (
+                <p
+                  className="onboarding-status"
+                  data-status="error"
+                  role="alert"
+                >
+                  {copy.progressFailed}
+                  <button
+                    type="button"
+                    onClick={() => void saveProgress(step).catch(() => {})}
+                  >
+                    {copy.retry}
+                  </button>
+                </p>
+              )}
               {step === "personalize" ? (
                 <>
                   <div className="onboarding-heading">
@@ -677,7 +706,7 @@ export function FirstRunOnboarding({
                       <Sparkles size={14} aria-hidden />
                       {copy.personalizeEyebrow}
                     </span>
-                    <h1 ref={headingRef} tabIndex={-1}>
+                    <h1 ref={focusHeading} tabIndex={-1}>
                       {copy.personalizeTitle}
                     </h1>
                     <p>{copy.personalizeSub}</p>
@@ -767,7 +796,7 @@ export function FirstRunOnboarding({
                       <KeyRound size={14} aria-hidden />
                       {copy.providerEyebrow}
                     </span>
-                    <h1 ref={headingRef} tabIndex={-1}>
+                    <h1 ref={focusHeading} tabIndex={-1}>
                       {copy.providerTitle}
                     </h1>
                     <p>{copy.providerSub}</p>
@@ -782,7 +811,9 @@ export function FirstRunOnboarding({
                             <ProviderBrandIcon kind={selectedProvider.kind} />
                           ) : null}
                           <select
+                            ref={providerSelectRef}
                             value={selectedProviderId}
+                            disabled={providerStatus === "testing"}
                             onChange={(event) =>
                               selectProvider(event.target.value)
                             }
@@ -801,7 +832,9 @@ export function FirstRunOnboarding({
                         <label>
                           <span>{copy.apiKey}</span>
                           <input
+                            ref={apiKeyRef}
                             type="password"
+                            disabled={providerStatus === "testing"}
                             value={apiKey}
                             placeholder={
                               selectedProvider.has_api_key
@@ -813,6 +846,8 @@ export function FirstRunOnboarding({
                             onChange={(event) => {
                               setApiKey(event.target.value);
                               setProviderStatus("idle");
+                              verified.current = null;
+                              setConnectionIssue(null);
                             }}
                           />
                         </label>
@@ -821,11 +856,15 @@ export function FirstRunOnboarding({
                       <label>
                         <span>{copy.model}</span>
                         <input
+                          ref={modelInputRef}
                           value={model}
+                          disabled={providerStatus === "testing"}
                           spellCheck={false}
                           onChange={(event) => {
                             setModel(event.target.value);
                             setProviderStatus("idle");
+                            verified.current = null;
+                            setConnectionIssue(null);
                           }}
                         />
                       </label>
@@ -835,16 +874,21 @@ export function FirstRunOnboarding({
                         <label>
                           <span>{copy.endpoint}</span>
                           <input
+                            ref={endpointInputRef}
                             value={endpoint}
+                            disabled={providerStatus === "testing"}
                             spellCheck={false}
                             onChange={(event) => {
                               setEndpoint(event.target.value);
                               setProviderStatus("idle");
+                              verified.current = null;
+                              setConnectionIssue(null);
                             }}
                           />
                         </label>
                       </details>
 
+                      <p className="onboarding-test-cost">{copy.testCost}</p>
                       <button
                         type="button"
                         className="onboarding-test-button"
@@ -869,6 +913,40 @@ export function FirstRunOnboarding({
                             : copy.test}
                         </span>
                       </button>
+                      {providerStatus === "testing" && (
+                        <button
+                          type="button"
+                          className="onboarding-cancel-test"
+                          onClick={cancelProviderTest}
+                        >
+                          {copy.cancelTest}
+                        </button>
+                      )}
+                      {connectionIssue && (
+                        <ConnectionIssue
+                          kind={connectionIssue}
+                          locale={locale}
+                          onRetry={() => void testProvider()}
+                          onEdit={() => {
+                            if (connectionIssue === "model")
+                              modelInputRef.current?.focus();
+                            else if (connectionIssue === "credentials")
+                              (
+                                apiKeyRef.current ?? providerSelectRef.current
+                              )?.focus();
+                            else if (
+                              ["quota", "rate_limit"].includes(connectionIssue)
+                            )
+                              providerSelectRef.current?.focus();
+                            else {
+                              const details =
+                                endpointInputRef.current?.closest("details");
+                              if (details) details.open = true;
+                              endpointInputRef.current?.focus();
+                            }
+                          }}
+                        />
+                      )}
                       {providerMessage ? (
                         <p
                           className="onboarding-status"
@@ -880,9 +958,31 @@ export function FirstRunOnboarding({
                       ) : null}
                     </div>
                   ) : (
-                    <p className="onboarding-empty" role="alert">
-                      {providerMessage || copy.noProviders}
-                    </p>
+                    <div className="onboarding-empty" role="status">
+                      {providersState
+                        ? copy.noProviders
+                        : copy.loadingProviders}
+                      {connectionIssue && (
+                        <ConnectionIssue
+                          kind={connectionIssue}
+                          locale={locale}
+                          onRetry={() => {
+                            void withDeadline(
+                              invoke<ProvidersStateDto>("get_providers_state"),
+                            )
+                              .then((state) => {
+                                setProvidersState(state);
+                                setConnectionIssue(null);
+                              })
+                              .catch((error) =>
+                                setConnectionIssue(
+                                  classifyConnectionIssue(error),
+                                ),
+                              );
+                          }}
+                        />
+                      )}
+                    </div>
                   )}
                 </>
               ) : null}
@@ -894,7 +994,7 @@ export function FirstRunOnboarding({
                       <FolderOpen size={14} aria-hidden />
                       {copy.workspaceEyebrow}
                     </span>
-                    <h1 ref={headingRef} tabIndex={-1}>
+                    <h1 ref={focusHeading} tabIndex={-1}>
                       {copy.workspaceTitle}
                     </h1>
                     <p>{copy.workspaceSub}</p>
@@ -986,42 +1086,79 @@ export function FirstRunOnboarding({
                   <div className="onboarding-complete-mark">
                     <Check size={34} strokeWidth={2.2} aria-hidden />
                   </div>
-                  <h1 ref={headingRef} tabIndex={-1}>
-                    {copy.completeTitle}
+                  <h1 ref={focusHeading} tabIndex={-1}>
+                    {healthSummary?.modelStatus === "verified"
+                      ? copy.completeTitle
+                      : copy.savedTitle}
                   </h1>
-                  <p>{copy.completeSub}</p>
-                  {healthSummary ? (
+                  <p>
+                    {healthSummary?.modelStatus === "verified"
+                      ? copy.completeSub
+                      : copy.savedSub}
+                  </p>
+
+                  {healthSummary && (
                     <div className="onboarding-health-grid" role="status">
-                      {[
-                        [copy.healthAgent, healthSummary.agent],
-                        [copy.healthModel, healthSummary.provider],
-                        [copy.healthWorkspace, healthSummary.workspace],
-                        [copy.healthPermission, healthSummary.permission],
-                      ].map(([label, value]) => (
-                        <div key={label}>
-                          <Check size={15} aria-hidden />
-                          <span>
-                            <small>{label}</small>
-                            <strong>{value}</strong>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="onboarding-starters">
-                    <h2>{copy.starterTitle}</h2>
-                    {starterTasks.map(({ label, Icon }) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => enterAstro(label)}
+                      <div>
+                        <Check size={15} aria-hidden />
+                        <span>
+                          <small>{copy.healthAgent}</small>
+                          <strong>{healthSummary.agent}</strong>
+                        </span>
+                      </div>
+                      <div
+                        data-status={
+                          healthSummary.modelStatus === "verified"
+                            ? "ok"
+                            : "pending"
+                        }
                       >
-                        <Icon size={17} aria-hidden />
-                        <span>{label}</span>
-                        <ChevronRight size={15} aria-hidden />
-                      </button>
-                    ))}
-                  </div>
+                        <span aria-hidden>
+                          {healthSummary.modelStatus === "verified" ? "✓" : "○"}
+                        </span>
+                        <span>
+                          <small>{copy.healthModel}</small>
+                          <strong>
+                            {copy.modelStatuses[healthSummary.modelStatus]}
+                          </strong>
+                          {!["unavailable"].includes(
+                            healthSummary.modelStatus,
+                          ) && <small>{healthSummary.provider}</small>}
+                        </span>
+                      </div>
+                      <div>
+                        <Check size={15} aria-hidden />
+                        <span>
+                          <small>{copy.healthWorkspace}</small>
+                          <strong>{healthSummary.workspace}</strong>
+                        </span>
+                      </div>
+                      <div
+                        data-status={
+                          healthSummary.sandboxAvailable ? "ok" : "pending"
+                        }
+                      >
+                        <span aria-hidden>
+                          {healthSummary.sandboxAvailable ? "✓" : "○"}
+                        </span>
+                        <span>
+                          <small>{copy.healthPermission}</small>
+                          <strong>{healthSummary.permission}</strong>
+                          {!healthSummary.sandboxAvailable && (
+                            <small>{copy.sandboxUnavailable}</small>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <StarterTaskChooser locale={locale} onUse={enterAstro} />
+                  {demoDraftPrepared && (
+                    <p role="status">
+                      {locale === "zh"
+                        ? "演示草稿已准备，未保存或发送。"
+                        : "Demo draft prepared; not saved or sent."}
+                    </p>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1038,6 +1175,7 @@ export function FirstRunOnboarding({
                   {step !== "personalize" ? (
                     <Button
                       variant="ghost"
+                      disabled={finishing}
                       onClick={() =>
                         goTo(step === "workspace" ? "provider" : "personalize")
                       }
@@ -1052,6 +1190,10 @@ export function FirstRunOnboarding({
                     <Button
                       variant="primary"
                       busy={finishing}
+                      disabled={
+                        !previewProviders &&
+                        (providerStatus !== "success" || !verified.current)
+                      }
                       busyLabel={copy.finishing}
                       onClick={() => void finish()}
                     >
@@ -1083,43 +1225,39 @@ export function FirstRunOnboarding({
 }
 
 export default function OnboardingGate({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<"loading" | "visible" | "ready">(
-    isTauri() ? "loading" : "ready",
+  const { locale } = useI18n();
+  const [state, setState] = useState<
+    "loading" | "visible" | "entering" | "ready" | "error"
+  >(isTauri() ? "loading" : "ready");
+  const [initialState, setInitialState] = useState<OnboardingStateDto | null>(
+    null,
   );
-  const [initialStep, setInitialStep] = useState<OnboardingStep>("intro");
-
-  const showOnboarding = useCallback((step: OnboardingStep = "intro") => {
-    setInitialStep(step);
-    setState("visible");
-  }, []);
-
+  const [epoch, setEpoch] = useState(0);
   useEffect(() => {
     if (!isTauri()) return;
     let disposed = false;
-    void invoke<OnboardingStateDto>("get_onboarding_state")
+    setState("loading");
+    void withDeadline(invoke<OnboardingStateDto>("get_onboarding_state"))
       .then((next) => {
-        if (disposed) return;
-        if (next.should_show)
-          showOnboarding(normalizeOnboardingStep(next.step));
-        else setState("ready");
+        if (!disposed) {
+          setInitialState(next);
+          setState(next.should_show ? "visible" : "ready");
+        }
       })
-      .catch((error) => {
-        console.warn(COPY.zh.loadError, error);
-        if (!disposed) setState("ready");
+      .catch(() => {
+        if (!disposed) setState("error");
       });
     return () => {
       disposed = true;
     };
-  }, [showOnboarding]);
-
+  }, [epoch]);
   useEffect(() => {
-    const handleReset = () => showOnboarding("intro");
-    window.addEventListener(ONBOARDING_RESET_EVENT, handleReset);
-    return () =>
-      window.removeEventListener(ONBOARDING_RESET_EVENT, handleReset);
-  }, [showOnboarding]);
-
-  if (state === "loading") {
+    const reset = () => setEpoch((value) => value + 1);
+    window.addEventListener(ONBOARDING_RESET_EVENT, reset);
+    return () => window.removeEventListener(ONBOARDING_RESET_EVENT, reset);
+  }, []);
+  const arrive = useCallback(() => setState("ready"), []);
+  if (state === "loading")
     return (
       <main
         className="onboarding-root onboarding-root--loading"
@@ -1128,14 +1266,43 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
         <OnboardingLogo compact />
       </main>
     );
-  }
-  if (state === "visible") {
+  if (state === "error")
     return (
-      <FirstRunOnboarding
-        initialStep={initialStep}
-        onComplete={() => setState("ready")}
-      />
+      <main className="onboarding-root onboarding-root--loading">
+        <section className="onboarding-card">
+          <h1>
+            {locale === "zh"
+              ? "暂时无法读取初始化状态"
+              : "Setup state is unavailable"}
+          </h1>
+          <p>
+            {locale === "zh"
+              ? "请重试读取状态。已有配置不会被覆盖；初始化需要先验证模型连接。"
+              : "Retry loading setup. Existing configuration is preserved; a verified model is required."}
+          </p>
+          <Button onClick={() => setEpoch((value) => value + 1)}>
+            {locale === "zh" ? "重试" : "Retry"}
+          </Button>
+        </section>
+      </main>
     );
-  }
-  return children;
+  return (
+    <>
+      {(state === "visible" || state === "entering") && (
+        <FirstRunOnboarding
+          key={epoch}
+          initialStep={resumeOnboardingStep(initialState?.step ?? "intro")}
+          initialDraft={initialState?.draft}
+          handoff={state === "entering"}
+          onHandoffComplete={arrive}
+          onComplete={() => setState("entering")}
+        />
+      )}
+      {(state === "entering" || state === "ready") && (
+        <div className="onboarding-app-host" key="app">
+          {children}
+        </div>
+      )}
+    </>
+  );
 }

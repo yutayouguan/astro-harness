@@ -114,6 +114,8 @@ import {
 import type { SlashAction } from "./lib/chat/composerCommands";
 import type { ComposerContextToken } from "./lib/chat/composerContext";
 import { takeOnboardingStarterPrompt } from "./lib/ui/onboarding";
+import { providerIsReady } from "./lib/providers/providerReadiness";
+import { ModelSetupNotice } from "./components/onboarding/ModelSetupNotice";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
@@ -1527,7 +1529,11 @@ export default function App() {
             <>
               <div className="sidebar-brand">
                 <div className="sidebar-logo" aria-hidden>
-                  <AstroLogoMark width={26} height={26} />
+                  <AstroLogoMark
+                    width={26}
+                    height={26}
+                    data-onboarding-brand-target
+                  />
                 </div>
                 <div className="sidebar-brand-text">Astro Agent</div>
               </div>
@@ -2440,6 +2446,11 @@ export default function App() {
                         )}
                       </div>
                     )}
+                    {!providerIsReady(activeProvider) && (
+                      <ModelSetupNotice
+                        onConfigure={() => openSettingsTab("providers")}
+                      />
+                    )}
                     <ChatView
                       projectId={activeProjectId}
                       sessionId={chat.sessionId}
@@ -2475,6 +2486,7 @@ export default function App() {
                       completionCelebrationId={chat.completionCelebrationId}
                       streamPaused={chat.streamPaused}
                       sendBlocked={chat.isCompacting || chat.sessionReadOnly}
+                      modelUnavailable={!providerIsReady(activeProvider)}
                       sendBlockedReason={
                         chat.isCompacting
                           ? t("chat.compactInProgress")
@@ -2483,7 +2495,9 @@ export default function App() {
                               !chat.sessionEndReason
                               ? t("chat.sessionCompactedReadOnly")
                               : t("chat.sessionEndedReadOnly")
-                            : undefined
+                            : !providerIsReady(activeProvider)
+                              ? t("chat.modelSetupRequired")
+                              : undefined
                       }
                       displayPrefs={chatDisplayPrefs}
                       onDefaultAnswerLayoutChange={setAnswerLayout}

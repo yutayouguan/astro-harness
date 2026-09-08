@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { providerIsReady } from "../../lib/providers/providerReadiness";
 import type {
   Dispatch,
   MutableRefObject,
@@ -309,6 +310,11 @@ export function useSend(deps: UseSendDeps) {
         sendStartLockRef.current ||
         !activeProvider
       ) {
+        return false;
+      }
+
+      if (!providerIsReady(activeProvider)) {
+        showTransientToast(t("chat.modelSetupRequired"), { tone: "warning" });
         return false;
       }
 

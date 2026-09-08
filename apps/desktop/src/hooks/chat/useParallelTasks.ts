@@ -1,3 +1,4 @@
+import { providerIsReady } from "../../lib/providers/providerReadiness";
 /**
  * 用户显式创建的独立任务：每条消息使用独立 session 并行流式。
  */
@@ -369,8 +370,8 @@ export function useParallelTasks(deps: Deps) {
       const text = opts.text.trim();
       const pending = opts.attachments ?? [];
       if (!text && pending.length === 0) return false;
-      if (!activeProvider) {
-        showTransientToast(t("status.none"), { tone: "warning" });
+      if (!providerIsReady(activeProvider)) {
+        showTransientToast(t("chat.modelSetupRequired"), { tone: "warning" });
         return false;
       }
 

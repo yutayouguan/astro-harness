@@ -382,6 +382,8 @@ type Props = {
   streamPaused?: boolean;
   /** 禁止发送（压实中 / 只读会话等） */
   sendBlocked?: boolean;
+  /** Missing model blocks submission, but keeps the draft editable. */
+  modelUnavailable?: boolean;
   /** 禁止发送时的输入框占位/原因文案 */
   sendBlockedReason?: string;
   /** 聊天展示偏好（详细度等） */
@@ -882,6 +884,7 @@ export default function ChatView({
   completionCelebrationId = 0,
   streamPaused = false,
   sendBlocked = false,
+  modelUnavailable = false,
   sendBlockedReason,
   displayPrefs,
   onDefaultAnswerLayoutChange,
@@ -2350,6 +2353,7 @@ export default function ChatView({
   const canQueueWhileBusy = streaming || turnInFlight || interruptBlocked;
   const canSend =
     !sendBlocked &&
+    !modelUnavailable &&
     !realtime.active &&
     (input.trim().length > 0 ||
       attachments.length > 0 ||

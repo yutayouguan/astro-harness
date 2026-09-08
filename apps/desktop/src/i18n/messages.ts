@@ -5,6 +5,8 @@ export type Locale = "zh" | "en";
 export type MessageKey = keyof typeof zh;
 
 export const zh = {
+  "chat.modelSetupRequired": "先连接一个可用模型即可发送任务，草稿会保留。",
+  "chat.configureModel": "连接模型",
   "nav.chat": "智能对话",
   "nav.memory": "记忆空间",
   "nav.files": "工作空间",
@@ -2896,6 +2898,8 @@ export const zh = {
 } as const;
 
 export const en: Record<MessageKey, string> = {
+  "chat.modelSetupRequired": "Connect a usable model before sending. Your draft will be kept.",
+  "chat.configureModel": "Connect a model",
   "nav.chat": "Chat",
   "nav.memory": "Memory Space",
   "nav.files": "Workspace",

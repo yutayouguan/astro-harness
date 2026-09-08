@@ -27,12 +27,13 @@ test("desktop startup is gated by the persisted first-run flow", () => {
     /<OnboardingGate>[\s\S]*?<App \/>[\s\S]*?<\/OnboardingGate>/,
   );
   assert.match(gate, /invoke<OnboardingStateDto>\("get_onboarding_state"\)/);
-  assert.match(gate, /invoke<OnboardingStateDto>\("complete_onboarding"\)/);
+  assert.match(gate, /"complete_onboarding"/);
+  assert.match(gate, /verificationToken: verified\.current\?\.token/);
 });
 
 test("onboarding uses canonical provider, project, and permission commands", () => {
   assert.match(gate, /"set_provider_api_key"/);
-  assert.match(gate, /"test_provider"/);
+  assert.match(gate, /"verify_onboarding_provider"/);
   assert.match(gate, /"set_active_provider_model"/);
   assert.match(gate, /"create_project"/);
   assert.match(gate, /"set_permission_preset"/);
@@ -50,6 +51,7 @@ test("motion and glass provide accessibility fallbacks", () => {
 test("registered commands support progress, completion, and settings reset", () => {
   for (const command of [
     "get_onboarding_state",
+    "verify_onboarding_provider",
     "save_onboarding_progress",
     "complete_onboarding",
     "reset_onboarding_state",
