@@ -1517,6 +1517,9 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
               {loading && !state && (
                 <li className="providers-empty">{t("skills.refreshing")}</li>
               )}
+              {!loading && state?.providers.length === 0 && (
+                <li className="providers-empty">{t("providers.noneAdded")}</li>
+              )}
               {state?.providers
                 .slice()
                 .sort((a, b) => {

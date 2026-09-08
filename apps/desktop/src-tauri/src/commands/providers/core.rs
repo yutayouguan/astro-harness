@@ -235,6 +235,9 @@ pub struct ProviderFallbackEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
+    /// Explicit user configuration; None is only for one-time legacy classification.
+    #[serde(default)]
+    pub added: Option<bool>,
     pub id: String,
     pub kind: ProviderKind,
     pub display_name: String,
@@ -265,6 +268,10 @@ pub struct ProviderConfig {
 }
 
 impl ProviderConfig {
+    fn is_added(&self) -> bool {
+        self.added == Some(true) || self.id.starts_with("toml:")
+    }
+
     /// 创建默认实例。
     pub fn new(kind: ProviderKind) -> Self {
         Self {
@@ -281,6 +288,7 @@ impl ProviderConfig {
             vision_model: String::new(),
             music_model: String::new(),
             embedding_model: String::new(),
+            added: Some(true),
         }
     }
 
@@ -301,9 +309,113 @@ pub struct ProvidersState {
 }
 
 impl ProvidersState {
-    /// 用内置默认集填充缺失供应商。
+    fn add_provider(&mut self, kind: ProviderKind) {
+        let mut provider = if let Some(index) = self
+            .providers
+            .iter()
+            .position(|p| p.kind == kind && !p.is_added())
+        {
+            // Promote, rather than replace, a catalog row: preserve its ID and stored fields.
+            self.providers.remove(index)
+        } else {
+            let mut provider = ProviderConfig::new(kind);
+            provider.enabled = !matches!(
+                kind,
+                ProviderKind::Openrouter
+                    | ProviderKind::Bailian
+                    | ProviderKind::Nvidia
+                    | ProviderKind::Moonshot
+                    | ProviderKind::Volcengine
+                    | ProviderKind::Minimax
+                    | ProviderKind::Hunyuan
+            );
+            provider
+        };
+        provider.added = Some(true);
+        self.providers.push(provider);
+    }
+
+    fn reorder_added(&mut self, ids: Vec<String>) -> Result<(), String> {
+        if ids.len()
+            != self
+                .providers
+                .iter()
+                .filter(|provider| provider.is_added())
+                .count()
+        {
+            return Err("排序列表长度不匹配".to_string());
+        }
+        let (added, templates): (Vec<_>, Vec<_>) = self
+            .providers
+            .iter()
+            .cloned()
+            .partition(ProviderConfig::is_added);
+        let mut by_id: std::collections::HashMap<String, ProviderConfig> = added
+            .into_iter()
+            .map(|provider| (provider.id.clone(), provider))
+            .collect();
+        let mut next = Vec::with_capacity(ids.len());
+        for id in ids {
+            let p = by_id
+                .remove(&id)
+                .ok_or_else(|| format!("提供商不存在: {id}"))?;
+            next.push(p);
+        }
+        if !by_id.is_empty() {
+            return Err("排序列表缺少部分提供商".to_string());
+        }
+        next.extend(templates);
+        self.providers = next;
+        Ok(())
+    }
+
+    fn remove_provider(&mut self, id: &str) -> Result<(), String> {
+        let matches: Vec<_> = self
+            .providers
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.id == id)
+            .map(|(i, _)| i)
+            .collect();
+        if matches.is_empty() {
+            return Err("提供商不存在".to_string());
+        }
+        // 若历史数据存在重复 id，一次删干净，避免「删了还在」
+        for idx in matches.into_iter().rev() {
+            self.providers.remove(idx);
+        }
+        if self.active_provider_id.as_deref() == Some(id)
+            || self
+                .active_provider_id
+                .as_ref()
+                .is_some_and(|aid| !self.providers.iter().any(|p| &p.id == aid))
+        {
+            self.active_provider_id = self
+                .providers
+                .iter()
+                .find(|p| {
+                    p.is_added()
+                        && p.enabled
+                        && providers::dispatch::supports_agent_responses(&toml_backend_id(p))
+                })
+                .map(|p| p.id.clone());
+        }
+        if self.active_image_provider_id.as_deref() == Some(id) {
+            self.active_image_provider_id = None;
+        }
+        self.ensure_builtin_kinds();
+        Ok(())
+    }
+
+    /// Built-in rows are a catalog, not user-added configuration.
     pub fn with_defaults() -> Self {
-        let mut s = Self::default();
+        let mut state = Self::default();
+        state.ensure_builtin_kinds();
+        state
+    }
+
+    pub fn ensure_builtin_kinds(&mut self) -> bool {
+        let mut changed = false;
         for kind in [
             ProviderKind::Anthropic,
             ProviderKind::Openai,
@@ -312,10 +424,6 @@ impl ProvidersState {
             ProviderKind::Azure,
             ProviderKind::Zhipu,
             ProviderKind::Ollama,
-        ] {
-            s.providers.push(ProviderConfig::new(kind));
-        }
-        for kind in [
             ProviderKind::Openrouter,
             ProviderKind::Bailian,
             ProviderKind::Nvidia,
@@ -324,36 +432,61 @@ impl ProvidersState {
             ProviderKind::Minimax,
             ProviderKind::Hunyuan,
         ] {
-            s.providers.push(ProviderConfig::new_disabled(kind));
+            if !self.providers.iter().any(|provider| provider.kind == kind) {
+                let mut provider = ProviderConfig::new(kind);
+                provider.enabled = matches!(
+                    kind,
+                    ProviderKind::Anthropic
+                        | ProviderKind::Openai
+                        | ProviderKind::Google
+                        | ProviderKind::Deepseek
+                        | ProviderKind::Azure
+                        | ProviderKind::Zhipu
+                        | ProviderKind::Ollama
+                );
+                provider.added = Some(false);
+                self.providers.push(provider);
+                changed = true;
+            }
         }
-        if let Some(first) = s.providers.first() {
-            s.active_provider_id = Some(first.id.clone());
-        }
-        s
+        changed
     }
 
-    /// 为已有配置补齐新增内置提供商（Azure / 智谱 / 六个新提供商）。
-    pub fn ensure_builtin_kinds(&mut self) -> bool {
+    /// Keep legacy configured accounts and explicit custom rows without deleting any data.
+    fn migrate_added_flags(&mut self, has_credentials: impl Fn(&ProviderConfig) -> bool) -> bool {
         let mut changed = false;
-        for kind in [ProviderKind::Azure, ProviderKind::Zhipu] {
-            if !self.providers.iter().any(|p| p.kind == kind) {
-                self.providers.push(ProviderConfig::new(kind));
-                changed = true;
+        let mut seen_kinds = std::collections::HashSet::new();
+        for provider in &mut self.providers {
+            let duplicate_kind = !seen_kinds.insert(provider.kind.as_str());
+            if provider.added.is_some() {
+                continue;
             }
-        }
-        for kind in [
-            ProviderKind::Openrouter,
-            ProviderKind::Bailian,
-            ProviderKind::Nvidia,
-            ProviderKind::Moonshot,
-            ProviderKind::Volcengine,
-            ProviderKind::Minimax,
-            ProviderKind::Hunyuan,
-        ] {
-            if !self.providers.iter().any(|p| p.kind == kind) {
-                self.providers.push(ProviderConfig::new_disabled(kind));
-                changed = true;
-            }
+            let customized = provider.kind == ProviderKind::Custom
+                || provider.id.starts_with("toml:")
+                || duplicate_kind
+                || (self.active_provider_id.as_deref() == Some(provider.id.as_str())
+                    && provider.kind != ProviderKind::Anthropic)
+                || self.active_image_provider_id.as_deref() == Some(provider.id.as_str())
+                || provider.display_name != provider.kind.display_name()
+                || provider.endpoint.trim_end_matches('/')
+                    != provider.kind.default_endpoint().trim_end_matches('/')
+                || (!provider.model.trim().is_empty()
+                    && provider.model != provider.kind.default_model()
+                    && provider.model != resolve_latest_chat_model(&provider.kind))
+                || !provider.fallback.is_empty()
+                || [
+                    &provider.image_model,
+                    &provider.video_model,
+                    &provider.tts_model,
+                    &provider.vision_model,
+                    &provider.music_model,
+                    &provider.embedding_model,
+                ]
+                .iter()
+                .any(|model| !model.is_empty());
+            provider.added =
+                Some(customized || (provider.kind.requires_api_key() && has_credentials(provider)));
+            changed = true;
         }
         changed
     }
@@ -502,6 +635,7 @@ pub struct ProviderConfigDto {
 #[derive(Debug, Clone, Serialize)]
 pub struct ProvidersStateDto {
     pub providers: Vec<ProviderConfigDto>,
+    pub provider_templates: Vec<ProviderConfigDto>,
     pub active_provider_id: Option<String>,
     pub active_image_provider_id: Option<String>,
 }
@@ -734,7 +868,9 @@ fn sync_custom_provider_models() {
 fn load_state() -> Result<ProvidersState, String> {
     let path = providers_path();
     if !path.exists() {
-        return Ok(ProvidersState::with_defaults());
+        let mut state = ProvidersState::with_defaults();
+        merge_toml_custom_providers(&mut state);
+        return Ok(state);
     }
     let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let mut state: ProvidersState = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
@@ -745,8 +881,11 @@ fn load_state() -> Result<ProvidersState, String> {
     if state.migrate_stale_defaults() {
         changed = true;
     }
+    if state.migrate_added_flags(|provider| resolve_api_key(provider).0) {
+        changed = true;
+    }
     if changed {
-        let _ = save_state(&state);
+        save_state(&state)?;
     }
     sync_custom_provider_models();
     merge_toml_custom_providers(&mut state);
@@ -789,6 +928,7 @@ fn merge_toml_custom_providers(state: &mut ProvidersState) {
             vision_model: String::new(),
             music_model: String::new(),
             embedding_model: String::new(),
+            added: Some(true),
         });
     }
 }
@@ -916,7 +1056,7 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         supports_responses_api: supports_responses_toggle(p.kind) || p.id.starts_with("toml:"),
         config_source: if p.id.starts_with("toml:") {
             "toml".to_string()
-        } else if p.id.starts_with("prov-") {
+        } else if p.is_added() {
             "user".to_string()
         } else {
             "builtin".to_string()
@@ -927,9 +1067,30 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
 /// 整体状态 → 前端 DTO。
 fn to_state_dto(state: &ProvidersState) -> ProvidersStateDto {
     ProvidersStateDto {
-        providers: state.providers.iter().map(to_dto).collect(),
-        active_provider_id: state.active_provider_id.clone(),
-        active_image_provider_id: state.active_image_provider_id.clone(),
+        providers: state
+            .providers
+            .iter()
+            .filter(|provider| provider.is_added())
+            .map(to_dto)
+            .collect(),
+        provider_templates: state
+            .providers
+            .iter()
+            .filter(|provider| !provider.is_added())
+            .map(to_dto)
+            .collect(),
+        active_provider_id: state.active_provider_id.clone().filter(|id| {
+            state
+                .providers
+                .iter()
+                .any(|provider| provider.id == *id && provider.is_added())
+        }),
+        active_image_provider_id: state.active_image_provider_id.clone().filter(|id| {
+            state
+                .providers
+                .iter()
+                .any(|provider| provider.id == *id && provider.is_added())
+        }),
     }
 }
 
@@ -969,6 +1130,7 @@ where
 pub fn get_providers_state() -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
         let _ = s.ensure_unique_ids();
+        s.ensure_builtin_kinds();
         Ok(to_state_dto(s))
     })
 }
@@ -980,7 +1142,7 @@ pub fn list_providers() -> Result<Vec<ProviderConfigDto>, String> {
         let list: Vec<_> = s
             .providers
             .iter()
-            .filter(|p| p.enabled)
+            .filter(|p| p.enabled && p.is_added())
             .map(to_dto)
             .collect();
         Ok(list)
@@ -992,17 +1154,7 @@ pub fn list_providers() -> Result<Vec<ProviderConfigDto>, String> {
 pub fn add_provider(kind: String) -> Result<ProvidersStateDto, String> {
     let kind = ProviderKind::from_str(&kind).ok_or_else(|| format!("未知提供商类型: {kind}"))?;
     with_state_mut(|s| {
-        // 新六家与 builtin 一致：添加后默认关闭，避免未配 Key 就占用「可用」
-        let cfg = match kind {
-            ProviderKind::Openrouter
-            | ProviderKind::Bailian
-            | ProviderKind::Nvidia
-            | ProviderKind::Moonshot
-            | ProviderKind::Volcengine
-            | ProviderKind::Minimax => ProviderConfig::new_disabled(kind),
-            _ => ProviderConfig::new(kind),
-        };
-        s.providers.push(cfg);
+        s.add_provider(kind);
         Ok(to_state_dto(s))
     })
 }
@@ -1039,6 +1191,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
             vision_model: provider.vision_model.trim().to_string(),
             music_model: provider.music_model.trim().to_string(),
             embedding_model: provider.embedding_model.trim().to_string(),
+            added: Some(true),
         };
         if s.active_image_provider_id.as_deref() == Some(s.providers[idx].id.as_str())
             && (!s.providers[idx].enabled
@@ -1054,22 +1207,7 @@ pub fn save_provider(provider: ProviderConfigInput) -> Result<ProvidersStateDto,
 #[tauri::command]
 pub fn reorder_providers(ids: Vec<String>) -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
-        if ids.len() != s.providers.len() {
-            return Err("排序列表长度不匹配".to_string());
-        }
-        let mut by_id: std::collections::HashMap<String, ProviderConfig> =
-            s.providers.drain(..).map(|p| (p.id.clone(), p)).collect();
-        let mut next = Vec::with_capacity(ids.len());
-        for id in ids {
-            let p = by_id
-                .remove(&id)
-                .ok_or_else(|| format!("提供商不存在: {id}"))?;
-            next.push(p);
-        }
-        if !by_id.is_empty() {
-            return Err("排序列表缺少部分提供商".to_string());
-        }
-        s.providers = next;
+        s.reorder_added(ids)?;
         Ok(to_state_dto(s))
     })
 }
@@ -1078,36 +1216,7 @@ pub fn reorder_providers(ids: Vec<String>) -> Result<ProvidersStateDto, String> 
 #[tauri::command]
 pub fn delete_provider(id: String) -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
-        if s.providers.len() <= 1 {
-            return Err("至少保留一个提供商".to_string());
-        }
-        let matches: Vec<_> = s
-            .providers
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.id == id)
-            .map(|(i, _)| i)
-            .collect();
-        if matches.is_empty() {
-            return Err("提供商不存在".to_string());
-        }
-        // 若历史数据存在重复 id，一次删干净，避免「删了还在」
-        for idx in matches.into_iter().rev() {
-            s.providers.remove(idx);
-        }
-        if s.providers.is_empty() {
-            return Err("至少保留一个提供商".to_string());
-        }
-        if s.active_provider_id.as_deref() == Some(&id)
-            || s.active_provider_id
-                .as_ref()
-                .is_some_and(|aid| !s.providers.iter().any(|p| &p.id == aid))
-        {
-            s.active_provider_id = s.providers.first().map(|p| p.id.clone());
-        }
-        if s.active_image_provider_id.as_deref() == Some(&id) {
-            s.active_image_provider_id = None;
-        }
+        s.remove_provider(&id)?;
         let _ = delete_api_key(&keyring_service_for_provider(&id));
         Ok(to_state_dto(s))
     })
@@ -1119,12 +1228,13 @@ pub fn set_active_provider(id: String) -> Result<ProvidersStateDto, String> {
     with_state_mut(|s| {
         let provider = s
             .providers
-            .iter()
+            .iter_mut()
             .find(|p| p.id == id && p.enabled)
             .ok_or_else(|| "提供商不存在或未启用".to_string())?;
         if !providers::dispatch::supports_agent_responses(&toml_backend_id(provider)) {
             return Err("该提供商不支持 Agent Responses API".to_string());
         }
+        provider.added = Some(true);
         s.active_provider_id = Some(id);
         Ok(to_state_dto(s))
     })
@@ -1154,6 +1264,7 @@ fn set_active_provider_model_in_state(
         return Err("该提供商不支持 Agent Responses API".to_string());
     }
     provider.model = model.to_string();
+    provider.added = Some(true);
     state.active_provider_id = Some(id.to_string());
     Ok(to_state_dto(state))
 }
@@ -1164,12 +1275,13 @@ pub fn set_active_image_provider(id: String) -> Result<ProvidersStateDto, String
     with_state_mut(|state| {
         let provider = state
             .providers
-            .iter()
+            .iter_mut()
             .find(|provider| provider.id == id && provider.enabled)
             .ok_or_else(|| "提供商不存在或未启用".to_string())?;
         if !providers::dispatch::supports_image_gen(&toml_backend_id(provider)) {
             return Err("该提供商不支持图片生成".to_string());
         }
+        provider.added = Some(true);
         state.active_image_provider_id = Some(id);
         Ok(to_state_dto(state))
     })
@@ -1206,6 +1318,9 @@ pub fn set_provider_api_key(id: String, api_key: String) -> Result<ProvidersStat
             return Err("提供商不存在".to_string());
         }
         save_api_key(&keyring_service_for_provider(&id), key).map_err(|e| e.to_string())?;
+        if let Some(provider) = s.providers.iter_mut().find(|provider| provider.id == id) {
+            provider.added = Some(true);
+        }
         Ok(to_state_dto(s))
     })
 }
@@ -1241,12 +1356,12 @@ pub(crate) fn find_provider_by_backend(backend_id: &str) -> Result<ProviderConfi
     with_state(|s| {
         s.providers
             .iter()
-            .find(|p| p.enabled && p.kind.backend_id() == backend_id)
+            .find(|p| p.is_added() && p.enabled && toml_backend_id(p) == backend_id)
             .cloned()
             .or_else(|| {
                 s.providers
                     .iter()
-                    .find(|p| p.kind.backend_id() == backend_id)
+                    .find(|p| p.is_added() && toml_backend_id(p) == backend_id)
                     .cloned()
             })
             .ok_or_else(|| format!("未找到 backend_id={backend_id} 的提供商"))
@@ -1466,7 +1581,7 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
         let mut minimax: Option<ImageGenTarget> = None;
 
         for p in &s.providers {
-            if !p.enabled {
+            if !p.is_added() || !p.enabled {
                 continue;
             }
             let Some(default_image) = default_image_model_for_kind(&p.kind) else {
@@ -1635,36 +1750,40 @@ fn require_api_key(p: &ProviderConfig) -> Result<String, String> {
 
 /// Tauri 命令：list_provider_models。
 #[tauri::command]
-pub async fn list_provider_models(id: String) -> Result<ProviderModelsResult, String> {
-    // TTL 缓存：10 分钟内用缓存，不请求 API
-    let cache = load_models_cache();
-    if let Some(entry) = cache.providers.get(&id) {
-        if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&entry.updated_at) {
-            let age = chrono::Utc::now().signed_duration_since(updated);
-            if age.num_minutes() < 10 {
-                let kind = if entry.kind.is_empty() {
-                    "custom"
-                } else {
-                    entry.kind.as_str()
-                };
-                return Ok(ProviderModelsResult {
-                    models: entry
-                        .models
-                        .iter()
-                        .cloned()
-                        .map(|e| e.into_info(kind))
-                        .collect(),
-                    latency_ms: entry.latency_ms,
-                    source: format!("{} (cached)", entry.source),
-                });
-            }
-        }
-    }
-    drop(cache);
-
+pub async fn list_provider_models(
+    id: String,
+    refresh: Option<bool>,
+) -> Result<ProviderModelsResult, String> {
     let provider = find_provider(&id)?;
     validate_http_endpoint(&provider.endpoint)?;
     let api_key = require_api_key(&provider)?;
+    if !refresh.unwrap_or(false) {
+        // TTL 缓存：10 分钟内用缓存，不请求 API
+        let cache = load_models_cache();
+        if let Some(entry) = cache.providers.get(&id) {
+            if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&entry.updated_at) {
+                let age = chrono::Utc::now().signed_duration_since(updated);
+                if age.num_minutes() < 10 {
+                    let kind = if entry.kind.is_empty() {
+                        "custom"
+                    } else {
+                        entry.kind.as_str()
+                    };
+                    return Ok(ProviderModelsResult {
+                        models: entry
+                            .models
+                            .iter()
+                            .cloned()
+                            .map(|e| e.into_info(kind))
+                            .collect(),
+                        latency_ms: entry.latency_ms,
+                        source: format!("{} (cached)", entry.source),
+                    });
+                }
+            }
+        }
+        drop(cache);
+    }
     // 刷新模型前确保 OpenRouter 上下文/能力表可用（失败不阻断，走回落）
     if let Err(err) = crate::meta::openrouter_meta::ensure_cache(false).await {
         tracing::warn!(error = %err, "OpenRouter 模型表不可用，将使用 API/回落");
@@ -2142,6 +2261,125 @@ mod tests {
     }
 
     #[test]
+    fn fresh_catalog_is_not_user_configuration() {
+        let state = ProvidersState::with_defaults();
+        assert_eq!(state.providers.len(), 14);
+        let dto = to_state_dto(&state);
+        assert!(dto.providers.is_empty());
+        assert_eq!(dto.provider_templates.len(), 14);
+        assert!(dto.active_provider_id.is_none());
+        assert!(dto
+            .provider_templates
+            .iter()
+            .all(|p| p.config_source == "builtin"));
+    }
+
+    #[test]
+    fn explicit_add_survives_reload_without_a_key() {
+        let mut state = ProvidersState::with_defaults();
+        let id = state
+            .providers
+            .iter()
+            .find(|p| p.kind == ProviderKind::Openai)
+            .unwrap()
+            .id
+            .clone();
+        state.add_provider(ProviderKind::Openai);
+        assert_eq!(state.providers.len(), 14);
+        assert_eq!(state.providers.last().unwrap().id, id);
+        let mut restored: ProvidersState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert!(!restored.migrate_added_flags(|_| false));
+        let dto = to_state_dto(&restored);
+        assert_eq!(dto.providers.len(), 1);
+        assert_eq!(dto.providers[0].id, id);
+        assert_eq!(dto.providers[0].config_source, "user");
+        restored.add_provider(ProviderKind::Openai);
+        assert_eq!(to_state_dto(&restored).providers.len(), 2);
+        assert_ne!(restored.providers.last().unwrap().id, id);
+    }
+
+    #[test]
+    fn legacy_accounts_are_classified_once_without_losing_rows() {
+        let mut state = ProvidersState::with_defaults();
+        for provider in &mut state.providers {
+            provider.added = None;
+        }
+        let keyed = state.providers[1].id.clone();
+        state.providers[2].endpoint = "https://custom.example/v1".into();
+        let mut duplicate = ProviderConfig::new(ProviderKind::Openai);
+        duplicate.added = None;
+        state.providers.push(duplicate);
+        assert!(state.migrate_added_flags(|p| p.id == keyed));
+        assert_eq!(state.providers.len(), 15);
+        assert_eq!(state.providers.iter().filter(|p| p.is_added()).count(), 3);
+        // A later environment key must not silently add every template again.
+        assert!(!state.migrate_added_flags(|_| true));
+        assert_eq!(state.providers.iter().filter(|p| p.is_added()).count(), 3);
+    }
+
+    #[test]
+    fn reorder_only_requires_added_ids_and_delete_last_stays_empty() {
+        let mut state = ProvidersState::with_defaults();
+        let first = ProviderConfig::new(ProviderKind::Openai);
+        let second = ProviderConfig::new(ProviderKind::Google);
+        let first_id = first.id.clone();
+        let second_id = second.id.clone();
+        state.providers.extend([first, second]);
+        state.active_provider_id = Some(first_id.clone());
+        let before = serde_json::to_value(&state).unwrap();
+        assert!(state
+            .reorder_added(vec![first_id.clone(), first_id.clone()])
+            .is_err());
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+        state
+            .reorder_added(vec![second_id.clone(), first_id.clone()])
+            .unwrap();
+        assert_eq!(state.providers[0].id, second_id);
+        state.remove_provider(&first_id).unwrap();
+        state.remove_provider(&second_id).unwrap();
+        let mut restored: ProvidersState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        restored.ensure_builtin_kinds();
+        restored.migrate_added_flags(|_| true);
+        assert_eq!(restored.providers.len(), 14);
+        assert!(to_state_dto(&restored).providers.is_empty());
+        assert!(restored.active_provider_id.is_none());
+    }
+
+    #[test]
+    fn legacy_selected_local_provider_is_retained_without_credentials() {
+        let mut state = ProvidersState::with_defaults();
+        let local = state
+            .providers
+            .iter_mut()
+            .find(|p| p.kind == ProviderKind::Ollama)
+            .unwrap();
+        local.added = None;
+        let id = local.id.clone();
+        state.active_provider_id = Some(id.clone());
+        state.migrate_added_flags(|_| false);
+        assert_eq!(to_state_dto(&state).providers[0].id, id);
+    }
+
+    #[test]
+    fn selecting_a_template_model_promotes_it_to_added() {
+        let mut state = ProvidersState::with_defaults();
+        let id = state
+            .providers
+            .iter()
+            .find(|p| p.kind == ProviderKind::Openai)
+            .unwrap()
+            .id
+            .clone();
+        let dto = set_active_provider_model_in_state(&mut state, &id, "chosen-model").unwrap();
+        assert_eq!(dto.providers.len(), 1);
+        assert_eq!(dto.providers[0].model, "chosen-model");
+        assert!(!dto.provider_templates.iter().any(|p| p.id == id));
+        assert_eq!(dto.active_provider_id.as_deref(), Some(id.as_str()));
+    }
+
+    #[test]
     fn ensure_builtin_adds_six_disabled() {
         let mut s = ProvidersState::default();
         assert!(s.ensure_builtin_kinds());
@@ -2368,6 +2606,7 @@ mod tests {
                     vision_model: String::new(),
                     music_model: String::new(),
                     embedding_model: String::new(),
+                    added: Some(true),
                 },
                 ProviderConfig {
                     id: "v1".into(),
@@ -2383,6 +2622,7 @@ mod tests {
                     vision_model: String::new(),
                     music_model: String::new(),
                     embedding_model: String::new(),
+                    added: Some(true),
                 },
                 ProviderConfig {
                     id: "x1".into(),
@@ -2398,6 +2638,7 @@ mod tests {
                     vision_model: String::new(),
                     music_model: String::new(),
                     embedding_model: String::new(),
+                    added: Some(true),
                 },
                 ProviderConfig {
                     id: "g1".into(),
@@ -2413,6 +2654,7 @@ mod tests {
                     vision_model: String::new(),
                     music_model: String::new(),
                     embedding_model: String::new(),
+                    added: Some(true),
                 },
             ],
         };

@@ -1048,6 +1048,7 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
   padding: 10px 6px;
   cursor: pointer;
 }
+.onboarding-model-hint,
 .onboarding-test-cost,
 .onboarding-task-privacy {
   margin: 0;

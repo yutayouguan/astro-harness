@@ -15,6 +15,9 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
   await page.route("**/__onboarding_mock/responses", route => route.fulfill({
     json: { ok: true, model: "qa-small", latency_ms: 12, message: "ok" },
   }));
+  await page.route("**/__onboarding_mock/models", route => route.fulfill({
+    json: { models: [{ id: "qa-small" }, { id: "qa-alt" }, { id: "text-embedding-3-small" }], latency_ms: 1, source: "qa" },
+  }));
   await page.addInitScript(({ boot }) => {
     const w = window as any;
     const initialDraft = { agent_name: "Astro", provider_id: "", model: "", endpoint: "",
@@ -33,7 +36,7 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
       endpoint: "http://127.0.0.1/mock/v1", model: "qa-small", enabled: true,
       has_api_key: false, key_source: "none", env_key_name: null, backend_id: "openai",
       supports_responses_api: true };
-    const initialProviders = { providers: [provider], active_provider_id: "qa", active_image_provider_id: null };
+    const initialProviders = { providers: [], provider_templates: [provider], active_provider_id: null, active_image_provider_id: null };
     if (!localStorage.getItem("qa.providers")) localStorage.setItem("qa.providers", JSON.stringify(initialProviders));
     const readState = () => JSON.parse(localStorage.getItem("qa.state")!);
     const readProviders = () => JSON.parse(localStorage.getItem("qa.providers")!);
@@ -74,7 +77,9 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           case "list_providers": return readProviders().providers;
           case "save_provider": {
             const state = readProviders();
-            state.providers[0] = { ...state.providers[0], ...args.provider };
+            const existing = [...state.providers, ...state.provider_templates].find(p => p.id === args.provider.id);
+            state.providers = [{ ...existing, ...args.provider }];
+            state.provider_templates = state.provider_templates.filter(p => p.id !== args.provider.id);
             localStorage.setItem("qa.providers", JSON.stringify(state)); return state;
           }
           case "set_provider_api_key": {
@@ -88,7 +93,20 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
             if (result.ok && before === snapshot()) receipt = before;
             return { ...result, verification_token: result.ok && !w.__omitProof ? "qa-proof" : null };
           }
-          case "set_active_provider_model": return readProviders();
+          case "set_active_provider_model": {
+            const state = readProviders(); state.active_provider_id = args.id;
+            localStorage.setItem("qa.providers", JSON.stringify(state)); return state;
+          }
+          case "add_provider": {
+            const state = readProviders();
+            state.providers.push({ ...provider, id: "qa-added", display_name: "OpenAI", config_source: "user" });
+            localStorage.setItem("qa.providers", JSON.stringify(state)); return state;
+          }
+          case "delete_provider": {
+            const state = readProviders(); state.providers = state.providers.filter(p => p.id !== args.id);
+            state.active_provider_id = null;
+            localStorage.setItem("qa.providers", JSON.stringify(state)); return state;
+          }
           case "get_config": return { agents: [{ id: "default", name: agentName }], active_agent_id: "default",
             workspace_dir: "/tmp/qa-default", memory_dir: "/tmp/qa-home", grpc_address: "" };
           case "set_default_agent_name": agentName = args.name; return { id: "default", name: agentName };
@@ -103,7 +121,11 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           case "get_app_icon": return { current: "blue", options: [] };
           case "get_mcp_servers": return [];
           case "get_cached_provider_models": return { models: [], latency_ms: 0, source: "qa" };
-          case "list_provider_models": return { models: [], latency_ms: 0, source: "qa" };
+          case "list_provider_models":
+            return await fetch("/__onboarding_mock/models").then(r => r.json()).then(result => {
+              if (result.error) throw Error(result.error);
+              return result;
+            });
           case "get_system_wallpaper": throw Error("No system wallpaper in QA");
           case "get_agent_tools": return [];
           case "start_chat": throw Error("TEST FAILURE: no task should auto-send");
@@ -126,8 +148,18 @@ async function startProvider(page: Page) {
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible();
 }
+async function chooseModel(page: Page, model = "qa-small") {
+  await page.getByRole("button", { name: "默认模型", exact: true }).click();
+  await page.getByRole("option", { name: model, exact: true }).click();
+}
+async function loadModels(page: Page) {
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeEnabled();
+  await chooseModel(page);
+}
 async function verifyProvider(page: Page) {
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
 }
@@ -142,9 +174,10 @@ test("model connection is mandatory; credentials alone do not unlock setup", asy
   await startProvider(page);
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /稍后连接|先进入 App|跳过设置/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("密钥或访问权限有问题");
+  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "保存密钥并获取模型", exact: true })).toBeDisabled();
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) =>
     ["complete_onboarding", "start_chat"].includes(x.cmd)))).toEqual([]);
@@ -187,6 +220,7 @@ test("restart restores draft but requires model verification again", async ({ pa
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+  await loadModels(page);
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "继续", exact: true }).click();
@@ -211,6 +245,7 @@ for (const [message, title] of [
     await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message } }));
     await startProvider(page);
     await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
     await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(title);
     await expect(page.locator("body")).not.toContainText("qa-canary-secret");
@@ -236,6 +271,7 @@ test("cancelled test ignores late success and cannot activate a model", async ({
   });
   await startProvider(page);
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
   const request = page.waitForRequest("**/__onboarding_mock/responses");
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await request;
@@ -250,7 +286,7 @@ test("editing a verified model invalidates continuation", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);
   await verifyProvider(page);
-  await page.getByLabel("默认模型", { exact: true }).fill("another-model");
+  await chooseModel(page, "qa-alt");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
 });
 
@@ -271,6 +307,7 @@ test("success without a backend receipt never unlocks setup", async ({ page }) =
   await startProvider(page);
   await page.evaluate(() => { (window as any).__omitProof = true; });
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("需要重新验证模型连接");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
@@ -338,6 +375,7 @@ test("hung provider times out without bypassing validation", async ({ page }) =>
   });
   await startProvider(page);
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await loadModels(page);
   const request = page.waitForRequest("**/__onboarding_mock/responses");
   await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
   await request;
@@ -381,14 +419,15 @@ test("credential URL is not saved and cannot be tested", async ({ page }) => {
   await startProvider(page);
   await page.getByText("高级连接设置", { exact: true }).click();
   await page.getByLabel("服务地址", { exact: true }).fill("https://example.com?api_key=qa-must-not-persist");
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("暂时无法连接服务");
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("");
   expect(await page.evaluate(() => localStorage.getItem("qa.state"))).not.toContain("qa-must-not-persist");
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`provider picker reuses the shared menu · ${theme}`, async ({ page }) => {
+  test(`provider picker reuses the shared menu · ${theme}`, async ({ page }, testInfo) => {
     await page.addInitScript(theme => {
       localStorage.setItem("astro-theme-mode", theme);
       localStorage.setItem("astro-locale", "zh");
@@ -417,7 +456,14 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByRole("option", { name: "Google Gemini", exact: true }).click();
     await expect(menu).toHaveCount(0);
     await expect(picker).toContainText("Google Gemini");
-    await expect(page.getByLabel("默认模型", { exact: true })).toHaveValue("gemini-3.1-pro");
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toContainText("请选择默认模型");
+    await chooseModel(page, "gemini-3.1-pro");
+    await page.getByRole("button", { name: "默认模型", exact: true }).click();
+    await page.screenshot({ path: testInfo.outputPath("model-menu.png"), fullPage: true, animations: "disabled" });
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
     await picker.press("ArrowDown");
     await expect(menu).toBeVisible();
@@ -431,3 +477,86 @@ for (const theme of ["light", "dark"] as const) {
     await expect(picker).toBeFocused();
   });
 }
+
+test("loading models requires an explicit choice and key changes reset it", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  const picker = page.getByRole("button", { name: "默认模型", exact: true });
+  await expect(picker).toBeDisabled();
+  await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(picker).toBeEnabled();
+  await expect(picker).toContainText("请选择默认模型");
+  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeDisabled();
+  await picker.click();
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await expect(page.getByRole("option", { name: "text-embedding-3-small" })).toHaveCount(0);
+  await page.getByRole("option", { name: "qa-alt", exact: true }).click();
+  const calls = await page.evaluate(() => (window as any).__onboardingCalls);
+  expect(calls.filter((x: any) => x.cmd === "list_provider_models")[0].args.refresh).toBe(true);
+  expect(calls.filter((x: any) => x.cmd === "verify_onboarding_provider")).toEqual([]);
+  await page.getByLabel("API Key", { exact: true }).fill("qa-replacement-key");
+  await expect(picker).toBeDisabled();
+  await expect(picker).toContainText("请选择默认模型");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+});
+
+for (const result of [
+  { models: [] },
+  { error: "401 invalid api key qa-model-list-secret" },
+]) {
+  test(`failed or empty model lists cannot use a built-in default: ${"error" in result ? "error" : "empty"}`, async ({ page }) => {
+    await installTransport(page);
+    await page.route("**/__onboarding_mock/models", route => route.fulfill({ json: result }));
+    await startProvider(page);
+    await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+    await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("qa-model-list-secret");
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+    await page.route("**/__onboarding_mock/models", route => route.fulfill({ json: { models: [{ id: "qa-small" }] } }));
+    await page.getByRole("button", { name: "重试连接", exact: true }).click();
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toContainText("请选择默认模型");
+  });
+}
+
+test("cancelled model loading ignores late results", async ({ page }) => {
+  await installTransport(page);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/__onboarding_mock/models", async route => {
+    await pending;
+    await route.fulfill({ json: { models: [{ id: "qa-stale" }] } });
+  });
+  await startProvider(page);
+  await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
+  const request = page.waitForRequest("**/__onboarding_mock/models");
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await request;
+  await page.getByRole("button", { name: "取消等待", exact: true }).click();
+  await page.getByLabel("API Key", { exact: true }).fill("qa-replacement-key");
+  const response = page.waitForResponse("**/__onboarding_mock/models");
+  release(); await response;
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+});
+
+test("settings show only added providers and can remove the last account", async ({ page }) => {
+  await installTransport(page, "existing");
+  await page.goto(RUNTIME_URL);
+  await page.getByRole("button", { name: "连接模型", exact: true }).click();
+  await expect(page.getByText("尚未添加模型服务，请从下方添加提供商。", { exact: true })).toBeVisible();
+  await expect(page.locator(".providers-list-item")).toHaveCount(0);
+  await page.locator(".providers-add-btn").click();
+  await expect(page.locator(".providers-list-item")).toHaveCount(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.providers")!).providers[0].has_api_key)).toBe(false);
+  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "删除", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "删除", exact: true }).click();
+  await expect(page.getByText("尚未添加模型服务，请从下方添加提供商。", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "连接模型", exact: true }).click();
+  await expect(page.locator(".providers-list-item")).toHaveCount(0);
+});

@@ -30,6 +30,7 @@ import type {
   ProjectDto,
   ProviderDto,
   ProviderTestResult,
+  ProviderModelsResult,
   ProvidersStateDto,
 } from "../../types";
 import {
@@ -56,6 +57,7 @@ import { OnboardingLogo, OnboardingBrandMotion } from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
 import { ConnectionIssue } from "./ConnectionIssue";
 import { COPY } from "./onboardingCopy";
+import { onboardingModelOptions } from "../../lib/ui/onboardingModels";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -140,6 +142,12 @@ export function FirstRunOnboarding({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialDraft.model);
   const [endpoint, setEndpoint] = useState(initialDraft.endpoint);
+  const [modelOptions, setModelOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [modelsStatus, setModelsStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [providerStatus, setProviderStatus] = useState<ProviderStatus>("idle");
   const [providerMessage, setProviderMessage] = useState("");
   const [workspacePath, setWorkspacePath] = useState(
@@ -158,7 +166,7 @@ export function FirstRunOnboarding({
   const mounted = useRef(true);
   const writes = useRef(createOnboardingWriteQueue());
   const apiKeyRef = useRef<HTMLInputElement>(null);
-  const modelInputRef = useRef<HTMLInputElement>(null);
+  const modelInputRef = useRef<HTMLDivElement>(null);
   const endpointInputRef = useRef<HTMLInputElement>(null);
   const providerSelectRef = useRef<HTMLDivElement>(null);
   const identityLoadedRef = useRef(false);
@@ -195,9 +203,10 @@ export function FirstRunOnboarding({
 
   const providers = useMemo(
     () =>
-      (providersState?.providers ?? []).filter(
-        (provider) => provider.supports_responses_api === true,
-      ),
+      [
+        ...(providersState?.providers ?? []),
+        ...(providersState?.provider_templates ?? []),
+      ].filter((provider) => provider.supports_responses_api === true),
     [providersState],
   );
   const selectedProvider =
@@ -341,7 +350,7 @@ export function FirstRunOnboarding({
       providers[0];
     if (!providers.some((provider) => provider.id === selectedProviderId)) {
       setSelectedProviderId(preferred.id);
-      setModel(preferred.model);
+      setModel("");
       setEndpoint(preferred.endpoint);
     }
   }, [providers, providersState?.active_provider_id, selectedProviderId]);
@@ -353,20 +362,141 @@ export function FirstRunOnboarding({
     const provider = providers.find((item) => item.id === id);
     if (!provider) return;
     setSelectedProviderId(provider.id);
-    setModel(provider.model);
+    setModel("");
+    setModelOptions([]);
+    setModelsStatus("idle");
     setEndpoint(provider.endpoint);
     setApiKey("");
     setProviderStatus("idle");
     setProviderMessage("");
   };
 
+  const invalidateModelList = () => {
+    providerRequest.current += 1;
+    verified.current = null;
+    setProviderStatus("idle");
+    setProviderMessage("");
+    setModel("");
+    setModelOptions([]);
+    setModelsStatus("idle");
+    setConnectionIssue(null);
+  };
+  const loadModels = async () => {
+    if (
+      !selectedProvider ||
+      modelsStatus === "loading" ||
+      providerStatus === "testing"
+    )
+      return;
+    setConnectionIssue(null);
+    if (!persistableOnboardingEndpoint(endpoint)) {
+      setConnectionIssue("network");
+      return;
+    }
+    if (
+      providerRequiresApiKey(selectedProvider) &&
+      !selectedProvider.has_api_key &&
+      !apiKey.trim()
+    ) {
+      setConnectionIssue("credentials");
+      return;
+    }
+    const request = ++providerRequest.current;
+    const currentRequest = () =>
+      mounted.current && request === providerRequest.current;
+    verified.current = null;
+    setProviderStatus("idle");
+    setProviderMessage("");
+    setModelOptions([]);
+    setModelsStatus("loading");
+    try {
+      let options: Array<{ value: string; label: string }>;
+      if (previewProviders) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        if (!currentRequest()) return;
+        options = onboardingModelOptions([{ id: selectedProvider.model }]);
+        setProvidersState((state) =>
+          state
+            ? {
+                ...state,
+                providers: state.providers.map((provider) =>
+                  provider.id === selectedProvider.id
+                    ? { ...provider, has_api_key: true }
+                    : provider,
+                ),
+              }
+            : state,
+        );
+        setApiKey("");
+      } else {
+        const next = await withDeadline(
+          invoke<ProvidersStateDto>("save_provider", {
+            provider: {
+              ...providerConfigInput(selectedProvider, selectedProvider.model),
+              endpoint: endpoint.trim(),
+            },
+          }),
+        );
+        if (!currentRequest()) return;
+        setProvidersState(next);
+        if (apiKey.trim()) {
+          const keyed = await withDeadline(
+            invoke<ProvidersStateDto>("set_provider_api_key", {
+              id: selectedProvider.id,
+              apiKey: apiKey.trim(),
+            }),
+          );
+          if (!currentRequest()) return;
+          setProvidersState(keyed);
+          setApiKey("");
+        }
+        const listed = await withDeadline(
+          invoke<ProviderModelsResult>("list_provider_models", {
+            id: selectedProvider.id,
+            refresh: true,
+          }),
+        );
+        if (!currentRequest()) return;
+        options = onboardingModelOptions(listed.models ?? []);
+      }
+      if (!options.length) {
+        setModelsStatus("error");
+        setConnectionIssue("model");
+        setModel("");
+        return;
+      }
+      setModelOptions(options);
+      setModel((current) =>
+        options.some((option) => option.value === current) ? current : "",
+      );
+      setModelsStatus("ready");
+    } catch (error) {
+      if (!currentRequest()) return;
+      setModelsStatus("error");
+      setConnectionIssue(classifyConnectionIssue(error));
+    }
+  };
+
   const cancelProviderTest = () => {
     providerRequest.current += 1;
     setProviderStatus("idle");
+    if (modelsStatus === "loading") setModelsStatus("idle");
     setProviderMessage("");
   };
   const testProvider = async () => {
-    if (!selectedProvider || providerStatus === "testing") return;
+    if (
+      !selectedProvider ||
+      providerStatus === "testing" ||
+      modelsStatus === "loading"
+    )
+      return;
+    if (
+      modelsStatus !== "ready" ||
+      !modelOptions.some((option) => option.value === model)
+    ) {
+      setConnectionIssue("model");
+      return;
+    }
     verified.current = null;
     setConnectionIssue(null);
     if (!persistableOnboardingEndpoint(endpoint)) {
@@ -813,7 +943,10 @@ export function FirstRunOnboarding({
                           className="onboarding-provider-select"
                           aria-label={copy.provider}
                           value={selectedProviderId}
-                          disabled={providerStatus === "testing"}
+                          disabled={
+                            providerStatus === "testing" ||
+                            modelsStatus === "loading"
+                          }
                           onChange={selectProvider}
                           options={providers.map((provider) => ({
                             value: provider.id,
@@ -830,7 +963,10 @@ export function FirstRunOnboarding({
                           <input
                             ref={apiKeyRef}
                             type="password"
-                            disabled={providerStatus === "testing"}
+                            disabled={
+                              providerStatus === "testing" ||
+                              modelsStatus === "loading"
+                            }
                             value={apiKey}
                             placeholder={
                               selectedProvider.has_api_key
@@ -840,30 +976,57 @@ export function FirstRunOnboarding({
                             autoComplete="off"
                             spellCheck={false}
                             onChange={(event) => {
+                              invalidateModelList();
                               setApiKey(event.target.value);
-                              setProviderStatus("idle");
-                              verified.current = null;
-                              setConnectionIssue(null);
                             }}
                           />
                         </label>
                       ) : null}
 
-                      <label>
+                      <Button
+                        className="onboarding-load-models"
+                        variant="secondary"
+                        busy={modelsStatus === "loading"}
+                        busyLabel={copy.loadingModels}
+                        disabled={
+                          providerStatus === "testing" ||
+                          (!apiKey.trim() &&
+                            selectedProvider != null &&
+                            providerRequiresApiKey(selectedProvider) &&
+                            !selectedProvider.has_api_key)
+                        }
+                        onClick={() => void loadModels()}
+                      >
+                        {modelsStatus === "loading"
+                          ? copy.loadingModels
+                          : copy.loadModels}
+                      </Button>
+                      <p className="onboarding-model-hint">
+                        {copy.modelLoadHint}
+                      </p>
+                      <div
+                        className="onboarding-provider-field"
+                        ref={modelInputRef}
+                      >
                         <span>{copy.model}</span>
-                        <input
-                          ref={modelInputRef}
+                        <SelectMenu
+                          className="onboarding-provider-select"
+                          aria-label={copy.model}
                           value={model}
-                          disabled={providerStatus === "testing"}
-                          spellCheck={false}
-                          onChange={(event) => {
-                            setModel(event.target.value);
+                          options={modelOptions}
+                          placeholder={copy.chooseModel}
+                          disabled={
+                            modelsStatus !== "ready" ||
+                            providerStatus === "testing"
+                          }
+                          onChange={(value) => {
+                            setModel(value);
                             setProviderStatus("idle");
                             verified.current = null;
                             setConnectionIssue(null);
                           }}
                         />
-                      </label>
+                      </div>
 
                       <details className="onboarding-advanced">
                         <summary>{copy.advanced}</summary>
@@ -872,13 +1035,14 @@ export function FirstRunOnboarding({
                           <input
                             ref={endpointInputRef}
                             value={endpoint}
-                            disabled={providerStatus === "testing"}
+                            disabled={
+                              providerStatus === "testing" ||
+                              modelsStatus === "loading"
+                            }
                             spellCheck={false}
                             onChange={(event) => {
+                              invalidateModelList();
                               setEndpoint(event.target.value);
-                              setProviderStatus("idle");
-                              verified.current = null;
-                              setConnectionIssue(null);
                             }}
                           />
                         </label>
@@ -889,7 +1053,11 @@ export function FirstRunOnboarding({
                         type="button"
                         className="onboarding-test-button"
                         data-status={providerStatus}
-                        disabled={providerStatus === "testing"}
+                        disabled={
+                          providerStatus === "testing" ||
+                          modelsStatus !== "ready" ||
+                          !model
+                        }
                         onClick={() => void testProvider()}
                       >
                         {providerStatus === "testing" ? (
@@ -909,7 +1077,8 @@ export function FirstRunOnboarding({
                             : copy.test}
                         </span>
                       </button>
-                      {providerStatus === "testing" && (
+                      {(providerStatus === "testing" ||
+                        modelsStatus === "loading") && (
                         <button
                           type="button"
                           className="onboarding-cancel-test"
@@ -922,10 +1091,21 @@ export function FirstRunOnboarding({
                         <ConnectionIssue
                           kind={connectionIssue}
                           locale={locale}
-                          onRetry={() => void testProvider()}
+                          onRetry={() =>
+                            void (modelsStatus === "ready" && model
+                              ? testProvider()
+                              : loadModels())
+                          }
                           onEdit={() => {
-                            if (connectionIssue === "model")
-                              modelInputRef.current?.focus();
+                            if (
+                              connectionIssue === "model" &&
+                              modelsStatus === "ready"
+                            )
+                              modelInputRef.current
+                                ?.querySelector<HTMLButtonElement>(
+                                  ".select-menu-trigger",
+                                )
+                                ?.focus();
                             else if (connectionIssue === "credentials")
                               (
                                 apiKeyRef.current ??

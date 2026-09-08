@@ -383,6 +383,7 @@ mod tests {
         enabled: bool,
     ) -> UiProvider {
         UiProvider {
+            added: Some(true),
             id: id.into(),
             kind,
             display_name: format!("{id}-display"),

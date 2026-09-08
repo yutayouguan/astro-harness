@@ -5,6 +5,7 @@ export type Locale = "zh" | "en";
 export type MessageKey = keyof typeof zh;
 
 export const zh = {
+  "providers.noneAdded": "尚未添加模型服务，请从下方添加提供商。",
   "chat.modelSetupRequired": "先连接一个可用模型即可发送任务，草稿会保留。",
   "chat.configureModel": "连接模型",
   "nav.chat": "智能对话",
@@ -2898,6 +2899,7 @@ export const zh = {
 } as const;
 
 export const en: Record<MessageKey, string> = {
+  "providers.noneAdded": "No model services added yet. Add a provider below.",
   "chat.modelSetupRequired": "Connect a usable model before sending. Your draft will be kept.",
   "chat.configureModel": "Connect a model",
   "nav.chat": "Chat",

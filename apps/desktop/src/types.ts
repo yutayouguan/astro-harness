@@ -355,6 +355,8 @@ export type ProviderDto = {
 /** 全部供应商 + 当前激活 id */
 export type ProvidersStateDto = {
   providers: ProviderDto[];
+  /** Built-in choices that have not been added; never render these as configured accounts. */
+  provider_templates?: ProviderDto[];
   active_provider_id: string | null;
   active_image_provider_id: string | null;
 };

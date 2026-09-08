@@ -278,6 +278,7 @@ mod tests {
 
     fn ui_provider(id: &str) -> UiProvider {
         UiProvider {
+            added: Some(true),
             id: id.into(),
             kind: ProviderKind::Openai,
             display_name: id.into(),
