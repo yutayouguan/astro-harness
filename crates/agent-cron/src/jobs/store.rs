@@ -298,6 +298,7 @@ impl CronStore {
     }
 
     /// 从磁盘加载 `jobs.json`；不存在或空文件返回空列表
+    #[cfg(test)]
     pub(crate) fn load(&self) -> anyhow::Result<JobsFile> {
         let _guard = lock_store()?;
         self.load_unlocked()
@@ -337,6 +338,7 @@ impl CronStore {
     }
 
     /// 原子写入 `jobs.json`（先写 `.json.tmp` 再 rename）
+    #[cfg(test)]
     pub(crate) fn save(&self, file: &JobsFile) -> anyhow::Result<()> {
         let _guard = lock_store()?;
         self.save_unlocked(file)
