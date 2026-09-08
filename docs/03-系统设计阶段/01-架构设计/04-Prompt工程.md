@@ -1,5 +1,7 @@
 # Prompt 工程指南
 
+> **工作原则继承**：全局使用 `AGENTS.md`，项目使用 `.astro/AGENT.md`；两层原文同时加载，项目补充且冲突时优先，其他全局规则保留。此覆盖关系仅限工作原则层，不替换 SOUL/IDENTITY/USER/TOOLS，也不改写源文件或扩大授权。
+
 > **协作与续接基线（2026-09-08）**：`agent-core/src/prompt/behavior_guidance.md` 仅保留授权、证据与运行时协议底线。身份、表达、用户偏好、工作方法和环境备忘分别由 `IDENTITY.md`、`SOUL.md`、`USER.md`、`AGENTS.md`、`TOOLS.md` 维护；默认正文位于 `agent-home/src/workspace/templates/*.md`。线程 notes 作为独立 user 上下文注入，history 回读 canonical rollout，显式压缩在完整工具结果批次持久化之后执行。实现与验收见 [线程检查点与上下文续接](../../04-详细设计阶段/03-记忆与上下文/07-线程检查点与上下文续接.md)。下文通用“先列方案确认”等历史示例不覆盖当前运行时契约。
 
 > **Harness 边界（2026-09-07）**：Prompt scaffold 是 Harness 交给 Model 的可见工作面，但不等于 Harness。当前契约分为 `PromptContract.base_instructions`（对应 Responses 的 `instructions`）、用户输入/上下文消息/reasoning/assistant output/tool call/tool output 位于 `ResponsesRequest.input`、工具 schema 位于独立 `tools` 字段。三者不能通过拼接 system 文本互相替代。下方 Tera 模板引擎和 `agent-evals` 框架为历史设计方案，当前实现使用 `agent-core/src/prompt/` 模块和 `agent-evolution` crate。总体边界见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。

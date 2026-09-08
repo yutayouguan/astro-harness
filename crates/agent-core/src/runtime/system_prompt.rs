@@ -37,10 +37,40 @@ fn load_agent_instructions(
     project_root: Option<&std::path::Path>,
     global_workspace: &std::path::Path,
 ) -> Option<String> {
-    project_root
-        .and_then(|root| std::fs::read_to_string(root.join(".astro/AGENT.md")).ok())
-        .filter(|content| !content.trim().is_empty())
-        .or_else(|| std::fs::read_to_string(global_workspace.join("AGENTS.md")).ok())
+    let read_layer = |path: &Path, title: &str, scope: &str| match std::fs::read_to_string(path) {
+        Ok(content) if !content.trim().is_empty() => {
+            let source = serde_json::json!({"scope": scope, "path": path.to_string_lossy()});
+            Some(format!("## {title}\n来源：{source}\n\n{}", content.trim()))
+        }
+        Ok(_) => None,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "could not read agent work rules");
+            None
+        }
+    };
+    let global = read_layer(
+        &global_workspace.join("AGENTS.md"),
+        "全局工作原则",
+        "global",
+    );
+    let project = project_root.and_then(|root| {
+        read_layer(
+            &root.join(".astro/AGENT.md"),
+            "项目工作原则（冲突时优先）",
+            "project",
+        )
+    });
+    // The higher-priority layer comes first so prefix budgeting preserves it.
+    // These are natural-language policies: retain both, do not guess clause-level merges.
+    let layers: Vec<_> = project.into_iter().chain(global).collect();
+    if layers.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "全局 AGENTS.md 提供基础工作原则，项目 .astro/AGENT.md 补充项目规则；冲突时项目规则优先，无冲突的全局规则继续适用。此优先级仅作用于工作原则层，不覆盖身份、人格、用户偏好、工具环境或运行时安全与授权契约；加载不会改写任何源文件。\n\n{}",
+        layers.join("\n\n---\n\n")
+    ))
 }
 
 const RTK_RUNTIME_GUIDANCE: &str = r#"## Astro 检测到的可选工具：RTK
@@ -158,7 +188,7 @@ impl AgentLoop {
                 &daily,
             )
         };
-        // 项目行为准则只取主 cwd；无项目文件时回退全局 default 工作区。
+        // 全局工作原则保留；主项目规则叠加，冲突时项目优先。
         let project_root = match self.current_turn_context().await {
             Some(context) => context.project_root().map(ToOwned::to_owned),
             None => self.project_root(),
@@ -578,21 +608,109 @@ mod tests {
     }
 
     #[test]
-    fn project_agent_md_overrides_global_agents_md_with_fallback() {
+    fn project_agent_md_overlays_global_agents_md_without_replacing_it() {
         let global = tempfile::tempdir().unwrap();
         let project = tempfile::tempdir().unwrap();
         std::fs::write(global.path().join("AGENTS.md"), "global rules").unwrap();
 
-        assert_eq!(
-            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
-            Some("global rules")
-        );
+        let global_only = load_agent_instructions(Some(project.path()), global.path()).unwrap();
+        assert!(global_only.contains("global rules"));
+        assert!(global_only.contains("\"scope\":\"global\""));
+        assert!(!global_only.contains("\"scope\":\"project\""));
 
         std::fs::create_dir_all(project.path().join(".astro")).unwrap();
         std::fs::write(project.path().join(".astro/AGENT.md"), "project rules").unwrap();
+        let combined = load_agent_instructions(Some(project.path()), global.path()).unwrap();
+        assert!(combined.contains("冲突时项目规则优先"));
+        assert!(combined.contains("无冲突的全局规则继续适用"));
+        assert!(combined.contains("\"scope\":\"project\""));
+        assert!(combined.contains("\"scope\":\"global\""));
+        assert!(combined.find("project rules").unwrap() < combined.find("global rules").unwrap());
         assert_eq!(
-            load_agent_instructions(Some(project.path()), global.path()).as_deref(),
-            Some("project rules")
+            std::fs::read_to_string(global.path().join("AGENTS.md")).unwrap(),
+            "global rules"
         );
+    }
+
+    #[test]
+    fn agent_rules_handle_missing_empty_and_canonical_filenames() {
+        let global = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        assert!(load_agent_instructions(None, global.path()).is_none());
+        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
+        std::fs::write(global.path().join("AGENT.md"), "wrong global filename").unwrap();
+        std::fs::write(
+            project.path().join(".astro/AGENTS.md"),
+            "wrong project filename",
+        )
+        .unwrap();
+        assert!(load_agent_instructions(Some(project.path()), global.path()).is_none());
+        std::fs::write(global.path().join("AGENTS.md"), "  \n").unwrap();
+        std::fs::write(project.path().join(".astro/AGENT.md"), "project only").unwrap();
+        let rules = load_agent_instructions(Some(project.path()), global.path()).unwrap();
+        assert!(rules.contains("project only"));
+        assert!(!rules.contains("\"scope\":\"global\""));
+        std::fs::write(project.path().join(".astro/AGENT.md"), "\n").unwrap();
+        assert!(load_agent_instructions(Some(project.path()), global.path()).is_none());
+    }
+
+    #[test]
+    fn switching_projects_does_not_retain_previous_work_rules() {
+        let global = tempfile::tempdir().unwrap();
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        std::fs::write(global.path().join("AGENTS.md"), "GLOBAL_WORK").unwrap();
+        for (project, text) in [(a.path(), "PROJECT_A"), (b.path(), "PROJECT_B")] {
+            std::fs::create_dir_all(project.join(".astro")).unwrap();
+            std::fs::write(project.join(".astro/AGENT.md"), text).unwrap();
+        }
+        let first = load_agent_instructions(Some(a.path()), global.path()).unwrap();
+        assert!(first.contains("PROJECT_A") && first.contains("GLOBAL_WORK"));
+        let second = load_agent_instructions(Some(b.path()), global.path()).unwrap();
+        assert!(second.contains("PROJECT_B") && second.contains("GLOBAL_WORK"));
+        assert!(!second.contains("PROJECT_A"));
+        let no_project = load_agent_instructions(None, global.path()).unwrap();
+        assert!(no_project.contains("GLOBAL_WORK"));
+        assert!(!no_project.contains("PROJECT_A") && !no_project.contains("PROJECT_B"));
+    }
+
+    #[tokio::test]
+    async fn project_rules_only_affect_work_principles_not_other_global_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let mut config = super::super::Config::with_defaults(dir.path().to_path_buf());
+        let ws = home::agent_workspace_dir(dir.path(), &home::active_agent_id(dir.path()));
+        std::fs::create_dir_all(project.path().join(".astro")).unwrap();
+        for name in ["SOUL.md", "IDENTITY.md", "USER.md", "TOOLS.md"] {
+            std::fs::write(ws.join(name), format!("- GLOBAL_{name}")).unwrap();
+            std::fs::write(
+                project.path().join(".astro").join(name),
+                format!("PROJECT_SHOULD_NOT_LOAD_{name}"),
+            )
+            .unwrap();
+        }
+        config.soul = std::fs::read_to_string(ws.join("SOUL.md")).unwrap();
+        std::fs::write(ws.join("AGENTS.md"), "GLOBAL_WORK_RULES").unwrap();
+        std::fs::write(project.path().join(".astro/AGENT.md"), "PROJECT_WORK_RULES").unwrap();
+        let session = AgentLoop::with_session_id(config, "layer-scope".into())
+            .await
+            .unwrap();
+        session.set_project_root(Some(project.path().to_path_buf()));
+        let prompt = session.build_prompt_contract().await;
+        let rendered = prompt.flattened();
+        for name in ["SOUL.md", "IDENTITY.md", "USER.md", "TOOLS.md"] {
+            assert!(
+                rendered.contains(&format!("GLOBAL_{name}")),
+                "missing {name}"
+            );
+            assert!(!rendered.contains(&format!("PROJECT_SHOULD_NOT_LOAD_{name}")));
+        }
+        assert!(rendered.contains("GLOBAL_WORK_RULES") && rendered.contains("PROJECT_WORK_RULES"));
+        assert!(!prompt.base_instructions.contains("PROJECT_WORK_RULES"));
+        session.set_project_root(None);
+        let without_project = session.build_system_prompt().await;
+        assert!(without_project.contains("GLOBAL_WORK_RULES"));
+        assert!(!without_project.contains("PROJECT_WORK_RULES"));
     }
 }
