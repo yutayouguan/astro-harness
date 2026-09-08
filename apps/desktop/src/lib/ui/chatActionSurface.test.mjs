@@ -212,6 +212,37 @@ test("composer keeps context usage available at every occupancy level", async ()
   assert.match(styles, /\.composer-context-btn\.is-critical/);
 });
 
+test("composer exposes an accessible hover-revealed input height control", async () => {
+  const source = await readFile(chatViewUrl, "utf8");
+  const messages = await readFile(messagesUrl, "utf8");
+  const styles = await readFile(markdownCssUrl, "utf8");
+
+  assert.match(source, /className="composer-expand-btn"/);
+  assert.match(source, /aria-expanded=\{composerManuallyExpanded\}/);
+  assert.match(source, /<Maximize2 size=\{18\}/);
+  assert.match(source, /<Minimize2 size=\{18\}/);
+  assert.match(
+    source,
+    /const capsuleComposerHasRichContent =\s*composerManuallyExpanded \|\|/,
+  );
+  assert.match(source, /Math\.min\(Math\.max\(el\.scrollHeight, 220\), 360\)/);
+  assert.match(messages, /"chat\.composerExpand": "展开输入框"/);
+  assert.match(messages, /"chat\.composerCollapse": "收起输入框"/);
+  assert.match(styles, /\.composer-expand-btn::before/);
+  assert.match(
+    styles,
+    /\.composer-expand-btn:hover svg,[\s\S]*?opacity:\s*1;[\s\S]*?transform:\s*scale\(1\);/,
+  );
+  assert.match(
+    styles,
+    /\.composer\.is-input-expanded \.composer-input[\s\S]*?max-height:\s*min\(42vh, 360px\);/,
+  );
+  assert.match(
+    styles,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.composer-expand-btn/,
+  );
+});
+
 test("context usage preview opens on hover and stays open across the portal gap", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const popover = await readFile(contextUsagePopoverUrl, "utf8");

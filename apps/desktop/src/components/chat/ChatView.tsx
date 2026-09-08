@@ -48,6 +48,8 @@ import {
   Trash2,
   X,
   MoreHorizontal,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   Check as CheckData,
@@ -1002,6 +1004,8 @@ export default function ChatView({
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [composerManuallyExpanded, setComposerManuallyExpanded] =
+    useState(false);
   const [paletteKind, setPaletteKind] = useState<PaletteKind | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -1947,8 +1951,11 @@ export default function ChatView({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-  }, [input]);
+    const nextHeight = composerManuallyExpanded
+      ? Math.min(Math.max(el.scrollHeight, 220), 360)
+      : Math.min(el.scrollHeight, 120);
+    el.style.height = `${nextHeight}px`;
+  }, [composerManuallyExpanded, input]);
 
   const revokePreview = (att: ChatAttachment) => {
     if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
@@ -2308,6 +2315,7 @@ export default function ChatView({
   const hasFloatingComposerOverlay =
     modeMenuOpen || plusOpen || contextPopoverOpen;
   const capsuleComposerHasRichContent =
+    composerManuallyExpanded ||
     attachments.length > 0 ||
     composerContexts.length > 0 ||
     Boolean(composerClarify) ||
@@ -3876,7 +3884,7 @@ export default function ChatView({
           ) : null}
 
           <motion.div
-            className={`composer composer--stacked ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
+            className={`composer composer--stacked ${composerManuallyExpanded ? "is-input-expanded" : ""} ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
             layout={!reduceComposerMotion}
             layoutDependency={composerLayoutState}
             transition={{ layout: composerLayoutTransition }}
@@ -4120,6 +4128,33 @@ export default function ChatView({
                   disabled={sendBlocked || realtime.active}
                   autoFocus
                 />
+                <button
+                  type="button"
+                  className="composer-expand-btn"
+                  aria-expanded={composerManuallyExpanded}
+                  aria-label={
+                    composerManuallyExpanded
+                      ? t("chat.composerCollapse")
+                      : t("chat.composerExpand")
+                  }
+                  title={
+                    composerManuallyExpanded
+                      ? t("chat.composerCollapse")
+                      : t("chat.composerExpand")
+                  }
+                  onClick={() => {
+                    setComposerManuallyExpanded((expanded) => !expanded);
+                    window.requestAnimationFrame(() =>
+                      textareaRef.current?.focus(),
+                    );
+                  }}
+                >
+                  {composerManuallyExpanded ? (
+                    <Minimize2 size={18} strokeWidth={2.2} aria-hidden />
+                  ) : (
+                    <Maximize2 size={18} strokeWidth={2.2} aria-hidden />
+                  )}
+                </button>
               </div>
             )}
             {realtime.active && realtime.transcript ? (
