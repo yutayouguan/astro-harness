@@ -7,6 +7,9 @@ use crate::compression::{prune_tool_view, ContextMaintenanceResult, ToolCompress
 use super::AgentLoop;
 
 impl AgentLoop {
+    pub(crate) fn record_context_sampling_snapshot(&self, tokens: u64) {
+        self.lock_state().sampled_context_tokens = Some(tokens);
+    }
     /// Canonical provider history. Mid-run handoff truncates only the local
     /// view and preserves every retained ResponseItem verbatim.
     pub async fn provider_response_history(&self) -> Vec<agent_protocol::ResponseItem> {

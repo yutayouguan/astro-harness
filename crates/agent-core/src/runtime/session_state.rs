@@ -43,6 +43,8 @@ pub(crate) struct SessionState {
     pub(crate) temperature: f32,
     pub(crate) additional_params: Value,
     pub(crate) token_usage: Option<agent_protocol::TokenUsageRecord>,
+    /// Last actual sampling snapshot, calibrated by provider usage when available.
+    pub(crate) sampled_context_tokens: Option<u64>,
 }
 
 impl SessionState {
@@ -78,6 +80,7 @@ impl SessionState {
             temperature: 0.7,
             additional_params: Value::Null,
             token_usage: None,
+            sampled_context_tokens: None,
         }
     }
 

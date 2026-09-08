@@ -16,7 +16,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "get_context_remaining".to_string(),
         toolset: "system".to_string(),
-        description: "Returns the remaining context window capacity: total tokens, used tokens, and remaining tokens."
+        description: "Returns total, used and remaining context tokens from the latest sampling snapshot (provider-calibrated when available). Not a live generation budget; later tool outputs are not yet included."
             .to_string(),
         schema: schema_for_args::<GetContextRemainingArgs>(),
         check_fn: None,
@@ -46,7 +46,7 @@ pub async fn dispatch(
                 0.0
             };
             Ok(format!(
-                "Context window: {window} tokens total, {used} used, {remaining} remaining ({pct:.0}% used)"
+                "Latest sampling snapshot (provider-calibrated when available, otherwise estimated): {window} tokens total, {used} used, {remaining} remaining ({pct:.0}% used). Not a live generation budget; subsequent tool outputs are not yet included."
             ))
         }
         (Some(window), None) => Ok(format!(

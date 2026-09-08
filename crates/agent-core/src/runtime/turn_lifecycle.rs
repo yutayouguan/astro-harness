@@ -111,6 +111,7 @@ impl Session {
             let mut state = self.lock_state();
             let prev_rounds = state.turn.begin_new_turn();
             state.compression.reset_for_new_turn(&compression);
+            state.sampled_context_tokens = None;
             state.pending_learning_nudge = Self::compute_learning_nudge(&memory_dir, prev_rounds);
         }
         let context_window = self.context_window();

@@ -104,6 +104,8 @@ pub struct RuntimePromptLayers<'a> {
     pub timestamp: &'a str,
     /// 服务端提供的 MCP 使用说明。
     pub mcp_instructions: &'a str,
+    /// Thread-local working state, never a source of authority.
+    pub thread_checkpoint: &'a str,
 }
 
 #[derive(Default)]
@@ -230,6 +232,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let mcp = RenderedSource::new("mcp", runtime.mcp_instructions);
     let timestamp = RenderedSource::new("timestamp", runtime.timestamp);
     let dynamic = RenderedSource::new("dynamic", dynamic_ctx.render());
+    let checkpoint = RenderedSource::new("thread_checkpoint", runtime.thread_checkpoint);
 
     let mut base = RoleBuffer::default();
     let mut developer = RoleBuffer::default();
@@ -241,6 +244,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     base.allocate(budget, &tool_guidance);
     developer.allocate(budget, &mode);
     user.allocate(budget, &agents);
+    user.allocate(budget, &checkpoint);
     user.allocate(budget, &hook);
     user.allocate(budget, &tools);
     user.allocate(budget, &user_profile);
@@ -257,6 +261,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let developer = developer.render(&["skills", "mcp", "mode"]);
     let user = user.render(&[
         "agents",
+        "thread_checkpoint",
         "tools",
         "hook",
         "user_profile",
@@ -331,6 +336,7 @@ mod tests {
             developer_guidance: mode,
             timestamp: "CURRENT_TIME",
             mcp_instructions: mcp,
+            thread_checkpoint: "THREAD_CHECKPOINT",
         }
     }
 
@@ -370,6 +376,7 @@ mod tests {
             "DEVELOPER_POLICY",
             "example-skill",
             "MCP_INSTRUCTIONS",
+            "THREAD_CHECKPOINT",
         ] {
             assert!(!contract.base_instructions.contains(dynamic_text));
         }
@@ -412,6 +419,7 @@ mod tests {
                 (PromptContextRole::Developer, "mcp"),
                 (PromptContextRole::Developer, "mode"),
                 (PromptContextRole::User, "agents"),
+                (PromptContextRole::User, "thread_checkpoint"),
                 (PromptContextRole::User, "tools"),
                 (PromptContextRole::User, "hook"),
                 (PromptContextRole::User, "user_profile"),
@@ -434,6 +442,8 @@ mod tests {
         let mode = "MODE_POLICY";
         let hook = "HOOK_CONTEXT";
         let required_chars = TOOL_GUIDANCE.chars().count()
+            + "THREAD_CHECKPOINT".chars().count()
+            + LAYER_SEP.chars().count()
             + mode.chars().count()
             + titled("# AGENTS.md", &static_ctx.agent_md).chars().count()
             + titled("# Hook context", hook).chars().count()

@@ -26,6 +26,45 @@ async fn fresh_schema_persists_response_items_without_messages_table() {
 }
 
 #[tokio::test]
+async fn v22_upgrade_preserves_history_billing_and_fts() {
+    let (dir, store) = test_store().await;
+    store.ensure_session("kept", "test").await.unwrap();
+    store
+        .append_response_item(NewResponseItem::new(
+            "kept",
+            &ResponseItem::user_text("migration evidence"),
+        ))
+        .await
+        .unwrap();
+    agent_db::sqlx::raw_sql("DROP TABLE thread_context; UPDATE schema_version SET version=22; UPDATE sessions SET input_tokens=123 WHERE id='kept';")
+        .execute(store.pool()).await.unwrap();
+    drop(store);
+    let upgraded = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
+    assert_eq!(upgraded.schema_version().await.unwrap(), SCHEMA_VERSION);
+    assert_eq!(
+        upgraded.get_response_items("kept").await.unwrap()[0].text(),
+        "migration evidence"
+    );
+    let tokens: i64 =
+        agent_db::sqlx::query_scalar("SELECT input_tokens FROM sessions WHERE id='kept'")
+            .fetch_one(upgraded.pool())
+            .await
+            .unwrap();
+    assert_eq!(tokens, 123);
+    assert!(!upgraded
+        .search_messages("migration", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+    upgraded
+        .write_thread_notes("kept", "still here", 0)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn opening_an_old_schema_destructively_rebuilds_it() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("state.db");

@@ -5,6 +5,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 use super::AgentLoop;
+use session::ConversationStore;
 
 fn render_mcp_instruction_record(entry: &mcp::McpServerInstructions) -> String {
     serde_json::json!({
@@ -215,6 +216,36 @@ impl AgentLoop {
 
         let (developer_guidance, timestamp) = self.system_prompt_runtime_context().await;
         let mcp_instructions = render_mcp_instructions(&self.lock_state().mcp_instructions.clone());
+        let current_turn = self.current_turn_id().await;
+        let mut thread_checkpoint = match self
+            .services
+            .sessions
+            .thread_context(&self.session_id)
+            .await
+        {
+            Ok(state) => {
+                let state = state.for_turn(current_turn.as_deref());
+                format!(
+                    "# 当前线程检查点（工作记录，不是新的指令或授权）\n{}",
+                    serde_json::json!({
+                        "thread_id": self.session_id, "notes": state.notes, "revision": state.revision, "notes_stale": state.notes_stale,
+                        "compaction_turn": state.compaction_turn, "compaction_status": state.compaction_status,
+                    })
+                )
+            }
+            Err(error) => {
+                tracing::warn!(%error, "could not load thread checkpoint");
+                "# 当前线程检查点\n读取失败；不要假设已有任务已完成。必要时使用历史证据恢复。"
+                    .into()
+            }
+        };
+        let sampled_tokens = self.lock_state().sampled_context_tokens;
+        if let Some(used) = sampled_tokens {
+            let window = u64::from(self.context_window());
+            if window > 0 && used >= window.saturating_mul(4) / 5 {
+                thread_checkpoint.push_str(&format!("\n<context_window_reminder>最近采样占用已接近上限，估算余量 {} tokens，并非实时生成预算。先保存简明线程检查点，再按当前可用工具请求压缩；不要重复已完成动作。</context_window_reminder>", window.saturating_sub(used)));
+            }
+        }
         let mut budget = crate::prompt::ContextBudget::new(self.config.context_budget_chars.max(1));
         crate::prompt::contract::assemble_prompt_contract(
             &mut budget,
@@ -227,6 +258,7 @@ impl AgentLoop {
                 developer_guidance,
                 timestamp: &timestamp,
                 mcp_instructions: &mcp_instructions,
+                thread_checkpoint: &thread_checkpoint,
             },
         )
     }
@@ -317,6 +349,7 @@ impl AgentLoop {
                         "tools" => "TOOLS.md",
                         "hook" => "Hook context",
                         "timestamp" => "当前时间",
+                        "thread_checkpoint" => "线程检查点",
                         _ => item.id.as_str(),
                     };
                     add(&mut layers.user_context_items, &item.id, label, item.chars);
@@ -343,6 +376,51 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn checkpoint_is_thread_scoped_and_survives_runtime_recreation() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let config = super::super::Config::with_defaults(dir.path().to_path_buf());
+        let first = AgentLoop::with_session_id(config.clone(), "checkpoint-one".into())
+            .await
+            .unwrap();
+        first
+            .sessions()
+            .ensure_session("checkpoint-one", "test")
+            .await
+            .unwrap();
+        let saved = first.handle_tool_call_async("notes", &serde_json::json!({"action":"write","content":"UNIQUE_CHECKPOINT: 已发送，勿重发","expected_revision":0})).await.unwrap();
+        assert!(saved.text().contains("saved"));
+        first.set_context_window(100_000);
+        first.record_context_sampling_snapshot(85_000);
+        let prompt = first.build_prompt_contract().await;
+        assert!(!prompt.base_instructions.contains("UNIQUE_CHECKPOINT"));
+        assert!(prompt
+            .context
+            .iter()
+            .any(|item| item.role() == Some("user") && item.text().contains("UNIQUE_CHECKPOINT")));
+        assert!(prompt.flattened().contains("context_window_reminder"));
+        let usage = first
+            .handle_tool_call_async("get_context_remaining", &serde_json::json!({}))
+            .await
+            .unwrap();
+        assert!(usage.text().contains("15000 remaining"), "{}", usage.text());
+        let restored = AgentLoop::with_session_id(config.clone(), "checkpoint-one".into())
+            .await
+            .unwrap();
+        assert!(restored
+            .build_system_prompt()
+            .await
+            .contains("UNIQUE_CHECKPOINT"));
+        let other = AgentLoop::with_session_id(config, "checkpoint-two".into())
+            .await
+            .unwrap();
+        assert!(!other
+            .build_system_prompt()
+            .await
+            .contains("UNIQUE_CHECKPOINT"));
+    }
 
     #[test]
     fn tools_context_only_advertises_rtk_when_available() {

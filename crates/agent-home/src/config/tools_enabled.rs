@@ -193,6 +193,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "memory" => "memory",
         "context_search" => "context_search",
         "pin_context" => "pin_context",
+        "notes" | "history" | "get_context_remaining" | "new_context_window" => "system",
         "cron" | "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "cron.add" | "cron.list" | "cron.remove" | "cron.enable" | "cron.disable" => "cron",
         "image_gen" => "image_gen",

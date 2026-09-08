@@ -5,7 +5,19 @@ use anyhow::{Context, Result};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 22;
+pub const SCHEMA_VERSION: i32 = 23;
+
+const THREAD_CONTEXT_DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS thread_context (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    notes TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 0,
+    notes_stale INTEGER NOT NULL DEFAULT 0,
+    compaction_turn TEXT,
+    compaction_reason TEXT,
+    compaction_status TEXT NOT NULL DEFAULT 'idle'
+);
+"#;
 
 const SCHEMA_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -135,6 +147,17 @@ impl SessionStore {
         if current == SCHEMA_VERSION {
             return self.validate_current_schema().await;
         }
+        // v22 -> v23 is additive: never rebuild existing conversations for this upgrade.
+        if current == 22 {
+            let mut tx = self.pool.begin().await?;
+            sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
+            sqlx::query("UPDATE schema_version SET version = ?1")
+                .bind(SCHEMA_VERSION)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return self.validate_current_schema().await;
+        }
         if current != 0 || self.has_user_tables().await? {
             self.rebuild_schema().await?;
             return self.validate_current_schema().await;
@@ -142,6 +165,7 @@ impl SessionStore {
 
         let mut tx = self.pool.begin().await?;
         sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
         sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
             .execute(&mut *tx)
             .await?;
@@ -167,6 +191,8 @@ impl SessionStore {
     }
 
     async fn validate_current_schema(&self) -> Result<()> {
+        sqlx::query("SELECT notes, revision, notes_stale, compaction_turn, compaction_reason, compaction_status FROM thread_context LIMIT 0")
+            .execute(&self.pool).await.context("thread context table is incomplete")?;
         sqlx::query(
             "SELECT id, project_id, branch_kind, branch_parent_message_id,
                     branch_parent_turn_index, branch_inherited_turn_count, branch_created_at
@@ -214,6 +240,7 @@ impl SessionStore {
              DROP TABLE IF EXISTS messages;
              DROP TABLE IF EXISTS response_items;
              DROP TABLE IF EXISTS project_roots;
+             DROP TABLE IF EXISTS thread_context;
              DROP TABLE IF EXISTS sessions;
              DROP TABLE IF EXISTS projects;
              DROP TABLE IF EXISTS schema_version;",
@@ -221,6 +248,7 @@ impl SessionStore {
         .execute(&mut *tx)
         .await?;
         sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
         sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
             .execute(&mut *tx)
             .await?;

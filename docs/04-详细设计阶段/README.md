@@ -43,6 +43,7 @@
 | [03-Persona与SystemPrompt注入设计.md](03-记忆与上下文/03-Persona与SystemPrompt注入设计.md) | PromptContract：稳定基础指令、角色化 dynamic context、用户输入与独立工具 schema |
 | [04-知识库RAG详细设计.md](03-记忆与上下文/04-知识库RAG详细设计.md) | F-05 知识库RAG：文档导入管道、RecursiveChunker 分块算法、BM25+向量混合检索（RRF）、knowledge_manage 工具 |
 | [05-记忆图谱详细设计.md](03-记忆与上下文/05-记忆图谱详细设计.md) | 记忆图谱：实体/关系抽取、SQLite 图查询（递归 CTE）、图谱增强检索、实体去重、vis-network 可视化 |
+| [07-线程检查点与上下文续接.md](03-记忆与上下文/07-线程检查点与上下文续接.md) | notes CAS、canonical history 引用、采样占用、turn-scoped 压缩及恢复验收 |
 | [_历史参考/用户建模系统设计.md](03-记忆与上下文/_历史参考/用户建模系统设计.md) | ⚠️ 已废弃 — 原用户建模设计，已被 01-记忆系统详细设计 的 L5 层取代，仅保留历史参考 |
 
 ## 04-工具与扩展生态

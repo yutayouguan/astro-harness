@@ -14,6 +14,39 @@ use crate::{BillingDelta, NewResponseItem, ScrolledResponseItem, SearchHit, Stor
 /// 要求 `Send`（`AgentLoop` 通过 `tokio::spawn` 跨线程移交），不要求 `Sync`。
 #[async_trait::async_trait]
 pub trait ConversationStore: Send + Sync {
+    async fn invalidate_thread_notes(&self, _session_id: &str) -> Result<()> {
+        Ok(())
+    }
+    async fn thread_context(&self, _session_id: &str) -> Result<crate::store::ThreadContext> {
+        Ok(crate::store::ThreadContext::default())
+    }
+    async fn write_thread_notes(
+        &self,
+        _session_id: &str,
+        _notes: &str,
+        _expected_revision: i64,
+    ) -> Result<i64> {
+        anyhow::bail!("thread notes are not supported by this store")
+    }
+    async fn request_context_compaction(
+        &self,
+        _session_id: &str,
+        _turn_id: &str,
+        _reason: &str,
+    ) -> Result<()> {
+        anyhow::bail!("context compaction requests are not supported by this store")
+    }
+    async fn take_context_compaction(&self, _session_id: &str, _turn_id: &str) -> Result<bool> {
+        Ok(false)
+    }
+    async fn finish_context_compaction(
+        &self,
+        _session_id: &str,
+        _turn_id: &str,
+        _status: &str,
+    ) -> Result<()> {
+        anyhow::bail!("context compaction requests are not supported by this store")
+    }
     // ── 消息 CRUD ──
 
     /// 追加一条消息到会话。返回新消息的自增 id。

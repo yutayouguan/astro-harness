@@ -105,6 +105,47 @@ impl SharedConversationStore {
 
 #[async_trait::async_trait]
 impl ConversationStore for SharedConversationStore {
+    async fn invalidate_thread_notes(&self, session_id: &str) -> Result<()> {
+        self.inner.invalidate_thread_notes(session_id).await
+    }
+    async fn thread_context(&self, session_id: &str) -> Result<session::store::ThreadContext> {
+        self.inner.thread_context(session_id).await
+    }
+    async fn write_thread_notes(
+        &self,
+        session_id: &str,
+        notes: &str,
+        expected_revision: i64,
+    ) -> Result<i64> {
+        self.inner
+            .write_thread_notes(session_id, notes, expected_revision)
+            .await
+    }
+    async fn request_context_compaction(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        reason: &str,
+    ) -> Result<()> {
+        self.inner
+            .request_context_compaction(session_id, turn_id, reason)
+            .await
+    }
+    async fn take_context_compaction(&self, session_id: &str, turn_id: &str) -> Result<bool> {
+        self.inner
+            .take_context_compaction(session_id, turn_id)
+            .await
+    }
+    async fn finish_context_compaction(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        status: &str,
+    ) -> Result<()> {
+        self.inner
+            .finish_context_compaction(session_id, turn_id, status)
+            .await
+    }
     async fn append_response_item(&self, msg: NewResponseItem<'_>) -> Result<i64> {
         self.inner.append_response_item(msg).await
     }

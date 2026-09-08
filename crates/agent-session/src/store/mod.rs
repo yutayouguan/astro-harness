@@ -7,6 +7,8 @@ mod rollout_projection;
 mod schema;
 mod search;
 mod sessions;
+mod thread_context;
+pub use thread_context::{ThreadContext, MAX_THREAD_NOTES_CHARS};
 
 use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
@@ -336,6 +338,42 @@ impl SessionStore {
 
 #[async_trait::async_trait]
 impl crate::ConversationStore for SessionStore {
+    async fn invalidate_thread_notes(&self, session_id: &str) -> Result<()> {
+        self.invalidate_thread_notes(session_id).await
+    }
+    async fn thread_context(&self, session_id: &str) -> Result<ThreadContext> {
+        self.thread_context(session_id).await
+    }
+    async fn write_thread_notes(
+        &self,
+        session_id: &str,
+        notes: &str,
+        expected_revision: i64,
+    ) -> Result<i64> {
+        self.write_thread_notes(session_id, notes, expected_revision)
+            .await
+    }
+    async fn request_context_compaction(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        reason: &str,
+    ) -> Result<()> {
+        self.request_context_compaction(session_id, turn_id, reason)
+            .await
+    }
+    async fn take_context_compaction(&self, session_id: &str, turn_id: &str) -> Result<bool> {
+        self.take_context_compaction(session_id, turn_id).await
+    }
+    async fn finish_context_compaction(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        status: &str,
+    ) -> Result<()> {
+        self.finish_context_compaction(session_id, turn_id, status)
+            .await
+    }
     #[allow(refining_impl_trait)]
     async fn append_response_item(&self, item: NewResponseItem<'_>) -> Result<i64> {
         SessionStore::append_response_item(self, item).await

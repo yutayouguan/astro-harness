@@ -1,5 +1,7 @@
 # Prompt 工程指南
 
+> **协作与续接基线（2026-09-08）**：通用执行契约位于 `agent-core/src/prompt/behavior_guidance.md`，按问答/诊断/实施/监控区分授权，允许低风险合理假设并要求可验证交付。线程 notes 作为独立 user 上下文注入，history 回读 canonical rollout，显式压缩在完整工具结果批次持久化之后执行。实现与验收见 [线程检查点与上下文续接](../../04-详细设计阶段/03-记忆与上下文/07-线程检查点与上下文续接.md)。下文通用“先列方案确认”等历史示例不覆盖当前运行时契约。
+
 > **Harness 边界（2026-09-07）**：Prompt scaffold 是 Harness 交给 Model 的可见工作面，但不等于 Harness。当前契约分为 `PromptContract.base_instructions`（对应 Responses 的 `instructions`）、用户输入/上下文消息/reasoning/assistant output/tool call/tool output 位于 `ResponsesRequest.input`、工具 schema 位于独立 `tools` 字段。三者不能通过拼接 system 文本互相替代。下方 Tera 模板引擎和 `agent-evals` 框架为历史设计方案，当前实现使用 `agent-core/src/prompt/` 模块和 `agent-evolution` crate。总体边界见 [Agent Harness 总体架构](11-Agent-Harness总体架构.md)。
 
 > 阶段：系统设计 | 状态：定稿 | 说明：Tera 模板引擎、模型差异、反模式、测试方法

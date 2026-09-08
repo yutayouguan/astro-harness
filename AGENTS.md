@@ -91,7 +91,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
 | `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v22，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v23，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回、线程检查点。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 
@@ -208,6 +208,8 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 `maintain_tool_context()` 三阶段：prune（截断超大 tool 结果）→ LLM 辅模型摘要（`AuxiliaryTask::Compaction`）→ head/tail fallback。`compressed_content` 字段存 Provider 视图；`content` 字段永远保留原文。压缩后用 thrashing guard 防抖（同一轮连续压缩不生效）。
 
+`notes` 原子维护当前线程检查点（revision CAS，最多 8000 字符），不混入长期记忆；`history` 按 canonical rollout 物理行引用提供当前线程只读 list/search/read。`get_context_remaining` 使用最近采样占用，`new_context_window` 只排队绑定 turn 的请求，由完整工具批次落盘后的维护边界执行并报告结果。检查点作为独立 user 上下文注入，历史回退后标为过时。schema v22 → v23 增量建表，不重建原有会话数据。
+
 ### Cron 的 non-Send 约束
 
 `AgentLoop` / `SessionStore` 含 rusqlite `RefCell`，非 Send。Cron 必须在 `current_thread` runtime 运行，通过 `spawn_blocking` 封装后对外暴露 Send future。
@@ -231,7 +233,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
     config.json        # AgentRuntimeConfig
     tools_enabled.json # tool gate 热加载
   data/
-    state.db           # ResponseItem、会话、FTS5（schema v22）
+    state.db           # ResponseItem、会话、FTS5、线程检查点（schema v23）
     artifacts.db       # 文件空间索引
     knowledge.db       # 知识内容 FTS
     subagents-v2.db    # Agent Graph、mailbox、状态事件与恢复元数据

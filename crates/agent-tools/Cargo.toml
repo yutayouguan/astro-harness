@@ -9,6 +9,7 @@ memory = { path = "../agent-memory" }
 sandbox = { path = "../agent-sandbox" }
 network-proxy = { path = "../agent-network-proxy" }
 session = { path = "../agent-session" }
+agent-rollout = { path = "../agent-rollout" }
 home = { path = "../agent-home" }
 subagents = { path = "../agent-subagents" }
 cron = { path = "../agent-cron" }

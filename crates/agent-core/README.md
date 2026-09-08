@@ -1,5 +1,7 @@
 # agent
 
+线程续接：稳定协作契约见 `src/prompt/behavior_guidance.md`；`notes` 是线程级检查点，`history` 精确回读 canonical rollout；`new_context_window` 在整批工具结果持久化后执行，`get_context_remaining` 使用最近采样占用。设计与测试边界见 [线程检查点与上下文续接](../../docs/04-详细设计阶段/03-记忆与上下文/07-线程检查点与上下文续接.md)。
+
 Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> StepContext` 驱动 Responses-only 多轮执行、工具调用、typed hooks、持久化与恢复。
 
 工具链与 Codex 的 Step-scoped tool plan 对齐：`CoreToolRuntime / ToolExecutor -> ToolRegistry -> build_tool_router / finalize_tool_router -> ToolRouter { registry, model_visible_specs } -> StepContext { tool_router } -> build_prompt() -> Prompt.tools -> ResponsesRequest -> ResponseItem -> ToolRouter::build_tool_call() -> ToolRegistry::dispatch`。

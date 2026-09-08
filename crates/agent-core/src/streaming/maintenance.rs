@@ -167,6 +167,7 @@ async fn emit_context_usage_snapshot(
     let total_tokens = usage
         .map(|value| value.total_tokens())
         .unwrap_or(snap.total_tokens);
+    session.record_context_sampling_snapshot(u64::from(total_tokens));
     let latest_usage = usage.map(|value| ContextUsageBreakdown {
         input_tokens: u64::from(value.prompt_tokens()),
         uncached_input_tokens: u64::from(value.input_tokens),
@@ -229,6 +230,33 @@ pub(super) async fn post_tool_maintenance(
     turn_context: &TurnContext,
     calls: &[types::ParsedToolCall],
 ) -> bool {
+    // This boundary runs after record_tool_outcomes for the complete batch.
+    match session
+        .apply_requested_context_compaction(turn_context.sub_id())
+        .await
+    {
+        Ok(true) => {
+            emit_context_compacted(
+                session,
+                turn_context,
+                "Requested context compaction completed".into(),
+            )
+            .await
+        }
+        Ok(false) => {}
+        Err(error) => {
+            tracing::warn!(%error, "requested context compaction failed; original history retained");
+            emit(
+                session,
+                turn_context,
+                EventMsg::Error(agent_protocol::ErrorEvent {
+                    message: format!("Requested context compaction failed: {error}"),
+                    error_type: "context_compaction_failed".into(),
+                }),
+            )
+            .await;
+        }
+    }
     let mut hook_stopped = false;
     {
         let agent = session.as_ref();

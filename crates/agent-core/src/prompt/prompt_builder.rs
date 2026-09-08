@@ -9,18 +9,18 @@ use chrono::Local;
 use crate::prompt::context::{DynamicContext, StaticContext};
 
 /// 工具调用与学习闭环固定指引（注入稳定基础指令）。
-pub const TOOL_GUIDANCE: &str = "\
+pub const TOOL_GUIDANCE: &str = concat!(include_str!("behavior_guidance.md"), "\n", "\
 # 工具使用\n\
 调用工具时只使用模型提供的原生结构化工具接口；不得把工具名称和参数 JSON 写入回答正文。\n\
 加载 Skill 时工具名必须是 skills，arguments.skill_id 填 Skill 名称；可用 action=list|curate|load|manage。\n\
 复杂可复用流程：skills manage create；纠错后的正确步骤：manage_action=patch（old_string 须唯一）。\n\
 长期偏好/环境事实：用 memory；跨会话原文：context_search（scope=session 或 all）。闲置技能：action=curate（只建议，确认后再 delete）。\n\
 用户明确要求查看、测试或操作网页时使用 browser_open；启动本地开发服务器并获得 loopback URL 后，自动 browser_open，再用 browser_snapshot/click/type/scroll/wait/screenshot 验证修改。仅为读取链接内容时优先 web_fetch，不要无故弹出网页预览。浏览器表单提交、发布、删除、登录、权限或购买操作必须声明 state_changing/sensitive intent。\n\
-需求含糊、有多种理解或缺关键信息时，别猜别硬做：用 ask_user（mode=question，questions）向用户提问；敏感/不可逆操作前用 ask_user（mode=confirm，title+body）；本地天气/附近定位用 ask_user（mode=location）。Agent↔Plan 切换只用 switch_mode（勿与 ask_user 混用）。\n\
+缺失信息会实质改变任务目标、授权或重要结果时，用 ask_user（mode=question，questions）提问；低风险且范围内的细节可合理假设。尚未获明确授权的敏感/不可逆操作用 ask_user（mode=confirm，title+body）；本地天气/附近定位用 ask_user（mode=location）。Agent↔Plan 切换只用 switch_mode（勿与 ask_user 混用）。\n\
 Agent Thread 只使用六个 V2 工具：spawn_agent(task_name,message,agent_type?,model?,reasoning_effort?,fork_turns?)；list_agents(path_prefix?)；send_message(target,message) 仅排队；followup_task(target,message) 排队并触发下一轮；wait_agent(timeout_ms?)；interrupt_agent(target)。新建可切换的长期助手才用 persona_create。\n\
 向用户展示本工作区媒体/网页时，在回复正文写 ![audio](path) / ![video](path) / ![image](path) / ![html](path)；path 用工具返回的工作区相对路径（如 generated/audio/…、generated/html/…），HTML 文件请写入 generated/html/ 目录；不要写绝对路径，也不要用「文件：`路径`」这类纯文本，更不要用 present / A2UI 挂媒体卡。\n\
 展示已写入的代码/文本文件（.py/.rs/.c/.ts/.json/.md 等）时，同样在正文写 ![code](path) 引用工作区相对路径，前端会按后缀语法高亮渲染成可复制/下载/引用的代码卡片；不要把文件全文再粘回正文，避免重复占用上下文。\n\
-推理内容使用模型原生 reasoning 通道，不要在回答正文中输出隐藏思考标记。";
+推理内容使用模型原生 reasoning 通道，不要在回答正文中输出隐藏思考标记。");
 
 /// 可链式追加的 prompt 层容器。
 pub struct PromptBuilder {

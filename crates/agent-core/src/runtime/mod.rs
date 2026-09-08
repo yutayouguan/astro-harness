@@ -2260,7 +2260,9 @@ impl Session {
 
     /// 设置主模型上下文窗口（token），供分阶段 tool 压缩使用。
     pub fn set_context_window(&self, window: u32) {
-        self.lock_state().model_ctx.set_context_window(window);
+        let mut state = self.lock_state();
+        state.model_ctx.set_context_window(window);
+        state.sampled_context_tokens = None;
     }
 
     /// 设置本轮交互模式（Plan 启用只读工具门禁）。

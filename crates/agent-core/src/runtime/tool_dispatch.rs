@@ -203,8 +203,8 @@ impl AgentLoop {
             workspace_write_grant: grants.workspace_write,
             sandbox_policy: grants.sandbox_policy,
             managed_network: grants.managed_network,
-            context_window: None,
-            context_tokens_used: None,
+            context_window: Some(u64::from(self.context_window())),
+            context_tokens_used: self.lock_state().sampled_context_tokens,
             tool_registry: Some(&self.services.tool_registry),
         };
         match step_context {
