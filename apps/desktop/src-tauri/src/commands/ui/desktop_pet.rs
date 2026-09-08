@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use image::{ImageFormat, ImageReader};
 use tauri::{
@@ -20,6 +21,7 @@ const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_ATLAS_BYTES: u64 = 50 * 1024 * 1024;
 const BASE_WINDOW_WIDTH: f64 = 300.0;
 const BASE_WINDOW_HEIGHT: f64 = 340.0;
+static PET_WINDOW_SYNC: Mutex<()> = Mutex::new(());
 
 pub type DesktopPetStateDto = types::DesktopPetState;
 
@@ -33,11 +35,11 @@ fn pet_dir_at(base: &Path) -> PathBuf {
     types::desktop_pet_root(base)
 }
 
-fn load_state_at(base: &Path) -> DesktopPetStateDto {
-    types::read_desktop_pet_state(base).unwrap_or_default()
+fn load_state_at(base: &Path) -> Result<DesktopPetStateDto, String> {
+    types::read_desktop_pet_state(base).map_err(|error| format!("无法读取桌宠设置：{error}"))
 }
 
-fn load_state() -> DesktopPetStateDto {
+fn load_state() -> Result<DesktopPetStateDto, String> {
     load_state_at(&home::default_memory_dir())
 }
 
@@ -83,14 +85,8 @@ fn validate_image_bytes(bytes: Vec<u8>) -> Result<ValidatedPetImage, String> {
 
 fn validate_source_path(source_path: &str) -> Result<ValidatedPetImage, String> {
     let source = PathBuf::from(source_path.trim());
-    let metadata = fs::metadata(&source).map_err(|_| "找不到所选宠物照片".to_string())?;
-    if !metadata.is_file() {
-        return Err("请选择宠物图片文件".to_string());
-    }
-    if metadata.len() > MAX_SOURCE_BYTES {
-        return Err("宠物照片不能超过 25 MB".to_string());
-    }
-    let bytes = fs::read(&source).map_err(|error| format!("无法读取宠物照片：{error}"))?;
+    let bytes = types::desktop_pet::read_limited_pet_file(&source, MAX_SOURCE_BYTES)
+        .map_err(|error| format!("无法读取宠物照片：{error}"))?;
     validate_image_bytes(bytes)
 }
 
@@ -168,12 +164,9 @@ fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
 }
 
 fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPetStateDto, String> {
-    let metadata = fs::metadata(manifest_path).map_err(|_| "找不到 pet.json".to_string())?;
-    if !metadata.is_file() || metadata.len() > MAX_MANIFEST_BYTES {
-        return Err("pet.json 无效或过大".to_string());
-    }
     let manifest_bytes =
-        fs::read(manifest_path).map_err(|error| format!("无法读取 pet.json：{error}"))?;
+        types::desktop_pet::read_limited_pet_file(manifest_path, MAX_MANIFEST_BYTES)
+            .map_err(|error| format!("无法读取 pet.json：{error}"))?;
     let manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("pet.json 格式无效：{error}"))?;
     let pet_id = validate_pet_id(&manifest.id)?.to_string();
@@ -198,8 +191,8 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     if !source_sheet.starts_with(&manifest_parent) || !source_sheet.is_file() {
         return Err("动画图集必须位于宠物包目录内".to_string());
     }
-    let sheet_bytes =
-        fs::read(&source_sheet).map_err(|error| format!("无法读取动画图集：{error}"))?;
+    let sheet_bytes = types::desktop_pet::read_limited_pet_file(&source_sheet, MAX_ATLAS_BYTES)
+        .map_err(|error| format!("无法读取动画图集：{error}"))?;
     let extension = validate_v2_atlas(&sheet_bytes)?;
 
     let pets_root = pet_dir_at(base).join("pets");
@@ -275,47 +268,23 @@ fn store_asset(
 }
 
 fn remove_uniform_edge_background(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let image = image::load_from_memory(bytes)
-        .map_err(|_| "生成的桌宠图片无法解码".to_string())?
-        .to_rgba8();
-    let (width, height) = image.dimensions();
-    if width == 0 || height == 0 {
-        return Err("生成的桌宠图片尺寸无效".to_string());
-    }
-    if image.pixels().any(|pixel| pixel[3] < 250) {
-        return Ok(bytes.to_vec());
-    }
-    let corners = [
-        image.get_pixel(0, 0),
-        image.get_pixel(width - 1, 0),
-        image.get_pixel(0, height - 1),
-        image.get_pixel(width - 1, height - 1),
-    ];
-    let background = [
-        corners.iter().map(|pixel| u32::from(pixel[0])).sum::<u32>() as f32 / 4.0,
-        corners.iter().map(|pixel| u32::from(pixel[1])).sum::<u32>() as f32 / 4.0,
-        corners.iter().map(|pixel| u32::from(pixel[2])).sum::<u32>() as f32 / 4.0,
-    ];
-    let distance = |pixel: &image::Rgba<u8>| {
-        let red = f32::from(pixel[0]) - background[0];
-        let green = f32::from(pixel[1]) - background[1];
-        let blue = f32::from(pixel[2]) - background[2];
-        (red * red + green * green + blue * blue).sqrt()
-    };
-    if corners.iter().any(|pixel| distance(pixel) > 36.0) {
-        return Ok(bytes.to_vec());
-    }
+    tools::builtin::desktop_pet::normalize_pet_image(bytes).map_err(|error| error.to_string())
+}
 
-    let mut output = image;
-    for pixel in output.pixels_mut() {
-        let alpha = ((distance(pixel) - 22.0) / 44.0).clamp(0.0, 1.0);
-        pixel[3] = (alpha * 255.0).round() as u8;
-    }
-    let mut encoded = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(output)
-        .write_to(&mut encoded, ImageFormat::Png)
-        .map_err(|error| format!("无法保存透明桌宠图片：{error}"))?;
-    Ok(encoded.into_inner())
+fn validate_generation_target(
+    state: &DesktopPetStateDto,
+    expected_source: &str,
+    expected_pet: &Option<String>,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        state.source_path.as_deref() == Some(expected_source),
+        "生成期间宠物照片已更换，请重新生成"
+    );
+    anyhow::ensure!(
+        &state.pet_path == expected_pet,
+        "生成期间已应用另一个桌宠，当前结果未覆盖它"
+    );
+    Ok(())
 }
 
 fn window_size(scale: f64) -> LogicalSize<f64> {
@@ -386,28 +355,60 @@ fn emit_state<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) {
     let _ = app.emit_to("main", PET_EVENT, state);
 }
 
+fn sync_window<R: Runtime>(app: &AppHandle<R>) -> Result<DesktopPetStateDto, String> {
+    let _guard = PET_WINDOW_SYNC
+        .lock()
+        .map_err(|_| "桌宠窗口同步锁不可用".to_string())?;
+    // Read after acquiring the lock: an older IPC must not reapply stale visibility/size.
+    let latest = load_state()?;
+    ensure_window(app, &latest)?;
+    Ok(latest)
+}
+
+fn present_committed_state(
+    app: &AppHandle,
+    committed: DesktopPetStateDto,
+) -> Result<DesktopPetStateDto, String> {
+    let latest = match sync_window(app) {
+        Ok(state) => state,
+        Err(error) => {
+            emit_state(app, &committed);
+            return Err(format!("桌宠设置已保存，但窗口同步失败：{error}"));
+        }
+    };
+    emit_state(app, &latest);
+    Ok(latest)
+}
+
 pub fn restore_window<R: Runtime>(app: &AppHandle<R>) {
-    let state = load_state();
+    let state = match load_state() {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::warn!(%error, "restore desktop pet state failed");
+            return;
+        }
+    };
     if let Err(error) = ensure_window(app, &state) {
         tracing::warn!(%error, "restore desktop pet window failed");
     }
 }
 
 fn refresh_from_disk<R: Runtime>(app: &AppHandle<R>) {
-    let state = load_state();
-    if let Err(error) = ensure_window(app, &state) {
-        tracing::warn!(%error, "refresh desktop pet window failed");
-        return;
-    }
+    let state = match sync_window(app) {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::warn!(%error, "refresh desktop pet state failed");
+            return;
+        }
+    };
     emit_state(app, &state);
 }
 
 fn schedule_refresh(app: &AppHandle) {
-    let scheduler = app.clone();
-    let callback_app = scheduler.clone();
-    if let Err(error) = scheduler.run_on_main_thread(move || refresh_from_disk(&callback_app)) {
-        tracing::warn!(%error, "schedule desktop pet refresh failed");
-    }
+    let app = app.clone();
+    // Tauri dispatches platform operations internally. Creating a WebView from a
+    // synchronous command/main-thread callback deadlocks on Windows WebView2.
+    tauri::async_runtime::spawn_blocking(move || refresh_from_disk(&app));
 }
 
 /// Bridge Agent-tool state writes into the native window. The callback is immediate for the
@@ -420,10 +421,13 @@ pub fn install_change_bridge(app: &AppHandle) {
 
     let watcher_app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut previous = load_state().updated_at;
+        let mut previous = load_state().ok().map(|state| state.revision);
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let current = load_state().updated_at;
+            let Ok(state) = load_state() else {
+                continue;
+            };
+            let current = Some(state.revision);
             if current == previous {
                 continue;
             }
@@ -434,7 +438,7 @@ pub fn install_change_bridge(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn get_desktop_pet_state() -> DesktopPetStateDto {
+pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
     load_state()
 }
 
@@ -446,27 +450,31 @@ pub fn import_desktop_pet_photo(
     let image = validate_source_path(&source_path)?;
     let base = home::default_memory_dir();
     let path = store_asset(&base, "source", &image.bytes, image.extension)?;
-    let path = path.to_string_lossy().into_owned();
-    let state = types::update_desktop_pet_state(&base, |state| {
-        state.source_path = Some(path);
+    let source_path = path.to_string_lossy().into_owned();
+    let updated = types::update_desktop_pet_state(&base, |state| {
+        state.source_path = Some(source_path);
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
-    })
-    .map_err(|error| format!("无法保存桌宠设置：{error}"))?;
+    });
+    let state = match updated {
+        Ok(state) => state,
+        Err(error) => {
+            let _ = fs::remove_file(path);
+            return Err(format!("无法保存桌宠设置：{error}"));
+        }
+    };
     emit_state(&app, &state);
     Ok(state)
 }
 
 #[tauri::command]
-pub fn import_desktop_pet_package(
+pub async fn import_desktop_pet_package(
     app: AppHandle,
     manifest_path: String,
 ) -> Result<DesktopPetStateDto, String> {
     let state =
         import_animated_pet_at(&home::default_memory_dir(), Path::new(manifest_path.trim()))?;
-    ensure_window(&app, &state)?;
-    emit_state(&app, &state);
-    Ok(state)
+    present_committed_state(&app, state)
 }
 
 #[tauri::command]
@@ -475,11 +483,12 @@ pub async fn generate_desktop_pet(
     description: Option<String>,
 ) -> Result<DesktopPetStateDto, String> {
     let base = home::default_memory_dir();
-    let state = load_state_at(&base);
+    let state = load_state_at(&base)?;
     let source_path = state
         .source_path
         .clone()
         .ok_or_else(|| "请先上传宠物照片".to_string())?;
+    let previous_pet_path = state.pet_path.clone();
     let image = validate_source_path(&source_path)?;
     let details = description.unwrap_or_default();
     if details.chars().count() > 2_000 {
@@ -509,10 +518,7 @@ pub async fn generate_desktop_pet(
     let pet_path = store_asset(&base, "pet", &transparent, "png")?;
     let pet_path_string = pet_path.to_string_lossy().into_owned();
     let updated = types::update_desktop_pet_state(&base, |state| {
-        anyhow::ensure!(
-            state.source_path.as_deref() == Some(source_path.as_str()),
-            "生成期间宠物照片已更换，请重新生成"
-        );
+        validate_generation_target(state, &source_path, &previous_pet_path)?;
         state.pet_path = Some(pet_path_string);
         state.enabled = true;
         state.provider = Some(generated.provider);
@@ -530,30 +536,41 @@ pub async fn generate_desktop_pet(
             return Err(error.to_string());
         }
     };
-    ensure_window(&app, &state)?;
-    emit_state(&app, &state);
-    Ok(state)
+    present_committed_state(&app, state)
 }
 
 #[tauri::command]
-pub fn set_desktop_pet_enabled(
+pub async fn set_desktop_pet_enabled(
     app: AppHandle,
     enabled: bool,
 ) -> Result<DesktopPetStateDto, String> {
     let base = home::default_memory_dir();
     let state = types::update_desktop_pet_state(&base, |state| {
+        if enabled {
+            anyhow::ensure!(
+                state
+                    .pet_path
+                    .as_deref()
+                    .is_some_and(|path| Path::new(path).is_file()),
+                "请先生成或导入有效的桌宠图片"
+            );
+        }
         state.enabled = enabled;
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
     })
     .map_err(|error| format!("无法保存桌宠设置：{error}"))?;
-    ensure_window(&app, &state)?;
-    emit_state(&app, &state);
-    Ok(state)
+    present_committed_state(&app, state)
 }
 
 #[tauri::command]
-pub fn set_desktop_pet_scale(app: AppHandle, scale: f64) -> Result<DesktopPetStateDto, String> {
+pub async fn set_desktop_pet_scale(
+    app: AppHandle,
+    scale: f64,
+) -> Result<DesktopPetStateDto, String> {
+    if !scale.is_finite() {
+        return Err("桌宠大小必须为有限数值".into());
+    }
     let base = home::default_memory_dir();
     let state = types::update_desktop_pet_state(&base, |state| {
         state.scale = scale.clamp(0.65, 1.35);
@@ -561,13 +578,11 @@ pub fn set_desktop_pet_scale(app: AppHandle, scale: f64) -> Result<DesktopPetSta
         Ok(())
     })
     .map_err(|error| format!("无法保存桌宠设置：{error}"))?;
-    ensure_window(&app, &state)?;
-    emit_state(&app, &state);
-    Ok(state)
+    present_committed_state(&app, state)
 }
 
 #[tauri::command]
-pub fn set_desktop_pet_always_on_top(
+pub async fn set_desktop_pet_always_on_top(
     app: AppHandle,
     always_on_top: bool,
 ) -> Result<DesktopPetStateDto, String> {
@@ -578,9 +593,7 @@ pub fn set_desktop_pet_always_on_top(
         Ok(())
     })
     .map_err(|error| format!("无法保存桌宠设置：{error}"))?;
-    ensure_window(&app, &state)?;
-    emit_state(&app, &state);
-    Ok(state)
+    present_committed_state(&app, state)
 }
 
 #[tauri::command]
@@ -640,6 +653,31 @@ mod tests {
     }
 
     #[test]
+    fn corrupt_pet_state_is_reported_without_resetting_it() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(pet_dir_at(temp.path())).unwrap();
+        let path = types::desktop_pet_state_path(temp.path());
+        fs::write(&path, "corrupt-state").unwrap();
+        assert!(load_state_at(temp.path()).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "corrupt-state");
+    }
+
+    #[test]
+    fn late_generation_does_not_replace_a_newly_selected_pet() {
+        let state = DesktopPetStateDto {
+            source_path: Some("source.png".into()),
+            pet_path: Some("new-pet.png".into()),
+            scale: 1.2,
+            ..DesktopPetStateDto::default()
+        };
+        assert!(
+            validate_generation_target(&state, "source.png", &Some("old-pet.png".into())).is_err()
+        );
+        assert!(validate_generation_target(&state, "source.png", &state.pet_path).is_ok());
+        assert!(validate_generation_target(&state, "other-source.png", &state.pet_path).is_err());
+    }
+
+    #[test]
     fn persists_desktop_pet_state() {
         let temp = tempfile::tempdir().unwrap();
         let state = DesktopPetStateDto {
@@ -649,7 +687,7 @@ mod tests {
             ..DesktopPetStateDto::default()
         };
         save_state_at(temp.path(), &state).unwrap();
-        let loaded = load_state_at(temp.path());
+        let loaded = load_state_at(temp.path()).unwrap();
         assert!(loaded.enabled);
         assert_eq!(loaded.scale, 1.2);
         assert_eq!(loaded.pet_path.as_deref(), Some("/tmp/pet.png"));

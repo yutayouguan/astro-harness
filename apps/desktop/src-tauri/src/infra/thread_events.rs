@@ -1888,6 +1888,7 @@ async fn process_live_event(
     } else {
         Vec::new()
     };
+    emit_live_desktop_pet_events(app, &thread_id, &events);
     emit_chat_events(app, &thread_id, events);
 }
 
@@ -1978,20 +1979,28 @@ pub(crate) fn emit_chat_events(app: &AppHandle, thread_id: &str, events: Vec<Cha
     let event_name = format!("chat_stream_{thread_id}");
     for event in events {
         let is_done = matches!(event, ChatStreamEvent::Done);
-        if let Some(state) = desktop_pet_activity_for_event(&event) {
+        let _ = app.emit(&event_name, event);
+        if is_done {
+            crate::commands::evolution_run::spawn_maybe_auto_evolution(app.clone());
+            crate::commands::evolution_run::spawn_maybe_curator(app.clone());
+        }
+    }
+}
+
+// History/snapshot replay uses emit_chat_events too, but must never celebrate an
+// old completion or restore an obsolete approval pose. Only accepted live events
+// reach this projection, using the status clock to order the two channels.
+fn emit_live_desktop_pet_events(app: &AppHandle, thread_id: &str, events: &[ChatStreamEvent]) {
+    for event in events {
+        if let Some(state) = desktop_pet_activity_for_event(event) {
             let _ = app.emit(
                 DESKTOP_PET_ACTIVITY_CHANGED_EVENT,
                 DesktopPetActivityChangedDto {
                     session_id: thread_id.to_string(),
                     state: state.to_string(),
-                    ts_ms: now_ts_ms(),
+                    ts_ms: next_session_status_ts_ms(),
                 },
             );
-        }
-        let _ = app.emit(&event_name, event);
-        if is_done {
-            crate::commands::evolution_run::spawn_maybe_auto_evolution(app.clone());
-            crate::commands::evolution_run::spawn_maybe_curator(app.clone());
         }
     }
 }

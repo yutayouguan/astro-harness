@@ -12,6 +12,4 @@ thiserror = { workspace = true }
 agent-db = { path = "../agent-db" }
 async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
-
-[dev-dependencies]
 tempfile = "3"

@@ -1,6 +1,7 @@
 //! Desktop pet persistent state shared by Agent tools and the Tauri shell.
 
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
@@ -32,6 +33,8 @@ static DESKTOP_PET_CHANGE_HANDLER: OnceLock<RwLock<Option<DesktopPetChangeHandle
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DesktopPetState {
+    /// Monotonic across all writers under state.lock; old state files start at zero.
+    pub revision: u64,
     pub enabled: bool,
     pub source_path: Option<String>,
     pub pet_path: Option<String>,
@@ -48,6 +51,7 @@ pub struct DesktopPetState {
 impl Default for DesktopPetState {
     fn default() -> Self {
         Self {
+            revision: 0,
             enabled: false,
             source_path: None,
             pet_path: None,
@@ -92,7 +96,13 @@ pub fn read_desktop_pet_state(base: &Path) -> anyhow::Result<DesktopPetState> {
 }
 
 pub fn write_desktop_pet_state(base: &Path, state: &DesktopPetState) -> anyhow::Result<()> {
-    with_state_lock(base, || write_desktop_pet_state_unlocked(base, state))
+    update_desktop_pet_state(base, |current| {
+        let revision = current.revision;
+        *current = state.clone();
+        current.revision = revision;
+        Ok(())
+    })?;
+    Ok(())
 }
 
 pub fn update_desktop_pet_state(
@@ -101,7 +111,13 @@ pub fn update_desktop_pet_state(
 ) -> anyhow::Result<DesktopPetState> {
     with_state_lock(base, || {
         let mut state = read_desktop_pet_state_unlocked(base)?;
+        let revision = state
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("桌宠状态版本已耗尽"))?;
         update(&mut state)?;
+        state.revision = revision;
+        validate_state(&state)?;
         write_desktop_pet_state_unlocked(base, &state)?;
         Ok(state)
     })
@@ -109,26 +125,47 @@ pub fn update_desktop_pet_state(
 
 fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetState> {
     let path = desktop_pet_state_path(base);
-    if !path.is_file() {
+    if !path.try_exists()? {
         return Ok(DesktopPetState::default());
     }
-    let bytes = fs::read(path)?;
-    Ok(serde_json::from_slice(&bytes)?)
+    let bytes = read_limited_pet_file(&path, 64 * 1024)?;
+    let state = serde_json::from_slice(&bytes)?;
+    validate_state(&state)?;
+    Ok(state)
+}
+
+fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        state.scale.is_finite() && (0.65..=1.35).contains(&state.scale),
+        "桌宠大小必须在 0.65..=1.35 之间"
+    );
+    anyhow::ensure!(
+        state.sprite_version_number.is_none() || state.sprite_version_number == Some(2),
+        "不支持的桌宠动画版本"
+    );
+    Ok(())
+}
+
+/// Check the open file, then cap the read as well so growth cannot bypass the limit.
+pub fn read_limited_pet_file(path: &Path, limit: u64) -> anyhow::Result<Vec<u8>> {
+    let file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    anyhow::ensure!(metadata.is_file(), "请选择普通文件");
+    anyhow::ensure!(metadata.len() <= limit, "文件超过 {} 字节限制", limit);
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+    anyhow::ensure!(bytes.len() as u64 <= limit, "文件超过 {} 字节限制", limit);
+    Ok(bytes)
 }
 
 fn write_desktop_pet_state_unlocked(base: &Path, state: &DesktopPetState) -> anyhow::Result<()> {
     let root = desktop_pet_root(base);
     let path = desktop_pet_state_path(base);
-    let temporary = root.join(format!(".state-{}.tmp", uuid::Uuid::new_v4().simple()));
-    fs::write(&temporary, serde_json::to_vec_pretty(state)?)?;
-    #[cfg(target_os = "windows")]
-    if path.exists() {
-        fs::remove_file(&path)?;
-    }
-    if let Err(error) = fs::rename(&temporary, &path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error.into());
-    }
+    let mut temporary = tempfile::NamedTempFile::new_in(&root)?;
+    temporary.write_all(&serde_json::to_vec_pretty(state)?)?;
+    temporary.as_file().sync_all()?;
+    // persist replaces atomically on Windows too, without deleting the old state first.
+    temporary.persist(&path).map_err(|error| error.error)?;
     Ok(())
 }
 
@@ -167,7 +204,15 @@ mod tests {
             ..DesktopPetState::default()
         };
         write_desktop_pet_state(temp.path(), &state).unwrap();
-        assert_eq!(read_desktop_pet_state(temp.path()).unwrap(), state);
+        let loaded = read_desktop_pet_state(temp.path()).unwrap();
+        assert_eq!(loaded.revision, 1);
+        assert_eq!(
+            loaded,
+            DesktopPetState {
+                revision: 1,
+                ..state
+            }
+        );
         let raw = fs::read_to_string(desktop_pet_state_path(temp.path())).unwrap();
         assert!(raw.contains("\"petPath\""));
         assert!(raw.contains("\"alwaysOnTop\""));
@@ -191,5 +236,68 @@ mod tests {
         assert_eq!(updated.scale, 1.25);
         assert_eq!(updated.pet_path, initial.pet_path);
         assert_eq!(updated.provider, initial.provider);
+        assert_eq!(updated.revision, 2);
+    }
+
+    #[test]
+    fn rejected_update_preserves_the_previous_file() {
+        let temp = tempfile::tempdir().unwrap();
+        write_desktop_pet_state(temp.path(), &DesktopPetState::default()).unwrap();
+        let before = fs::read(desktop_pet_state_path(temp.path())).unwrap();
+        assert!(update_desktop_pet_state(temp.path(), |state| {
+            state.scale = f64::NAN;
+            Ok(())
+        })
+        .is_err());
+        assert_eq!(
+            fs::read(desktop_pet_state_path(temp.path())).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn legacy_state_loads_at_revision_zero_and_corruption_is_not_overwritten() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(desktop_pet_root(temp.path())).unwrap();
+        let path = desktop_pet_state_path(temp.path());
+        fs::write(&path, br#"{"scale":1.0}"#).unwrap();
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 0);
+        fs::write(&path, "broken").unwrap();
+        assert!(write_desktop_pet_state(temp.path(), &DesktopPetState::default()).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "broken");
+    }
+
+    #[test]
+    fn bounded_read_rejects_oversized_and_non_regular_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("large");
+        fs::File::create(&path)
+            .unwrap()
+            .set_len(51 * 1024 * 1024)
+            .unwrap();
+        assert!(read_limited_pet_file(&path, 50 * 1024 * 1024).is_err());
+        assert!(read_limited_pet_file(temp.path(), 50 * 1024 * 1024).is_err());
+    }
+
+    #[test]
+    fn concurrent_writers_publish_unique_monotonic_revisions() {
+        let temp = tempfile::tempdir().unwrap();
+        let workers = (0..8)
+            .map(|_| {
+                let base = temp.path().to_path_buf();
+                std::thread::spawn(move || {
+                    update_desktop_pet_state(&base, |_| Ok(()))
+                        .unwrap()
+                        .revision
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut revisions = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        revisions.sort_unstable();
+        assert_eq!(revisions, (1..=8).collect::<Vec<_>>());
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 8);
     }
 }

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
 
 import {
   DESKTOP_PET_CELL,
@@ -29,7 +36,7 @@ export default function DesktopPetCanvas({
   const frameRequestRef = useRef(0);
   const startedAtRef = useRef(0);
   const playbackRef = useRef({ state, lookAngle, reducedMotion });
-  playbackRef.current = { state, lookAngle, reducedMotion };
+  const [loadError, setLoadError] = useState(false);
 
   const draw = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
@@ -40,7 +47,9 @@ export default function DesktopPetCanvas({
     if (!startedAtRef.current) startedAtRef.current = timestamp;
     const playback = playbackRef.current;
     const frame =
-      playback.state === "look" && playback.lookAngle != null
+      !playback.reducedMotion &&
+      playback.state === "look" &&
+      playback.lookAngle != null
         ? frameForLookAngle(playback.lookAngle)
         : frameForElapsed(
             playback.state === "look" ? "idle" : playback.state,
@@ -85,19 +94,28 @@ export default function DesktopPetCanvas({
   }, [draw]);
 
   useEffect(() => {
+    imageRef.current = null;
+    setLoadError(false);
+    if (frameRequestRef.current)
+      window.cancelAnimationFrame(frameRequestRef.current);
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (canvas && context) {
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
     if (!src) return;
-    const image = new Image();
-    let disposed = false;
-
-    image.onload = () => {
-      if (disposed) return;
-      imageRef.current = image;
-      restart();
-    };
-    image.src = src;
+    const dispose = loadPetAtlas({
+      src,
+      createImage: () => new Image(),
+      loaded: (image) => {
+        imageRef.current = image;
+        restart();
+      },
+      failed: () => setLoadError(true),
+    });
     return () => {
-      disposed = true;
-      image.onload = null;
+      dispose();
       imageRef.current = null;
       if (frameRequestRef.current) {
         window.cancelAnimationFrame(frameRequestRef.current);
@@ -105,16 +123,24 @@ export default function DesktopPetCanvas({
     };
   }, [restart, src]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    playbackRef.current = { state, lookAngle, reducedMotion };
     restart();
   }, [lookAngle, reducedMotion, restart, state]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={className}
-      role="img"
-      aria-label={label}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className={className}
+        role="img"
+        aria-label={label}
+      />
+      {loadError ? (
+        <span className="desktop-pet-image-error" role="alert">
+          {label}: 图片无法加载 / Image unavailable
+        </span>
+      ) : null}
+    </>
   );
 }

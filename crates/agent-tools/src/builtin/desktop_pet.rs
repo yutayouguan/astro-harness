@@ -149,7 +149,14 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
     let pet_path = store_asset(&ctx.memory_dir, "pet", &pet_bytes, "png")?;
     let source_path = source_image
         .map(|image| store_asset(&ctx.memory_dir, "source", &image.bytes, image.extension))
-        .transpose()?;
+        .transpose();
+    let source_path = match source_path {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = fs::remove_file(&pet_path);
+            return Err(error);
+        }
+    };
 
     let pet_path_value = pet_path.to_string_lossy().into_owned();
     let source_path_value = source_path
@@ -250,12 +257,7 @@ fn resolve_authorized_source(ctx: &ToolContext<'_>, input: &str) -> anyhow::Resu
 
 fn read_authorized_image(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<ValidatedImage> {
     let path = resolve_authorized_source(ctx, input)?;
-    let metadata = fs::metadata(&path)?;
-    anyhow::ensure!(
-        metadata.len() <= MAX_IMAGE_BYTES,
-        "桌面宠物图片不能超过 25 MB"
-    );
-    let bytes = fs::read(&path)?;
+    let bytes = types::desktop_pet::read_limited_pet_file(&path, MAX_IMAGE_BYTES)?;
     let mut reader = ImageReader::new(Cursor::new(&bytes)).with_guessed_format()?;
     let format = reader
         .format()
@@ -277,8 +279,31 @@ fn read_authorized_image(ctx: &ToolContext<'_>, input: &str) -> anyhow::Result<V
     Ok(ValidatedImage { bytes, extension })
 }
 
-fn normalize_pet_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut image = image::load_from_memory(bytes)?.to_rgba8();
+/// Shared by the settings generator and Agent tool. Always encodes a real PNG.
+pub fn normalize_pet_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    anyhow::ensure!(
+        !bytes.is_empty() && bytes.len() as u64 <= MAX_IMAGE_BYTES,
+        "桌面宠物图片为空或超过 25 MB"
+    );
+    let mut reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
+    anyhow::ensure!(
+        matches!(
+            reader.format(),
+            Some(ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP)
+        ),
+        "桌面宠物仅支持 PNG、JPEG 和 WebP"
+    );
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let decoded = reader.decode()?;
+    anyhow::ensure!(
+        u64::from(decoded.width()) * u64::from(decoded.height()) <= MAX_DECODE_ALLOC / 4,
+        "桌面宠物图片尺寸过大"
+    );
+    let mut image = decoded.to_rgba8();
     let (width, height) = image.dimensions();
     anyhow::ensure!(width > 0 && height > 0, "桌面宠物图片尺寸无效");
     if image.pixels().all(|pixel| pixel[3] >= 250) {
@@ -300,12 +325,49 @@ fn normalize_pet_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
             (red * red + green * green + blue * blue).sqrt()
         };
         if corners.iter().all(|pixel| distance(pixel) <= 36.0) {
-            for pixel in image.pixels_mut() {
-                let alpha = ((distance(pixel) - 22.0) / 44.0).clamp(0.0, 1.0);
-                pixel[3] = (alpha * 255.0).round() as u8;
+            // Only remove the edge-connected background, never similarly colored
+            // enclosed fur/eyes/body details. Do not recolor pre-existing alpha art.
+            let mut visited = vec![false; (width as usize) * (height as usize)];
+            let mut pending = std::collections::VecDeque::new();
+            for x in 0..width {
+                pending.push_back((x, 0));
+                pending.push_back((x, height - 1));
+            }
+            for y in 0..height {
+                pending.push_back((0, y));
+                pending.push_back((width - 1, y));
+            }
+            while let Some((x, y)) = pending.pop_front() {
+                let index = y as usize * width as usize + x as usize;
+                if visited[index] {
+                    continue;
+                }
+                visited[index] = true;
+                let pixel = image.get_pixel_mut(x, y);
+                let difference = distance(pixel);
+                if difference >= 66.0 {
+                    continue;
+                }
+                pixel[3] = (((difference - 22.0) / 44.0).clamp(0.0, 1.0) * 255.0).round() as u8;
+                if x > 0 {
+                    pending.push_back((x - 1, y));
+                }
+                if x + 1 < width {
+                    pending.push_back((x + 1, y));
+                }
+                if y > 0 {
+                    pending.push_back((x, y - 1));
+                }
+                if y + 1 < height {
+                    pending.push_back((x, y + 1));
+                }
             }
         }
     }
+    anyhow::ensure!(
+        image.pixels().any(|pixel| pixel[3] > 0),
+        "未能从图片中提取桌宠主体"
+    );
     let mut encoded = Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(image).write_to(&mut encoded, ImageFormat::Png)?;
     Ok(encoded.into_inner())
@@ -335,6 +397,37 @@ mod tests {
     use super::*;
     use image::{DynamicImage, Rgba, RgbaImage};
     use std::sync::RwLock;
+
+    #[test]
+    fn matte_preserves_enclosed_details_matching_the_background() {
+        let mut image = RgbaImage::from_pixel(12, 12, Rgba([255, 255, 255, 255]));
+        for y in 3..9 {
+            for x in 3..9 {
+                image.put_pixel(x, y, Rgba([80, 40, 20, 255]));
+            }
+        }
+        image.put_pixel(6, 6, Rgba([255, 255, 255, 255]));
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        let result = image::load_from_memory(&normalize_pet_image(bytes.get_ref()).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(result.get_pixel(0, 0)[3], 0);
+        assert_eq!(result.get_pixel(6, 6)[3], 255);
+    }
+
+    #[test]
+    fn normalization_always_returns_png_and_preserves_existing_alpha() {
+        let image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(8, 8, Rgba([40, 80, 120, 128])));
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::WebP).unwrap();
+        let normalized = normalize_pet_image(bytes.get_ref()).unwrap();
+        assert_eq!(image::guess_format(&normalized).unwrap(), ImageFormat::Png);
+        let normalized = image::load_from_memory(&normalized).unwrap().to_rgba8();
+        assert!(normalized.pixels().all(|pixel| pixel[3] == 128));
+    }
 
     fn tiny_png(path: &Path) {
         let mut image = RgbaImage::from_pixel(12, 12, Rgba([220, 250, 235, 255]));

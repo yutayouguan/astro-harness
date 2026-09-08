@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
   Eye,
   EyeOff,
@@ -11,7 +9,8 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
 import { useReducedMotion } from "framer-motion";
 
 import conceptImage from "../../assets/generated/desktop-pet-concept.png";
@@ -19,19 +18,7 @@ import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 
-export type DesktopPetState = {
-  enabled: boolean;
-  sourcePath: string | null;
-  petPath: string | null;
-  scale: number;
-  alwaysOnTop: boolean;
-  updatedAt: string;
-  provider: string | null;
-  model: string | null;
-  spriteVersionNumber: number | null;
-  displayName: string | null;
-  description: string | null;
-};
+export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
 const COPY = {
   zh: {
@@ -89,20 +76,6 @@ const COPY = {
   },
 } as const;
 
-const EMPTY_STATE: DesktopPetState = {
-  enabled: false,
-  sourcePath: null,
-  petPath: null,
-  scale: 1,
-  alwaysOnTop: true,
-  updatedAt: "",
-  provider: null,
-  model: null,
-  spriteVersionNumber: null,
-  displayName: null,
-  description: null,
-};
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -111,52 +84,30 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
   const { locale } = useI18n();
   const copy = COPY[locale];
   const reducedMotion = useReducedMotion();
-  const [state, setState] = useState<DesktopPetState>(EMPTY_STATE);
+  const {
+    state,
+    loading,
+    pending,
+    error: stateError,
+    mutate,
+    clearError,
+  } = useDesktopPetState(active);
   const [description, setDescription] = useState("");
-  const [busy, setBusy] = useState<"load" | "upload" | "generate" | null>(
-    "load",
-  );
-  const [error, setError] = useState("");
-
-  const refresh = useCallback(async () => {
-    if (!("__TAURI_INTERNALS__" in window)) {
-      setBusy(null);
-      return;
-    }
-    try {
-      setState(await invoke<DesktopPetState>("get_desktop_pet_state"));
-      setError("");
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(null);
-    }
-  }, []);
-
+  const [phase, setPhase] = useState<"upload" | "generate" | null>(null);
+  const [localError, setLocalError] = useState("");
+  const [scaleDraft, setScaleDraft] = useState<number | null>(null);
+  const scaleCommit = useRef<number | null>(null);
+  const busy = phase ?? (loading || pending > 0 ? "load" : null);
+  const error = localError || stateError;
   useEffect(() => {
-    if (active) void refresh();
-  }, [active, refresh]);
-
-  useEffect(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void listen<DesktopPetState>("desktop-pet-changed", (event) => {
-      if (!disposed) setState(event.payload);
-    })
-      .then((cleanup) => {
-        if (disposed) cleanup();
-        else unlisten = cleanup;
-      })
-      .catch(() => {});
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
+    setScaleDraft(null);
+  }, [state.revision]);
 
   async function choosePhoto() {
-    setError("");
+    if (busy) return;
+    setPhase("upload");
+    setLocalError("");
+    clearError();
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
@@ -167,40 +118,36 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           { name: copy.source, extensions: ["png", "jpg", "jpeg", "webp"] },
         ],
       });
-      if (typeof selected !== "string") return;
-      setBusy("upload");
-      setState(
-        await invoke<DesktopPetState>("import_desktop_pet_photo", {
-          sourcePath: selected,
-        }),
-      );
+      if (typeof selected === "string") {
+        await mutate("import_desktop_pet_photo", { sourcePath: selected });
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      setLocalError(errorMessage(cause));
     } finally {
-      setBusy(null);
+      setPhase(null);
     }
   }
 
   async function generate() {
     if (!state.sourcePath || busy) return;
-    setBusy("generate");
-    setError("");
+    setPhase("generate");
+    setLocalError("");
     try {
-      setState(
-        await invoke<DesktopPetState>("generate_desktop_pet", {
-          description: description.trim() || null,
-        }),
-      );
-    } catch (cause) {
-      setError(errorMessage(cause));
+      await mutate("generate_desktop_pet", {
+        description: description.trim() || null,
+      });
+    } catch {
+      // The shared controller owns errors; a failed request must not restore old state.
     } finally {
-      setBusy(null);
+      setPhase(null);
     }
   }
 
   async function importAnimatedPackage() {
     if (busy) return;
-    setError("");
+    setPhase("upload");
+    setLocalError("");
+    clearError();
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
@@ -209,17 +156,13 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
         title: copy.importAnimated,
         filters: [{ name: "pet.json", extensions: ["json"] }],
       });
-      if (typeof selected !== "string") return;
-      setBusy("upload");
-      setState(
-        await invoke<DesktopPetState>("import_desktop_pet_package", {
-          manifestPath: selected,
-        }),
-      );
+      if (typeof selected === "string") {
+        await mutate("import_desktop_pet_package", { manifestPath: selected });
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      setLocalError(errorMessage(cause));
     } finally {
-      setBusy(null);
+      setPhase(null);
     }
   }
 
@@ -227,35 +170,38 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     command: "set_desktop_pet_enabled" | "set_desktop_pet_always_on_top",
     value: boolean,
   ) {
-    const previous = state;
-    setState((current) =>
-      command === "set_desktop_pet_enabled"
-        ? { ...current, enabled: value }
-        : { ...current, alwaysOnTop: value },
-    );
+    setLocalError("");
     try {
-      const args =
+      await mutate(
+        command,
         command === "set_desktop_pet_enabled"
           ? { enabled: value }
-          : { alwaysOnTop: value };
-      setState(await invoke<DesktopPetState>(command, args));
-      setError("");
-    } catch (cause) {
-      setState(previous);
-      setError(errorMessage(cause));
+          : { alwaysOnTop: value },
+      );
+    } catch {
+      // Preserve the newest authoritative state, including concurrent Tool changes.
     }
   }
 
   async function updateScale(scale: number) {
-    setState((current) => ({ ...current, scale }));
+    if (
+      scaleCommit.current === scale ||
+      (scale === state.scale && pending === 0)
+    ) {
+      setScaleDraft(null);
+      return;
+    }
+    scaleCommit.current = scale;
+    setLocalError("");
     try {
-      setState(
-        await invoke<DesktopPetState>("set_desktop_pet_scale", { scale }),
-      );
-      setError("");
-    } catch (cause) {
-      setError(errorMessage(cause));
-      void refresh();
+      await mutate("set_desktop_pet_scale", { scale });
+    } catch {
+      // The shared controller exposes the error without rolling back another update.
+    } finally {
+      if (scaleCommit.current === scale) {
+        scaleCommit.current = null;
+        setScaleDraft(null);
+      }
     }
   }
 
@@ -429,11 +375,11 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
                 min="0.65"
                 max="1.35"
                 step="0.05"
-                value={state.scale}
+                value={scaleDraft ?? state.scale}
                 disabled={busy != null}
                 onChange={(event) => {
                   const scale = Number(event.currentTarget.value);
-                  setState((current) => ({ ...current, scale }));
+                  setScaleDraft(scale);
                 }}
                 onPointerUp={(event) =>
                   void updateScale(Number(event.currentTarget.value))
@@ -445,7 +391,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
                   void updateScale(Number(event.currentTarget.value))
                 }
               />
-              <output>{Math.round(state.scale * 100)}%</output>
+              <output>{Math.round((scaleDraft ?? state.scale) * 100)}%</output>
             </label>
           </div>
         </section>
