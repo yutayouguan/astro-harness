@@ -51,6 +51,7 @@ import {
 } from "../../lib/chat/chatMode";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
+import { ONBOARDING_RESET_EVENT } from "../../lib/ui/onboarding";
 import {
   gradientFromPreset,
   gradientSwatchBackground,
@@ -169,6 +170,9 @@ const ABOUT_COPY = {
     view: "查看",
     collapse: "收起",
     dataDirectory: "数据目录",
+    onboarding: "首次启动引导",
+    onboardingSub: "重新运行欢迎动画和初始化设置。",
+    onboardingAction: "重新运行",
   },
   en: {
     development: "Development build",
@@ -193,6 +197,9 @@ const ABOUT_COPY = {
     view: "View",
     collapse: "Hide",
     dataDirectory: "Data directory",
+    onboarding: "First-run setup",
+    onboardingSub: "Run the welcome animation and initial setup again.",
+    onboardingAction: "Run again",
   },
 } as const;
 
@@ -751,6 +758,14 @@ export default function PreferencesPanel({
     (option) => option.id === appIcon.current,
   );
   const aboutCopy = ABOUT_COPY[locale];
+  const restartOnboarding = useCallback(async () => {
+    try {
+      await invoke("reset_onboarding_state");
+      window.dispatchEvent(new Event(ONBOARDING_RESET_EVENT));
+    } catch (error) {
+      console.error("reset onboarding failed", error);
+    }
+  }, []);
   const updateStatus =
     updatePhase === "checking"
       ? aboutCopy.checking
@@ -2076,6 +2091,16 @@ export default function PreferencesPanel({
                   <strong>{aboutCopy.dataDirectory}</strong>
                 </span>
                 <code>~/.astro</code>
+              </div>
+              <div className="prefs-about-setting-row">
+                <span className="prefs-about-setting-copy">
+                  <strong>{aboutCopy.onboarding}</strong>
+                  <small>{aboutCopy.onboardingSub}</small>
+                </span>
+                <button type="button" onClick={() => void restartOnboarding()}>
+                  <RefreshCw size={13} aria-hidden />
+                  {aboutCopy.onboardingAction}
+                </button>
               </div>
             </div>
           </section>

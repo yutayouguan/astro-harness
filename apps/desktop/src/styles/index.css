@@ -86,6 +86,7 @@
 @import "./components/media.css" layer(features);
 @import "./components/agent-picker.css" layer(features);
 @import "./features/preferences.css" layer(features);
+@import "./features/onboarding.css" layer(features);
 @import "./features/preferences-color-editor.css" layer(features);
 @import "./features/settings-card-surfaces.css" layer(features);
 @import "./features/browser-settings.css" layer(features);

@@ -2,6 +2,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import OnboardingGate from "./components/onboarding/OnboardingGate";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
 import { MorphiconProvider } from "./hooks/app/useMorphicons";
@@ -94,7 +95,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <LocaleProvider>
             <ActiveAgentProvider>
               <DialogProvider>
-                <App />
+                <OnboardingGate>
+                  <App />
+                </OnboardingGate>
               </DialogProvider>
             </ActiveAgentProvider>
           </LocaleProvider>

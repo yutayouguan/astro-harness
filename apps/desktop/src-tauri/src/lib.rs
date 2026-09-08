@@ -265,6 +265,10 @@ pub fn run() {
             commands::wallpaper::get_system_wallpaper,
             commands::ui_style::get_active_ui_style,
             commands::ui_style::reset_active_ui_style,
+            commands::onboarding::get_onboarding_state,
+            commands::onboarding::save_onboarding_progress,
+            commands::onboarding::complete_onboarding,
+            commands::onboarding::reset_onboarding_state,
             commands::chat::query_memory,
             // — agent —
             commands::agent::prepare_task_worktree,
