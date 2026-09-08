@@ -20,12 +20,15 @@ pub struct SeedReport {
 const BUNDLED_STORYBOARD_VIDEO_MD: &str = include_str!("../bundled/storyboard-video/SKILL.md");
 const BUNDLED_AIHOT_MD: &str = include_str!("../bundled/aihot/SKILL.md");
 const BUNDLED_CREATIVE_MEDIA_MD: &str = include_str!("../bundled/creative-media/SKILL.md");
+const BUNDLED_DESKTOP_PET_CREATOR_MD: &str =
+    include_str!("../bundled/desktop-pet-creator/SKILL.md");
 const BUNDLED_UI_STYLE_DESIGNER_MD: &str = include_str!("../bundled/ui-style-designer/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("aihot", BUNDLED_AIHOT_MD),
     ("creative-media", BUNDLED_CREATIVE_MEDIA_MD),
+    ("desktop-pet-creator", BUNDLED_DESKTOP_PET_CREATOR_MD),
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
     ("ui-style-designer", BUNDLED_UI_STYLE_DESIGNER_MD),
 ];
@@ -184,10 +187,15 @@ mod tests {
         let r1 = seed_bundled_into(dir.path());
         assert!(r1.installed.contains(&"aihot".to_string()));
         assert!(r1.installed.contains(&"creative-media".to_string()));
+        assert!(r1.installed.contains(&"desktop-pet-creator".to_string()));
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
         assert!(r1.installed.contains(&"ui-style-designer".to_string()));
         assert!(dir.path().join("skills/aihot/SKILL.md").is_file());
         assert!(dir.path().join("skills/creative-media/SKILL.md").is_file());
+        assert!(dir
+            .path()
+            .join("skills/desktop-pet-creator/SKILL.md")
+            .is_file());
         assert!(dir
             .path()
             .join("skills/storyboard-video/SKILL.md")
@@ -206,6 +214,12 @@ mod tests {
         let storyboard =
             fs::read_to_string(dir.path().join("skills/storyboard-video/SKILL.md")).unwrap();
         assert!(!storyboard.contains("astro_tools:"));
+        let desktop_pet =
+            fs::read_to_string(dir.path().join("skills/desktop-pet-creator/SKILL.md")).unwrap();
+        assert!(desktop_pet.contains("request_user_input_async"));
+        assert!(desktop_pet.contains("image_gen"));
+        assert!(desktop_pet.contains("desktop_pet"));
+        assert!(desktop_pet.contains("astro_tools:"));
         let ui_style =
             fs::read_to_string(dir.path().join("skills/ui-style-designer/SKILL.md")).unwrap();
         assert!(ui_style.contains("request_user_input_async"));
@@ -217,6 +231,7 @@ mod tests {
         assert!(r2.installed.is_empty());
         assert!(r2.skipped.contains(&"aihot".to_string()));
         assert!(r2.skipped.contains(&"creative-media".to_string()));
+        assert!(r2.skipped.contains(&"desktop-pet-creator".to_string()));
         assert!(r2.skipped.contains(&"storyboard-video".to_string()));
         assert!(r2.skipped.contains(&"ui-style-designer".to_string()));
     }

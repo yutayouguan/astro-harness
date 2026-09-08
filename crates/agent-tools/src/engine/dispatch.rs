@@ -78,6 +78,7 @@ pub fn tool_requires_in_process_write(name: &str, args: &serde_json::Value) -> b
         "pin_context" => matches!(action().as_str(), "pin" | "unpin" | "clear"),
         "cron_add" | "cron_remove" | "cron_enable" | "cron_disable" => true,
         "image_gen" | "video_gen" | "speech_gen" | "music_gen" => true,
+        "desktop_pet" => action() != "status",
         _ => false,
     }
 }
@@ -156,6 +157,14 @@ mod permission_tests {
         assert!(tool_requires_in_process_write(
             "image_gen",
             &serde_json::json!({})
+        ));
+        assert!(!tool_requires_in_process_write(
+            "desktop_pet",
+            &serde_json::json!({"action": "status"})
+        ));
+        assert!(tool_requires_in_process_write(
+            "desktop_pet",
+            &serde_json::json!({"action": "apply"})
         ));
     }
 

@@ -187,7 +187,11 @@ pub async fn serve(
     tracing::info!("Providers: google, openai, claude, deepseek, minimax, zhipu, mimo, ollama");
 
     Server::builder()
-        .add_service(AstroServiceServer::new(service))
+        .add_service(
+            AstroServiceServer::new(service)
+                .max_decoding_message_size(32 * 1024 * 1024)
+                .max_encoding_message_size(64 * 1024 * 1024),
+        )
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
         .context("gRPC serve")?;

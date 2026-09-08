@@ -7,6 +7,14 @@ pub struct GeneratedImage {
     pub mime_type: String,
 }
 
+/// 图片生成/编辑请求中的参考图。
+#[derive(Debug, Clone)]
+pub struct ImageInput {
+    pub data: Vec<u8>,
+    pub mime_type: String,
+    pub filename: String,
+}
+
 /// 生成的音频。
 #[derive(Debug, Clone)]
 pub struct GeneratedAudio {
@@ -42,6 +50,7 @@ pub struct ImageGenConfig {
     pub output_compression: Option<u8>,
     pub quality: Option<String>,
     pub background: Option<String>,
+    pub input_images: Vec<ImageInput>,
     pub additional_params: serde_json::Value,
 }
 

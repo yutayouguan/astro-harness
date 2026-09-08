@@ -263,6 +263,13 @@ pub fn run() {
             commands::wallpaper::cancel_wallpaper_generation,
             commands::wallpaper::analyze_wallpaper,
             commands::wallpaper::get_system_wallpaper,
+            commands::desktop_pet::get_desktop_pet_state,
+            commands::desktop_pet::import_desktop_pet_photo,
+            commands::desktop_pet::generate_desktop_pet,
+            commands::desktop_pet::set_desktop_pet_enabled,
+            commands::desktop_pet::set_desktop_pet_scale,
+            commands::desktop_pet::set_desktop_pet_always_on_top,
+            commands::desktop_pet::open_desktop_pet_main,
             commands::ui_style::get_active_ui_style,
             commands::ui_style::reset_active_ui_style,
             commands::onboarding::get_onboarding_state,
@@ -631,6 +638,9 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             configure_macos_window(&window);
+
+            commands::desktop_pet::restore_window(app.handle());
+            commands::desktop_pet::install_change_bridge(app.handle());
 
             Ok(())
         })

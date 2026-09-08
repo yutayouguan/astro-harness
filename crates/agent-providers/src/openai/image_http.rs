@@ -3,12 +3,12 @@
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use futures::StreamExt;
-use reqwest::Client;
+use reqwest::{multipart, Client, RequestBuilder};
 use serde_json::{json, Value};
 
 use super::defaults::DEFAULT_API_BASE;
 use crate::compat::openai_compatible_base;
-use crate::types::media::{GeneratedImage, ImageGenConfig};
+use crate::types::media::{GeneratedImage, ImageGenConfig, ImageInput};
 use crate::types::ProviderConfig;
 
 const DEFAULT_IMAGE_MODEL: &str = "gpt-image-2";
@@ -19,6 +19,9 @@ const MAX_ERROR_BODY_CHARS: usize = 4096;
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_IMAGE_BASE64_BYTES: usize = MAX_IMAGE_BYTES.div_ceil(3) * 4;
 const MAX_IMAGE_RESPONSE_BYTES: usize = 128 * 1024 * 1024;
+const MAX_INPUT_IMAGE_BYTES: usize = 25 * 1024 * 1024;
+const MAX_INPUT_IMAGE_TOTAL_BYTES: usize = 50 * 1024 * 1024;
+const MAX_INPUT_IMAGES: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ImageApiFlavor {
@@ -118,14 +121,30 @@ async fn generate_image(
             crate::impls::azure::azure_openai_v1_base(endpoint)
         }
     };
-    let url = format!("{base}/images/generations");
+    let edit_mode = !image_config.input_images.is_empty();
+    let url = format!(
+        "{base}/images/{}",
+        if edit_mode { "edits" } else { "generations" }
+    );
     let safe_url = sanitized_url(&url);
 
-    let body = image_generation_request_body(model, prompt, image_config, flavor)?;
-    let response = build_image_generation_request(client, &url, config.api_key.trim(), &body)
-        .send()
-        .await
-        .with_context(|| format!("连接 {provider_label} 图片 API 失败: {safe_url}"))?;
+    let response = if edit_mode {
+        build_image_edit_request(
+            client,
+            &url,
+            config.api_key.trim(),
+            model,
+            prompt,
+            image_config,
+            flavor,
+        )?
+    } else {
+        let body = image_generation_request_body(model, prompt, image_config, flavor)?;
+        build_image_generation_request(client, &url, config.api_key.trim(), &body)
+    }
+    .send()
+    .await
+    .with_context(|| format!("连接 {provider_label} 图片 API 失败: {safe_url}"))?;
 
     let status = response.status();
     let response_url = response_url_without_query(response.url());
@@ -397,6 +416,134 @@ fn build_image_generation_request(
         .bearer_auth(api_key)
         .header("content-type", "application/json")
         .json(body)
+}
+
+fn validate_image_inputs(inputs: &[ImageInput]) -> Result<()> {
+    if inputs.is_empty() {
+        return Ok(());
+    }
+    if inputs.len() > MAX_INPUT_IMAGES {
+        anyhow::bail!("参考图片不能超过 {MAX_INPUT_IMAGES} 张");
+    }
+    let mut total_bytes = 0usize;
+    for input in inputs {
+        if input.data.is_empty() {
+            anyhow::bail!("参考图片为空");
+        }
+        if input.data.len() > MAX_INPUT_IMAGE_BYTES {
+            anyhow::bail!("单张参考图片不能超过 25 MiB");
+        }
+        total_bytes = total_bytes.saturating_add(input.data.len());
+        if total_bytes > MAX_INPUT_IMAGE_TOTAL_BYTES {
+            anyhow::bail!("参考图片总大小不能超过 50 MiB");
+        }
+        if !matches!(
+            input.mime_type.as_str(),
+            "image/png" | "image/jpeg" | "image/webp"
+        ) {
+            anyhow::bail!("参考图片仅支持 PNG、JPEG 和 WebP");
+        }
+    }
+    Ok(())
+}
+
+fn form_text(value: &Value) -> String {
+    match value {
+        Value::String(value) => value.clone(),
+        _ => value.to_string(),
+    }
+}
+
+fn build_image_edit_request(
+    client: &Client,
+    url: &str,
+    api_key: &str,
+    model: &str,
+    prompt: &str,
+    config: &ImageGenConfig,
+    flavor: ImageApiFlavor,
+) -> Result<RequestBuilder> {
+    validate_image_inputs(&config.input_images)?;
+    let n = if config.n == 0 { 1 } else { config.n };
+    if !(1..=10).contains(&n) {
+        anyhow::bail!("图片生成张数 n 必须在 1..=10 之间");
+    }
+    let size = match (config.width, config.height) {
+        (Some(width), Some(height)) if width > 0 && height > 0 => format!("{width}x{height}"),
+        (None, None) => DEFAULT_IMAGE_SIZE.to_string(),
+        _ => anyhow::bail!("图片尺寸必须同时提供 width 和 height"),
+    };
+    let output_format = normalized_output_format(config.output_format.as_deref())?;
+    if config.output_compression.is_some_and(|value| value > 100) {
+        anyhow::bail!("output_compression 必须在 0..=100 之间");
+    }
+
+    let mut form = multipart::Form::new()
+        .text("model", model.to_string())
+        .text("prompt", prompt.to_string())
+        .text("n", n.to_string())
+        .text("size", size);
+    if flavor == ImageApiFlavor::AzureFoundryV1 {
+        form = form
+            .text(
+                "output_format",
+                output_format
+                    .as_deref()
+                    .unwrap_or(DEFAULT_OUTPUT_FORMAT)
+                    .to_string(),
+            )
+            .text(
+                "output_compression",
+                config
+                    .output_compression
+                    .unwrap_or(DEFAULT_OUTPUT_COMPRESSION)
+                    .to_string(),
+            );
+    } else if let Some(format) = output_format {
+        form = form.text("output_format", format);
+        if let Some(compression) = config.output_compression {
+            form = form.text("output_compression", compression.to_string());
+        }
+    }
+    if let Some(quality) = non_empty(config.quality.as_deref()) {
+        form = form.text("quality", quality.to_string());
+    }
+    if let Some(background) = non_empty(config.background.as_deref()) {
+        form = form.text("background", background.to_string());
+    }
+    if let Some(extra) = config.additional_params.as_object() {
+        for (key, value) in extra {
+            if !matches!(
+                key.as_str(),
+                "model"
+                    | "prompt"
+                    | "n"
+                    | "size"
+                    | "output_format"
+                    | "output_compression"
+                    | "quality"
+                    | "background"
+                    | "image"
+                    | "image[]"
+            ) {
+                form = form.text(key.clone(), form_text(value));
+            }
+        }
+    }
+    for (index, input) in config.input_images.iter().enumerate() {
+        let filename = if input.filename.trim().is_empty() {
+            format!("reference-{index}.png")
+        } else {
+            input.filename.clone()
+        };
+        let part = multipart::Part::bytes(input.data.clone())
+            .file_name(filename)
+            .mime_str(&input.mime_type)
+            .context("参考图片 MIME 无效")?;
+        form = form.part("image[]", part);
+    }
+
+    Ok(client.post(url).bearer_auth(api_key).multipart(form))
 }
 
 fn response_url_without_query(url: &reqwest::Url) -> String {

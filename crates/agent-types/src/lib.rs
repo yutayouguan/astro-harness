@@ -5,6 +5,7 @@ pub mod async_user_input;
 pub mod auxiliary_target;
 pub mod compact_scope;
 pub mod credentials;
+pub mod desktop_pet;
 pub mod error;
 pub mod grpc_addr;
 pub mod interaction_mode;
@@ -71,6 +72,11 @@ pub use ui_style::{
 pub use approval::{ApprovalAction, ApprovalDecision, ApprovalMode};
 pub use async_user_input::AsyncUserInputQuestion;
 pub use credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, ModelCredentials};
+pub use desktop_pet::{
+    desktop_pet_root, desktop_pet_state_path, notify_desktop_pet_changed, read_desktop_pet_state,
+    set_desktop_pet_change_handler, update_desktop_pet_state, write_desktop_pet_state,
+    DesktopPetState,
+};
 pub use interaction_mode::InteractionMode;
 pub use memory_citation::MemoryCitation;
 pub use model_profile::{

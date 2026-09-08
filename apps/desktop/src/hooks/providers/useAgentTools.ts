@@ -43,6 +43,7 @@ export type AgentToolId =
   | "robotics"
   | "audio_analyze"
   | "image_gen"
+  | "desktop_pet"
   | "ui_style"
   | "video_gen"
   | "video_analyze"
@@ -232,6 +233,20 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     params: [
       { name: "prompt", type: "string" },
       { name: "aspect_ratio", type: "string", optional: true },
+    ],
+  },
+  {
+    id: "desktop_pet",
+    titleKey: "agentTools.desktopPet.title",
+    descKey: "agentTools.desktopPet.desc",
+    Icon: IconImageGen,
+    tone: "pink",
+    params: [
+      { name: "action", type: "string" },
+      { name: "imagePath", type: "string", optional: true },
+      { name: "sourcePath", type: "string", optional: true },
+      { name: "scale", type: "number", optional: true },
+      { name: "alwaysOnTop", type: "boolean", optional: true },
     ],
   },
   {

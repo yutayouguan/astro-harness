@@ -45,6 +45,7 @@ import PreferencesPanel from "./components/settings/PreferencesPanel";
 import BrowserSettingsPanel from "./components/settings/BrowserSettingsPanel";
 import TerminalSettingsPanel from "./components/settings/TerminalSettingsPanel";
 import EnvironmentDependenciesPanel from "./components/settings/EnvironmentDependenciesPanel";
+import DesktopPetPanel from "./components/settings/DesktopPetPanel";
 import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
 import PluginsPage from "./components/plugins/PluginsPage";
@@ -2098,6 +2099,9 @@ export default function App() {
                       active={nav === "settings"}
                       tone={shellTone}
                     />
+                  )}
+                  {settingsTab === "desktop-pet" && (
+                    <DesktopPetPanel active={nav === "settings"} />
                   )}
                   {settingsTab === "evolution" && (
                     <EvolutionModelsPanel

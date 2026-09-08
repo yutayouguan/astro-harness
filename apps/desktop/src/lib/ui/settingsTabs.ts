@@ -11,6 +11,7 @@ import {
   IconInsights,
   IconMemory,
   IconModelMarket,
+  IconPet,
   IconProviders,
   IconSettings,
   IconSparkles,
@@ -52,6 +53,11 @@ export const SETTINGS_TAB_GROUPS: SettingsTabGroup[] = [
         id: "preferences:conversation",
         labelKey: "settings.sidebar.tab.conversation",
         Icon: IconChat,
+      },
+      {
+        id: "desktop-pet",
+        labelKey: "settings.sidebar.tab.desktopPet",
+        Icon: IconPet,
       },
       {
         id: "terminal",

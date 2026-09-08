@@ -228,6 +228,19 @@ export function IconAppearance(props: IconProps) {
   );
 }
 
+/** 桌面宠物 — 四枚足趾与中心肉垫 */
+export function IconPet(props: IconProps) {
+  return (
+    <NavIconBase {...props}>
+      <ellipse cx="7.2" cy="7.4" rx="1.8" ry="2.2" />
+      <ellipse cx="12" cy="5.8" rx="1.8" ry="2.2" />
+      <ellipse cx="16.8" cy="7.4" rx="1.8" ry="2.2" />
+      <ellipse cx="18.5" cy="12" rx="1.7" ry="2.1" />
+      <path d="M12 10.2c-3.5 0-6.7 3.1-6.7 6.1 0 2 1.5 3.3 3.5 3.3 1.2 0 2.1-.6 3.2-.6s2 .6 3.2.6c2 0 3.5-1.3 3.5-3.3 0-3-3.2-6.1-6.7-6.1Z" />
+    </NavIconBase>
+  );
+}
+
 /** 智能流程 — 圆形本体内嵌流程连线：上游节点经折线接到下游节点 */
 export function IconLoop(props: IconProps) {
   return (

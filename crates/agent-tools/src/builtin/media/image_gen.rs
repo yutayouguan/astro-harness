@@ -10,7 +10,7 @@ use home::{generated_dir, GeneratedKind};
 use providers::interactions_http::{
     google_interactions_image, InteractionImagePart, InteractionImageRequest, InteractionVideoInput,
 };
-use providers::types::media::GeneratedImage;
+use providers::types::media::{GeneratedImage, ImageGenConfig, ImageInput};
 use providers::ProviderConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -127,6 +127,7 @@ fn normalize_image_size_token(s: &str) -> Option<String> {
     }
 }
 
+#[cfg(test)]
 fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
     args.aspect_ratio
         .as_deref()
@@ -165,13 +166,47 @@ fn has_advanced_interactions_args(args: &ImageGenArgs) -> bool {
             .is_some_and(|s| !s.is_empty())
 }
 
+fn has_openai_unsupported_args(args: &ImageGenArgs) -> bool {
+    args.aspect_ratio
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty() && value != "1:1")
+        || args
+            .image_size
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty() && value != "1K")
+        || args
+            .previous_interaction_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        || args.google_search
+        || args.image_search
+        || args
+            .thinking_level
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        || args
+            .video_uri
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        || args
+            .video
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+}
+
 /// 向注册表登记 `image_gen` 工具。
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ToolEntry {
         name: "image_gen".to_string(),
         toolset: "image_gen".to_string(),
         namespace: super::MEDIA_GENERATION_NAMESPACE.to_string(),
-        description: "Generate or edit images. Gemini Interactions supports reference and advanced generation controls; OpenAI and Azure Foundry v1 currently support prompt-only generation. Saves under generated/images/."
+        description: "Generate or edit images. Gemini Interactions supports reference images and advanced generation controls; OpenAI and Azure Foundry v1 support prompt generation plus reference-image editing. Saves under generated/images/."
             .to_string(),
         schema: schema_for_args::<ImageGenArgs>(),
         check_fn: None,
@@ -323,9 +358,9 @@ async fn generate_one_openai_compat(
     creds: &ImageGenCreds,
 ) -> anyhow::Result<types::ToolOutput> {
     let prompt = args.prompt.trim();
-    if has_advanced_interactions_args(args) {
+    if has_openai_unsupported_args(args) {
         anyhow::bail!(
-            "{} 图片生成当前仅支持 prompt/title；参考图、尺寸、搜索、思考或视频参数仅支持 Google Interactions",
+            "{} 图片生成当前支持 prompt/title/reference_images 以及 1:1/1K；其他画幅、尺寸、搜索、思考或视频参数仅支持 Google Interactions",
             creds.provider
         );
     }
@@ -340,7 +375,27 @@ async fn generate_one_openai_compat(
         ..ProviderConfig::default()
     };
 
-    let images = providers::dispatch::generate_image(&creds.provider, prompt, &config).await?;
+    let input_images = args
+        .reference_images
+        .as_ref()
+        .into_iter()
+        .flatten()
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| load_provider_image_input(ctx, path))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let options = ImageGenConfig {
+        width: Some(1024),
+        height: Some(1024),
+        input_images,
+        ..ImageGenConfig::default()
+    };
+    let images = providers::dispatch::generate_image_with_options(
+        &creds.provider,
+        prompt,
+        &config,
+        &options,
+    )
+    .await?;
     let img = images
         .into_iter()
         .next()
@@ -431,6 +486,30 @@ fn load_reference_image(
     Ok(InteractionImagePart {
         data,
         mime_type: mime_from_name(filename).to_string(),
+    })
+}
+
+fn load_provider_image_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::Result<ImageInput> {
+    let path = resolve_workspace_file(ctx, relative)?;
+    let data = std::fs::read(&path)
+        .map_err(|error| anyhow::anyhow!("读取参考图失败 {}: {error}", path.display()))?;
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("image.png")
+        .to_string();
+    let mime_type = mime_from_name(&filename).to_string();
+    anyhow::ensure!(
+        matches!(
+            mime_type.as_str(),
+            "image/png" | "image/jpeg" | "image/webp"
+        ),
+        "OpenAI/Azure 参考图仅支持 PNG、JPEG 和 WebP"
+    );
+    Ok(ImageInput {
+        data,
+        mime_type,
+        filename,
     })
 }
 
@@ -677,6 +756,21 @@ mod arg_tests {
                 "expected advanced for {name}"
             );
         }
+    }
+
+    #[test]
+    fn openai_reference_images_are_supported_but_other_advanced_args_are_not() {
+        let base = base_args();
+        assert!(!has_openai_unsupported_args(&ImageGenArgs {
+            reference_images: Some(vec!["pet.png".into()]),
+            aspect_ratio: Some("1:1".into()),
+            image_size: Some("1K".into()),
+            ..base.clone()
+        }));
+        assert!(has_openai_unsupported_args(&ImageGenArgs {
+            aspect_ratio: Some("16:9".into()),
+            ..base
+        }));
     }
 }
 

@@ -88,6 +88,9 @@ impl ImageGenModel for MiniMaxImageModel {
         prompt: &str,
         config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
+        if !config.input_images.is_empty() {
+            anyhow::bail!("MiniMax 图片生成暂不支持参考图编辑");
+        }
         let provider_config = self.0.to_provider_config();
         let req = crate::minimax::image_http::MiniMaxImageRequest {
             model: self.0.model().to_string(),

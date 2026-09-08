@@ -875,6 +875,9 @@ impl ImageGenModel for GeminiImageModel {
         prompt: &str,
         config: &ImageGenConfig,
     ) -> anyhow::Result<Vec<GeneratedImage>> {
+        if !config.input_images.is_empty() {
+            anyhow::bail!("Google 图片生成暂不支持参考图编辑");
+        }
         let cfg = self.0.to_provider_config();
         let req = crate::google::interactions_http::InteractionImageRequest {
             prompt: prompt.to_string(),

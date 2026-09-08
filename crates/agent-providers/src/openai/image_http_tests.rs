@@ -138,6 +138,26 @@ fn image_options_are_forwarded_and_validated() {
 }
 
 #[test]
+fn reference_images_are_validated_for_edit_requests() {
+    let valid = ImageInput {
+        data: vec![1, 2, 3],
+        mime_type: "image/png".to_string(),
+        filename: "pet.png".to_string(),
+    };
+    validate_image_inputs(&[valid]).expect("PNG reference should be accepted");
+
+    let invalid = ImageInput {
+        data: vec![1, 2, 3],
+        mime_type: "image/svg+xml".to_string(),
+        filename: "pet.svg".to_string(),
+    };
+    assert!(validate_image_inputs(&[invalid])
+        .expect_err("SVG reference must be rejected")
+        .to_string()
+        .contains("PNG"));
+}
+
+#[test]
 fn image_error_message_prefers_structured_api_error() {
     assert_eq!(
         image_error_message(br#"{"error":{"message":"quota exceeded"}}"#),

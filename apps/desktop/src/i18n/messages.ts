@@ -322,6 +322,7 @@ export const zh = {
   "settings.sidebar.tab.general": "基础设置",
   "settings.sidebar.tab.appearance": "外观",
   "settings.sidebar.tab.conversation": "对话",
+  "settings.sidebar.tab.desktopPet": "桌面宠物",
   "settings.sidebar.tab.terminal": "终端",
   "settings.sidebar.tab.context": "自动压缩",
   "settings.sidebar.tab.providers": "模型服务",
@@ -1029,6 +1030,9 @@ export const zh = {
   "agentTools.imageGen.title": "图像生成",
   "agentTools.imageGen.desc":
     "Gemini Interactions 出图；prompt 须含主体/构图/光影/风格等详细描述；用户要 16:9/2K 等须传 aspect_ratio、image_size；备用 OpenAI",
+  "agentTools.desktopPet.title": "AI 桌面宠物",
+  "agentTools.desktopPet.desc":
+    "把 image_gen 生成的角色应用为 Astro 桌面宠物，并控制显示、大小与置顶",
   "agentTools.uiStyle.title": "AI 壁纸与主题",
   "agentTools.uiStyle.desc":
     "应用、回滚或重置 Astro 的 AI 壁纸、配色与全局图标风格",
@@ -3231,6 +3235,7 @@ export const en: Record<MessageKey, string> = {
   "settings.sidebar.tab.general": "Basics",
   "settings.sidebar.tab.appearance": "Appearance",
   "settings.sidebar.tab.conversation": "Chat",
+  "settings.sidebar.tab.desktopPet": "Desktop Pet",
   "settings.sidebar.tab.terminal": "Terminal",
   "settings.sidebar.tab.context": "Automatic Compression",
   "settings.sidebar.tab.providers": "Model Services",
@@ -3974,6 +3979,9 @@ export const en: Record<MessageKey, string> = {
   "agentTools.imageGen.title": "Image Generation",
   "agentTools.imageGen.desc":
     "Gemini Interactions; prompt must be a rich scene/style description; MUST set aspect_ratio/image_size when user asks (e.g. 16:9, 2K); OpenAI fallback",
+  "agentTools.desktopPet.title": "AI Desktop Pet",
+  "agentTools.desktopPet.desc":
+    "Apply an image_gen character as the Astro desktop pet and control visibility, size, and always-on-top behavior",
   "agentTools.uiStyle.title": "AI Wallpaper & Theme",
   "agentTools.uiStyle.desc":
     "Apply, roll back, or reset Astro AI wallpapers, palettes, and global icon styling",

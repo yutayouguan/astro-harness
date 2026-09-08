@@ -2711,10 +2711,28 @@ impl AstroService for AstroServiceImpl {
         let model = req.model;
         let api_key = req.api_key;
         let base_url = req.base_url;
+        let input_images = if req.input_image.is_empty() {
+            Vec::new()
+        } else {
+            vec![providers::types::ImageInput {
+                data: req.input_image,
+                mime_type: if req.input_image_mime.trim().is_empty() {
+                    "image/png".to_string()
+                } else {
+                    req.input_image_mime
+                },
+                filename: if req.input_image_name.trim().is_empty() {
+                    "reference.png".to_string()
+                } else {
+                    req.input_image_name
+                },
+            }]
+        };
         let image_options = providers::types::ImageGenConfig {
             width: (req.width > 0).then_some(req.width as u32),
             height: (req.height > 0).then_some(req.height as u32),
             n: if req.count > 0 { req.count as u32 } else { 1 },
+            input_images,
             ..providers::types::ImageGenConfig::default()
         };
 

@@ -233,6 +233,7 @@ mod inventory_register_tests {
             "memory",
             "music_gen",
             "image_gen",
+            "desktop_pet",
             "ui_style",
             "video_gen",
             "speech_gen",

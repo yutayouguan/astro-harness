@@ -541,6 +541,9 @@ message ImageRequest {
   int32 count = 6;
   string api_key = 7;
   string base_url = 8;
+  bytes input_image = 9;
+  string input_image_mime = 10;
+  string input_image_name = 11;
 }
 
 message ImageEvent {

@@ -24,6 +24,7 @@ pub const KNOWN_TOOLSET_IDS: &[&str] = &[
     "robotics",
     "audio_analyze",
     "image_gen",
+    "desktop_pet",
     "ui_style",
     "video_gen",
     "video_analyze",
@@ -195,6 +196,7 @@ pub fn tool_name_to_toolset(name: &str) -> &str {
         "cron" | "cron_add" | "cron_list" | "cron_remove" | "cron_enable" | "cron_disable"
         | "cron.add" | "cron.list" | "cron.remove" | "cron.enable" | "cron.disable" => "cron",
         "image_gen" => "image_gen",
+        "desktop_pet" => "desktop_pet",
         "ui_style" => "ui_style",
         "video_gen" => "video_gen",
         "video_analyze" | "video_understand" => "video_analyze",
@@ -318,5 +320,11 @@ mod tests {
     fn ui_style_has_a_dedicated_toolset_gate() {
         assert_eq!(tool_name_to_toolset("ui_style"), "ui_style");
         assert!(KNOWN_TOOLSET_IDS.contains(&"ui_style"));
+    }
+
+    #[test]
+    fn desktop_pet_has_a_dedicated_toolset_gate() {
+        assert_eq!(tool_name_to_toolset("desktop_pet"), "desktop_pet");
+        assert!(KNOWN_TOOLSET_IDS.contains(&"desktop_pet"));
     }
 }

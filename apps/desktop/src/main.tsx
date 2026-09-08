@@ -2,6 +2,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import DesktopPetSurface from "./components/desktop-pet/DesktopPetSurface";
 import OnboardingGate from "./components/onboarding/OnboardingGate";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
@@ -23,6 +24,12 @@ import "./styles/index.css";
 import "./styles/features/settings-material-unified.css";
 
 installContextMenuGuard();
+
+const isDesktopPetWindow =
+  new URLSearchParams(window.location.search).get("surface") === "desktop-pet";
+if (isDesktopPetWindow) {
+  document.documentElement.dataset.windowSurface = "desktop-pet";
+}
 
 (() => {
   try {
@@ -90,19 +97,23 @@ class RootErrorBoundary extends React.Component<
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <RootErrorBoundary>
-      <ThemeProvider>
-        <MorphiconProvider>
-          <LocaleProvider>
-            <ActiveAgentProvider>
-              <DialogProvider>
-                <OnboardingGate>
-                  <App />
-                </OnboardingGate>
-              </DialogProvider>
-            </ActiveAgentProvider>
-          </LocaleProvider>
-        </MorphiconProvider>
-      </ThemeProvider>
+      {isDesktopPetWindow ? (
+        <DesktopPetSurface />
+      ) : (
+        <ThemeProvider>
+          <MorphiconProvider>
+            <LocaleProvider>
+              <ActiveAgentProvider>
+                <DialogProvider>
+                  <OnboardingGate>
+                    <App />
+                  </OnboardingGate>
+                </DialogProvider>
+              </ActiveAgentProvider>
+            </LocaleProvider>
+          </MorphiconProvider>
+        </ThemeProvider>
+      )}
     </RootErrorBoundary>
   </React.StrictMode>,
 );

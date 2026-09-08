@@ -24,6 +24,9 @@ use crate::infra::thread_events::{
     ThreadEventsBridge, THREAD_EVENTS_READY_TIMEOUT,
 };
 
+const IMAGE_GRPC_REQUEST_LIMIT: usize = 32 * 1024 * 1024;
+const IMAGE_GRPC_RESPONSE_LIMIT: usize = 64 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // DTOs
 // ---------------------------------------------------------------------------
@@ -1304,12 +1307,17 @@ async fn generate_image_via_grpc(
     prompt: &str,
     width: i32,
     height: i32,
+    input_image: Option<&[u8]>,
+    input_image_mime: Option<&str>,
+    input_image_name: Option<&str>,
 ) -> Result<(Vec<u8>, String), String> {
     let grpc_address = default_grpc_address();
     let endpoint = endpoint_url(&grpc_address);
     let mut client = AstroServiceClient::connect(endpoint)
         .await
-        .map_err(|e| friendly_error(&e.to_string()))?;
+        .map_err(|e| friendly_error(&e.to_string()))?
+        .max_encoding_message_size(IMAGE_GRPC_REQUEST_LIMIT)
+        .max_decoding_message_size(IMAGE_GRPC_RESPONSE_LIMIT);
 
     let mut stream = client
         .generate_image(ImageRequest {
@@ -1321,6 +1329,9 @@ async fn generate_image_via_grpc(
             count: 1,
             api_key: target.api_key.clone(),
             base_url: target.base_url.clone(),
+            input_image: input_image.unwrap_or_default().to_vec(),
+            input_image_mime: input_image_mime.unwrap_or_default().to_string(),
+            input_image_name: input_image_name.unwrap_or_default().to_string(),
         })
         .await
         .map_err(|e| e.to_string())?
@@ -1354,10 +1365,32 @@ pub(crate) async fn generate_image_data(
     width: i32,
     height: i32,
 ) -> Result<GeneratedImageData, String> {
+    generate_image_data_with_reference(prompt, width, height, None).await
+}
+
+pub(crate) async fn generate_image_data_with_reference(
+    prompt: &str,
+    width: i32,
+    height: i32,
+    reference: Option<(&[u8], &str, &str)>,
+) -> Result<GeneratedImageData, String> {
     let targets = resolve_image_gen_targets()?;
     let mut errors: Vec<String> = Vec::new();
     for target in &targets {
-        match generate_image_via_grpc(target, prompt, width, height).await {
+        let (input_image, input_image_mime, input_image_name) = reference
+            .map(|(data, mime, name)| (Some(data), Some(mime), Some(name)))
+            .unwrap_or((None, None, None));
+        match generate_image_via_grpc(
+            target,
+            prompt,
+            width,
+            height,
+            input_image,
+            input_image_mime,
+            input_image_name,
+        )
+        .await
+        {
             Ok((data, mime)) => {
                 return Ok(GeneratedImageData {
                     data,

@@ -47,6 +47,7 @@ pub(crate) use automation::cron;
 pub(crate) use automation::loops;
 
 pub(crate) use ui::browser;
+pub(crate) use ui::desktop_pet;
 pub(crate) use ui::icon;
 pub(crate) use ui::onboarding;
 pub(crate) use ui::ui_style;

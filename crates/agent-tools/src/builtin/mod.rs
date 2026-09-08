@@ -4,6 +4,7 @@
 //! 便于 `builtin::image_gen` 等路径引用。
 
 pub mod agents;
+pub mod desktop_pet;
 pub mod hitl;
 pub mod media;
 pub mod memory;
