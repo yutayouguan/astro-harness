@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
 description: 从用户描述或上传的宠物照片生成专属 Astro 桌面宠物并立即应用。用户说“生成桌宠”“把这张照片做成桌面宠物”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 1
+astro_bundled_rev: 2
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 

@@ -151,13 +151,15 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
         .map(|image| store_asset(&ctx.memory_dir, "source", &image.bytes, image.extension))
         .transpose()?;
 
-    let pet_path = pet_path.to_string_lossy().into_owned();
-    let source_path = source_path.map(|path| path.to_string_lossy().into_owned());
+    let pet_path_value = pet_path.to_string_lossy().into_owned();
+    let source_path_value = source_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
     let provider = clean_optional(args.provider);
     let model = clean_optional(args.model);
-    let state = types::update_desktop_pet_state(&ctx.memory_dir, |state| {
-        state.pet_path = Some(pet_path);
-        if let Some(source_path) = source_path {
+    let updated = types::update_desktop_pet_state(&ctx.memory_dir, |state| {
+        state.pet_path = Some(pet_path_value);
+        if let Some(source_path) = source_path_value {
             state.source_path = Some(source_path);
         }
         state.enabled = true;
@@ -170,7 +172,17 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
         apply_display_options(state, args.scale, args.always_on_top);
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
-    })?;
+    });
+    let state = match updated {
+        Ok(state) => state,
+        Err(error) => {
+            let _ = fs::remove_file(&pet_path);
+            if let Some(source_path) = source_path {
+                let _ = fs::remove_file(source_path);
+            }
+            return Err(error);
+        }
+    };
     types::notify_desktop_pet_changed();
     Ok(state)
 }

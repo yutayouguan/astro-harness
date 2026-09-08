@@ -127,10 +127,12 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     let unlisten: (() => void) | undefined;
     void listen<DesktopPetState>("desktop-pet-changed", (event) => {
       if (!disposed) setState(event.payload);
-    }).then((cleanup) => {
-      if (disposed) cleanup();
-      else unlisten = cleanup;
-    });
+    })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      })
+      .catch(() => {});
     return () => {
       disposed = true;
       unlisten?.();

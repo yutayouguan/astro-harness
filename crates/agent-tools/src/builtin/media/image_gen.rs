@@ -498,14 +498,13 @@ fn load_provider_image_input(ctx: &ToolContext<'_>, relative: &str) -> anyhow::R
         .and_then(|name| name.to_str())
         .unwrap_or("image.png")
         .to_string();
-    let mime_type = mime_from_name(&filename).to_string();
-    anyhow::ensure!(
-        matches!(
-            mime_type.as_str(),
-            "image/png" | "image/jpeg" | "image/webp"
-        ),
-        "OpenAI/Azure 参考图仅支持 PNG、JPEG 和 WebP"
-    );
+    let mime_type = match image::guess_format(&data) {
+        Ok(image::ImageFormat::Png) => "image/png",
+        Ok(image::ImageFormat::Jpeg) => "image/jpeg",
+        Ok(image::ImageFormat::WebP) => "image/webp",
+        _ => anyhow::bail!("OpenAI/Azure 参考图仅支持有效的 PNG、JPEG 和 WebP"),
+    }
+    .to_string();
     Ok(ImageInput {
         data,
         mime_type,
@@ -877,6 +876,10 @@ mod path_tests {
 
         let path = resolve_workspace_file(&ctx, "ok.txt").unwrap();
         assert!(path.ends_with("ok.txt"));
+        let error = load_provider_image_input(&ctx, "ok.txt")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("有效的 PNG、JPEG 和 WebP"), "{error}");
     }
 
     #[test]
