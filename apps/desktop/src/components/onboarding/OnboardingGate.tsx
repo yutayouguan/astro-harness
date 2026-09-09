@@ -22,7 +22,7 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
-  TestTubeDiagonal,
+  Zap,
 } from "lucide-react";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -1222,7 +1222,7 @@ export function FirstRunOnboarding({
                         ) : providerStatus === "success" ? (
                           <Check size={17} aria-hidden />
                         ) : (
-                          <TestTubeDiagonal size={17} aria-hidden />
+                          <Zap size={17} aria-hidden />
                         )}
                         <span>
                           {providerStatus === "testing"

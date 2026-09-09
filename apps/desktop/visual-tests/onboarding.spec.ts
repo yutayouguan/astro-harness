@@ -698,7 +698,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/iframe.html?id=app-first-run-onboarding--provider&viewMode=story");
     const testButton = page.getByRole("button", { name: "测试", exact: true });
     await expect(testButton).toBeVisible();
-    await expect(testButton.locator("svg.lucide-test-tube-diagonal")).toHaveCount(1);
+    await expect(testButton.locator("svg.lucide-zap")).toHaveCount(1);
     const picker = page.getByRole("button", { name: "模型服务", exact: true });
     await expect(picker).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".onboarding-provider-form select")).toHaveCount(0);
