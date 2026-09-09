@@ -38,6 +38,46 @@ const provider = await readFile(
   ),
   "utf8",
 );
+const resetCss = await readFile(
+  new URL("../../styles/foundation/reset.css", import.meta.url),
+  "utf8",
+);
+const globalsCss = await readFile(
+  new URL("../../styles/foundation/globals.css", import.meta.url),
+  "utf8",
+);
+
+test("opaque root underlays exclude desktop pets in normal, zoom and macOS modes", () => {
+  const sharedRoot = resetCss.match(/html,\s*body,\s*#root\s*\{([^}]+)\}/)?.[1];
+  assert.ok(sharedRoot);
+  assert.doesNotMatch(sharedRoot, /background\s*:/);
+  assert.match(
+    resetCss,
+    /html:not\(\[data-window-surface="desktop-pet"\]\) #root/,
+  );
+  assert.match(
+    globalsCss,
+    /html\.zooming:not\(\[data-window-surface="desktop-pet"\]\) #root/,
+  );
+  for (const rule of globalsCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (rule[1].includes("body") && /background\s*:/.test(rule[2])) {
+      assert.ok(
+        rule[1].includes(':not([data-window-surface="desktop-pet"])'),
+        rule[1],
+      );
+    }
+  }
+  assert.match(main, /colorScheme\s*=\s*isDesktopPetWindow\s*\?\s*"normal"/);
+  assert.match(backend, /\.transparent\(true\)/);
+});
+
+test("static assets do not advertise working animation controls", () => {
+  const pause = surface.split('id: "pet-pause"')[1].split('id: "pet-hide"')[0];
+  assert.match(pause, /enabled: state\.spriteVersionNumber === 2/);
+  assert.match(pause, /静态形象/);
+  assert.match(panel, /生成静态形象/);
+  assert.match(panel, /不包含动画帧/);
+});
 
 test("desktop pet is reachable from settings and a dedicated transparent surface", () => {
   assert.match(app, /<DesktopPetPanel active=\{nav === "settings"\}/);

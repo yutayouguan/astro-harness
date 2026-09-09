@@ -29,6 +29,7 @@ const isDesktopPetWindow =
   new URLSearchParams(window.location.search).get("surface") === "desktop-pet";
 if (isDesktopPetWindow) {
   document.documentElement.dataset.windowSurface = "desktop-pet";
+  document.documentElement.style.colorScheme = "normal";
 }
 
 (() => {
@@ -43,7 +44,10 @@ if (isDesktopPetWindow) {
             ? "dark"
             : "light";
     document.documentElement.dataset.theme = resolved;
-    document.documentElement.style.colorScheme = resolved;
+    // A native transparent WebView must not receive an opaque UA canvas color.
+    document.documentElement.style.colorScheme = isDesktopPetWindow
+      ? "normal"
+      : resolved;
     applyGlassIntensity(
       document.documentElement,
       readStoredGlassIntensity(window.localStorage),

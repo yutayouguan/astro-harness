@@ -63,14 +63,14 @@ html.zooming .sidebar-nav-indicator {
 }
 
 /* 缩放时用更实的底，盖住新露出的窗体缝 */
-html.zooming,
-html.zooming body,
-html.zooming #root {
+html.zooming:not([data-window-surface="desktop-pet"]),
+html.zooming:not([data-window-surface="desktop-pet"]) body,
+html.zooming:not([data-window-surface="desktop-pet"]) #root {
   background: var(--window-underlay, var(--bg1)) !important;
 }
 
 /* macOS 原生透明：body 背景半透明，让 NSVisualEffectView 穿透 */
-html[data-platform="macos"] body {
+html[data-platform="macos"]:not([data-window-surface="desktop-pet"]) body {
   background: color-mix(
     in srgb,
     var(--window-underlay, var(--bg1)) 72%,
@@ -78,7 +78,7 @@ html[data-platform="macos"] body {
   ) !important;
 }
 
-html[data-platform="macos"][data-theme="dark"] body {
+html[data-platform="macos"][data-theme="dark"]:not([data-window-surface="desktop-pet"]) body {
   background: color-mix(
     in srgb,
     var(--window-underlay, var(--bg1)) 55%,

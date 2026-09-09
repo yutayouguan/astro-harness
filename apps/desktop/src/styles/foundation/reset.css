@@ -21,10 +21,15 @@ body,
   width: 100%;
   height: 100%;
   color: var(--ink);
-  /* 透明窗圆角抗锯齿底色：与当前壳层主色一致，消灭四角色差 */
-  background: var(--window-underlay, var(--bg1)) !important;
   overflow: hidden;
   scrollbar-width: thin;
+}
+
+/* Main-window underlay must not paint the transparent desktop-pet WebView. */
+html:not([data-window-surface="desktop-pet"]),
+html:not([data-window-surface="desktop-pet"]) body,
+html:not([data-window-surface="desktop-pet"]) #root {
+  background: var(--window-underlay, var(--bg1)) !important;
 }
 
 html {

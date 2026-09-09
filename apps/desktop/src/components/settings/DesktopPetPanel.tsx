@@ -32,7 +32,7 @@ const COPY = {
     sourceHint: "建议使用正面、光线均匀、主体完整的照片",
     upload: "选择照片",
     replace: "更换照片",
-    create: "生成专属桌宠",
+    create: "生成静态形象",
     creating: "正在生成桌宠…",
     style: "希望它呈现什么感觉？",
     stylePlaceholder: "例如：圆润 Q 版、温柔安静、保留蓝色项圈",
@@ -48,6 +48,9 @@ const COPY = {
     importAnimated: "导入动画桌宠",
     importAnimatedHint: "选择 Codex v2 宠物包中的 pet.json",
     animatedBadge: "动画 v2",
+    staticHint:
+      "当前生成单张透明图片，不包含动画帧。眨眼、转头等动作需要导入完整 v2 动画宠物包。",
+    staticBadge: "静态图片",
   },
   en: {
     eyebrow: "ASTRO DESKTOP COMPANION",
@@ -58,7 +61,7 @@ const COPY = {
     sourceHint: "Use a well-lit photo with the full subject clearly visible",
     upload: "Choose photo",
     replace: "Replace photo",
-    create: "Create desktop pet",
+    create: "Create static portrait",
     creating: "Creating your pet…",
     style: "How should your companion feel?",
     stylePlaceholder:
@@ -75,6 +78,9 @@ const COPY = {
     importAnimated: "Import animated pet",
     importAnimatedHint: "Choose pet.json from a Codex v2 pet package",
     animatedBadge: "Animated v2",
+    staticHint:
+      "Generation currently produces one transparent image, not animation frames. Import a complete v2 pet package for blinking, turning, and other motions.",
+    staticBadge: "Static image",
   },
 } as const;
 
@@ -434,6 +440,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               {copy.importAnimated}
             </button>
           </div>
+          <p className="desktop-pet-model">{copy.staticHint}</p>
           {error ? (
             <p className="desktop-pet-error" role="alert">
               {error}
@@ -498,9 +505,13 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               </div>
             )}
           </div>
-          {state.spriteVersionNumber === 2 ? (
+          {state.petPath ? (
             <div className="desktop-pet-animation-meta">
-              <span>{copy.animatedBadge}</span>
+              <span>
+                {state.spriteVersionNumber === 2
+                  ? copy.animatedBadge
+                  : copy.staticBadge}
+              </span>
               <strong>{state.displayName || copy.generated}</strong>
             </div>
           ) : null}

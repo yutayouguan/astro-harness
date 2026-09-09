@@ -64,7 +64,13 @@ export default function DesktopPetSurface() {
           },
           {
             id: "pet-pause",
-            text: state.animationPaused ? "恢复动画" : "暂停动画",
+            text:
+              state.spriteVersionNumber === 2
+                ? state.animationPaused
+                  ? "恢复动画"
+                  : "暂停动画"
+                : "静态形象（无动画帧）",
+            enabled: state.spriteVersionNumber === 2,
             action: () =>
               act("edit_pet_scene", {
                 request: { action: "pause", paused: !state.animationPaused },
