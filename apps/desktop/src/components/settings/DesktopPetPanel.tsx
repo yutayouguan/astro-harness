@@ -536,11 +536,8 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           <div className="desktop-pet-preview" data-empty={!petSrc}>
             {petSrc && state.spriteVersionNumber === 2 ? (
               <DesktopPetCanvas
-                src={
-                  previewAction === "grooming" && state.groomingPath
-                    ? resolveMediaSrc(state.groomingPath) || petSrc
-                    : petSrc
-                }
+                src={petSrc}
+                groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
                 state={previewAction === "kneading" ? "running" : "idle"}
                 clip={
                   previewAction === "grooming" && state.groomingPath

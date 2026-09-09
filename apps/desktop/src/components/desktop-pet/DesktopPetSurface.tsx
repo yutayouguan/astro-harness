@@ -14,6 +14,7 @@ import {
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation";
 import DesktopPetCanvas from "./DesktopPetCanvas";
+import { usePetHitTesting } from "./usePetHitTesting";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetScene } from "../../lib/ui/petScene";
 import {
@@ -141,6 +142,7 @@ export default function DesktopPetSurface() {
     "running-left" | "running-right" | null
   >(null);
   const [lookAngle, setLookAngle] = useState<number | null>(null);
+  usePetHitTesting(state.enabled, dragState != null);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -174,7 +176,7 @@ export default function DesktopPetSurface() {
     transientTimerRef.current = window.setTimeout(() => {
       transientTimerRef.current = null;
       setActivity(resolvePetRuntime(runtimeRef.current, Date.now()));
-    }, 980);
+    }, 700);
   }, [state.enabled, state.petPath, state.spriteVersionNumber]);
 
   useEffect(() => {
@@ -346,20 +348,10 @@ export default function DesktopPetSurface() {
       <div
         className="desktop-pet-stage"
         role="group"
-        aria-label="桌面宠物，右键或 Shift+F10 打开菜单"
-        tabIndex={0}
+        aria-label="桌面宠物，右键打开菜单；键盘操作请使用主窗口桌宠设置"
         onContextMenu={(event) => {
           event.preventDefault();
           void showMenu();
-        }}
-        onKeyDown={(event) => {
-          if (
-            event.key === "ContextMenu" ||
-            (event.shiftKey && event.key === "F10")
-          ) {
-            event.preventDefault();
-            void showMenu();
-          }
         }}
         onPointerMove={(event) => {
           if (leisure) setLeisure(null);
@@ -391,7 +383,8 @@ export default function DesktopPetSurface() {
       >
         {petSrc && state.spriteVersionNumber === 2 ? (
           <DesktopPetCanvas
-            src={groomingSrc || petSrc}
+            src={petSrc}
+            groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
             state={groomingSrc ? "idle" : renderedState}
             clip={groomingSrc ? "grooming" : undefined}
             lookAngle={lookAngle}
@@ -401,6 +394,7 @@ export default function DesktopPetSurface() {
           />
         ) : petSrc ? (
           <img
+            crossOrigin="anonymous"
             className="desktop-pet-character"
             src={petSrc}
             alt="Desktop pet"

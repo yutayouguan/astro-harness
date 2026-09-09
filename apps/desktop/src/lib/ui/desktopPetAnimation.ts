@@ -1,3 +1,5 @@
+import { idlePetFrame } from "./desktopPetMotion.ts";
+
 export type DesktopPetAnimationState =
   | "idle"
   | "running-right"
@@ -27,7 +29,7 @@ export const DESKTOP_PET_ANIMATIONS: Record<
   Exclude<DesktopPetAnimationState, "look">,
   AnimationSpec
 > = {
-  idle: { row: 0, durations: [280, 110, 110, 140, 140, 320] },
+  idle: { row: 0, durations: [3200, 80, 100, 140, 160, 220] },
   "running-right": {
     row: 1,
     durations: [120, 120, 120, 120, 120, 120, 120, 220],
@@ -54,6 +56,7 @@ export function frameForElapsed(
 ): DesktopPetFrame {
   const spec = DESKTOP_PET_ANIMATIONS[state];
   if (reducedMotion) return { row: spec.row, column: 0 };
+  if (state === "idle") return { row: 0, column: idlePetFrame(elapsedMs) };
   const total = spec.durations.reduce((sum, duration) => sum + duration, 0);
   let cursor = ((elapsedMs % total) + total) % total;
   for (let column = 0; column < spec.durations.length; column += 1) {

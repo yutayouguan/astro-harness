@@ -264,6 +264,8 @@ pub fn run() {
             commands::wallpaper::analyze_wallpaper,
             commands::wallpaper::get_system_wallpaper,
             commands::desktop_pet::get_desktop_pet_state,
+            commands::desktop_pet::desktop_pet_pointer,
+            commands::desktop_pet::set_desktop_pet_hit_test,
             commands::desktop_pet::use_builtin_desktop_pet,
             commands::pet_scene::get_pet_scenes,
             commands::pet_scene::edit_pet_scene,
@@ -654,6 +656,7 @@ pub fn run() {
                 .expect("missing window config");
 
             let window = WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .accept_first_mouse(true)
                 .background_color(BG)
                 .auto_resize()
                 .build()?;

@@ -372,16 +372,27 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
         .allow_directory(home::ui_dir(&home::default_memory_dir()), true)
         .map_err(|error| format!("无法授权桌宠素材目录：{error}"))?;
     if let Some(window) = app.get_webview_window(PET_WINDOW_LABEL) {
-        window
-            .set_always_on_top(state.always_on_top)
-            .map_err(|error| error.to_string())?;
-        window
-            .set_size(window_size(state.scale))
-            .map_err(|error| error.to_string())?;
-        if state.enabled {
-            window.show().map_err(|error| error.to_string())?;
-        } else {
-            window.hide().map_err(|error| error.to_string())?;
+        // A companion must never become the key window, including after show().
+        window.set_focusable(false).map_err(|e| e.to_string())?;
+        if window.is_always_on_top().map_err(|e| e.to_string())? != state.always_on_top {
+            window
+                .set_always_on_top(state.always_on_top)
+                .map_err(|e| e.to_string())?;
+        }
+        let size = window.inner_size().map_err(|e| e.to_string())?;
+        let wanted = window_size(state.scale)
+            .to_physical::<u32>(window.scale_factor().map_err(|e| e.to_string())?);
+        if size != wanted {
+            window
+                .set_size(window_size(state.scale))
+                .map_err(|e| e.to_string())?;
+        }
+        if window.is_visible().map_err(|e| e.to_string())? != state.enabled {
+            if state.enabled {
+                window.show().map_err(|error| error.to_string())?;
+            } else {
+                window.hide().map_err(|error| error.to_string())?;
+            }
         }
         return Ok(());
     }
@@ -406,6 +417,8 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
     .always_on_top(state.always_on_top)
     .skip_taskbar(true)
     .focused(false)
+    .focusable(false)
+    .accept_first_mouse(true)
     .visible(true)
     .build()
     .map_err(|error| format!("无法创建桌宠窗口：{error}"))?;
@@ -503,6 +516,32 @@ pub fn install_change_bridge(app: &AppHandle) {
 #[tauri::command]
 pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
     load_state()
+}
+
+/// A window-local pointer probe still works while transparent pixels pass clicks
+/// through. Pointer events alone cannot re-enable an ignored window.
+#[tauri::command]
+pub fn desktop_pet_pointer(window: WebviewWindow) -> Result<(f64, f64), String> {
+    if window.label() != PET_WINDOW_LABEL {
+        return Err("Only the pet window may probe its pointer".into());
+    }
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let origin = window.inner_position().map_err(|e| e.to_string())?;
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    Ok((
+        (cursor.x - f64::from(origin.x)) / scale,
+        (cursor.y - f64::from(origin.y)) / scale,
+    ))
+}
+
+#[tauri::command]
+pub fn set_desktop_pet_hit_test(window: WebviewWindow, interactive: bool) -> Result<(), String> {
+    if window.label() != PET_WINDOW_LABEL {
+        return Err("Only the pet window may change hit testing".into());
+    }
+    window
+        .set_ignore_cursor_events(!interactive)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

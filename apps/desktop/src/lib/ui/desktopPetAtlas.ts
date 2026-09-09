@@ -1,5 +1,6 @@
 export type AtlasImage = {
   src: string;
+  crossOrigin?: string | null;
   naturalWidth: number;
   naturalHeight: number;
   onload: ((event: Event) => unknown) | null;
@@ -14,6 +15,9 @@ export function loadPetAtlas<T extends AtlasImage>(options: {
   kind?: "v2" | "grooming";
 }) {
   const image = options.createImage();
+  // Tauri's asset protocol supplies ACAO for its window origin. Opt in before
+  // setting src so alpha hit testing does not read a tainted canvas.
+  image.crossOrigin = "anonymous";
   let disposed = false;
   image.onload = () => {
     if (disposed) return;

@@ -79,6 +79,16 @@ test("static assets do not advertise working animation controls", () => {
   assert.match(panel, /不包含动画帧/);
 });
 
+test("pet refresh is non-activating, idempotent and scoped hit testing cannot target main", () => {
+  assert.match(backend, /\.focusable\(false\)/);
+  assert.match(backend, /\.accept_first_mouse\(true\)/);
+  assert.match(backend, /is_visible\(\)[\s\S]*?!= state\.enabled/);
+  assert.match(backend, /if size != wanted/);
+  assert.match(backend, /window\.label\(\) != PET_WINDOW_LABEL/);
+  assert.match(commands, /\.accept_first_mouse\(true\)/);
+  assert.match(surface, /usePetHitTesting\(state\.enabled/);
+});
+
 test("desktop pet is reachable from settings and a dedicated transparent surface", () => {
   assert.match(app, /<DesktopPetPanel active=\{nav === "settings"\}/);
   assert.match(main, /get\("surface"\) === "desktop-pet"/);

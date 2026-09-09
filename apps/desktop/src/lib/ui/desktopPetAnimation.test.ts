@@ -9,7 +9,8 @@ import {
 
 test("animation rows follow the Codex v2 contract", () => {
   assert.deepEqual(frameForElapsed("idle", 0), { row: 0, column: 0 });
-  assert.deepEqual(frameForElapsed("idle", 280), { row: 0, column: 1 });
+  assert.deepEqual(frameForElapsed("idle", 280), { row: 0, column: 0 });
+  assert.deepEqual(frameForElapsed("idle", 3200), { row: 0, column: 1 });
   assert.deepEqual(frameForElapsed("running", 600), { row: 7, column: 5 });
   assert.deepEqual(frameForElapsed("failed", 9999, true), {
     row: 5,

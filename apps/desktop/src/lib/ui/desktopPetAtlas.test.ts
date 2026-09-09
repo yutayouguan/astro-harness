@@ -19,6 +19,7 @@ test("only a decoded v2 atlas reaches the player", () => {
     failed: () => failed++,
   });
   image.onload?.(new Event("load"));
+  assert.equal(image.crossOrigin, "anonymous");
   assert.equal(loaded, 1);
   image.naturalHeight = 1872;
   image.onload?.(new Event("load"));
