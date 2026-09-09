@@ -13,15 +13,29 @@ import {
   Bot,
   Check,
   ChevronRight,
+  CircleAlert,
+  CircleCheck,
+  Clock3,
+  Cpu,
   FolderOpen,
+  Info,
   KeyRound,
   Languages,
+  Link2,
+  ListRestart,
   LoaderCircle,
+  MessageSquare,
   Monitor,
   Moon,
+  RefreshCw,
+  RotateCcw,
+  Server,
+  ShieldAlert,
   ShieldCheck,
+  ShieldQuestion,
   Sparkles,
   Sun,
+  X,
   Zap,
 } from "lucide-react";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
@@ -187,6 +201,13 @@ export function FirstRunOnboarding({
   const workspaceReady =
     workspaceCheck?.path === effectiveWorkspacePath &&
     workspaceCheck.status === "ready";
+  const WorkspaceCheckIcon = previewProviders
+    ? Info
+    : workspaceCheck?.path !== effectiveWorkspacePath
+      ? Clock3
+      : workspaceReady
+        ? CircleCheck
+        : CircleAlert;
   const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>(
     initialDraft.permission_preset,
   );
@@ -1085,7 +1106,10 @@ export function FirstRunOnboarding({
                         className="onboarding-provider-field"
                         ref={providerSelectRef}
                       >
-                        <span>{copy.provider}</span>
+                        <span className="onboarding-field-label">
+                          <Server size={14} aria-hidden />
+                          {copy.provider}
+                        </span>
                         <SelectMenu
                           className="onboarding-provider-select"
                           aria-label={copy.provider}
@@ -1100,7 +1124,10 @@ export function FirstRunOnboarding({
                       </div>
 
                       <label>
-                        <span>{copy.endpoint}</span>
+                        <span className="onboarding-field-label">
+                          <Link2 size={14} aria-hidden />
+                          {copy.endpoint}
+                        </span>
                         <input
                           ref={endpointInputRef}
                           value={endpoint}
@@ -1124,7 +1151,10 @@ export function FirstRunOnboarding({
                       {selectedProvider &&
                       providerRequiresApiKey(selectedProvider) ? (
                         <label>
-                          <span>{copy.apiKey}</span>
+                          <span className="onboarding-field-label">
+                            <KeyRound size={14} aria-hidden />
+                            {copy.apiKey}
+                          </span>
                           <input
                             ref={apiKeyRef}
                             type="password"
@@ -1162,6 +1192,9 @@ export function FirstRunOnboarding({
                         }
                         onClick={() => void loadModels()}
                       >
+                        {modelsStatus !== "loading" && (
+                          <ListRestart size={15} aria-hidden />
+                        )}
                         {modelsStatus === "loading"
                           ? copy.loadingModels
                           : copy.loadModels}
@@ -1173,7 +1206,10 @@ export function FirstRunOnboarding({
                         className="onboarding-provider-field"
                         ref={modelInputRef}
                       >
-                        <span>{copy.model}</span>
+                        <span className="onboarding-field-label">
+                          <Cpu size={14} aria-hidden />
+                          {copy.model}
+                        </span>
                         <SelectMenu
                           className="onboarding-provider-select"
                           aria-label={copy.model}
@@ -1237,6 +1273,7 @@ export function FirstRunOnboarding({
                           className="onboarding-cancel-test"
                           onClick={cancelProviderTest}
                         >
+                          <X size={14} aria-hidden />
                           {copy.cancelTest}
                         </button>
                       )}
@@ -1360,6 +1397,7 @@ export function FirstRunOnboarding({
                     </span>
                     <span className="onboarding-folder-action">
                       {workspacePath ? copy.changeFolder : copy.chooseFolder}
+                      <ChevronRight size={14} aria-hidden />
                     </span>
                   </button>
                   {effectiveWorkspacePath && (
@@ -1368,11 +1406,14 @@ export function FirstRunOnboarding({
                       data-status={workspaceReady ? "ready" : "pending"}
                       role="status"
                     >
-                      {previewProviders
-                        ? copy.workspaceCheckDemo
-                        : workspaceCheck?.path !== effectiveWorkspacePath
-                          ? copy.workspaceChecking
-                          : copy.workspaceChecks[workspaceCheck.status]}
+                      <WorkspaceCheckIcon size={15} aria-hidden />
+                      <span>
+                        {previewProviders
+                          ? copy.workspaceCheckDemo
+                          : workspaceCheck?.path !== effectiveWorkspacePath
+                            ? copy.workspaceChecking
+                            : copy.workspaceChecks[workspaceCheck.status]}
+                      </span>
                       {!previewProviders &&
                         !workspaceReady &&
                         workspaceCheck?.path === effectiveWorkspacePath && (
@@ -1382,6 +1423,7 @@ export function FirstRunOnboarding({
                               setWorkspaceCheckRetry((value) => value + 1)
                             }
                           >
+                            <RefreshCw size={14} aria-hidden />
                             {copy.workspaceCheckRetry}
                           </Button>
                         )}
@@ -1397,6 +1439,7 @@ export function FirstRunOnboarding({
                         size="sm"
                         onClick={() => setConfigRetry((value) => value + 1)}
                       >
+                        <RefreshCw size={14} aria-hidden />
                         {copy.workspaceRetry}
                       </Button>
                     </div>
@@ -1408,6 +1451,7 @@ export function FirstRunOnboarding({
                       onClick={() => setWorkspacePath("")}
                       disabled={finishing}
                     >
+                      <RotateCcw size={14} aria-hidden />
                       {copy.defaultWorkspace}
                     </Button>
                   )}
@@ -1432,7 +1476,10 @@ export function FirstRunOnboarding({
                         onChange={() => setPermissionPreset("ask_for_approval")}
                       />
                       <span>
-                        <strong>{copy.ask}</strong>
+                        <strong className="onboarding-inline-label">
+                          <ShieldQuestion size={16} aria-hidden />
+                          {copy.ask}
+                        </strong>
                         <small>{copy.askSub}</small>
                       </span>
                       <Check size={17} aria-hidden />
@@ -1452,7 +1499,10 @@ export function FirstRunOnboarding({
                         onChange={() => setPermissionPreset("approve_for_me")}
                       />
                       <span>
-                        <strong>{copy.approve}</strong>
+                        <strong className="onboarding-inline-label">
+                          <Zap size={16} aria-hidden />
+                          {copy.approve}
+                        </strong>
                         <small>{copy.approveSub}</small>
                       </span>
                       <Check size={17} aria-hidden />
@@ -1493,7 +1543,7 @@ export function FirstRunOnboarding({
                   {healthSummary && (
                     <div className="onboarding-health-grid" role="status">
                       <div>
-                        <Check size={15} aria-hidden />
+                        <Bot size={17} aria-hidden />
                         <span>
                           <small>{copy.healthAgent}</small>
                           <strong>{healthSummary.agent}</strong>
@@ -1506,9 +1556,11 @@ export function FirstRunOnboarding({
                             : "pending"
                         }
                       >
-                        <span aria-hidden>
-                          {healthSummary.modelStatus === "verified" ? "✓" : "○"}
-                        </span>
+                        {healthSummary.modelStatus === "verified" ? (
+                          <CircleCheck size={17} aria-hidden />
+                        ) : (
+                          <Info size={17} aria-hidden />
+                        )}
                         <span>
                           <small>{copy.healthModel}</small>
                           <strong>
@@ -1520,7 +1572,7 @@ export function FirstRunOnboarding({
                         </span>
                       </div>
                       <div>
-                        <Check size={15} aria-hidden />
+                        <FolderOpen size={17} aria-hidden />
                         <span>
                           <small>{copy.healthWorkspace}</small>
                           <strong>{healthSummary.workspace}</strong>
@@ -1532,9 +1584,11 @@ export function FirstRunOnboarding({
                           healthSummary.sandboxAvailable ? "ok" : "pending"
                         }
                       >
-                        <span aria-hidden>
-                          {healthSummary.sandboxAvailable ? "✓" : "○"}
-                        </span>
+                        {healthSummary.sandboxAvailable ? (
+                          <ShieldCheck size={17} aria-hidden />
+                        ) : (
+                          <ShieldAlert size={17} aria-hidden />
+                        )}
                         <span>
                           <small>{copy.healthPermission}</small>
                           <strong>{healthSummary.permission}</strong>
@@ -1558,8 +1612,8 @@ export function FirstRunOnboarding({
                     size="sm"
                     onClick={() => enterAstro()}
                   >
+                    <MessageSquare size={15} aria-hidden />
                     {copy.enter}
-                    <ChevronRight size={15} aria-hidden />
                   </Button>
                 </div>
               ) : null}

@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { FileText, Languages, Lightbulb } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  Languages,
+  Lightbulb,
+  MessageSquarePlus,
+} from "lucide-react";
 import { Button } from "../ui";
 import {
   buildStarterPrompt,
@@ -64,7 +70,12 @@ export function StarterTaskChooser({
         />
       </label>
       <details className="onboarding-task-preview" open>
-        <summary>{zh ? "发送内容预览" : "Prompt preview"}</summary>
+        <summary>
+          <span className="onboarding-inline-label">
+            <Eye size={14} aria-hidden />
+            {zh ? "发送内容预览" : "Prompt preview"}
+          </span>
+        </summary>
         <pre>
           {prompt ??
             (zh
@@ -84,6 +95,7 @@ export function StarterTaskChooser({
           if (prompt) onUse(prompt);
         }}
       >
+        <MessageSquarePlus size={16} aria-hidden />
         {zh ? "填入新对话" : "Prepare a new chat"}
       </Button>
     </section>
