@@ -329,6 +329,13 @@
   backdrop-filter: blur(32px) saturate(155%);
 }
 
+/* Form caret/selection repaints must not re-filter the entire card. The ambient
+   backdrop is already blurred; retain the same fill, border and shadow here. */
+.onboarding-stage--provider .onboarding-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .onboarding-heading {
   max-width: 620px;
 }
@@ -585,9 +592,8 @@
   color: var(--ink);
   background: color-mix(in srgb, var(--shell-bg) 76%, transparent);
   font: inherit;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+  /* Focus feedback is immediate, not a delayed editing affordance. */
+  transition: none;
 }
 
 .onboarding-provider-form input:focus {
