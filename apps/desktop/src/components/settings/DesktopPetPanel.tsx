@@ -15,6 +15,7 @@ import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
 import { useReducedMotion } from "framer-motion";
 
 import conceptImage from "../../assets/generated/desktop-pet-concept.png";
+import builtinPetAtlas from "../../assets/pets/naitang/spritesheet.webp";
 import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -241,6 +242,18 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     }
   }
 
+  async function useBuiltinPet() {
+    if (busy) return;
+    setLocalError("");
+    clearError();
+    try {
+      await mutate("use_builtin_desktop_pet", {});
+      setNotice(zh ? "内置奶糖已应用到桌面" : "Naitang is now on your desktop");
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
+    }
+  }
+
   async function updateToggle(
     command: "set_desktop_pet_enabled" | "set_desktop_pet_always_on_top",
     value: boolean,
@@ -293,6 +306,33 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
         </div>
         <img src={conceptImage} alt="" aria-hidden />
       </div>
+
+      <section className="prefs-card desktop-pet-builtin">
+        <DesktopPetCanvas
+          src={builtinPetAtlas}
+          state="idle"
+          className="desktop-pet-builtin-canvas"
+          label={zh ? "内置奶糖动画预览" : "Built-in Naitang preview"}
+          reducedMotion={!!reducedMotion || !active}
+        />
+        <div>
+          <h3>{zh ? "内置奶糖" : "Built-in Naitang"}</h3>
+          <p>
+            {zh
+              ? "眨眼、踩奶、舔脚脚和转头都已准备好，无需上传照片或配置模型。"
+              : "Blinking, kneading, paw grooming and looking around — no photo or model setup needed."}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="desktop-pet-import-package"
+          disabled={busy != null}
+          onClick={() => void useBuiltinPet()}
+        >
+          <PawPrint size={17} />
+          {zh ? "使用内置奶糖" : "Use built-in Naitang"}
+        </button>
+      </section>
 
       <div className="desktop-pet-grid">
         <section className="prefs-card desktop-pet-card">

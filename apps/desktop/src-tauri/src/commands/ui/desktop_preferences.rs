@@ -1,12 +1,11 @@
 //! Onboarding reuses real OS preferences and the shared pet transaction.
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::Path};
+use std::path::Path;
 use tauri::AppHandle;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 static AUTOSTART_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const BUILTIN_PET: &[u8] = include_bytes!("../../../../src/assets/onboarding-companion.svg");
 const NOTIFICATIONS: &[&str] = &["desktop", "notifications"];
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -162,19 +161,7 @@ pub(super) fn apply_pet_choice_at(base: &Path, enabled: Option<bool>) -> Result<
                     "原有桌宠资源不可用，请在设置中重新选择"
                 );
             } else {
-                let path = types::desktop_pet_root(base)
-                    .join(format!("builtin-companion-{}.svg", uuid::Uuid::new_v4()));
-                let mut file = fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&path)?;
-                file.write_all(BUILTIN_PET)?;
-                file.sync_all()?;
-                state.pet_path = Some(path.to_string_lossy().into_owned());
-                state.sprite_version_number = None;
-                state.grooming_path = None;
-                state.display_name = Some("Astro 小伙伴".into());
-                state.description = Some("内置桌面小伙伴，无需模型生成".into());
+                super::builtin_pet::install_into_state(base, state)?;
             }
         }
         state.enabled = enabled;
@@ -188,6 +175,7 @@ pub(super) fn apply_pet_choice_at(base: &Path, enabled: Option<bool>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     #[test]
     fn preferences_default_off_and_reading_does_not_create_config() {
         let root = tempfile::tempdir().unwrap();
@@ -211,7 +199,12 @@ mod tests {
         assert!(first.enabled);
         assert_eq!(
             fs::read(first.pet_path.as_ref().unwrap()).unwrap(),
-            BUILTIN_PET
+            super::super::builtin_pet::SPRITESHEET
+        );
+        assert_eq!(first.sprite_version_number, Some(2));
+        assert_eq!(
+            fs::read(first.grooming_path.as_ref().unwrap()).unwrap(),
+            super::super::builtin_pet::GROOMING
         );
         apply_pet_choice_at(root.path(), Some(true)).unwrap();
         assert_eq!(

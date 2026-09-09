@@ -506,6 +506,23 @@ pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
 }
 
 #[tauri::command]
+pub async fn use_builtin_desktop_pet(app: AppHandle) -> Result<DesktopPetStateDto, String> {
+    let state = tauri::async_runtime::spawn_blocking(|| {
+        let base = home::default_memory_dir();
+        types::update_desktop_pet_state(&base, |state| {
+            super::builtin_pet::install_into_state(&base, state)?;
+            state.enabled = true;
+            state.updated_at = chrono::Utc::now().to_rfc3339();
+            Ok(())
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
 pub fn import_desktop_pet_photo(
     app: AppHandle,
     source_path: String,
@@ -651,6 +668,18 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builtin_naitang_assets_satisfy_native_animation_contract() {
+        assert_eq!(
+            validate_v2_atlas(super::super::builtin_pet::SPRITESHEET).unwrap(),
+            "webp"
+        );
+        assert_eq!(
+            validate_grooming_strip(super::super::builtin_pet::GROOMING).unwrap(),
+            "webp"
+        );
+    }
     use image::{DynamicImage, Rgba, RgbaImage};
 
     fn tiny_png() -> Vec<u8> {
