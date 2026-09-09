@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
+import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
 
 import {
   DESKTOP_PET_CELL,
@@ -21,6 +22,7 @@ type Props = {
   className?: string;
   label?: string;
   reducedMotion?: boolean;
+  clip?: "grooming";
 };
 
 export default function DesktopPetCanvas({
@@ -30,12 +32,13 @@ export default function DesktopPetCanvas({
   className,
   label = "Animated desktop pet",
   reducedMotion = false,
+  clip,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const frameRequestRef = useRef(0);
   const startedAtRef = useRef(0);
-  const playbackRef = useRef({ state, lookAngle, reducedMotion });
+  const playbackRef = useRef({ state, lookAngle, reducedMotion, clip });
   const [loadError, setLoadError] = useState(false);
 
   const draw = useCallback((timestamp: number) => {
@@ -47,15 +50,20 @@ export default function DesktopPetCanvas({
     if (!startedAtRef.current) startedAtRef.current = timestamp;
     const playback = playbackRef.current;
     const frame =
-      !playback.reducedMotion &&
-      playback.state === "look" &&
-      playback.lookAngle != null
-        ? frameForLookAngle(playback.lookAngle)
-        : frameForElapsed(
-            playback.state === "look" ? "idle" : playback.state,
+      playback.clip === "grooming"
+        ? groomingFrame(
             timestamp - startedAtRef.current,
             playback.reducedMotion,
-          );
+          )
+        : !playback.reducedMotion &&
+            playback.state === "look" &&
+            playback.lookAngle != null
+          ? frameForLookAngle(playback.lookAngle)
+          : frameForElapsed(
+              playback.state === "look" ? "idle" : playback.state,
+              timestamp - startedAtRef.current,
+              playback.reducedMotion,
+            );
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     const targetWidth = Math.round(DESKTOP_PET_CELL.width * ratio);
     const targetHeight = Math.round(DESKTOP_PET_CELL.height * ratio);
@@ -107,6 +115,7 @@ export default function DesktopPetCanvas({
     if (!src) return;
     const dispose = loadPetAtlas({
       src,
+      kind: clip,
       createImage: () => new Image(),
       loaded: (image) => {
         imageRef.current = image;
@@ -121,12 +130,12 @@ export default function DesktopPetCanvas({
         window.cancelAnimationFrame(frameRequestRef.current);
       }
     };
-  }, [restart, src]);
+  }, [restart, src, clip]);
 
   useLayoutEffect(() => {
-    playbackRef.current = { state, lookAngle, reducedMotion };
+    playbackRef.current = { state, lookAngle, reducedMotion, clip };
     restart();
-  }, [lookAngle, reducedMotion, restart, state]);
+  }, [lookAngle, reducedMotion, restart, state, clip]);
 
   return (
     <>

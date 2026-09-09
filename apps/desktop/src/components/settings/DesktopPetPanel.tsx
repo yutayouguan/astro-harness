@@ -110,6 +110,12 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
   const [sceneDescription, setSceneDescription] = useState("");
   const [includePet, setIncludePet] = useState(false);
   const [notice, setNotice] = useState("");
+  const [previewAction, setPreviewAction] = useState<
+    "idle" | "kneading" | "grooming"
+  >("idle");
+  useEffect(() => {
+    setPreviewAction("idle");
+  }, [state.petPath, state.groomingPath]);
   const zh = locale === "zh";
   const [phase, setPhase] = useState<
     "upload" | "generate" | "wallpaper" | null
@@ -490,8 +496,17 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           <div className="desktop-pet-preview" data-empty={!petSrc}>
             {petSrc && state.spriteVersionNumber === 2 ? (
               <DesktopPetCanvas
-                src={petSrc}
-                state="idle"
+                src={
+                  previewAction === "grooming" && state.groomingPath
+                    ? resolveMediaSrc(state.groomingPath) || petSrc
+                    : petSrc
+                }
+                state={previewAction === "kneading" ? "running" : "idle"}
+                clip={
+                  previewAction === "grooming" && state.groomingPath
+                    ? "grooming"
+                    : undefined
+                }
                 className="desktop-pet-preview-canvas"
                 label={state.displayName || copy.generated}
                 reducedMotion={Boolean(reducedMotion)}
@@ -515,6 +530,29 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               <strong>{state.displayName || copy.generated}</strong>
             </div>
           ) : null}
+          {state.spriteVersionNumber === 2 && state.groomingPath && (
+            <div
+              className="pet-scene-actions"
+              aria-label={zh ? "动作预览" : "Animation preview"}
+            >
+              {(["idle", "kneading", "grooming"] as const).map((action) => (
+                <button
+                  key={action}
+                  type="button"
+                  aria-pressed={previewAction === action}
+                  onClick={() => setPreviewAction(action)}
+                >
+                  {zh
+                    ? { idle: "眨眼", kneading: "踩奶", grooming: "舔脚脚" }[
+                        action
+                      ]
+                    : { idle: "Blink", kneading: "Knead", grooming: "Groom" }[
+                        action
+                      ]}
+                </button>
+              ))}
+            </div>
+          )}
           {state.provider && state.model ? (
             <p className="desktop-pet-model">
               {copy.provider}: {state.provider} · {state.model}

@@ -3,6 +3,7 @@ export type DesktopPetState = {
   enabled: boolean;
   sourcePath: string | null;
   petPath: string | null;
+  groomingPath: string | null;
   scale: number;
   alwaysOnTop: boolean;
   updatedAt: string;
@@ -23,6 +24,7 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   enabled: false,
   sourcePath: null,
   petPath: null,
+  groomingPath: null,
   scale: 1,
   alwaysOnTop: true,
   updatedAt: "",

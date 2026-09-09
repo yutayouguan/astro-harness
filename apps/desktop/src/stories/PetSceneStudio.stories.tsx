@@ -17,6 +17,7 @@ const meta = {
       petPath: photo,
     };
     const pet = {
+      groomingPath: null,
       petPath: photo,
       sourcePath: photo,
       spriteVersionNumber: null,

@@ -15,6 +15,7 @@ pub const DESKTOP_PET_V2_CELL_HEIGHT: u32 = 208;
 pub const DESKTOP_PET_V2_WIDTH: u32 = DESKTOP_PET_V2_COLUMNS * DESKTOP_PET_V2_CELL_WIDTH;
 pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL_HEIGHT;
 pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
+pub const DESKTOP_PET_GROOMING_WIDTH: u32 = 6 * DESKTOP_PET_V2_CELL_WIDTH;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +25,9 @@ pub struct DesktopPetManifest {
     pub description: String,
     pub sprite_version_number: u32,
     pub spritesheet_path: String,
+    /// Optional Astro-only six-frame paw-grooming strip; base atlas remains Codex v2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grooming_spritesheet_path: Option<String>,
 }
 
 type DesktopPetChangeHandler = Arc<dyn Fn() + Send + Sync + 'static>;
@@ -38,6 +42,7 @@ pub struct DesktopPetState {
     pub enabled: bool,
     pub source_path: Option<String>,
     pub pet_path: Option<String>,
+    pub grooming_path: Option<String>,
     pub scale: f64,
     pub always_on_top: bool,
     pub updated_at: String,
@@ -63,6 +68,7 @@ impl Default for DesktopPetState {
             enabled: false,
             source_path: None,
             pet_path: None,
+            grooming_path: None,
             scale: 1.0,
             always_on_top: true,
             updated_at: String::new(),
@@ -154,6 +160,10 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        state.grooming_path.is_none() || state.sprite_version_number == Some(2),
+        "舔爪扩展需要 v2 动画桌宠"
+    );
     anyhow::ensure!(state.scenes.len() <= 100, "场景收藏已达 100 个上限");
     let mut ids = std::collections::HashSet::new();
     for scene in &state.scenes {

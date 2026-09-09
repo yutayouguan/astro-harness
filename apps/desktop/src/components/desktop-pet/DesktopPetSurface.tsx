@@ -16,6 +16,11 @@ import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation"
 import DesktopPetCanvas from "./DesktopPetCanvas";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetScene } from "../../lib/ui/petScene";
+import {
+  canPlayPetLeisure,
+  LEISURE_DURATION,
+  type PetLeisure,
+} from "../../lib/ui/desktopPetLeisure";
 
 type SessionStatusPayload = {
   sessionId?: unknown;
@@ -32,6 +37,8 @@ type PetActivityPayload = {
 
 export default function DesktopPetSurface() {
   const { state, error, mutate } = useDesktopPetState();
+  const [leisure, setLeisure] = useState<PetLeisure | null>(null);
+  const leisureNext = useRef<PetLeisure>("kneading");
   const menuRef = useRef<Menu | null>(null);
   const menuOpening = useRef(false);
   const [menuError, setMenuError] = useState("");
@@ -81,6 +88,28 @@ export default function DesktopPetSurface() {
             text: "暂时隐藏",
             action: () => act("set_desktop_pet_enabled", { enabled: false }),
           },
+          ...(state.groomingPath
+            ? [
+                {
+                  id: "pet-knead",
+                  text: "踩奶",
+                  enabled: leisureAllowed,
+                  action: () => {
+                    setLookAngle(null);
+                    setLeisure("kneading");
+                  },
+                },
+                {
+                  id: "pet-groom",
+                  text: "舔脚脚",
+                  enabled: leisureAllowed,
+                  action: () => {
+                    setLookAngle(null);
+                    setLeisure("grooming");
+                  },
+                },
+              ]
+            : []),
           {
             id: "pet-scenes",
             text: "切换场景",
@@ -262,10 +291,45 @@ export default function DesktopPetSurface() {
   }, [reducedMotion]);
 
   const petSrc = state.petPath ? resolveMediaSrc(state.petPath) : "";
-  const renderedState: DesktopPetAnimationState = reducedMotion
-    ? activity
-    : (dragState ??
-      (activity === "idle" && lookAngle != null ? "look" : activity));
+  const leisureAllowed = canPlayPetLeisure({
+    enabled: state.enabled,
+    spriteVersionNumber: state.spriteVersionNumber,
+    groomingPath: state.groomingPath,
+    paused: state.animationPaused,
+    reducedMotion,
+    activity,
+    dragging: dragState != null,
+  });
+  useEffect(() => {
+    if (!leisureAllowed) {
+      setLeisure(null);
+      return;
+    }
+    if (leisure) {
+      const timer = window.setTimeout(
+        () => setLeisure(null),
+        LEISURE_DURATION[leisure],
+      );
+      return () => window.clearTimeout(timer);
+    }
+    if (lookAngle != null) return;
+    const timer = window.setTimeout(() => {
+      const next = leisureNext.current;
+      leisureNext.current = next === "kneading" ? "grooming" : "kneading";
+      setLeisure(next);
+    }, 20_000);
+    return () => window.clearTimeout(timer);
+  }, [leisureAllowed, leisure, lookAngle, state.petPath, state.groomingPath]);
+  const playedLeisure = leisureAllowed ? leisure : null;
+  const groomingSrc =
+    playedLeisure === "grooming" ? resolveMediaSrc(state.groomingPath) : null;
+  const renderedState: DesktopPetAnimationState =
+    playedLeisure === "kneading"
+      ? "running"
+      : reducedMotion
+        ? activity
+        : (dragState ??
+          (activity === "idle" && lookAngle != null ? "look" : activity));
 
   return (
     <main className="desktop-pet-surface">
@@ -298,6 +362,7 @@ export default function DesktopPetSurface() {
           }
         }}
         onPointerMove={(event) => {
+          if (leisure) setLeisure(null);
           if (
             reducedMotion ||
             state.animationPaused ||
@@ -317,6 +382,7 @@ export default function DesktopPetSurface() {
         onPointerLeave={() => setLookAngle(null)}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
+          setLeisure(null);
           void getCurrentWindow()
             .startDragging()
             .catch(() => setDragState(null));
@@ -325,8 +391,9 @@ export default function DesktopPetSurface() {
       >
         {petSrc && state.spriteVersionNumber === 2 ? (
           <DesktopPetCanvas
-            src={petSrc}
-            state={renderedState}
+            src={groomingSrc || petSrc}
+            state={groomingSrc ? "idle" : renderedState}
+            clip={groomingSrc ? "grooming" : undefined}
             lookAngle={lookAngle}
             reducedMotion={reducedMotion || state.animationPaused}
             className="desktop-pet-character desktop-pet-character--canvas"

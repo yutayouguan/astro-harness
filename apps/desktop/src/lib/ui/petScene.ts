@@ -8,6 +8,7 @@ export type PetScene = {
   pet: Pick<
     DesktopPetState,
     | "sourcePath"
+    | "groomingPath"
     | "spriteVersionNumber"
     | "displayName"
     | "description"

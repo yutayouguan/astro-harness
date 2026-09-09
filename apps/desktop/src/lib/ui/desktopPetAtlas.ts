@@ -11,12 +11,15 @@ export function loadPetAtlas<T extends AtlasImage>(options: {
   createImage: () => T;
   loaded: (image: T) => void;
   failed: () => void;
+  kind?: "v2" | "grooming";
 }) {
   const image = options.createImage();
   let disposed = false;
   image.onload = () => {
     if (disposed) return;
-    if (image.naturalWidth !== 1536 || image.naturalHeight !== 2288)
+    const width = options.kind === "grooming" ? 1152 : 1536;
+    const height = options.kind === "grooming" ? 208 : 2288;
+    if (image.naturalWidth !== width || image.naturalHeight !== height)
       options.failed();
     else options.loaded(image);
   };

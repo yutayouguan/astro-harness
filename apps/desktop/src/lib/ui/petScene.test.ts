@@ -12,6 +12,7 @@ const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 test("pet groups retain identity across homes and sort favorites without mutating input", () => {
   const pet = {
+    groomingPath: null,
     petPath: "/managed/pet.png",
     sourcePath: null,
     spriteVersionNumber: null,

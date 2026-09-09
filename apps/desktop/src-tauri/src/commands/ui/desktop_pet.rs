@@ -155,9 +155,41 @@ fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
             if column < *used_columns && !populated {
                 return Err(format!("v2 图集第 {} 行第 {} 格为空", row + 1, column + 1));
             }
-            if column >= *used_columns && populated {
+            // Current v2 hatch-pet packages may store a dedicated neutral frame at (0, 6).
+            if column >= *used_columns && populated && !(row == 0 && column == 6) {
                 return Err(format!("v2 图集第 {} 行未使用格必须全透明", row + 1));
             }
+        }
+    }
+    Ok(extension)
+}
+
+fn validate_grooming_strip(bytes: &[u8]) -> Result<&'static str, String> {
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    let extension = match reader.format() {
+        Some(ImageFormat::Png) => "png",
+        Some(ImageFormat::WebP) => "webp",
+        _ => return Err("舔爪动画仅支持 PNG/WebP".into()),
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(types::desktop_pet::DESKTOP_PET_GROOMING_WIDTH);
+    limits.max_image_height = Some(types::DESKTOP_PET_V2_CELL_HEIGHT);
+    limits.max_alloc = Some(8 * 1024 * 1024);
+    reader.limits(limits);
+    let image = reader.decode().map_err(|e| e.to_string())?.to_rgba8();
+    if image.dimensions() != (1152, 208) {
+        return Err("舔爪动画必须是 1152×208 的六帧图条".into());
+    }
+    if !image.pixels().any(|p| p[3] == 0) {
+        return Err("舔爪动画需要透明背景".into());
+    }
+    for column in 0..6 {
+        if !(0..208)
+            .any(|y| (column * 192..(column + 1) * 192).any(|x| image.get_pixel(x, y)[3] > 0))
+        {
+            return Err("舔爪动画存在空白帧".into());
         }
     }
     Ok(extension)
@@ -194,6 +226,32 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let sheet_bytes = types::desktop_pet::read_limited_pet_file(&source_sheet, MAX_ATLAS_BYTES)
         .map_err(|error| format!("无法读取动画图集：{error}"))?;
     let extension = validate_v2_atlas(&sheet_bytes)?;
+    let grooming = manifest
+        .grooming_spritesheet_path
+        .as_deref()
+        .map(|relative| -> Result<_, String> {
+            let relative = Path::new(relative);
+            if relative.as_os_str().is_empty()
+                || relative.is_absolute()
+                || !relative
+                    .components()
+                    .all(|part| matches!(part, std::path::Component::Normal(_)))
+            {
+                return Err("groomingSpritesheetPath 必须是包内的安全相对路径".into());
+            }
+            let path = manifest_parent
+                .join(relative)
+                .canonicalize()
+                .map_err(|_| "舔爪动画不存在")?;
+            if !path.starts_with(&manifest_parent) {
+                return Err("舔爪动画不能越出宠物包".into());
+            }
+            let bytes = types::desktop_pet::read_limited_pet_file(&path, 8 * 1024 * 1024)
+                .map_err(|e| e.to_string())?;
+            let extension = validate_grooming_strip(&bytes)?;
+            Ok((format!("grooming.{extension}"), bytes))
+        })
+        .transpose()?;
 
     let pets_root = pet_dir_at(base).join("pets");
     fs::create_dir_all(&pets_root).map_err(|error| format!("无法创建桌宠库：{error}"))?;
@@ -209,11 +267,15 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
         display_name: manifest.display_name.trim().to_string(),
         description: manifest.description.trim().to_string(),
         spritesheet_path: copied_sheet_name,
+        grooming_spritesheet_path: grooming.as_ref().map(|(name, _)| name.clone()),
         ..manifest
     };
     let import_result = (|| -> Result<(), String> {
         fs::write(&copied_sheet, &sheet_bytes)
             .map_err(|error| format!("无法复制动画图集：{error}"))?;
+        if let Some((name, bytes)) = &grooming {
+            fs::write(temporary.join(name), bytes).map_err(|e| format!("无法复制舔爪动画：{e}"))?;
+        }
         fs::write(
             temporary.join("pet.json"),
             serde_json::to_vec_pretty(&managed_manifest).map_err(|error| error.to_string())?,
@@ -230,6 +292,10 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let pet_path = destination.join(&managed_manifest.spritesheet_path);
     let updated = types::update_desktop_pet_state(base, |state| {
         state.pet_path = Some(pet_path.to_string_lossy().into_owned());
+        state.grooming_path = managed_manifest
+            .grooming_spritesheet_path
+            .as_ref()
+            .map(|name| destination.join(name).to_string_lossy().into_owned());
         state.source_path = None;
         state.follow_wallpaper = false;
         state.enabled = true;
@@ -505,6 +571,7 @@ pub(super) async fn generate_pet_identity(
         provider: Some(generated.provider),
         model: Some(generated.model),
         sprite_version_number: None,
+        grooming_path: None,
         display_name: None,
         description: Some(details.to_string()),
     })
@@ -616,6 +683,70 @@ mod tests {
         bytes.into_inner()
     }
 
+    fn grooming_png() -> Vec<u8> {
+        let mut image = RgbaImage::new(1152, 208);
+        for column in 0..6 {
+            image.put_pixel(column * 192 + 20, 30, Rgba([180, 90, 40, 255]));
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn validates_grooming_strip_geometry_and_all_frames() {
+        assert_eq!(validate_grooming_strip(&grooming_png()).unwrap(), "png");
+        assert!(validate_grooming_strip(&tiny_png()).is_err());
+    }
+
+    #[test]
+    fn imports_optional_grooming_and_rejects_escaping_extension() {
+        let temp = tempfile::tempdir().unwrap();
+        let package = temp.path().join("package");
+        let base = temp.path().join("astro");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(package.join("atlas.png"), valid_v2_atlas(false)).unwrap();
+        fs::write(package.join("grooming.png"), grooming_png()).unwrap();
+        let mut manifest = types::DesktopPetManifest {
+            id: "cat".into(),
+            display_name: "Cat".into(),
+            description: "A grooming kitten".into(),
+            sprite_version_number: 2,
+            spritesheet_path: "atlas.png".into(),
+            grooming_spritesheet_path: Some("grooming.png".into()),
+        };
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
+        assert!(Path::new(state.grooming_path.as_deref().unwrap()).is_file());
+        manifest.grooming_spritesheet_path = Some("../outside.png".into());
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(import_animated_pet_at(&base, &package.join("pet.json")).is_err());
+        assert_eq!(load_state_at(&base).unwrap().revision, state.revision);
+    }
+
+    #[test]
+    fn accepts_v2_neutral_reference_cell_without_changing_idle_frames() {
+        let mut image = image::load_from_memory(&valid_v2_atlas(false))
+            .unwrap()
+            .to_rgba8();
+        image.put_pixel(6 * 192 + 20, 30, Rgba([200, 100, 50, 255]));
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        assert!(validate_v2_atlas(bytes.get_ref()).is_ok());
+    }
+
     #[test]
     fn validates_and_stores_pet_assets_inside_app_home() {
         let temp = tempfile::tempdir().unwrap();
@@ -687,6 +818,7 @@ mod tests {
                 display_name: "Momo".into(),
                 description: "A calm orange cat".into(),
                 sprite_version_number: 2,
+                grooming_spritesheet_path: None,
                 spritesheet_path: "spritesheet.png".into(),
             })
             .unwrap(),
@@ -719,6 +851,7 @@ mod tests {
                 display_name: "Escape".into(),
                 description: "Must remain inside the package".into(),
                 sprite_version_number: 2,
+                grooming_spritesheet_path: None,
                 spritesheet_path: "../outside.png".into(),
             })
             .unwrap(),

@@ -11,6 +11,8 @@ use std::{
 #[serde(rename_all = "camelCase")]
 pub struct PetIdentity {
     pub pet_path: String,
+    #[serde(default)]
+    pub grooming_path: Option<String>,
     pub source_path: Option<String>,
     pub sprite_version_number: Option<u32>,
     pub display_name: Option<String>,
@@ -27,6 +29,7 @@ impl PetIdentity {
                 .clone()
                 .ok_or_else(|| anyhow::anyhow!("请先生成或导入桌宠"))?,
             source_path: state.source_path.clone(),
+            grooming_path: state.grooming_path.clone(),
             sprite_version_number: state.sprite_version_number,
             display_name: state.display_name.clone(),
             description: state.description.clone(),
@@ -37,6 +40,7 @@ impl PetIdentity {
 
     fn apply(&self, state: &mut DesktopPetState) {
         state.pet_path = Some(self.pet_path.clone());
+        state.grooming_path = self.grooming_path.clone();
         state.source_path = self.source_path.clone();
         state.sprite_version_number = self.sprite_version_number;
         state.display_name = self.display_name.clone();
@@ -76,6 +80,10 @@ impl PetScene {
         );
         anyhow::ensure!(!self.pet.pet_path.is_empty(), "场景缺少桌宠");
         anyhow::ensure!(
+            self.pet.grooming_path.is_none() || self.pet.sprite_version_number == Some(2),
+            "舔爪扩展需要 v2 动画桌宠"
+        );
+        anyhow::ensure!(
             self.pet.sprite_version_number.is_none() || self.pet.sprite_version_number == Some(2),
             "不支持的桌宠版本"
         );
@@ -111,6 +119,9 @@ pub fn managed_file(base: &Path, path: &Path) -> anyhow::Result<PathBuf> {
 pub fn save_scene(base: &Path, scene: PetScene) -> anyhow::Result<DesktopPetState> {
     scene.validate()?;
     managed_file(base, Path::new(&scene.pet.pet_path))?;
+    if let Some(path) = &scene.pet.grooming_path {
+        managed_file(base, Path::new(path))?;
+    }
     if let Some(path) = scene.wallpaper_path(base) {
         managed_file(base, &path)?;
     }
@@ -301,6 +312,16 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
     scene.pet.pet_path = pet_name.clone();
     scene.pet.source_path = None;
     scene.wallpaper_source_path = None;
+    if let Some(path) = &scene.pet.grooming_path {
+        let path = managed_file(base, Path::new(path))?;
+        let bytes = read_limited_pet_file(&path, 8 * 1024 * 1024)?;
+        let name = format!(
+            "grooming.{}",
+            path.extension().and_then(|s| s.to_str()).unwrap_or("png")
+        );
+        fs::write(temporary.path().join(&name), bytes)?;
+        scene.pet.grooming_path = Some(name);
+    }
     if scene.pet.sprite_version_number == Some(2) {
         let manifest = crate::DesktopPetManifest {
             id: scene.id.clone(),
@@ -317,6 +338,7 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
                 .unwrap_or_else(|| "Exported Astro companion".into()),
             sprite_version_number: 2,
             spritesheet_path: pet_name,
+            grooming_spritesheet_path: scene.pet.grooming_path.clone(),
         };
         fs::write(
             temporary.path().join("pet.json"),
@@ -392,6 +414,9 @@ pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Resul
             || (mode == SceneApplyMode::Linked && state.follow_wallpaper);
         if apply_pet {
             managed_file(base, Path::new(&scene.pet.pet_path))?;
+            if let Some(path) = &scene.pet.grooming_path {
+                managed_file(base, Path::new(path))?;
+            }
         }
         if mode != SceneApplyMode::Pet {
             let mut style = scene
@@ -476,6 +501,9 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
                 .cloned()
             {
                 managed_file(base, Path::new(&scene.pet.pet_path))?;
+                if let Some(path) = &scene.pet.grooming_path {
+                    managed_file(base, Path::new(path))?;
+                }
                 scene.pet.apply(state);
             }
         }
@@ -489,6 +517,24 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pet_scene_grooming_survives_apply_and_export() {
+        let (dir, mut scene) = fixture();
+        let path = dir.path().join("ui/grooming.png");
+        fs::write(&path, b"validated grooming strip").unwrap();
+        scene.pet.sprite_version_number = Some(2);
+        scene.pet.grooming_path = Some(path.to_string_lossy().into_owned());
+        save_scene(dir.path(), scene.clone()).unwrap();
+        let applied = apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
+        assert_eq!(applied.grooming_path, scene.pet.grooming_path);
+        let output = tempfile::tempdir().unwrap();
+        let package = export_scene(dir.path(), &scene.id, output.path()).unwrap();
+        let manifest: crate::DesktopPetManifest =
+            serde_json::from_slice(&fs::read(package.join("pet.json")).unwrap()).unwrap();
+        assert!(package
+            .join(manifest.grooming_spritesheet_path.unwrap())
+            .is_file());
+    }
     fn fixture() -> (tempfile::TempDir, PetScene) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("ui");
@@ -503,6 +549,7 @@ mod tests {
             pet_path: root.join("pet.png").to_string_lossy().into_owned(),
             source_path: None,
             sprite_version_number: None,
+            grooming_path: None,
             display_name: Some("Mochi".into()),
             description: None,
             provider: None,

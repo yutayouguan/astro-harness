@@ -51,3 +51,28 @@ test("cancelled old atlas callbacks cannot paint over the replacement", () => {
   assert.equal(updates, 0);
   assert.equal(image.onload, null);
 });
+
+test("grooming strips cannot be confused with the v2 main atlas", () => {
+  const image: AtlasImage = {
+    src: "",
+    naturalWidth: 1152,
+    naturalHeight: 208,
+    onload: null,
+    onerror: null,
+  };
+  let loaded = 0,
+    failed = 0;
+  const stop = loadPetAtlas({
+    src: "grooming.webp",
+    kind: "grooming",
+    createImage: () => image,
+    loaded: () => loaded++,
+    failed: () => failed++,
+  });
+  image.onload?.(new Event("load"));
+  assert.equal(loaded, 1);
+  image.naturalHeight = 2288;
+  image.onload?.(new Event("load"));
+  assert.equal(failed, 1);
+  stop();
+});

@@ -210,6 +210,7 @@ fn save_scene(
                 pet_path: path.to_string_lossy().into_owned(),
                 source_path: source_path.map(|p| p.to_string_lossy().into_owned()),
                 sprite_version_number: None,
+                grooming_path: None,
                 display_name: Some(name.into()),
                 description: None,
                 provider: clean_optional(args.provider),
@@ -294,6 +295,7 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
         state.pet_path = Some(pet_path_value);
         state.follow_wallpaper = false;
         state.sprite_version_number = None;
+        state.grooming_path = None;
         state.display_name = None;
         state.description = None;
         if let Some(source_path) = source_path_value {
