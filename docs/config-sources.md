@@ -130,3 +130,14 @@ cargo run -p hooks --bin astro-migrate-extensions -- --root /absolute/path/to/as
 
 验证：`cargo test -p agent-config -p home -p mcp -p hooks -p usage --lib -- --test-threads=1`。
 所有测试使用隔离临时目录，不对真实 `~/.astro` 执行迁移。
+
+跨进程持久化验收：
+
+```bash
+cargo test -p server --test config_sources_restart_test -- --test-threads=1
+```
+
+父测试创建私有临时数据根，并启动独立测试进程完成写入和重新读取；验证原来源写回、
+项目 server 整体覆盖、缓存删除后定义与审批状态保留、配置/凭证变更使缓存失效、Hook
+内容变更不沿用旧审批，以及引用缺失时明确报错。每个子进程有超时和执行回执校验。
+此测试不启动真实 App、不执行 Hook 命令、不连接 MCP，也不等同于原生界面启动验收。
