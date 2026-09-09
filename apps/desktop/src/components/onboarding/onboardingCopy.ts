@@ -46,8 +46,8 @@ export const COPY = {
     noMatchingModels: "没有匹配的模型，试试其他关键词",
     modelLoadHint: "先获取模型列表，再选择默认模型。此步骤不发起聊天生成请求。",
     endpoint: "服务地址",
-    test: "保存并测试连接",
-    testing: "正在验证连接",
+    test: "测试",
+    testing: "测试中…",
     testSuccess: "连接成功",
     noProviders: "没有可用的 Responses API 模型服务。请检查安装配置。",
     workspaceEyebrow: "03 · 工作空间与安全",
@@ -143,8 +143,8 @@ export const COPY = {
     modelLoadHint:
       "Load the provider's model list, then choose a default. This step does not generate a chat response.",
     endpoint: "Service address",
-    test: "Save and test connection",
-    testing: "Verifying connection",
+    test: "Test",
+    testing: "Testing…",
     testSuccess: "Connection successful",
     noProviders:
       "No Responses API provider is available. Check the installation configuration.",

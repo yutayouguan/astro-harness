@@ -170,7 +170,7 @@ async function loadModels(page: Page) {
 async function verifyProvider(page: Page) {
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
 }
 async function finishVerified(page: Page) {
@@ -184,7 +184,7 @@ test("model connection is mandatory; credentials alone do not unlock setup", asy
   await startProvider(page);
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /稍后连接|先进入 App|跳过设置/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "测试", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "保存密钥并获取模型", exact: true })).toBeDisabled();
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
@@ -233,7 +233,7 @@ test("restart restores draft but requires model verification again", async ({ pa
   await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await loadModels(page);
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-workspace");
@@ -258,7 +258,7 @@ for (const [message, title] of [
     await startProvider(page);
     await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
-    await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+    await page.getByRole("button", { name: "测试", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(title);
     await expect(page.locator("body")).not.toContainText("qa-canary-secret");
     await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
@@ -290,7 +290,7 @@ for (const variant of [
     await startProvider(page);
     await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
     await loadModels(page);
-    await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+    await page.getByRole("button", { name: "测试", exact: true }).click();
     const card = page.getByRole("alert", { name: "密钥或访问权限有问题" });
     await expect(card).toBeVisible();
     await expect(card.locator(".onboarding-connection-issue__icon svg")).toHaveCount(1);
@@ -328,7 +328,7 @@ test("cancelled test ignores late success and cannot activate a model", async ({
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
   const request = page.waitForRequest("**/__onboarding_mock/responses");
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await request;
   await page.getByRole("button", { name: "取消等待", exact: true }).click();
   const response = page.waitForResponse("**/__onboarding_mock/responses");
@@ -363,7 +363,7 @@ test("success without a backend receipt never unlocks setup", async ({ page }) =
   await page.evaluate(() => { (window as any).__omitProof = true; });
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("需要重新验证模型连接");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
 });
@@ -395,8 +395,8 @@ test("saved credentials are reused without rewriting provider config; only expli
   let calls = await page.evaluate(() => (window as any).__onboardingCalls);
   expect(calls.filter((x: any) => ["save_provider", "set_provider_api_key", "verify_onboarding_provider"].includes(x.cmd))).toEqual([]);
   await chooseModel(page, "qa-alt");
-  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeFocused();
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await expect(page.getByRole("button", { name: "测试", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeFocused();
   await finishVerified(page);
   await page.reload();
@@ -432,7 +432,7 @@ test("workspace is rechecked at completion and quota errors offer the official c
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "complete_onboarding"))).toEqual([]);
   await page.getByRole("button", { name: "返回", exact: true }).click();
   await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message: "insufficient_quota" } }));
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByRole("button", { name: "官方控制台", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "官方控制台", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
@@ -531,7 +531,7 @@ test("hung provider times out without bypassing validation", async ({ page }) =>
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
   const request = page.waitForRequest("**/__onboarding_mock/responses");
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await request;
   await expect(page.getByRole("alert")).toContainText("连接测试超时", { timeout: 25000 });
   release();
@@ -582,7 +582,7 @@ test("base_url is directly editable and edits invalidate model verification", as
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
   await loadModels(page);
-  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByText("连接成功", { exact: true })).toBeVisible();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("qa.providers")!).providers[0]);
   expect(saved.endpoint).toBe("http://127.0.0.1/updated/v1");
@@ -629,7 +629,7 @@ for (const theme of ["light", "dark"] as const) {
     await search.press("ArrowDown");
     await search.press("Enter");
     await expect(popup).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "测试", exact: true })).toBeFocused();
     await expect(picker).toContainText("Deep Think");
     await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
     if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
@@ -696,6 +696,9 @@ for (const theme of ["light", "dark"] as const) {
     }, theme);
     await page.setViewportSize({ width: theme === "dark" ? 390 : 1100, height: 850 });
     await page.goto("/iframe.html?id=app-first-run-onboarding--provider&viewMode=story");
+    const testButton = page.getByRole("button", { name: "测试", exact: true });
+    await expect(testButton).toBeVisible();
+    await expect(testButton.locator("svg.lucide-test-tube-diagonal")).toHaveCount(1);
     const picker = page.getByRole("button", { name: "模型服务", exact: true });
     await expect(picker).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".onboarding-provider-form select")).toHaveCount(0);
@@ -749,7 +752,7 @@ test("loading models requires an explicit choice and key changes reset it", asyn
   await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await expect(picker).toBeEnabled();
   await expect(picker).toContainText("请选择默认模型");
-  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "测试", exact: true })).toBeDisabled();
   if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
   await expect(page.getByRole("option")).toHaveCount(2);
   await expect(page.getByRole("option", { name: "text-embedding-3-small" })).toHaveCount(0);
