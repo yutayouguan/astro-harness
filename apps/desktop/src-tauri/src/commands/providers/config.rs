@@ -161,6 +161,8 @@ fn runtime_status_dto(server: proto::McpServerInfo) -> McpRuntimeStatusDto {
 /// MCP 服务器配置的前端 DTO。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerDto {
+    #[serde(default, rename = "sourcePath")]
+    pub source_path: Option<String>,
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -309,6 +311,7 @@ fn dto_from_config_scoped(c: mcp::McpServerConfig, scope: &str) -> McpServerDto 
         })
         .collect();
     McpServerDto {
+        source_path: None,
         id: c.id,
         name: c.name,
         description: c.description,
@@ -472,9 +475,15 @@ pub async fn get_mcp_servers(
     let resolved_root = explicit_root.or_else(|| agent::git_worktree::resolve_project_root(None));
     let servers =
         mcp::load_mcp_servers_scoped(scope, resolved_root.as_deref()).map_err(|e| e.to_string())?;
+    let sources = mcp::source_paths(scope, resolved_root.as_deref()).map_err(|e| e.to_string())?;
     Ok(servers
         .into_iter()
-        .map(|server| dto_from_config_scoped(server, scope))
+        .map(|server| {
+            let source = sources.get(&server.id).cloned();
+            let mut dto = dto_from_config_scoped(server, scope);
+            dto.source_path = source;
+            dto
+        })
         .collect())
 }
 
@@ -557,7 +566,7 @@ pub async fn set_mcp_servers(
         .map_err(|e| e.to_string())
 }
 
-/// 短连 list_tools，写回 discovered，并合并默认工具开关
+/// 实时刷新工具发现；仅缓存元数据，不改写配置或显式工具开关。
 #[tauri::command]
 pub async fn refresh_mcp_tools(
     agent_id: Option<String>,
@@ -1000,6 +1009,7 @@ mod mcp_config_tests {
 
     fn server_dto(transport: &str) -> McpServerDto {
         McpServerDto {
+            source_path: None,
             id: "demo".into(),
             name: "Demo".into(),
             description: String::new(),

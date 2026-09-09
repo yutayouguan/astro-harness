@@ -2,18 +2,12 @@
 //!
 //! 费用路径 **禁止** 读取 `litellm-model-meta.json`。
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
-
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use home::default_memory_dir;
-
-const OPENROUTER_PRICING_CACHE_FILE: &str = "openrouter-model-pricing.json";
-const PRICING_CACHE_MAX_AGE: Duration = Duration::hours(24);
 
 /// 四桶 token 用量（memory 侧类型，避免 memory→providers 依赖）。
 #[derive(Debug, Clone, Copy, Default)]
@@ -213,18 +207,11 @@ struct PricingCacheFile {
     models: HashMap<String, CachedModelPricing>,
 }
 
-fn openrouter_pricing_cache_path() -> PathBuf {
-    let dir = home::models_cache_dir(&default_memory_dir());
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join(OPENROUTER_PRICING_CACHE_FILE)
-}
-
 fn is_cache_fetched_at_valid(fetched_at: DateTime<Utc>) -> bool {
-    let now = Utc::now();
-    if fetched_at > now {
-        return true;
-    }
-    now - fetched_at < PRICING_CACHE_MAX_AGE
+    let age = Utc::now().signed_duration_since(fetched_at).num_seconds();
+    age >= 0
+        && home::cache::policy(&default_memory_dir(), home::cache::Domain::Models)
+            .is_ok_and(|policy| age as u64 <= policy.ttl_seconds)
 }
 
 fn parse_price_value(value: &Value) -> Option<f64> {
@@ -266,9 +253,13 @@ fn lookup_model_in_cache<'a>(
 }
 
 fn read_pricing_cache_file() -> Option<PricingCacheFile> {
-    let path = openrouter_pricing_cache_path();
-    let content = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&content).ok()
+    home::cache::read(
+        &default_memory_dir(),
+        home::cache::Domain::Models,
+        &"openrouter-model-pricing",
+    )
+    .ok()
+    .flatten()
 }
 
 fn load_valid_pricing_cache() -> Option<PricingCacheFile> {
@@ -283,13 +274,12 @@ fn load_valid_pricing_cache() -> Option<PricingCacheFile> {
 }
 
 fn write_pricing_cache(cache: &PricingCacheFile) {
-    let path = openrouter_pricing_cache_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(cache) {
-        let _ = fs::write(path, json);
-    }
+    let _ = home::cache::write(
+        &default_memory_dir(),
+        home::cache::Domain::Models,
+        &"openrouter-model-pricing",
+        cache,
+    );
 }
 
 fn parse_models_api_response(json: Value) -> Option<PricingCacheFile> {

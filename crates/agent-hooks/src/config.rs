@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AstroConfig {
-    #[serde(default)]
+    #[serde(default, rename = "shell_hooks")]
     pub hooks: HashMap<String, String>,
 }
 
@@ -27,6 +27,14 @@ pub fn load_config(root: &Path) -> anyhow::Result<AstroConfig> {
         return Ok(AstroConfig::default());
     }
     let text = fs::read_to_string(&path)?;
+    let value: toml::Value = text.parse()?;
+    anyhow::ensure!(
+        !value
+            .get("hooks")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|hooks| hooks.values().any(toml::Value::is_str)),
+        "legacy string hooks must move to [shell_hooks]"
+    );
     let cfg: AstroConfig = toml::from_str(&text)?;
     Ok(cfg)
 }
@@ -45,7 +53,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.toml"),
-            r#""hooks" = { "PostToolUse" = "echo hi", "AgentEnd" = "true" }
+            r#""shell_hooks" = { "PostToolUse" = "echo hi", "AgentEnd" = "true" }
 "#,
         )
         .unwrap();

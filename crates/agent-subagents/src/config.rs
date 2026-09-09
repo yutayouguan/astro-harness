@@ -337,6 +337,7 @@ fn config_base_dir(source: &ConfigLayerSource) -> Option<PathBuf> {
         | ConfigLayerSource::System { file }
         | ConfigLayerSource::User { file }
         | ConfigLayerSource::Profile { file, .. }
+        | ConfigLayerSource::Included { file, .. }
         | ConfigLayerSource::Agent { file, .. } => file.parent().map(Path::to_path_buf),
         ConfigLayerSource::Project { dot_config_dir } => Some(dot_config_dir.clone()),
         ConfigLayerSource::ManagedPreferences { .. }

@@ -69,7 +69,9 @@ dependencies = [
 name = "agent-config"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
@@ -2584,6 +2586,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -2614,6 +2617,7 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "uuid",
  "windows-sys 0.59.0",
 ]
 

@@ -12,6 +12,7 @@
 | 全局配置 | `config.toml`；`config_path`、`config_file::lock_config_file` |
 | Agent | `agents/active.json`、`agents/*.toml`；默认设置位于全局 TOML `desktop.agents` |
 | 模型 | `models/cache/`；`models_cache_dir`；Provider 注册信息位于全局 TOML `desktop.providers` |
+| MCP / Hook | 显式领域定义引用；`mcp/cache/`、`security/hooks/trust.json`、`logs/hooks/` 分离 |
 | 工具与技能 | 全局 TOML `desktop.tools` / `desktop.skills`；`skills/` 内的包、来源、锁与备份 |
 | 会话 | `sessions/state.db`、`rollouts/`、`tool_spills/`、`subagents/subagents-v2.db` |
 | 文件与知识 | `artifacts/artifacts.db`、`knowledge.db`、`uploads/` |
@@ -26,6 +27,10 @@
 `home::ensure_workspace` 补齐缺失的默认状态和工作区模板，但不覆盖已有个性化文件。
 MCP 与记忆/权限设置写同一 TOML 时，锁必须覆盖完整的读取—修改—原子写入过程。
 全局技能/工具默认值与 Agent 级覆写仍是不同语义，但统一写入同一 TOML 的不同段，不再初始化可编辑 JSON 副本。
+
+MCP/Hook 可通过入口的 `config_sources` 显式引用领域文件；模型与 MCP 缓存策略、来源写回、
+审批状态和离线迁移详见 [配置来源与缓存](config-sources.md)。缓存路径使用 `home::cache` 解析，
+不能绕过策略直接拼接 `models_cache_dir` 写缓存。
 
 项目工作规则只从项目根 `AGENTS.md` 加载；项目 `.astro/` 只用于显式项目配置。
 读取规则、打开项目不得创建项目 `.astro/`，现有项目配置不能因本机目录调整被删除。

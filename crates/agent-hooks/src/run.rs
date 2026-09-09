@@ -136,6 +136,7 @@ struct StoredHookRun {
 
 #[derive(Clone, Default)]
 pub struct HookRunStore {
+    pub(crate) audit_file: Option<std::path::PathBuf>,
     records: Arc<Mutex<VecDeque<StoredHookRun>>>,
     observers: Arc<Mutex<HashMap<String, HookRunObserver>>>,
 }
@@ -153,6 +154,53 @@ impl std::fmt::Debug for HookRunStore {
 }
 
 impl HookRunStore {
+    pub fn with_audit_root(base: &std::path::Path) -> Self {
+        Self {
+            audit_file: Some(
+                home::hook_runs_dir(base)
+                    .join(format!("runs-{}.jsonl", uuid::Uuid::new_v4().simple())),
+            ),
+            ..Default::default()
+        }
+    }
+
+    fn persist_metadata(
+        &self,
+        phase: &str,
+        session_id: &str,
+        turn_id: Option<&str>,
+        run: &HookRunRecord,
+    ) {
+        use std::io::Write;
+        let Some(path) = &self.audit_file else {
+            return;
+        };
+        let result = (|| -> anyhow::Result<()> {
+            std::fs::create_dir_all(path.parent().unwrap())?;
+            anyhow::ensure!(
+                !path
+                    .symlink_metadata()
+                    .is_ok_and(|m| m.file_type().is_symlink()),
+                "hook audit file is a symlink"
+            );
+            let mut options = std::fs::OpenOptions::new();
+            options.create(true).append(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(path)?;
+            file.lock()?;
+            let value = serde_json::json!({"phase":phase,"session_id":session_id,"turn_id":turn_id,"id":run.id,"handler_id":run.handler_id,"event":run.event_name,"status":run.status,"source":run.source_path,"started_at":run.started_at,"completed_at":run.completed_at,"duration_ms":run.duration_ms});
+            writeln!(file, "{value}")?;
+            file.unlock()?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            tracing::warn!(%error, "hook metadata audit write failed");
+        }
+    }
     pub fn set_observer(&self, session_id: impl Into<String>, observer: HookRunObserver) {
         if let Ok(mut observers) = self.observers.lock() {
             observers.insert(session_id.into(), observer);
@@ -166,6 +214,7 @@ impl HookRunStore {
     }
 
     pub fn start(&self, session_id: String, turn_id: Option<String>, record: HookRunRecord) {
+        self.persist_metadata("started", &session_id, turn_id.as_deref(), &record);
         let notify = record.execution_mode == HookExecutionMode::Sync;
         if let Ok(mut records) = self.records.lock() {
             records.push_back(StoredHookRun {
@@ -242,6 +291,9 @@ impl HookRunStore {
                     )
                 })
         };
+        if let Some((session_id, turn_id, run)) = &completed {
+            self.persist_metadata("completed", session_id, turn_id.as_deref(), run);
+        }
         if let Some((session_id, turn_id, run)) = completed.filter(|_| notify) {
             self.notify(
                 &session_id,
@@ -284,6 +336,20 @@ pub(crate) fn unix_timestamp() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disk_audit_keeps_metadata_not_hook_output() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = HookRunStore::with_audit_root(dir.path());
+        assert!(!home::hook_runs_dir(dir.path()).exists());
+        let mut run = running_record();
+        run.summary = "secret-command-output".into();
+        run.status_message = Some("private message".into());
+        store.start("session".into(), Some("turn".into()), run);
+        let text = std::fs::read_to_string(store.audit_file.unwrap()).unwrap();
+        assert!(text.contains("hook-run-1") && text.contains("session"));
+        assert!(!text.contains("secret-command-output") && !text.contains("private message"));
+    }
 
     fn running_record() -> HookRunRecord {
         HookRunRecord {

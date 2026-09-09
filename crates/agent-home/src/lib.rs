@@ -3,6 +3,7 @@
 //! 提供路径解析、日志以及配置层（图标、工具开关、内容扫描）。
 //! 供不需要持久化存储的 crate（如 `mcp`）直接依赖，避免引入 SQLite。
 
+pub mod cache;
 pub mod config;
 pub mod config_file;
 pub mod infra;

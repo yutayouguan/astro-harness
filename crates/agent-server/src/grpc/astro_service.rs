@@ -675,8 +675,8 @@ impl AstroServiceImpl {
                 Arc::new(rt)
             }
             Err(err) => {
-                tracing::warn!(%err, "hook runtime bootstrap failed; using empty");
-                Arc::new(::hooks::HookRuntime::new())
+                tracing::warn!(%err, "hook runtime bootstrap failed; blocking configured execution");
+                Arc::new(::hooks::HookRuntime::new().with_configuration_error(err.to_string()))
             }
         };
         Self {
@@ -696,14 +696,19 @@ impl AstroServiceImpl {
 
     pub(crate) fn hook_runtime_for_project(&self, project_root: &str) -> Arc<::hooks::HookRuntime> {
         let requested_root = project_root.trim();
-        if requested_root.is_empty() {
-            return Arc::clone(&self.hook_runtime);
-        }
-        let project_root = match Path::new(requested_root).canonicalize() {
+        let requested_path = if requested_root.is_empty() {
+            self.memory_dir.as_path()
+        } else {
+            Path::new(requested_root)
+        };
+        let project_root = match requested_path.canonicalize() {
             Ok(project_root) => project_root,
             Err(error) => {
                 tracing::warn!(%error, project_root = requested_root, "cannot resolve project hook root");
-                return Arc::clone(&self.hook_runtime);
+                return Arc::new(
+                    self.hook_runtime
+                        .with_configuration_error(error.to_string()),
+                );
             }
         };
         match self
@@ -713,7 +718,10 @@ impl AstroServiceImpl {
             Ok(runtime) => Arc::new(runtime),
             Err(error) => {
                 tracing::warn!(%error, project_root = %project_root.display(), "failed to discover project command hooks");
-                Arc::clone(&self.hook_runtime)
+                Arc::new(
+                    self.hook_runtime
+                        .with_configuration_error(error.to_string()),
+                )
             }
         }
     }

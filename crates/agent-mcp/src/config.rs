@@ -5,6 +5,7 @@
 //! `config.toml` 都不是配置输入。
 
 use std::collections::{BTreeMap, HashMap};
+#[cfg(test)]
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
@@ -441,9 +442,6 @@ struct TomlMcpServer {
     /// Astro 逐工具开关兼容旧 bool；table 同时承载 approval_mode。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     tools: HashMap<String, McpToolConfig>,
-    /// UI 使用的发现缓存；后续可迁移到独立 runtime state。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    discovered: Vec<DiscoveredTool>,
 }
 
 impl TomlMcpServer {
@@ -517,7 +515,7 @@ impl TomlMcpServer {
             disabled_tools: self.disabled_tools,
             default_tools_approval_mode: self.default_tools_approval_mode,
             tools: self.tools,
-            discovered: self.discovered,
+            discovered: Vec::new(),
         })
     }
 
@@ -570,7 +568,6 @@ impl TomlMcpServer {
             disabled_tools: config.disabled_tools.clone(),
             default_tools_approval_mode: config.default_tools_approval_mode,
             tools: config.tools.clone(),
-            discovered: config.discovered.clone(),
         }
     }
 }
@@ -591,33 +588,14 @@ pub fn mcp_config_path_for_project(project_root: &Path) -> PathBuf {
     project_root.join(".astro").join("config.toml")
 }
 
-fn read_toml_value(path: &Path) -> anyhow::Result<toml::Value> {
-    if !path.exists() {
-        return Ok(toml::Value::Table(Default::default()));
-    }
-    let raw = fs::read_to_string(path)?;
-    if raw.trim().is_empty() {
-        return Ok(toml::Value::Table(Default::default()));
-    }
-    raw.parse::<toml::Value>()
-        .with_context(|| format!("parse MCP config {}", path.display()))
-}
-
-fn write_toml_value(path: &Path, value: &toml::Value) -> anyhow::Result<()> {
-    let servers = value
-        .get("mcp_servers")
-        .ok_or_else(|| anyhow::anyhow!("missing MCP section"))?;
-    let mut doc = home::settings::read_document(path)?;
-    home::settings::put(&mut doc, &["mcp_servers"], servers)?;
-    home::settings::write_document(path, &doc)
-}
-
 fn merge_servers(
     merged: &mut BTreeMap<String, McpServerConfig>,
     servers: BTreeMap<String, TomlMcpServer>,
 ) -> anyhow::Result<()> {
+    let mut ids = std::collections::HashSet::new();
     for (id, server) in servers {
         let config = server.into_config(id)?;
+        anyhow::ensure!(ids.insert(config.id.clone()), "duplicate normalized MCP ID");
         merged.insert(config.id.clone(), config);
     }
     Ok(())
@@ -655,6 +633,49 @@ pub fn decode_mcp_servers_from_value(config: &toml::Value) -> anyhow::Result<Vec
     Ok(decoded.into_values().collect())
 }
 
+mod sourced;
+pub use sourced::source_paths;
+
+fn discovery_identity(
+    config: &McpServerConfig,
+    project_root: Option<&Path>,
+) -> anyhow::Result<String> {
+    let mut cfg = config.clone();
+    cfg.discovered.clear();
+    cfg.tools.clear();
+    let mut credentials = BTreeMap::new();
+    for name in cfg
+        .env_vars
+        .iter()
+        .chain(cfg.env_http_headers.values())
+        .chain(cfg.bearer_token_env_var.iter())
+    {
+        credentials.insert(name.clone(), std::env::var(name).ok());
+    }
+    // Only the digest reaches disk, never these configuration/credential values.
+    home::cache::fingerprint(&(
+        cfg,
+        credentials,
+        project_root.map(|p| p.canonicalize()).transpose()?,
+    ))
+}
+
+fn hydrate_discovery(configs: &mut [McpServerConfig], project_root: Option<&Path>) {
+    let base = default_memory_dir();
+    for cfg in configs {
+        if cfg.r#type != McpTransportType::Stdio {
+            continue;
+        }
+        if let Ok(key) = discovery_identity(cfg, project_root) {
+            match home::cache::read(&base, home::cache::Domain::Mcp, &key) {
+                Ok(Some(tools)) => cfg.discovered = tools,
+                Ok(None) => {}
+                Err(error) => tracing::warn!(%error, "MCP discovery cache unavailable"),
+            }
+        }
+    }
+}
+
 /// 按 `系统 → 全局 → 可信项目` 读取并以 Server 为单位整体覆盖。
 pub fn load_mcp_servers_layered(
     project_root: Option<&Path>,
@@ -676,7 +697,9 @@ pub fn load_mcp_servers_layered(
             .with_context(|| format!("decode MCP config layer {:?}", layer.source))?;
         merge_servers(&mut merged, root.mcp_servers)?;
     }
-    Ok(merged.into_values().collect())
+    let mut configs: Vec<_> = merged.into_values().collect();
+    hydrate_discovery(&mut configs, project_root);
+    Ok(configs)
 }
 
 /// 无项目上下文时读取统一的全局配置。
@@ -689,23 +712,7 @@ pub fn load_mcp_servers_scoped(
     scope: &str,
     project_root: Option<&Path>,
 ) -> anyhow::Result<Vec<McpServerConfig>> {
-    if scope == "builtin" {
-        return Ok(Vec::new());
-    }
-    let path = match scope {
-        "project" => {
-            let root = project_root
-                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
-            mcp_config_path_for_project(root)
-        }
-        _ => mcp_config_path_global(),
-    };
-    let root: McpTomlRoot = read_toml_value(&path)?
-        .try_into()
-        .with_context(|| format!("decode MCP config {}", path.display()))?;
-    let mut merged = BTreeMap::new();
-    merge_servers(&mut merged, root.mcp_servers)?;
-    Ok(merged.into_values().collect())
+    sourced::load(scope, project_root)
 }
 
 /// 将服务器列表写入统一的 `~/.astro/config.toml`。
@@ -719,107 +726,34 @@ pub fn save_mcp_servers_scoped(
     project_root: Option<&Path>,
     servers: &[McpServerConfig],
 ) -> anyhow::Result<()> {
-    ensure_default_workspace_dirs()?;
-    let path = match scope {
-        "builtin" => anyhow::bail!("builtin MCP servers are read-only"),
-        "project" => {
-            let root = project_root
-                .ok_or_else(|| anyhow::anyhow!("project scope requires a project root"))?;
-            mcp_config_path_for_project(root)
-        }
-        _ => mcp_config_path_global(),
-    };
-    if scope == "project" && servers.is_empty() && !path.exists() {
-        return Ok(());
-    }
-    let _guard = home::config_file::lock_config_file(&path)?;
-    let mut root = read_toml_value(&path)?;
-    let table = root
-        .as_table_mut()
-        .ok_or_else(|| anyhow::anyhow!("MCP config root must be a TOML table"))?;
-    let mapped: BTreeMap<String, TomlMcpServer> = servers
-        .iter()
-        .map(|config| {
-            let id = sanitize_server_id(&config.id);
-            (id, TomlMcpServer::from_config(config))
-        })
-        .collect();
-    table.insert("mcp_servers".into(), toml::Value::try_from(mapped)?);
-    write_toml_value(&path, &root)
+    sourced::save(scope, project_root, servers)
 }
 
-/// 合并 discovered：保留已有 tools 开关；新工具默认 true
+/// 更新运行时发现结果，不改变任何显式工具开关。
 pub fn merge_discovered(server: &mut McpServerConfig, discovered: Vec<DiscoveredTool>) {
-    for d in &discovered {
-        server
-            .tools
-            .entry(d.name.clone())
-            .or_insert(McpToolConfig::Enabled(true));
-    }
     server.discovered = discovered;
 }
 
-/// 只把 discovered 写回磁盘，并与磁盘上最新的 tools 开关合并，避免覆盖 UI 刚保存的开关
-pub fn persist_discovered(updates: &[(String, Vec<DiscoveredTool>)]) -> anyhow::Result<()> {
+/// 将发现结果写入可丢弃缓存，绝不修改配置定义或工具开关。
+pub fn persist_discovered(
+    updates: &[(McpServerConfig, Vec<DiscoveredTool>)],
+) -> anyhow::Result<()> {
     persist_discovered_layered(None, updates)
 }
 
-/// 只向当前可写层中已存在的 Server 回写发现缓存。
-///
-/// 继承自系统或项目层的 Server 不会被自动复制到全局层，避免一次
-/// `tools/list` 将分层配置意外摊平。这个缓存后续应迁移到独立运行时状态。
+/// 发现缓存按配置、凭证环境与项目隔离；远端 OAuth 尚无稳定账号标识，
+/// 所有 HTTP server 暂不使用持久缓存，仍通过实时连接发现。
 pub fn persist_discovered_layered(
-    _project_root: Option<&Path>,
-    updates: &[(String, Vec<DiscoveredTool>)],
+    project_root: Option<&Path>,
+    updates: &[(McpServerConfig, Vec<DiscoveredTool>)],
 ) -> anyhow::Result<()> {
-    if updates.is_empty() {
-        return Ok(());
-    }
-    ensure_default_workspace_dirs()?;
-    let path = mcp_config_path_global();
-
-    let _guard = home::config_file::lock_config_file(&path)?;
-    let mut root = read_toml_value(&path)?;
-    let root_table = root
-        .as_table_mut()
-        .ok_or_else(|| anyhow::anyhow!("MCP config root must be a TOML table"))?;
-    let Some(server_table) = root_table
-        .get_mut("mcp_servers")
-        .and_then(toml::Value::as_table_mut)
-    else {
-        return Ok(());
-    };
-
-    let mut changed = false;
-    for (sid, discovered) in updates {
-        let sid = sanitize_server_id(sid);
-        let Some((_, server)) = server_table
-            .iter_mut()
-            .find(|(configured_id, _)| sanitize_server_id(configured_id) == sid)
-        else {
+    let base = default_memory_dir();
+    for (config, discovered) in updates {
+        if config.r#type != McpTransportType::Stdio {
             continue;
-        };
-        let server = server
-            .as_table_mut()
-            .ok_or_else(|| anyhow::anyhow!("MCP server {sid:?} must be a TOML table"))?;
-        let tools = server
-            .entry("tools")
-            .or_insert_with(|| toml::Value::Table(Default::default()))
-            .as_table_mut()
-            .ok_or_else(|| anyhow::anyhow!("MCP server {sid:?} tools must be a TOML table"))?;
-        for tool in discovered {
-            tools
-                .entry(tool.name.clone())
-                .or_insert(toml::Value::Boolean(true));
         }
-        server.insert(
-            "discovered".into(),
-            toml::Value::try_from(discovered.clone())?,
-        );
-        changed = true;
-    }
-    if changed {
-        write_toml_value(&path, &root)?;
+        let identity = discovery_identity(config, project_root)?;
+        home::cache::write(&base, home::cache::Domain::Mcp, &identity, discovered)?;
     }
     Ok(())
 }
@@ -1061,7 +995,7 @@ tools = { read = true, write = false }
         save_mcp_servers(&servers).unwrap();
 
         persist_discovered(&[(
-            "s1".into(),
+            servers[0].clone(),
             vec![
                 DiscoveredTool {
                     name: "a".into(),
@@ -1112,7 +1046,7 @@ command = "project-command"
         persist_discovered_layered(
             Some(&project),
             &[(
-                "inherited".into(),
+                load_mcp_servers_layered(Some(&project)).unwrap().remove(0),
                 vec![DiscoveredTool {
                     name: "read".into(),
                     description: "Read".into(),
@@ -1127,7 +1061,7 @@ command = "project-command"
         assert!(!global_config.contains("mcp_servers"));
         let loaded = load_mcp_servers_layered(Some(&project)).unwrap();
         assert_eq!(loaded.len(), 1);
-        assert!(loaded[0].discovered.is_empty());
+        assert_eq!(loaded[0].discovered.len(), 1);
     }
 
     #[test]

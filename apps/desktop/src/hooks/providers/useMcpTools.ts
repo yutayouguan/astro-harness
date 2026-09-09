@@ -207,6 +207,7 @@ export type McpServer = {
   discovered: McpDiscoveredTool[];
   scope: McpConfigScope;
   provenance: string;
+  sourcePath?: string;
   editable: boolean;
   /** 公开 MCP 目录中的分类；个人配置通常不提供。 */
   category?: McpPublicEntryCategory;
@@ -473,6 +474,7 @@ export function normalizeMcpServer(
         : "global",
     provenance:
       typeof config.provenance === "string" ? config.provenance : "user",
+    sourcePath: readOptionalString(config, ["sourcePath", "source_path"]),
     editable: config.editable !== false,
     category,
     featured: config.featured === true,

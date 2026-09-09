@@ -1,19 +1,15 @@
 //! OpenRouter Models API 本地缓存与查找。
 //!
 //! 源：`GET https://openrouter.ai/api/v1/models?output_modalities=all`
-//! 刷新模型列表时按需拉取，落盘 `~/.astro/openrouter-model-meta.json`。
+//! 刷新模型列表时按需拉取，使用统一的 models 缓存策略。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 const OPENROUTER_MODELS_URL: &str = "https://openrouter.ai/api/v1/models?output_modalities=all";
-
-/// 缓存超过该时长则在下次刷新模型时重新拉取
-const CACHE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// 归一化后的模型能力条目（供 enrich 使用）。
 #[derive(Debug, Clone, Default)]
@@ -332,11 +328,14 @@ fn parse_reasoning_meta(
     Some(meta)
 }
 
-/// OpenRouter 元数据缓存文件路径。
-fn cache_path() -> PathBuf {
-    let dir = home::models_cache_dir(&home::default_memory_dir());
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("openrouter-model-meta.json")
+fn read_cache() -> Option<serde_json::Value> {
+    home::cache::read(
+        &home::default_memory_dir(),
+        home::cache::Domain::Models,
+        &"openrouter-model-meta",
+    )
+    .ok()
+    .flatten()
 }
 
 /// 获取进程内缓存 Map 锁。
@@ -377,12 +376,7 @@ fn parse_map(value: serde_json::Value) -> HashMap<String, OpenRouterEntry> {
 }
 
 fn load_disk_into_memory() -> bool {
-    let path = cache_path();
-    let Ok(bytes) = std::fs::read(&path) else {
-        mark_ready();
-        return false;
-    };
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+    let Some(value) = read_cache() else {
         mark_ready();
         return false;
     };
@@ -391,7 +385,6 @@ fn load_disk_into_memory() -> bool {
         mark_ready();
         return false;
     }
-    sync_usage_pricing_cache(&value);
     if let Ok(mut guard) = map_lock().write() {
         *guard = map;
         mark_ready();
@@ -402,17 +395,7 @@ fn load_disk_into_memory() -> bool {
 }
 
 fn cache_is_fresh() -> bool {
-    let path = cache_path();
-    let Ok(meta) = std::fs::metadata(&path) else {
-        return false;
-    };
-    let Ok(modified) = meta.modified() else {
-        return false;
-    };
-    modified
-        .elapsed()
-        .map(|d| d < CACHE_MAX_AGE)
-        .unwrap_or(false)
+    read_cache().is_some()
 }
 
 /// 确保内存中有 OpenRouter 表：优先磁盘，过期或缺失则联网拉取。
@@ -462,24 +445,25 @@ async fn fetch_and_store() -> Result<usize, String> {
     if map.is_empty() {
         return Err("OpenRouter 模型表为空".into());
     }
-    let dir = home::default_memory_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = cache_path();
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(&value).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    if let Err(error) = home::cache::write(
+        &home::default_memory_dir(),
+        home::cache::Domain::Models,
+        &"openrouter-model-meta",
+        &value,
+    ) {
+        tracing::warn!(%error, "OpenRouter metadata cache write failed");
+    }
     sync_usage_pricing_cache(&value);
     let n = map.len();
     if let Ok(mut guard) = map_lock().write() {
         *guard = map;
     }
     mark_ready();
-    tracing::info!(count = n, path = %path.display(), "OpenRouter 模型表已更新");
+    tracing::info!(count = n, "OpenRouter 模型表已更新");
     Ok(n)
 }
 
-/// 同步写入 usage 估费用的 `openrouter-model-pricing.json`（per-token 单价）。
+/// 同步写入 usage 共用的定价缓存（per-token 单价）。
 fn sync_usage_pricing_cache(value: &serde_json::Value) {
     let Some(data) = value.get("data").and_then(|v| v.as_array()) else {
         return;
@@ -528,13 +512,13 @@ fn sync_usage_pricing_cache(value: &serde_json::Value) {
         "fetched_at": fetched_at,
         "models": models,
     });
-    let cache_dir = home::models_cache_dir(&home::default_memory_dir());
-    let _ = std::fs::create_dir_all(&cache_dir);
-    let path = cache_dir.join("openrouter-model-pricing.json");
-    let tmp = path.with_extension("json.tmp");
-    if let Ok(bytes) = serde_json::to_vec_pretty(&cache) {
-        let _ = std::fs::write(&tmp, bytes);
-        let _ = std::fs::rename(&tmp, &path);
+    if let Err(error) = home::cache::write(
+        &home::default_memory_dir(),
+        home::cache::Domain::Models,
+        &"openrouter-model-pricing",
+        &cache,
+    ) {
+        tracing::warn!(%error, "OpenRouter pricing cache write failed");
     }
 }
 

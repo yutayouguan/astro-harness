@@ -566,7 +566,7 @@ impl McpHub {
             self.servers.remove(&id);
         }
 
-        let mut discovered_updates: Vec<(String, Vec<DiscoveredTool>)> = Vec::new();
+        let mut discovered_updates: Vec<(McpServerConfig, Vec<DiscoveredTool>)> = Vec::new();
         let mut connect_errors = self.last_connect_errors.clone();
         let mut pending = Vec::new();
         let mut required_failures = Vec::new();
@@ -675,7 +675,7 @@ impl McpHub {
                     {
                         merge_discovered(slot, discovered.clone());
                     }
-                    discovered_updates.push((sid.clone(), discovered));
+                    discovered_updates.push((cfg.clone(), discovered));
                     self.states
                         .insert(sid.clone(), McpLifecycleState::Connected);
                     self.retries.remove(&sid);
@@ -1161,7 +1161,7 @@ impl McpHub {
                         })
                         .collect();
                     merge_discovered(cfg, discovered.clone());
-                    discovered_updates.push((sanitize_server_id(&cfg.id), discovered));
+                    discovered_updates.push((cfg.clone(), discovered));
                     // drop running → 关闭短连
                 }
                 Err(e) => {
@@ -1169,7 +1169,11 @@ impl McpHub {
                 }
             }
         }
-        persist_discovered_layered(Some(&execution_context.working_dir), &discovered_updates)?;
+        if let Err(error) =
+            persist_discovered_layered(Some(&execution_context.working_dir), &discovered_updates)
+        {
+            tracing::warn!(%error, "MCP discovery cache write failed; live discovery is still valid");
+        }
         Ok(configs)
     }
 }

@@ -20,6 +20,7 @@ pub const DOT_ASTRO_DIR: &str = ".astro";
 /// 此列表遵循公开的项目配置契约。这些值涉及凭据重定向、Provider 流量、
 /// 主机元数据、通知或遥测，因此仅属于用户/系统层。
 pub const PROJECT_PROTECTED_KEYS: &[&str] = &[
+    "cache",
     "desktop",
     "openai_base_url",
     "chatgpt_base_url",
@@ -111,6 +112,8 @@ impl LocalConfigLoad {
 
 #[derive(Debug, Error)]
 pub enum LocalConfigError {
+    #[error("configuration sources: {0}")]
+    Sources(String),
     #[error("configuration working directory is not a directory: {0}")]
     InvalidWorkingDirectory(PathBuf),
     #[error("failed to canonicalize {path}: {source}")]
@@ -173,7 +176,11 @@ pub fn load_local_config(
             },
         )? {
             discovery_layers.push(layer.clone());
-            layers.push(layer);
+            layers.extend(expand_sources(
+                layer,
+                path,
+                path.parent().unwrap_or(Path::new(".")),
+            )?);
         }
     }
 
@@ -185,7 +192,7 @@ pub fn load_local_config(
         },
     )? {
         discovery_layers.push(layer.clone());
-        layers.push(layer);
+        layers.extend(expand_sources(layer, &user_path, &options.astro_home)?);
     }
 
     // 项目发现和信任是机器/用户层面的决策。选定的 profile
@@ -202,16 +209,22 @@ pub fn load_local_config(
         if !path.is_file() {
             return Err(LocalConfigError::MissingProfile(path));
         }
-        layers.push(load_file(
+        let layer = load_file(
             &path,
             ConfigLayerSource::Profile {
                 name: profile.to_string(),
                 file: path.clone(),
             },
-        )?);
+        )?;
+        layers.extend(expand_sources(layer, &path, &options.astro_home)?);
     }
 
     let mut diagnostics = Vec::new();
+    let global_files: Vec<_> = layers
+        .iter()
+        .filter_map(|layer| crate::sources::source_file(&layer.source))
+        .filter_map(|file| file.canonicalize().ok())
+        .collect();
 
     for dot_astro_dir in project_config_dirs(&project_root, &cwd) {
         let path = dot_astro_dir.join(CONFIG_TOML_FILE);
@@ -238,7 +251,20 @@ pub fn load_local_config(
 
         let mut layer = load_file(&path, source.clone())?;
         strip_project_protected_keys(&mut layer, &mut diagnostics);
-        layers.push(layer);
+        let expanded = expand_sources(layer, &path, &project_root)?;
+        if expanded
+            .iter()
+            .filter_map(|layer| crate::sources::source_file(&layer.source))
+            .any(|file| {
+                file.canonicalize()
+                    .is_ok_and(|file| global_files.contains(&file))
+            })
+        {
+            return Err(LocalConfigError::Sources(
+                "project sources must not alias global configuration files".into(),
+            ));
+        }
+        layers.extend(expanded);
     }
 
     if let Some(config) = &options.session_overrides {
@@ -260,6 +286,18 @@ pub fn load_local_config(
         project_root,
         project_trust,
     })
+}
+
+fn expand_sources(
+    layer: ConfigLayerEntry,
+    file: &Path,
+    boundary: &Path,
+) -> Result<Vec<ConfigLayerEntry>, LocalConfigError> {
+    if layer.config.get("config_sources").is_none() {
+        return Ok(vec![layer]);
+    }
+    crate::sources::expand_layer(layer, file, boundary)
+        .map_err(|error| LocalConfigError::Sources(error.to_string()))
 }
 
 pub fn validate_profile_name(profile: &str) -> Result<(), LocalConfigError> {

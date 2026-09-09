@@ -10,12 +10,14 @@ pub mod event;
 pub mod gateway;
 pub mod lifecycle_events;
 pub mod mcp;
+pub mod migration;
 pub mod names;
 pub mod outcome;
 pub mod plugin;
 pub mod run;
 pub mod shell;
 pub mod tool_events;
+pub mod trust;
 pub mod ui;
 #[cfg(windows)]
 mod windows_job;
@@ -91,6 +93,13 @@ impl HookRuntime {
         }
     }
 
+    pub fn with_configuration_error(&self, message: impl Into<String>) -> Self {
+        Self {
+            command: Arc::new(CommandHookRunner::blocked(message)),
+            ..self.clone()
+        }
+    }
+
     /// Bind the session-scoped MCP transport used by `mcp_tool` hook handlers.
     pub fn with_mcp_executor(&self, executor: Arc<dyn HookMcpExecutor>) -> Self {
         Self {
@@ -111,13 +120,7 @@ impl HookRuntime {
         if let Ok(mut sh) = rt.shell.lock() {
             *sh = ShellHookRunner::from_map(cfg.hooks);
         }
-        let command = match CommandHookRunner::load(root) {
-            Ok(command) => Arc::new(command),
-            Err(error) => {
-                tracing::warn!(%error, root = %root.display(), "failed to load hooks.json");
-                Arc::new(CommandHookRunner::default())
-            }
-        };
+        let command = Arc::new(CommandHookRunner::load(root)?);
         Ok(Self { command, ..rt })
     }
 
@@ -414,6 +417,7 @@ mod tests {
                     hooks: std::collections::HashMap::from([(
                         event.to_string(),
                         vec![MatcherGroup {
+                            id: None,
                             matcher: None,
                             hooks: vec![HookHandlerConfig::Command {
                                 command: command.to_string(),

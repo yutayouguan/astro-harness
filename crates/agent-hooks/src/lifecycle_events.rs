@@ -451,6 +451,7 @@ mod tests {
                     hooks: std::collections::HashMap::from([(
                         event.to_string(),
                         vec![MatcherGroup {
+                            id: None,
                             matcher: None,
                             hooks: vec![HookHandlerConfig::Command {
                                 command: command.to_string(),

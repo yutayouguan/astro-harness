@@ -4,6 +4,7 @@
 //! 加载器提供有序层；消费者获得一个生效的 TOML 值以及精确的逐键来源追溯。
 
 pub mod loader;
+pub mod sources;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -22,20 +23,44 @@ use toml::Value as TomlValue;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConfigLayerSource {
-    PackagedDefaults { file: PathBuf },
-    ManagedPreferences { domain: String, key: String },
-    System { file: PathBuf },
-    EnterpriseManaged { id: String, name: String },
-    User { file: PathBuf },
-    Profile { name: String, file: PathBuf },
-    Project { dot_config_dir: PathBuf },
-    Agent { agent_id: String, file: PathBuf },
+    PackagedDefaults {
+        file: PathBuf,
+    },
+    ManagedPreferences {
+        domain: String,
+        key: String,
+    },
+    System {
+        file: PathBuf,
+    },
+    EnterpriseManaged {
+        id: String,
+        name: String,
+    },
+    User {
+        file: PathBuf,
+    },
+    Profile {
+        name: String,
+        file: PathBuf,
+    },
+    Project {
+        dot_config_dir: PathBuf,
+    },
+    Agent {
+        agent_id: String,
+        file: PathBuf,
+    },
+    Included {
+        file: PathBuf,
+        owner: Box<ConfigLayerSource>,
+    },
     SessionOverrides,
     RequestOverrides,
 }
 
 impl ConfigLayerSource {
-    pub const fn precedence(&self) -> i16 {
+    pub fn precedence(&self) -> i16 {
         match self {
             Self::PackagedDefaults { .. } => -10,
             Self::ManagedPreferences { .. } => 0,
@@ -45,6 +70,7 @@ impl ConfigLayerSource {
             Self::Profile { .. } => 21,
             Self::Project { .. } => 25,
             Self::Agent { .. } => 27,
+            Self::Included { owner, .. } => owner.precedence(),
             Self::SessionOverrides => 30,
             Self::RequestOverrides => 35,
         }
@@ -354,6 +380,42 @@ fn merge_with_origins(
     origin: &ConfigOrigin,
     origins: &mut BTreeMap<ConfigKeyPath, ConfigOrigin>,
 ) {
+    if path.segments() == ["hooks"] {
+        // Stable rule IDs override across events; unrelated rules remain additive.
+        if let (Some(base), Some(overlay)) = (base.as_table_mut(), overlay.as_table()) {
+            let ids: Vec<_> = overlay
+                .values()
+                .filter_map(TomlValue::as_array)
+                .flatten()
+                .filter_map(|rule| rule.get("id").and_then(TomlValue::as_str))
+                .collect();
+            for rules in base
+                .iter_mut()
+                .filter_map(|(_, value)| value.as_array_mut())
+            {
+                rules.retain(|rule| {
+                    !rule
+                        .get("id")
+                        .and_then(TomlValue::as_str)
+                        .is_some_and(|id| ids.contains(&id))
+                });
+            }
+        }
+    }
+    if path.segments().len() == 2 && path.segments()[0] == "hooks" && path.segments()[1] != "state"
+    {
+        if let (Some(base), Some(overlay)) = (base.as_array_mut(), overlay.as_array()) {
+            base.extend(overlay.iter().cloned());
+            origins.insert(path.clone(), origin.clone());
+            return;
+        }
+    }
+    if path.segments().len() == 2 && path.segments()[0] == "mcp_servers" {
+        *base = overlay.clone();
+        origins.retain(|candidate, _| !candidate.starts_with(path));
+        assign_origin(overlay, path, origin, origins);
+        return;
+    }
     if let (Some(base_table), Some(overlay_table)) = (base.as_table_mut(), overlay.as_table()) {
         for (key, value) in overlay_table {
             let child_path = path.pushed(key);
@@ -445,6 +507,29 @@ fn canonical_toml_bytes(value: &TomlValue) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn domain_overrides_replace_mcp_servers_and_keep_unrelated_hook_rules() {
+        let stack = ConfigLayerStack::new(vec![
+            layer(source_user(), "[mcp_servers.a]\ncommand='old'\nenv={TOKEN='private'}\n[[hooks.PreToolUse]]\nid='replace'\nhooks=[]\n[[hooks.PreToolUse]]\nid='keep'\nhooks=[]\n"),
+            layer(source_project("/repo/.astro"), "[mcp_servers.a]\nurl='https://example.com'\n[[hooks.PostToolUse]]\nid='replace'\nhooks=[]\n"),
+        ]);
+        let config = stack.effective_config();
+        assert!(config["mcp_servers"]["a"].get("command").is_none());
+        assert!(config["mcp_servers"]["a"].get("env").is_none());
+        assert!(stack
+            .origin_at(["mcp_servers", "a", "env", "TOKEN"].iter())
+            .is_none());
+        assert_eq!(config["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            config["hooks"]["PreToolUse"][0]["id"].as_str(),
+            Some("keep")
+        );
+        assert_eq!(
+            config["hooks"]["PostToolUse"][0]["id"].as_str(),
+            Some("replace")
+        );
+    }
 
     fn source_user() -> ConfigLayerSource {
         ConfigLayerSource::User {

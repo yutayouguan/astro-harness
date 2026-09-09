@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(test)]
 use std::fs;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::infra::keystore::{
@@ -679,13 +679,6 @@ pub struct ProviderTestResult {
     pub message: String,
 }
 
-/// 模型缓存文件路径。
-fn models_path() -> PathBuf {
-    let dir = home::models_cache_dir(&home::default_memory_dir());
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("models.json")
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ModelsCacheFile {
     #[serde(default)]
@@ -694,6 +687,8 @@ struct ModelsCacheFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CachedProviderModels {
+    #[serde(default)]
+    configuration_fingerprint: String,
     provider_id: String,
     #[serde(default)]
     display_name: String,
@@ -710,14 +705,30 @@ struct CachedProviderModels {
 
 /// 从磁盘加载模型列表缓存。
 fn load_models_cache() -> ModelsCacheFile {
-    let path = models_path();
-    if !path.exists() {
-        return ModelsCacheFile::default();
+    let base = home::default_memory_dir();
+    match home::cache::read::<ModelsCacheFile>(
+        &base,
+        home::cache::Domain::Models,
+        &"provider-catalog",
+    ) {
+        Ok(Some(mut cache)) => {
+            let ttl = home::cache::policy(&base, home::cache::Domain::Models)
+                .map(|p| p.ttl_seconds)
+                .unwrap_or(0);
+            cache.providers.retain(|_, entry| {
+                chrono::DateTime::parse_from_rfc3339(&entry.updated_at).is_ok_and(|time| {
+                    let age = chrono::Utc::now().signed_duration_since(time).num_seconds();
+                    age >= 0 && (age as u64) <= ttl
+                })
+            });
+            cache
+        }
+        Ok(None) => ModelsCacheFile::default(),
+        Err(error) => {
+            tracing::warn!(%error, "model cache unavailable");
+            ModelsCacheFile::default()
+        }
     }
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
 }
 
 /// 串行化 models.json 的读改写，避免并发 list_provider_models 互相覆盖 / 撞临时文件。
@@ -725,29 +736,14 @@ static MODELS_CACHE_LOCK: Mutex<()> = Mutex::new(());
 
 /// 将模型列表缓存原子写入磁盘（调用方须已持有 `MODELS_CACHE_LOCK`）。
 fn save_models_cache(cache: &ModelsCacheFile) -> Result<(), String> {
-    let path = models_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    // 唯一临时名：多线程若共用 models.json.tmp，一方 rename 后另一方会 ENOENT。
-    let tmp = path.with_extension(format!(
-        "json.{}.{}.tmp",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
-    let raw = serde_json::to_string_pretty(cache).map_err(|e| e.to_string())?;
-    if let Err(e) = fs::write(&tmp, raw) {
-        let _ = fs::remove_file(&tmp);
-        return Err(e.to_string());
-    }
-    if let Err(e) = fs::rename(&tmp, &path) {
-        let _ = fs::remove_file(&tmp);
-        return Err(e.to_string());
-    }
-    Ok(())
+    home::cache::write(
+        &home::default_memory_dir(),
+        home::cache::Domain::Models,
+        &"provider-catalog",
+        cache,
+    )
+    .map(|_| ())
+    .map_err(|error| error.to_string())
 }
 
 /// 持久化某一 Provider 的模型列表。
@@ -762,6 +758,7 @@ fn persist_provider_models(
     cache.providers.insert(
         provider.id.clone(),
         CachedProviderModels {
+            configuration_fingerprint: provider_cache_identity(provider).unwrap_or_default(),
             provider_id: provider.id.clone(),
             display_name: provider.display_name.clone(),
             kind: provider.kind.as_str().to_string(),
@@ -837,9 +834,12 @@ fn sync_custom_provider_models() {
             })
             .collect();
         cache.providers.insert(
-            id.clone(),
+            format!("toml:{id}"),
             CachedProviderModels {
-                provider_id: id.clone(),
+                configuration_fingerprint: configured_provider_for_cache(&format!("toml:{id}"))
+                    .and_then(|p| provider_cache_identity(&p))
+                    .unwrap_or_default(),
+                provider_id: format!("toml:{id}"),
                 display_name: cfg.name.clone(),
                 kind: "custom".to_string(),
                 models,
@@ -1486,6 +1486,36 @@ fn resolve_media_model(configured: &str, default: &str) -> String {
     }
 }
 
+/// Read definitions without load_state's model-cache synchronization side effects.
+fn configured_provider_for_cache(id: &str) -> Option<ProviderConfig> {
+    let mut state: ProvidersState =
+        home::settings::read(&home::default_memory_dir(), &["desktop", "providers"])
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+    merge_toml_custom_providers(&mut state);
+    state
+        .providers
+        .into_iter()
+        .find(|provider| provider.id == id)
+}
+
+fn provider_cache_identity(provider: &ProviderConfig) -> Option<String> {
+    let (_, _, _, credential) = resolve_api_key(provider);
+    let custom: Option<serde_json::Value> = if let Some(id) = provider.id.strip_prefix("toml:") {
+        home::settings::read(&home::default_memory_dir(), &["custom_providers", id]).ok()?
+    } else {
+        None
+    };
+    home::cache::fingerprint(&(provider, credential, custom)).ok()
+}
+
+fn cache_entry_is_current(entry: &CachedProviderModels) -> bool {
+    configured_provider_for_cache(&entry.provider_id)
+        .and_then(|p| provider_cache_identity(&p))
+        .is_some_and(|identity| identity == entry.configuration_fingerprint)
+}
+
 /// 从模型缓存中选取该 provider 最新的聊天模型 id。
 /// 缓存为空时回退到 `ProviderKind::default_model()` 硬编码值。
 pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
@@ -1494,6 +1524,9 @@ pub fn resolve_latest_chat_model(kind: &ProviderKind) -> String {
     // 遍历缓存中该 kind 的所有 provider entry
     let mut best: Option<(u64, String)> = None;
     for entry in cache.providers.values() {
+        if !cache_entry_is_current(entry) {
+            continue;
+        }
         if entry.kind != kind_str {
             continue;
         }
@@ -1724,10 +1757,18 @@ pub async fn list_provider_models(
     if !refresh.unwrap_or(false) {
         // TTL 缓存：10 分钟内用缓存，不请求 API
         let cache = load_models_cache();
-        if let Some(entry) = cache.providers.get(&id) {
+        if let Some(entry) = cache
+            .providers
+            .get(&id)
+            .filter(|entry| cache_entry_is_current(entry))
+        {
             if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&entry.updated_at) {
                 let age = chrono::Utc::now().signed_duration_since(updated);
-                if age.num_minutes() < 10 {
+                let ttl =
+                    home::cache::policy(&home::default_memory_dir(), home::cache::Domain::Models)
+                        .map_err(|e| e.to_string())?
+                        .ttl_seconds;
+                if age.num_seconds() >= 0 && (age.num_seconds() as u64) <= ttl {
                     let kind = if entry.kind.is_empty() {
                         "custom"
                     } else {
@@ -2000,6 +2041,9 @@ pub fn cached_model_info(
 ) -> Option<crate::meta::model_meta::ModelInfo> {
     let cache = load_models_cache();
     let entry = cache.providers.get(provider_id)?;
+    if !cache_entry_is_current(entry) {
+        return None;
+    }
     let kind = if entry.kind.is_empty() {
         "custom"
     } else {
@@ -2033,23 +2077,27 @@ pub async fn get_cached_provider_models(
     id: String,
 ) -> Result<Option<ProviderModelsResult>, String> {
     let cache = load_models_cache();
-    Ok(cache.providers.get(&id).map(|c| {
-        let kind = if c.kind.is_empty() {
-            "custom"
-        } else {
-            c.kind.as_str()
-        };
-        ProviderModelsResult {
-            models: c
-                .models
-                .iter()
-                .cloned()
-                .map(|e| e.into_info(kind))
-                .collect(),
-            latency_ms: c.latency_ms,
-            source: c.source.clone(),
-        }
-    }))
+    Ok(cache
+        .providers
+        .get(&id)
+        .filter(|entry| cache_entry_is_current(entry))
+        .map(|c| {
+            let kind = if c.kind.is_empty() {
+                "custom"
+            } else {
+                c.kind.as_str()
+            };
+            ProviderModelsResult {
+                models: c
+                    .models
+                    .iter()
+                    .cloned()
+                    .map(|e| e.into_info(kind))
+                    .collect(),
+                latency_ms: c.latency_ms,
+                source: c.source.clone(),
+            }
+        }))
 }
 
 /// 单模型连通性探测；协议实现已下沉到 `providers::verify`。
@@ -2714,5 +2762,31 @@ mod tests {
             "lost providers under concurrent RMW: {:?}",
             cache.providers.keys().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn model_cache_invalidates_changed_provider_definition() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let mut provider = ProviderConfig::new(ProviderKind::Ollama);
+        provider.id = "cache-fixture".into();
+        let state = ProvidersState {
+            providers: vec![provider.clone()],
+            ..Default::default()
+        };
+        home::settings::write(dir.path(), &["desktop", "providers"], &state).unwrap();
+        let before = fs::read(home::config_path(dir.path())).unwrap();
+        persist_provider_models(&provider, &[], "test", 1).unwrap();
+        let cache = load_models_cache();
+        let entry = cache.providers.get(&provider.id).unwrap();
+        assert!(cache_entry_is_current(entry));
+        assert_eq!(fs::read(home::config_path(dir.path())).unwrap(), before);
+        provider.endpoint = "http://127.0.0.1:11435".into();
+        let state = ProvidersState {
+            providers: vec![provider],
+            ..Default::default()
+        };
+        home::settings::write(dir.path(), &["desktop", "providers"], &state).unwrap();
+        assert!(!cache_entry_is_current(entry));
     }
 }

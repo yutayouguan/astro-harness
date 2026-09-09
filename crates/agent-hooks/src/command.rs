@@ -189,6 +189,8 @@ struct ConfigToml {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct MatcherGroup {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(default)]
     pub matcher: Option<String>,
     #[serde(default)]
@@ -267,6 +269,7 @@ pub struct CommandHookDecision {
 
 #[derive(Debug, Clone)]
 struct ConfiguredHandler {
+    rule_id: Option<String>,
     id: String,
     key: String,
     enabled: bool,
@@ -363,6 +366,9 @@ pub struct CommandHookSourceSummary {
 
 #[derive(Clone)]
 pub struct CommandHookRunner {
+    configuration_error: Option<String>,
+    trust_hashes: HashMap<String, String>,
+    authority_root: Option<PathBuf>,
     handlers: HashMap<HookEvent, Vec<ConfiguredHandler>>,
     runs: HookRunStore,
     sources: Vec<CommandHookSourceSummary>,
@@ -386,6 +392,9 @@ impl Default for CommandHookRunner {
     fn default() -> Self {
         Self {
             handlers: HashMap::new(),
+            configuration_error: None,
+            trust_hashes: HashMap::new(),
+            authority_root: None,
             runs: HookRunStore::default(),
             sources: Vec::new(),
             mcp_executor: unavailable_executor(),
@@ -414,8 +423,25 @@ pub struct CommandHookSummary {
 }
 
 impl CommandHookRunner {
+    pub fn blocked(error: impl Into<String>) -> Self {
+        Self {
+            configuration_error: Some(error.into()),
+            ..Default::default()
+        }
+    }
     pub fn load(root: &Path) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            !crate::migration::marker(root).exists(),
+            "extension migration is incomplete"
+        );
+        Self::validate_migrated_home(root)
+    }
+
+    pub(crate) fn validate_migrated_home(root: &Path) -> anyhow::Result<Self> {
         let mut runner = Self::default();
+        runner.authority_root = Some(root.to_path_buf());
+        runner.trust_hashes = crate::trust::load(root)?;
+        runner.runs = HookRunStore::with_audit_root(root);
         runner.load_scope(root, CommandHookScope::User, CommandHookTrust::Trusted)?;
         Ok(runner)
     }
@@ -424,6 +450,7 @@ impl CommandHookRunner {
         let mut runner = Self::load(astro_home)?;
         let cwd = cwd.canonicalize()?;
         let loaded = load_local_config(&LocalConfigOptions::new(astro_home, &cwd))?;
+        runner.authority_root = Some(loaded.project_root.clone());
         let trust = CommandHookTrust::from(loaded.project_trust);
         for directory in project_hook_dirs(&loaded.project_root, &cwd) {
             let source_paths = [directory.join("hooks.json"), directory.join("config.toml")];
@@ -460,37 +487,61 @@ impl CommandHookRunner {
         scope: CommandHookScope,
         trust: CommandHookTrust,
     ) -> anyhow::Result<()> {
-        let toml_path = directory.join("config.toml");
-        let toml_hooks = if toml_path.is_file() {
-            let raw = std::fs::read_to_string(&toml_path)?;
-            toml::from_str::<ConfigToml>(&raw)?
-                .hooks
-                .unwrap_or_default()
-        } else {
-            HooksToml::default()
-        };
-        let json_path = directory.join("hooks.json");
-        if json_path.is_file() {
-            self.load_file(&json_path, scope, trust, &toml_hooks.state)?;
+        let path = directory.join("config.toml");
+        let value = agent_config::sources::read_root(&path)?;
+        let boundary = self.authority_root.as_deref().unwrap_or(directory);
+        let documents = agent_config::sources::documents(
+            &path,
+            &value,
+            agent_config::sources::Domain::Hooks,
+            boundary,
+        )?;
+        let legacy = directory.join("hooks.json");
+        if legacy.exists() {
+            let legacy = legacy.canonicalize()?;
+            anyhow::ensure!(documents.iter().any(|doc| doc.path == legacy && !doc.root), "hooks.json must be explicitly referenced by config_sources.hooks; run the extension config migration");
         }
-        if toml_path.is_file() && !toml_hooks.events.is_empty() {
+        let mut controls = HashMap::new();
+        let mut definitions = Vec::new();
+        for doc in documents {
+            let config: ConfigToml = doc.value.try_into().map_err(|_| {
+                anyhow::anyhow!("invalid Hook configuration in {}", doc.path.display())
+            })?;
+            let Some(hooks) = config.hooks else {
+                continue;
+            };
+            anyhow::ensure!(
+                hooks
+                    .state
+                    .values()
+                    .all(|state| state.trusted_hash.is_none()),
+                "trusted_hash must be migrated to security/hooks/trust.json"
+            );
+            controls.extend(
+                hooks
+                    .state
+                    .into_iter()
+                    .map(|(key, state)| (crate::trust::canonical_key(&key), state)),
+            );
+            if !hooks.events.is_empty() {
+                definitions.push((
+                    doc.path,
+                    HooksFile {
+                        description: None,
+                        hooks: hooks.events,
+                    },
+                ));
+            }
+        }
+        for (source, file) in definitions {
             self.sources.push(CommandHookSourceSummary {
-                path: toml_path.to_string_lossy().into_owned(),
+                path: source.to_string_lossy().into_owned(),
                 scope,
                 trust,
                 enabled: true,
                 reason: None,
             });
-            self.extend_from_file(
-                HooksFile {
-                    description: None,
-                    hooks: toml_hooks.events,
-                },
-                &toml_path,
-                &toml_hooks.state,
-                scope,
-                trust,
-            );
+            self.extend_from_file(file, &source, &controls, scope, trust);
         }
         Ok(())
     }
@@ -514,26 +565,6 @@ impl CommandHookRunner {
         Ok(runner)
     }
 
-    fn load_file(
-        &mut self,
-        source: &Path,
-        scope: CommandHookScope,
-        trust: CommandHookTrust,
-        states: &HashMap<String, HookStateToml>,
-    ) -> anyhow::Result<()> {
-        let raw = std::fs::read_to_string(source)?;
-        let file: HooksFile = serde_json::from_str(&raw)?;
-        self.sources.push(CommandHookSourceSummary {
-            path: source.to_string_lossy().into_owned(),
-            scope,
-            trust,
-            enabled: true,
-            reason: None,
-        });
-        self.extend_from_file(file, source, states, scope, trust);
-        Ok(())
-    }
-
     fn extend_from_file(
         &mut self,
         file: HooksFile,
@@ -548,6 +579,12 @@ impl CommandHookRunner {
                 continue;
             };
             for (group_index, group) in groups.into_iter().enumerate() {
+                if let Some(rule_id) = group.id.as_deref() {
+                    // Higher project layers replace one logical rule, not an event's entire array.
+                    for handlers in self.handlers.values_mut() {
+                        handlers.retain(|handler| handler.rule_id.as_deref() != Some(rule_id));
+                    }
+                }
                 let group_for_hash = group.clone();
                 let matcher_source = group.matcher.clone();
                 let matcher = match compile_matcher(group.matcher.as_deref()) {
@@ -558,8 +595,13 @@ impl CommandHookRunner {
                     }
                 };
                 for (handler_index, handler) in group.hooks.into_iter().enumerate() {
-                    let key = hook_key(source, event_name, group_index, handler_index);
-                    let state = states.get(&key);
+                    let key = match group.id.as_deref() {
+                        Some(id) => format!("{}:rule:{id}:{handler_index}", source.display()),
+                        None => hook_key(source, event_name, group_index, handler_index),
+                    };
+                    let state = states
+                        .get(&key)
+                        .or_else(|| group.id.as_ref().and_then(|id| states.get(id)));
                     let (kind, requested, asynchronous, status_message, additional_context_limit) =
                         match handler {
                             HookHandlerConfig::Command {
@@ -643,7 +685,7 @@ impl CommandHookRunner {
                         &group_for_hash,
                         normalized_handler,
                     );
-                    let trust_status = match state.and_then(|state| state.trusted_hash.as_deref()) {
+                    let trust_status = match self.trust_hashes.get(&key).map(String::as_str) {
                         Some(trusted_hash) if trusted_hash == current_hash => {
                             HookTrustStatus::Trusted
                         }
@@ -655,18 +697,23 @@ impl CommandHookRunner {
                     };
                     let enabled = state.and_then(|state| state.enabled) != Some(false)
                         && trust_status != HookTrustStatus::Modified;
-                    let id = handler_id(
-                        source,
-                        &event,
-                        group_index,
-                        handler_index,
-                        matcher_source.as_deref(),
-                        &kind.identity(),
-                    );
+                    let id = if group.id.is_some() {
+                        key.clone()
+                    } else {
+                        handler_id(
+                            source,
+                            &event,
+                            group_index,
+                            handler_index,
+                            matcher_source.as_deref(),
+                            &kind.identity(),
+                        )
+                    };
                     self.handlers
                         .entry(event_name)
                         .or_default()
                         .push(ConfiguredHandler {
+                            rule_id: group.id.clone(),
                             id,
                             key,
                             enabled,
@@ -690,6 +737,9 @@ impl CommandHookRunner {
     }
 
     pub fn is_empty(&self) -> bool {
+        if self.configuration_error.is_some() {
+            return false;
+        }
         self.handlers
             .values()
             .all(|handlers| handlers.iter().all(|handler| !handler.enabled))
@@ -737,7 +787,10 @@ impl CommandHookRunner {
         self.sources.clone()
     }
 
-    pub(crate) fn share_run_store(mut self, runs: HookRunStore) -> Self {
+    pub(crate) fn share_run_store(mut self, mut runs: HookRunStore) -> Self {
+        if runs.audit_file.is_none() {
+            runs.audit_file = self.runs.audit_file.clone();
+        }
         self.runs = runs;
         self
     }
@@ -777,6 +830,13 @@ impl CommandHookRunner {
         payload: &HookPayload,
         memory_consolidation: bool,
     ) -> Vec<CommandHookDecision> {
+        if let Some(error) = &self.configuration_error {
+            return vec![CommandHookDecision {
+                block_reason: Some(format!("Hook configuration unavailable: {error}")),
+                error: Some(error.clone()),
+                ..Default::default()
+            }];
+        }
         let Some(event_name) = HookEvent::from_command_name(event) else {
             return Vec::new();
         };
@@ -1101,11 +1161,11 @@ fn canonical_json(value: &Value) -> Value {
 }
 
 fn hook_key(source: &Path, event: HookEvent, group_index: usize, handler_index: usize) -> String {
-    format!(
+    crate::trust::canonical_key(&format!(
         "{}:{}:{group_index}:{handler_index}",
         source.display(),
         event.key_label()
-    )
+    ))
 }
 
 fn project_hook_dirs(project_root: &Path, cwd: &Path) -> Vec<PathBuf> {
@@ -2171,6 +2231,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(project.join(".astro/hooks.json"), hooks).unwrap();
+        std::fs::write(
+            project.join(".astro/config.toml"),
+            "[config_sources]\nhooks=['hooks.json']\n",
+        )
+        .unwrap();
         (root, astro_home, cwd)
     }
 
@@ -2179,6 +2244,7 @@ mod tests {
             hooks: HashMap::from([(
                 crate::PRE_TOOL_USE.into(),
                 vec![MatcherGroup {
+                    id: None,
                     matcher: matcher.map(str::to_string),
                     hooks: vec![HookHandlerConfig::Command {
                         command,
@@ -2232,6 +2298,7 @@ mod tests {
                 hooks: HashMap::from([(
                     crate::PRE_TOOL_USE.into(),
                     vec![MatcherGroup {
+                        id: None,
                         matcher: Some("terminal".into()),
                         hooks: vec![HookHandlerConfig::McpTool {
                             server: "policy".into(),
@@ -2294,6 +2361,7 @@ mod tests {
                 hooks: HashMap::from([(
                     crate::SESSION_END.into(),
                     vec![MatcherGroup {
+                        id: None,
                         matcher: Some("other".into()),
                         hooks: vec![HookHandlerConfig::McpTool {
                             server: "audit".into(),
@@ -2567,7 +2635,6 @@ mod tests {
                 [hooks]
                 [hooks.state."legacy-hook-key"]
                 enabled = false
-                trusted_hash = "sha256:abc123"
 
                 [[hooks.PreToolUse]]
                 matcher = "terminal"
@@ -2587,6 +2654,61 @@ mod tests {
         assert_eq!(hooks[0].handler_type, HookHandlerType::Command);
         assert_eq!(hooks[0].additional_context_limit, Some(4096));
         assert!(hooks[0].source.ends_with("config.toml"));
+    }
+
+    #[test]
+    fn explicit_rule_identity_survives_reordering_and_project_override() {
+        let (_root, astro_home, cwd) = project_fixture(
+            "trusted",
+            r#"{"hooks":{"PreToolUse":[{"id":"shared","hooks":[{"type":"command","command":"project"}]}]}}"#,
+        );
+        let global = astro_home.join("config.toml");
+        let trust = std::fs::read_to_string(&global).unwrap();
+        let rule = |id: &str| {
+            format!("\n[[hooks.PreToolUse]]\nid={id:?}\n[[hooks.PreToolUse.hooks]]\ntype='command'\ncommand='global'\n")
+        };
+        std::fs::write(
+            &global,
+            format!("{trust}{}{}", rule("shared"), rule("keep")),
+        )
+        .unwrap();
+        let first = CommandHookRunner::load(&astro_home).unwrap().list();
+        std::fs::write(
+            &global,
+            format!("{trust}{}{}", rule("keep"), rule("shared")),
+        )
+        .unwrap();
+        let second = CommandHookRunner::load(&astro_home).unwrap().list();
+        for entry in &first {
+            assert!(second
+                .iter()
+                .any(|other| other.id == entry.id && other.current_hash == entry.current_hash));
+        }
+        let effective = CommandHookRunner::load_for_project(&astro_home, &cwd)
+            .unwrap()
+            .list();
+        assert_eq!(effective.len(), 2);
+        assert_eq!(
+            effective
+                .iter()
+                .filter(|h| h.command.as_deref() == Some("project"))
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_configuration_runner_blocks_instead_of_disabling_hooks() {
+        let runner = CommandHookRunner::blocked("fixture error");
+        assert!(!runner.is_empty());
+        let decisions = runner
+            .run(crate::PRE_TOOL_USE, &HookPayload::default())
+            .await;
+        assert!(decisions[0]
+            .block_reason
+            .as_ref()
+            .unwrap()
+            .contains("fixture error"));
     }
 
     #[tokio::test]
@@ -2657,10 +2779,8 @@ mod tests {
             .remove(0);
         assert!(initial.current_hash.starts_with("sha256:"));
 
-        let state = format!(
-            "[hooks.state.{:?}]\ntrusted_hash = {:?}\n",
-            initial.key, initial.current_hash
-        );
+        crate::trust::record(root.path(), &initial.key, &initial.current_hash).unwrap();
+        let state = String::new();
         std::fs::write(&source, hook_body("true", &state)).unwrap();
         let trusted = CommandHookRunner::load(root.path())
             .unwrap()
@@ -2687,7 +2807,7 @@ mod tests {
         let runner = CommandHookRunner::load_for_project(&astro_home, &cwd).unwrap();
 
         assert_eq!(runner.handler_count(), 0);
-        assert_eq!(runner.sources().len(), 1);
+        assert_eq!(runner.sources().len(), 2);
         assert_eq!(runner.sources()[0].trust, CommandHookTrust::Untrusted);
         assert!(!runner.sources()[0].enabled);
         assert_eq!(
@@ -2894,6 +3014,7 @@ mod tests {
                 hooks: HashMap::from([(
                     crate::PRE_TOOL_USE.into(),
                     vec![MatcherGroup {
+                        id: None,
                         matcher: None,
                         hooks: vec![HookHandlerConfig::Command {
                             command: "sleep 10 & wait".into(),
@@ -3035,6 +3156,7 @@ mod tests {
                 hooks: HashMap::from([(
                     crate::USER_PROMPT_SUBMIT.into(),
                     vec![MatcherGroup {
+                        id: None,
                         matcher: None,
                         hooks: vec![
                             HookHandlerConfig::Command {
@@ -3093,6 +3215,7 @@ mod tests {
                 hooks: HashMap::from([(
                     crate::STOP.into(),
                     vec![MatcherGroup {
+                        id: None,
                         matcher: None,
                         hooks: vec![HookHandlerConfig::Command {
                             command: r#"printf '%s' '{"decision":"block","reason":"policy"}'"#

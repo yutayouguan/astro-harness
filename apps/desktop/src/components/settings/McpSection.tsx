@@ -721,7 +721,7 @@ function McpServerCard({
         </div>
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
-            <span className="mcp-server-name">{server.name}</span>
+            <span className="mcp-server-name" title={server.sourcePath}>{server.name}</span>
             <span className="mcp-server-type">
               {t(MCP_TYPE_LABEL[server.type])}
             </span>

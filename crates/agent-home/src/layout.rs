@@ -12,6 +12,11 @@ paths! {
     sessions_dir => "sessions",
     models_dir => "models",
     models_cache_dir => "models/cache",
+    mcp_cache_dir => "mcp/cache",
+    hook_trust_path => "security/hooks/trust.json",
+    hook_runs_dir => "logs/hooks",
+    extension_migration_marker => "backups/extensions-in-progress.json",
+    backups_dir => "backups",
     skills_dir => "skills",
     skill_origins_path => "skills/origins.json",
     skill_lock_path => "skills/lock.json",
@@ -67,6 +72,7 @@ pub(crate) const INITIAL_STATE_FILES: &[(&str, &str)] = &[
 
 /// Never initialize an empty parallel store over an unmigrated installation.
 pub fn require_current_layout(base: &Path) -> anyhow::Result<()> {
+    anyhow::ensure!(!extension_migration_marker(base).exists(), "extension migration is incomplete; restore its recorded backup before restarting");
     anyhow::ensure!(!base.join("backups/layout-in-progress.json").exists(),
         "Astro home migration is incomplete; inspect backups/layout-in-progress.json before restarting");
     for old in [

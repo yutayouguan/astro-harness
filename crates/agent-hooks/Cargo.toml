@@ -19,6 +19,8 @@ serde_yaml = "0.9"
 toml = "0.8"
 regex = "1"
 sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
