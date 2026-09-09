@@ -1148,9 +1148,6 @@
   pointer-events: none;
 }
 
-html[data-onboarding-entering] [data-onboarding-brand-target] {
-  visibility: hidden;
-}
 .onboarding-root.onboarding-root--handoff {
   background: transparent;
   pointer-events: none;
@@ -1158,7 +1155,6 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
 .onboarding-root--handoff::before {
   display: none;
 }
-.onboarding-root--handoff .onboarding-stage,
 .onboarding-root--handoff .onboarding-ambient,
 .onboarding-root--handoff .onboarding-brand-rail,
 .onboarding-root--handoff .onboarding-demo-label {
@@ -1394,9 +1390,6 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
   --astro-mark-c0: var(--tone);
   --astro-mark-c1: var(--tone);
   --astro-mark-c2: var(--accent-2);
-}
-.onboarding-brand-motion[data-phase="app"] .onboarding-logo-halo {
-  display: none;
 }
 .onboarding-brand-motion[data-phase="intro"] .onboarding-logo-base {
   animation: onboarding-logo-materialize 1.05s 360ms

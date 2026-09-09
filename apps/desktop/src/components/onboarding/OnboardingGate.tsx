@@ -74,6 +74,7 @@ import {
 } from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
 import { OnboardingWarp } from "./OnboardingWarp";
+import { OnboardingScene } from "./OnboardingScene";
 import { onboardingStageVariants } from "../../lib/ui/onboardingMotion";
 import { OnboardingPreferences } from "./OnboardingPreferences";
 import { DesktopPreferencePreviewContext } from "../../hooks/settings/useDesktopPreference";
@@ -218,13 +219,6 @@ export function FirstRunOnboarding({
   const [demoDraft, setDemoDraft] = useState<string | null>(null);
   const demoInputRef = useRef<HTMLTextAreaElement>(null);
   const [introReplay, setIntroReplay] = useState(0);
-  const [brandArrived, setBrandArrived] = useState(false);
-  const [warpArrived, setWarpArrived] = useState(false);
-  const brandArrival = useCallback(() => setBrandArrived(true), []);
-  const warpArrival = useCallback(() => setWarpArrived(true), []);
-  useEffect(() => {
-    if (handoff && brandArrived && warpArrived) onHandoffComplete?.();
-  }, [handoff, brandArrived, warpArrived, onHandoffComplete]);
   const [connectionIssue, setConnectionIssue] =
     useState<ConnectionIssueKind | null>(null);
   const [progressError, setProgressError] = useState(false);
@@ -911,11 +905,12 @@ export function FirstRunOnboarding({
       className={`onboarding-root ${handoff ? "onboarding-root--handoff" : ""}`}
       data-step={step}
     >
-      <OnboardingBrandMotion
-        key={introReplay}
-        phase={handoff ? "app" : step === "intro" ? "intro" : "header"}
-        onArrive={brandArrival}
-      />
+      {!handoff && (
+        <OnboardingBrandMotion
+          key={introReplay}
+          phase={step === "intro" ? "intro" : "header"}
+        />
+      )}
       {step !== "intro" && (
         <div className="onboarding-brand-rail" aria-hidden>
           <div className="onboarding-brand">
@@ -941,7 +936,7 @@ export function FirstRunOnboarding({
         mode={handoff ? "app" : step === "intro" ? "intro" : "step"}
         direction={direction}
         reduced={reducedMotion}
-        onFinished={handoff ? warpArrival : undefined}
+        onFinished={handoff ? onHandoffComplete : undefined}
       />
       {step === "intro" && <OnboardingIntroParticles key={introReplay} />}
       {step === "intro" && previewProviders && (
@@ -964,791 +959,810 @@ export function FirstRunOnboarding({
         </button>
       ) : null}
 
-      <AnimatePresence mode="wait" initial={false} custom={direction}>
-        {step === "intro" ? (
-          <motion.section
-            key="intro"
-            className="onboarding-intro"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={
-              reducedMotion
-                ? { opacity: 0 }
-                : {
-                    opacity: 0,
-                    transform: "perspective(1200px) translateZ(150px)",
-                  }
-            }
-            transition={{ duration: 0.18 }}
-          >
-            <div
-              className="onboarding-intro-anchor"
-              data-onboarding-brand-anchor="intro"
-              aria-hidden
-            />
-            <motion.div
-              className="onboarding-intro-copy"
-              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: reducedMotion ? 0 : 0.82, duration: 0.5 }}
+      <div className="onboarding-scenes">
+        <AnimatePresence mode="sync" initial={false} custom={direction}>
+          {step === "intro" ? (
+            <OnboardingScene
+              key="intro"
+              className="onboarding-intro"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              variants={variants}
+              custom={direction}
+              exit="exit"
             >
-              <h1>{copy.hello}</h1>
-              <p>{copy.introSub}</p>
-            </motion.div>
-          </motion.section>
-        ) : (
-          <motion.section
-            key={step}
-            className={`onboarding-stage onboarding-stage--${step}`}
-            custom={direction}
-            variants={variants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-          >
-            <header className="onboarding-header" data-tauri-drag-region="true">
-              <div className="onboarding-brand-placeholder" aria-hidden />
-              {step !== "complete" ? (
-                <ol className="onboarding-progress" aria-label="Setup progress">
-                  {STEP_ORDER.map((item, index) => (
-                    <li
-                      key={item}
-                      className={index <= currentIndex ? "is-active" : ""}
-                      aria-current={item === step ? "step" : undefined}
-                    >
-                      <span>{index + 1}</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-            </header>
-
-            <div className="onboarding-card">
-              {progressError && (
-                <p
-                  className="onboarding-status"
-                  data-status="error"
-                  role="alert"
-                >
-                  {copy.progressFailed}
-                  <button
-                    type="button"
-                    onClick={() => void saveProgress(step).catch(() => {})}
+              <div
+                className="onboarding-intro-anchor"
+                data-onboarding-brand-anchor="intro"
+                aria-hidden
+              />
+              <motion.div
+                className="onboarding-intro-copy"
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: reducedMotion ? 0 : 0.82, duration: 0.5 }}
+              >
+                <h1>{copy.hello}</h1>
+                <p>{copy.introSub}</p>
+              </motion.div>
+            </OnboardingScene>
+          ) : (
+            <OnboardingScene
+              key={step}
+              className={`onboarding-stage onboarding-stage--${step}`}
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate={handoff ? "exit" : "center"}
+              departing={handoff}
+              exit="exit"
+            >
+              <header
+                className="onboarding-header"
+                data-tauri-drag-region="true"
+              >
+                <div className="onboarding-brand-placeholder" aria-hidden />
+                {step !== "complete" ? (
+                  <ol
+                    className="onboarding-progress"
+                    aria-label="Setup progress"
                   >
-                    {copy.retry}
-                  </button>
-                </p>
-              )}
-              {step === "personalize" ? (
-                <>
-                  <div className="onboarding-heading">
-                    <span className="onboarding-eyebrow">
-                      <Sparkles size={14} aria-hidden />
-                      {copy.personalizeEyebrow}
-                    </span>
-                    <h1 ref={focusHeading} tabIndex={-1}>
-                      {copy.personalizeTitle}
-                    </h1>
-                    <p>{copy.personalizeSub}</p>
-                  </div>
-
-                  <div className="onboarding-setting-group">
-                    <div className="onboarding-setting-label">
-                      <Languages size={18} aria-hidden />
-                      <span>{copy.language}</span>
-                    </div>
-                    <div className="onboarding-choice-grid is-two">
-                      {(["zh", "en"] as const).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          className={locale === value ? "is-selected" : ""}
-                          aria-pressed={locale === value}
-                          onClick={() => setLocale(value)}
-                        >
-                          <span>
-                            {value === "zh" ? copy.chinese : copy.english}
-                          </span>
-                          {locale === value ? (
-                            <Check size={16} aria-hidden />
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="onboarding-setting-group">
-                    <div className="onboarding-setting-label">
-                      {mode === "dark" ? (
-                        <Moon size={18} aria-hidden />
-                      ) : mode === "light" ? (
-                        <Sun size={18} aria-hidden />
-                      ) : (
-                        <Monitor size={18} aria-hidden />
-                      )}
-                      <span>{copy.theme}</span>
-                    </div>
-                    <div className="onboarding-choice-grid is-three">
-                      {(
-                        [
-                          ["light", copy.light, Sun],
-                          ["auto", copy.auto, Monitor],
-                          ["dark", copy.dark, Moon],
-                        ] as const
-                      ).map(([value, label, Icon]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          className={mode === value ? "is-selected" : ""}
-                          aria-pressed={mode === value}
-                          onClick={() => setMode(value as ThemeMode)}
-                        >
-                          <Icon size={17} aria-hidden />
-                          <span>{label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <label className="onboarding-agent-name">
-                    <span className="onboarding-setting-label">
-                      <Bot size={18} aria-hidden />
-                      <span>{copy.agentName}</span>
-                    </span>
-                    <input
-                      value={agentName}
-                      maxLength={64}
-                      placeholder={copy.agentNamePlaceholder}
-                      autoComplete="off"
-                      onChange={(event) => {
-                        agentNameTouchedRef.current = true;
-                        setAgentName(event.target.value);
-                      }}
-                    />
-                  </label>
-                  <DesktopPreferencePreviewContext.Provider
-                    value={{
-                      values: previewUsage,
-                      change: (kind, value) =>
-                        setPreviewUsage((current) => ({
-                          ...current,
-                          [kind]: value,
-                        })),
-                    }}
-                  >
-                    <OnboardingPreferences
-                      locale={locale}
-                      preview={Boolean(previewProviders)}
-                      petChoice={petChoice}
-                      onPetChoice={(value) => {
-                        setPetChoice(value);
-                        draftRef.current.pet_enabled = value;
-                        void saveProgress(step).catch(() => {});
-                      }}
-                    />
-                  </DesktopPreferencePreviewContext.Provider>
-                </>
-              ) : null}
-
-              {step === "provider" ? (
-                <>
-                  <div className="onboarding-heading">
-                    <span className="onboarding-eyebrow">
-                      <KeyRound size={14} aria-hidden />
-                      {copy.providerEyebrow}
-                    </span>
-                    <h1 ref={focusHeading} tabIndex={-1}>
-                      {copy.providerTitle}
-                    </h1>
-                    <p>{copy.providerSub}</p>
-                  </div>
-
-                  {providers.length > 0 ? (
-                    <div className="onboarding-provider-form">
-                      <div
-                        className="onboarding-provider-field"
-                        ref={providerSelectRef}
+                    {STEP_ORDER.map((item, index) => (
+                      <li
+                        key={item}
+                        className={index <= currentIndex ? "is-active" : ""}
+                        aria-current={item === step ? "step" : undefined}
                       >
-                        <span className="onboarding-field-label">
-                          <Server size={14} aria-hidden />
-                          {copy.provider}
-                        </span>
-                        <SelectMenu
-                          className="onboarding-provider-select"
-                          aria-label={copy.provider}
-                          value={selectedProviderId}
-                          disabled={
-                            providerStatus === "testing" ||
-                            modelsStatus === "loading"
-                          }
-                          onChange={selectProvider}
-                          options={providerOptions}
-                        />
+                        <span>{index + 1}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </header>
+
+              <div className="onboarding-card">
+                {progressError && (
+                  <p
+                    className="onboarding-status"
+                    data-status="error"
+                    role="alert"
+                  >
+                    {copy.progressFailed}
+                    <button
+                      type="button"
+                      onClick={() => void saveProgress(step).catch(() => {})}
+                    >
+                      {copy.retry}
+                    </button>
+                  </p>
+                )}
+                {step === "personalize" ? (
+                  <>
+                    <div className="onboarding-heading">
+                      <span className="onboarding-eyebrow">
+                        <Sparkles size={14} aria-hidden />
+                        {copy.personalizeEyebrow}
+                      </span>
+                      <h1 ref={focusHeading} tabIndex={-1}>
+                        {copy.personalizeTitle}
+                      </h1>
+                      <p>{copy.personalizeSub}</p>
+                    </div>
+
+                    <div className="onboarding-setting-group">
+                      <div className="onboarding-setting-label">
+                        <Languages size={18} aria-hidden />
+                        <span>{copy.language}</span>
                       </div>
+                      <div className="onboarding-choice-grid is-two">
+                        {(["zh", "en"] as const).map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={locale === value ? "is-selected" : ""}
+                            aria-pressed={locale === value}
+                            onClick={() => setLocale(value)}
+                          >
+                            <span>
+                              {value === "zh" ? copy.chinese : copy.english}
+                            </span>
+                            {locale === value ? (
+                              <Check size={16} aria-hidden />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                      <label>
-                        <span className="onboarding-field-label">
-                          <Link2 size={14} aria-hidden />
-                          {copy.endpoint}
-                        </span>
-                        <input
-                          ref={endpointInputRef}
-                          value={endpoint}
-                          inputMode="url"
-                          autoCapitalize="none"
-                          autoCorrect="off"
-                          autoComplete="off"
-                          disabled={
-                            providerStatus === "testing" ||
-                            modelsStatus === "loading"
-                          }
-                          spellCheck={false}
-                          onBlur={() => void saveProgress(step).catch(() => {})}
-                          onChange={(event) => {
-                            invalidateModelList();
-                            setEndpoint(event.target.value);
-                          }}
-                        />
-                      </label>
+                    <div className="onboarding-setting-group">
+                      <div className="onboarding-setting-label">
+                        {mode === "dark" ? (
+                          <Moon size={18} aria-hidden />
+                        ) : mode === "light" ? (
+                          <Sun size={18} aria-hidden />
+                        ) : (
+                          <Monitor size={18} aria-hidden />
+                        )}
+                        <span>{copy.theme}</span>
+                      </div>
+                      <div className="onboarding-choice-grid is-three">
+                        {(
+                          [
+                            ["light", copy.light, Sun],
+                            ["auto", copy.auto, Monitor],
+                            ["dark", copy.dark, Moon],
+                          ] as const
+                        ).map(([value, label, Icon]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={mode === value ? "is-selected" : ""}
+                            aria-pressed={mode === value}
+                            onClick={() => setMode(value as ThemeMode)}
+                          >
+                            <Icon size={17} aria-hidden />
+                            <span>{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                      {selectedProvider &&
-                      providerRequiresApiKey(selectedProvider) ? (
-                        <label>
+                    <label className="onboarding-agent-name">
+                      <span className="onboarding-setting-label">
+                        <Bot size={18} aria-hidden />
+                        <span>{copy.agentName}</span>
+                      </span>
+                      <input
+                        value={agentName}
+                        maxLength={64}
+                        placeholder={copy.agentNamePlaceholder}
+                        autoComplete="off"
+                        onChange={(event) => {
+                          agentNameTouchedRef.current = true;
+                          setAgentName(event.target.value);
+                        }}
+                      />
+                    </label>
+                    <DesktopPreferencePreviewContext.Provider
+                      value={{
+                        values: previewUsage,
+                        change: (kind, value) =>
+                          setPreviewUsage((current) => ({
+                            ...current,
+                            [kind]: value,
+                          })),
+                      }}
+                    >
+                      <OnboardingPreferences
+                        locale={locale}
+                        preview={Boolean(previewProviders)}
+                        petChoice={petChoice}
+                        onPetChoice={(value) => {
+                          setPetChoice(value);
+                          draftRef.current.pet_enabled = value;
+                          void saveProgress(step).catch(() => {});
+                        }}
+                      />
+                    </DesktopPreferencePreviewContext.Provider>
+                  </>
+                ) : null}
+
+                {step === "provider" ? (
+                  <>
+                    <div className="onboarding-heading">
+                      <span className="onboarding-eyebrow">
+                        <KeyRound size={14} aria-hidden />
+                        {copy.providerEyebrow}
+                      </span>
+                      <h1 ref={focusHeading} tabIndex={-1}>
+                        {copy.providerTitle}
+                      </h1>
+                      <p>{copy.providerSub}</p>
+                    </div>
+
+                    {providers.length > 0 ? (
+                      <div className="onboarding-provider-form">
+                        <div
+                          className="onboarding-provider-field"
+                          ref={providerSelectRef}
+                        >
                           <span className="onboarding-field-label">
-                            <KeyRound size={14} aria-hidden />
-                            {copy.apiKey}
+                            <Server size={14} aria-hidden />
+                            {copy.provider}
                           </span>
-                          <input
-                            ref={apiKeyRef}
-                            type="password"
+                          <SelectMenu
+                            className="onboarding-provider-select"
+                            aria-label={copy.provider}
+                            value={selectedProviderId}
                             disabled={
                               providerStatus === "testing" ||
                               modelsStatus === "loading"
                             }
-                            value={apiKey}
-                            placeholder={
-                              selectedProvider.has_api_key
-                                ? copy.apiKeyStored
-                                : copy.apiKeyPlaceholder
-                            }
+                            onChange={selectProvider}
+                            options={providerOptions}
+                          />
+                        </div>
+
+                        <label>
+                          <span className="onboarding-field-label">
+                            <Link2 size={14} aria-hidden />
+                            {copy.endpoint}
+                          </span>
+                          <input
+                            ref={endpointInputRef}
+                            value={endpoint}
+                            inputMode="url"
+                            autoCapitalize="none"
+                            autoCorrect="off"
                             autoComplete="off"
+                            disabled={
+                              providerStatus === "testing" ||
+                              modelsStatus === "loading"
+                            }
                             spellCheck={false}
+                            onBlur={() =>
+                              void saveProgress(step).catch(() => {})
+                            }
                             onChange={(event) => {
                               invalidateModelList();
-                              setApiKey(event.target.value);
+                              setEndpoint(event.target.value);
                             }}
                           />
                         </label>
-                      ) : null}
 
-                      <Button
-                        className="onboarding-load-models"
-                        variant="secondary"
-                        busy={modelsStatus === "loading"}
-                        busyLabel={copy.loadingModels}
-                        disabled={
-                          providerStatus === "testing" ||
-                          (!apiKey.trim() &&
-                            selectedProvider != null &&
-                            providerRequiresApiKey(selectedProvider) &&
-                            !selectedProvider.has_api_key)
-                        }
-                        onClick={() => void loadModels()}
-                      >
-                        {modelsStatus !== "loading" && (
-                          <ListRestart size={15} aria-hidden />
-                        )}
-                        {modelsStatus === "loading"
-                          ? copy.loadingModels
-                          : copy.loadModels}
-                      </Button>
-                      <p className="onboarding-model-hint">
-                        {copy.modelLoadHint}
-                      </p>
-                      <div
-                        className="onboarding-provider-field"
-                        ref={modelInputRef}
-                      >
-                        <span className="onboarding-field-label">
-                          <Cpu size={14} aria-hidden />
-                          {copy.model}
-                        </span>
-                        <SelectMenu
-                          className="onboarding-provider-select"
-                          aria-label={copy.model}
-                          value={model}
-                          options={modelOptions}
-                          openRequest={modelOpenRequest}
-                          placeholder={copy.chooseModel}
-                          search={{
-                            placeholder: copy.searchModels,
-                            emptyLabel: copy.noMatchingModels,
-                          }}
-                          menuMaxHeight={360}
+                        {selectedProvider &&
+                        providerRequiresApiKey(selectedProvider) ? (
+                          <label>
+                            <span className="onboarding-field-label">
+                              <KeyRound size={14} aria-hidden />
+                              {copy.apiKey}
+                            </span>
+                            <input
+                              ref={apiKeyRef}
+                              type="password"
+                              disabled={
+                                providerStatus === "testing" ||
+                                modelsStatus === "loading"
+                              }
+                              value={apiKey}
+                              placeholder={
+                                selectedProvider.has_api_key
+                                  ? copy.apiKeyStored
+                                  : copy.apiKeyPlaceholder
+                              }
+                              autoComplete="off"
+                              spellCheck={false}
+                              onChange={(event) => {
+                                invalidateModelList();
+                                setApiKey(event.target.value);
+                              }}
+                            />
+                          </label>
+                        ) : null}
+
+                        <Button
+                          className="onboarding-load-models"
+                          variant="secondary"
+                          busy={modelsStatus === "loading"}
+                          busyLabel={copy.loadingModels}
                           disabled={
-                            modelsStatus !== "ready" ||
-                            providerStatus === "testing"
+                            providerStatus === "testing" ||
+                            (!apiKey.trim() &&
+                              selectedProvider != null &&
+                              providerRequiresApiKey(selectedProvider) &&
+                              !selectedProvider.has_api_key)
                           }
-                          onChange={(value) => {
-                            setModel(value);
-                            setFocusTest(true);
-                            setProviderStatus("idle");
-                            verified.current = null;
-                            setConnectionIssue(null);
-                          }}
-                        />
-                      </div>
-
-                      <p className="onboarding-test-cost">{copy.testCost}</p>
-                      <button
-                        type="button"
-                        ref={testButtonRef}
-                        className={`onboarding-test-button ${model && modelsStatus === "ready" && providerStatus !== "success" ? "is-next-action" : ""}`}
-                        data-status={providerStatus}
-                        disabled={
-                          providerStatus === "testing" ||
-                          modelsStatus !== "ready" ||
-                          !model
-                        }
-                        onClick={() => void testProvider()}
-                      >
-                        {providerStatus === "testing" ? (
-                          <LoaderCircle
-                            className="is-spinning"
-                            size={17}
-                            aria-hidden
+                          onClick={() => void loadModels()}
+                        >
+                          {modelsStatus !== "loading" && (
+                            <ListRestart size={15} aria-hidden />
+                          )}
+                          {modelsStatus === "loading"
+                            ? copy.loadingModels
+                            : copy.loadModels}
+                        </Button>
+                        <p className="onboarding-model-hint">
+                          {copy.modelLoadHint}
+                        </p>
+                        <div
+                          className="onboarding-provider-field"
+                          ref={modelInputRef}
+                        >
+                          <span className="onboarding-field-label">
+                            <Cpu size={14} aria-hidden />
+                            {copy.model}
+                          </span>
+                          <SelectMenu
+                            className="onboarding-provider-select"
+                            aria-label={copy.model}
+                            value={model}
+                            options={modelOptions}
+                            openRequest={modelOpenRequest}
+                            placeholder={copy.chooseModel}
+                            search={{
+                              placeholder: copy.searchModels,
+                              emptyLabel: copy.noMatchingModels,
+                            }}
+                            menuMaxHeight={360}
+                            disabled={
+                              modelsStatus !== "ready" ||
+                              providerStatus === "testing"
+                            }
+                            onChange={(value) => {
+                              setModel(value);
+                              setFocusTest(true);
+                              setProviderStatus("idle");
+                              verified.current = null;
+                              setConnectionIssue(null);
+                            }}
                           />
-                        ) : providerStatus === "success" ? (
-                          <Check size={17} aria-hidden />
-                        ) : (
-                          <Zap size={17} aria-hidden />
-                        )}
-                        <span>
-                          {providerStatus === "testing"
-                            ? copy.testing
-                            : copy.test}
-                        </span>
-                      </button>
-                      {(providerStatus === "testing" ||
-                        modelsStatus === "loading") && (
+                        </div>
+
+                        <p className="onboarding-test-cost">{copy.testCost}</p>
                         <button
                           type="button"
-                          className="onboarding-cancel-test"
-                          onClick={cancelProviderTest}
-                        >
-                          <X size={14} aria-hidden />
-                          {copy.cancelTest}
-                        </button>
-                      )}
-                      {connectionIssue && (
-                        <ConnectionIssue
-                          kind={connectionIssue}
-                          locale={locale}
-                          officialConsoleUrl={
-                            selectedProvider?.official_key_url
-                          }
-                          onRetry={() =>
-                            void (modelsStatus === "ready" && model
-                              ? testProvider()
-                              : loadModels())
-                          }
-                          onEdit={() => {
-                            if (
-                              connectionIssue === "model" &&
-                              modelsStatus === "ready"
-                            )
-                              modelInputRef.current
-                                ?.querySelector<HTMLButtonElement>(
-                                  ".select-menu-trigger",
-                                )
-                                ?.focus();
-                            else if (connectionIssue === "credentials")
-                              (
-                                apiKeyRef.current ??
-                                providerSelectRef.current?.querySelector<HTMLButtonElement>(
-                                  ".select-menu-trigger",
-                                )
-                              )?.focus();
-                            else if (
-                              ["quota", "rate_limit"].includes(connectionIssue)
-                            )
-                              providerSelectRef.current
-                                ?.querySelector<HTMLButtonElement>(
-                                  ".select-menu-trigger",
-                                )
-                                ?.focus();
-                            else {
-                              endpointInputRef.current?.focus();
-                            }
-                          }}
-                        />
-                      )}
-                      {providerMessage ? (
-                        <p
-                          className="onboarding-status"
+                          ref={testButtonRef}
+                          className={`onboarding-test-button ${model && modelsStatus === "ready" && providerStatus !== "success" ? "is-next-action" : ""}`}
                           data-status={providerStatus}
-                          role={providerStatus === "error" ? "alert" : "status"}
+                          disabled={
+                            providerStatus === "testing" ||
+                            modelsStatus !== "ready" ||
+                            !model
+                          }
+                          onClick={() => void testProvider()}
                         >
-                          {providerMessage}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="onboarding-empty" role="status">
-                      {providersState
-                        ? copy.noProviders
-                        : copy.loadingProviders}
-                      {connectionIssue && (
-                        <ConnectionIssue
-                          kind={connectionIssue}
-                          locale={locale}
-                          onRetry={() => {
-                            void withDeadline(
-                              invoke<ProvidersStateDto>("get_providers_state"),
-                            )
-                              .then((state) => {
-                                setProvidersState(state);
-                                setConnectionIssue(null);
-                              })
-                              .catch((error) =>
-                                setConnectionIssue(
-                                  classifyConnectionIssue(error),
-                                ),
-                              );
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </>
-              ) : null}
-
-              {step === "workspace" ? (
-                <>
-                  <div className="onboarding-heading">
-                    <span className="onboarding-eyebrow">
-                      <FolderOpen size={14} aria-hidden />
-                      {copy.workspaceEyebrow}
-                    </span>
-                    <h1 ref={focusHeading} tabIndex={-1}>
-                      {copy.workspaceTitle}
-                    </h1>
-                    <p>{copy.workspaceSub}</p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="onboarding-folder-picker"
-                    disabled={finishing}
-                    onClick={() => void chooseWorkspace()}
-                  >
-                    <span className="onboarding-folder-icon">
-                      <FolderOpen size={22} aria-hidden />
-                    </span>
-                    <span>
-                      <strong>
-                        {workspacePath
-                          ? inferProjectName(workspacePath)
-                          : copy.defaultWorkspace}
-                      </strong>
-                      <small title={effectiveWorkspacePath}>
-                        {displayedWorkspacePath ||
-                          (workspaceLoadError
-                            ? copy.workspaceLoadFailed
-                            : copy.workspaceLoading)}
-                      </small>
-                    </span>
-                    <span className="onboarding-folder-action">
-                      {workspacePath ? copy.changeFolder : copy.chooseFolder}
-                      <ChevronRight size={14} aria-hidden />
-                    </span>
-                  </button>
-                  {effectiveWorkspacePath && (
-                    <div
-                      className="onboarding-workspace-check"
-                      data-status={workspaceReady ? "ready" : "pending"}
-                      role="status"
-                    >
-                      <WorkspaceCheckIcon size={15} aria-hidden />
-                      <span>
-                        {previewProviders
-                          ? copy.workspaceCheckDemo
-                          : workspaceCheck?.path !== effectiveWorkspacePath
-                            ? copy.workspaceChecking
-                            : copy.workspaceChecks[workspaceCheck.status]}
-                      </span>
-                      {!previewProviders &&
-                        !workspaceReady &&
-                        workspaceCheck?.path === effectiveWorkspacePath && (
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              setWorkspaceCheckRetry((value) => value + 1)
+                          {providerStatus === "testing" ? (
+                            <LoaderCircle
+                              className="is-spinning"
+                              size={17}
+                              aria-hidden
+                            />
+                          ) : providerStatus === "success" ? (
+                            <Check size={17} aria-hidden />
+                          ) : (
+                            <Zap size={17} aria-hidden />
+                          )}
+                          <span>
+                            {providerStatus === "testing"
+                              ? copy.testing
+                              : copy.test}
+                          </span>
+                        </button>
+                        {(providerStatus === "testing" ||
+                          modelsStatus === "loading") && (
+                          <button
+                            type="button"
+                            className="onboarding-cancel-test"
+                            onClick={cancelProviderTest}
+                          >
+                            <X size={14} aria-hidden />
+                            {copy.cancelTest}
+                          </button>
+                        )}
+                        {connectionIssue && (
+                          <ConnectionIssue
+                            kind={connectionIssue}
+                            locale={locale}
+                            officialConsoleUrl={
+                              selectedProvider?.official_key_url
+                            }
+                            onRetry={() =>
+                              void (modelsStatus === "ready" && model
+                                ? testProvider()
+                                : loadModels())
+                            }
+                            onEdit={() => {
+                              if (
+                                connectionIssue === "model" &&
+                                modelsStatus === "ready"
+                              )
+                                modelInputRef.current
+                                  ?.querySelector<HTMLButtonElement>(
+                                    ".select-menu-trigger",
+                                  )
+                                  ?.focus();
+                              else if (connectionIssue === "credentials")
+                                (
+                                  apiKeyRef.current ??
+                                  providerSelectRef.current?.querySelector<HTMLButtonElement>(
+                                    ".select-menu-trigger",
+                                  )
+                                )?.focus();
+                              else if (
+                                ["quota", "rate_limit"].includes(
+                                  connectionIssue,
+                                )
+                              )
+                                providerSelectRef.current
+                                  ?.querySelector<HTMLButtonElement>(
+                                    ".select-menu-trigger",
+                                  )
+                                  ?.focus();
+                              else {
+                                endpointInputRef.current?.focus();
+                              }
+                            }}
+                          />
+                        )}
+                        {providerMessage ? (
+                          <p
+                            className="onboarding-status"
+                            data-status={providerStatus}
+                            role={
+                              providerStatus === "error" ? "alert" : "status"
                             }
                           >
-                            <RefreshCw size={14} aria-hidden />
-                            {copy.workspaceCheckRetry}
-                          </Button>
+                            {providerMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="onboarding-empty" role="status">
+                        {providersState
+                          ? copy.noProviders
+                          : copy.loadingProviders}
+                        {connectionIssue && (
+                          <ConnectionIssue
+                            kind={connectionIssue}
+                            locale={locale}
+                            onRetry={() => {
+                              void withDeadline(
+                                invoke<ProvidersStateDto>(
+                                  "get_providers_state",
+                                ),
+                              )
+                                .then((state) => {
+                                  setProvidersState(state);
+                                  setConnectionIssue(null);
+                                })
+                                .catch((error) =>
+                                  setConnectionIssue(
+                                    classifyConnectionIssue(error),
+                                  ),
+                                );
+                            }}
+                          />
                         )}
+                      </div>
+                    )}
+                  </>
+                ) : null}
+
+                {step === "workspace" ? (
+                  <>
+                    <div className="onboarding-heading">
+                      <span className="onboarding-eyebrow">
+                        <FolderOpen size={14} aria-hidden />
+                        {copy.workspaceEyebrow}
+                      </span>
+                      <h1 ref={focusHeading} tabIndex={-1}>
+                        {copy.workspaceTitle}
+                      </h1>
+                      <p>{copy.workspaceSub}</p>
                     </div>
-                  )}
-                  <p className="onboarding-workspace-confirm">
-                    {copy.workspaceConfirm}
-                  </p>
-                  {workspaceLoadError && !workspacePath && (
-                    <div className="onboarding-workspace-error" role="alert">
-                      <span>{copy.workspaceLoadFailed}</span>
-                      <Button
-                        size="sm"
-                        onClick={() => setConfigRetry((value) => value + 1)}
+
+                    <button
+                      type="button"
+                      className="onboarding-folder-picker"
+                      disabled={finishing}
+                      onClick={() => void chooseWorkspace()}
+                    >
+                      <span className="onboarding-folder-icon">
+                        <FolderOpen size={22} aria-hidden />
+                      </span>
+                      <span>
+                        <strong>
+                          {workspacePath
+                            ? inferProjectName(workspacePath)
+                            : copy.defaultWorkspace}
+                        </strong>
+                        <small title={effectiveWorkspacePath}>
+                          {displayedWorkspacePath ||
+                            (workspaceLoadError
+                              ? copy.workspaceLoadFailed
+                              : copy.workspaceLoading)}
+                        </small>
+                      </span>
+                      <span className="onboarding-folder-action">
+                        {workspacePath ? copy.changeFolder : copy.chooseFolder}
+                        <ChevronRight size={14} aria-hidden />
+                      </span>
+                    </button>
+                    {effectiveWorkspacePath && (
+                      <div
+                        className="onboarding-workspace-check"
+                        data-status={workspaceReady ? "ready" : "pending"}
+                        role="status"
                       >
-                        <RefreshCw size={14} aria-hidden />
-                        {copy.workspaceRetry}
+                        <WorkspaceCheckIcon size={15} aria-hidden />
+                        <span>
+                          {previewProviders
+                            ? copy.workspaceCheckDemo
+                            : workspaceCheck?.path !== effectiveWorkspacePath
+                              ? copy.workspaceChecking
+                              : copy.workspaceChecks[workspaceCheck.status]}
+                        </span>
+                        {!previewProviders &&
+                          !workspaceReady &&
+                          workspaceCheck?.path === effectiveWorkspacePath && (
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                setWorkspaceCheckRetry((value) => value + 1)
+                              }
+                            >
+                              <RefreshCw size={14} aria-hidden />
+                              {copy.workspaceCheckRetry}
+                            </Button>
+                          )}
+                      </div>
+                    )}
+                    <p className="onboarding-workspace-confirm">
+                      {copy.workspaceConfirm}
+                    </p>
+                    {workspaceLoadError && !workspacePath && (
+                      <div className="onboarding-workspace-error" role="alert">
+                        <span>{copy.workspaceLoadFailed}</span>
+                        <Button
+                          size="sm"
+                          onClick={() => setConfigRetry((value) => value + 1)}
+                        >
+                          <RefreshCw size={14} aria-hidden />
+                          {copy.workspaceRetry}
+                        </Button>
+                      </div>
+                    )}
+                    {workspacePath && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setWorkspacePath("")}
+                        disabled={finishing}
+                      >
+                        <RotateCcw size={14} aria-hidden />
+                        {copy.defaultWorkspace}
                       </Button>
+                    )}
+
+                    <fieldset className="onboarding-permissions">
+                      <legend>
+                        <ShieldCheck size={18} aria-hidden />
+                        {copy.permission}
+                      </legend>
+                      <label
+                        className={
+                          permissionPreset === "ask_for_approval"
+                            ? "is-selected"
+                            : ""
+                        }
+                      >
+                        <input
+                          type="radio"
+                          disabled={finishing}
+                          name="onboarding-permission"
+                          checked={permissionPreset === "ask_for_approval"}
+                          onChange={() =>
+                            setPermissionPreset("ask_for_approval")
+                          }
+                        />
+                        <span>
+                          <strong className="onboarding-inline-label">
+                            <ShieldQuestion size={16} aria-hidden />
+                            {copy.ask}
+                          </strong>
+                          <small>{copy.askSub}</small>
+                        </span>
+                        <Check size={17} aria-hidden />
+                      </label>
+                      <label
+                        className={
+                          permissionPreset === "approve_for_me"
+                            ? "is-selected"
+                            : ""
+                        }
+                      >
+                        <input
+                          type="radio"
+                          disabled={finishing}
+                          name="onboarding-permission"
+                          checked={permissionPreset === "approve_for_me"}
+                          onChange={() => setPermissionPreset("approve_for_me")}
+                        />
+                        <span>
+                          <strong className="onboarding-inline-label">
+                            <Zap size={16} aria-hidden />
+                            {copy.approve}
+                          </strong>
+                          <small>{copy.approveSub}</small>
+                        </span>
+                        <Check size={17} aria-hidden />
+                      </label>
+                    </fieldset>
+                    <p className="onboarding-network-note">
+                      <ShieldCheck size={15} aria-hidden />
+                      {copy.networkNote}
+                    </p>
+                    {finishError ? (
+                      <p
+                        className="onboarding-status"
+                        data-status="error"
+                        role="alert"
+                      >
+                        {finishError}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {step === "complete" ? (
+                  <div className="onboarding-complete">
+                    <div className="onboarding-complete-mark">
+                      <Check size={34} strokeWidth={2.2} aria-hidden />
                     </div>
-                  )}
-                  {workspacePath && (
+                    <h1 ref={focusHeading} tabIndex={-1}>
+                      {healthSummary?.modelStatus === "verified"
+                        ? copy.completeTitle
+                        : copy.savedTitle}
+                    </h1>
+                    <p>
+                      {healthSummary?.modelStatus === "verified"
+                        ? copy.completeSub
+                        : copy.savedSub}
+                    </p>
+
+                    {healthSummary && (
+                      <div className="onboarding-health-grid" role="status">
+                        <div>
+                          <Bot size={17} aria-hidden />
+                          <span>
+                            <small>{copy.healthAgent}</small>
+                            <strong>{healthSummary.agent}</strong>
+                          </span>
+                        </div>
+                        <div
+                          data-status={
+                            healthSummary.modelStatus === "verified"
+                              ? "ok"
+                              : "pending"
+                          }
+                        >
+                          {healthSummary.modelStatus === "verified" ? (
+                            <CircleCheck size={17} aria-hidden />
+                          ) : (
+                            <Info size={17} aria-hidden />
+                          )}
+                          <span>
+                            <small>{copy.healthModel}</small>
+                            <strong>
+                              {copy.modelStatuses[healthSummary.modelStatus]}
+                            </strong>
+                            {!["unavailable"].includes(
+                              healthSummary.modelStatus,
+                            ) && <small>{healthSummary.provider}</small>}
+                          </span>
+                        </div>
+                        <div>
+                          <FolderOpen size={17} aria-hidden />
+                          <span>
+                            <small>{copy.healthWorkspace}</small>
+                            <strong>{healthSummary.workspace}</strong>
+                            <small>{healthSummary.workspacePath}</small>
+                          </span>
+                        </div>
+                        <div
+                          data-status={
+                            healthSummary.sandboxAvailable ? "ok" : "pending"
+                          }
+                        >
+                          {healthSummary.sandboxAvailable ? (
+                            <ShieldCheck size={17} aria-hidden />
+                          ) : (
+                            <ShieldAlert size={17} aria-hidden />
+                          )}
+                          <span>
+                            <small>{copy.healthPermission}</small>
+                            <strong>{healthSummary.permission}</strong>
+                            {!healthSummary.sandboxAvailable && (
+                              <small>{copy.sandboxUnavailable}</small>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <StarterTaskChooser locale={locale} onUse={enterAstro} />
+                    {demoDraft !== null && (
+                      <div className="onboarding-demo-composer">
+                        <label className="onboarding-task-input">
+                          <span className="onboarding-inline-label">
+                            <MessageSquare size={16} aria-hidden />
+                            {locale === "zh"
+                              ? "聊天输入框（演示）"
+                              : "Chat input (demo)"}
+                          </span>
+                          <textarea
+                            ref={demoInputRef}
+                            value={demoDraft}
+                            rows={5}
+                            onChange={(event) =>
+                              setDemoDraft(event.target.value)
+                            }
+                          />
+                        </label>
+                        <p className="onboarding-task-privacy" role="status">
+                          {locale === "zh"
+                            ? "草稿已填入，可直接编辑。此预览不会保存或发送；APP 中会打开真实聊天输入框。"
+                            : "Draft ready to edit. This preview never saves or sends; the app opens the real chat input."}
+                        </p>
+                      </div>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setWorkspacePath("")}
-                      disabled={finishing}
+                      onClick={() => enterAstro()}
                     >
-                      <RotateCcw size={14} aria-hidden />
-                      {copy.defaultWorkspace}
+                      <MessageSquare size={15} aria-hidden />
+                      {copy.enter}
                     </Button>
-                  )}
-
-                  <fieldset className="onboarding-permissions">
-                    <legend>
-                      <ShieldCheck size={18} aria-hidden />
-                      {copy.permission}
-                    </legend>
-                    <label
-                      className={
-                        permissionPreset === "ask_for_approval"
-                          ? "is-selected"
-                          : ""
-                      }
-                    >
-                      <input
-                        type="radio"
-                        disabled={finishing}
-                        name="onboarding-permission"
-                        checked={permissionPreset === "ask_for_approval"}
-                        onChange={() => setPermissionPreset("ask_for_approval")}
-                      />
-                      <span>
-                        <strong className="onboarding-inline-label">
-                          <ShieldQuestion size={16} aria-hidden />
-                          {copy.ask}
-                        </strong>
-                        <small>{copy.askSub}</small>
-                      </span>
-                      <Check size={17} aria-hidden />
-                    </label>
-                    <label
-                      className={
-                        permissionPreset === "approve_for_me"
-                          ? "is-selected"
-                          : ""
-                      }
-                    >
-                      <input
-                        type="radio"
-                        disabled={finishing}
-                        name="onboarding-permission"
-                        checked={permissionPreset === "approve_for_me"}
-                        onChange={() => setPermissionPreset("approve_for_me")}
-                      />
-                      <span>
-                        <strong className="onboarding-inline-label">
-                          <Zap size={16} aria-hidden />
-                          {copy.approve}
-                        </strong>
-                        <small>{copy.approveSub}</small>
-                      </span>
-                      <Check size={17} aria-hidden />
-                    </label>
-                  </fieldset>
-                  <p className="onboarding-network-note">
-                    <ShieldCheck size={15} aria-hidden />
-                    {copy.networkNote}
-                  </p>
-                  {finishError ? (
-                    <p
-                      className="onboarding-status"
-                      data-status="error"
-                      role="alert"
-                    >
-                      {finishError}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-
-              {step === "complete" ? (
-                <div className="onboarding-complete">
-                  <div className="onboarding-complete-mark">
-                    <Check size={34} strokeWidth={2.2} aria-hidden />
                   </div>
-                  <h1 ref={focusHeading} tabIndex={-1}>
-                    {healthSummary?.modelStatus === "verified"
-                      ? copy.completeTitle
-                      : copy.savedTitle}
-                  </h1>
-                  <p>
-                    {healthSummary?.modelStatus === "verified"
-                      ? copy.completeSub
-                      : copy.savedSub}
-                  </p>
+                ) : null}
 
-                  {healthSummary && (
-                    <div className="onboarding-health-grid" role="status">
-                      <div>
-                        <Bot size={17} aria-hidden />
-                        <span>
-                          <small>{copy.healthAgent}</small>
-                          <strong>{healthSummary.agent}</strong>
-                        </span>
-                      </div>
-                      <div
-                        data-status={
-                          healthSummary.modelStatus === "verified"
-                            ? "ok"
-                            : "pending"
+                {step !== "complete" ? (
+                  <footer className="onboarding-actions">
+                    {step !== "personalize" ? (
+                      <Button
+                        variant="ghost"
+                        disabled={finishing}
+                        onClick={() =>
+                          goTo(
+                            step === "workspace" ? "provider" : "personalize",
+                          )
                         }
                       >
-                        {healthSummary.modelStatus === "verified" ? (
-                          <CircleCheck size={17} aria-hidden />
-                        ) : (
-                          <Info size={17} aria-hidden />
-                        )}
-                        <span>
-                          <small>{copy.healthModel}</small>
-                          <strong>
-                            {copy.modelStatuses[healthSummary.modelStatus]}
-                          </strong>
-                          {!["unavailable"].includes(
-                            healthSummary.modelStatus,
-                          ) && <small>{healthSummary.provider}</small>}
-                        </span>
-                      </div>
-                      <div>
-                        <FolderOpen size={17} aria-hidden />
-                        <span>
-                          <small>{copy.healthWorkspace}</small>
-                          <strong>{healthSummary.workspace}</strong>
-                          <small>{healthSummary.workspacePath}</small>
-                        </span>
-                      </div>
-                      <div
-                        data-status={
-                          healthSummary.sandboxAvailable ? "ok" : "pending"
+                        <ArrowLeft size={16} aria-hidden />
+                        {copy.back}
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
+                    {step === "workspace" ? (
+                      <Button
+                        variant="primary"
+                        busy={finishing}
+                        disabled={
+                          !workspaceReady ||
+                          (!previewProviders &&
+                            (providerStatus !== "success" || !verified.current))
+                        }
+                        busyLabel={copy.finishing}
+                        onClick={() => void finish()}
+                      >
+                        {copy.finish}
+                        <ChevronRight size={16} aria-hidden />
+                      </Button>
+                    ) : (
+                      <Button
+                        ref={continueButtonRef}
+                        variant="primary"
+                        disabled={
+                          step === "provider" && providerStatus !== "success"
+                        }
+                        onClick={() =>
+                          goTo(
+                            step === "personalize" ? "provider" : "workspace",
+                          )
                         }
                       >
-                        {healthSummary.sandboxAvailable ? (
-                          <ShieldCheck size={17} aria-hidden />
-                        ) : (
-                          <ShieldAlert size={17} aria-hidden />
-                        )}
-                        <span>
-                          <small>{copy.healthPermission}</small>
-                          <strong>{healthSummary.permission}</strong>
-                          {!healthSummary.sandboxAvailable && (
-                            <small>{copy.sandboxUnavailable}</small>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <StarterTaskChooser locale={locale} onUse={enterAstro} />
-                  {demoDraft !== null && (
-                    <div className="onboarding-demo-composer">
-                      <label className="onboarding-task-input">
-                        <span className="onboarding-inline-label">
-                          <MessageSquare size={16} aria-hidden />
-                          {locale === "zh"
-                            ? "聊天输入框（演示）"
-                            : "Chat input (demo)"}
-                        </span>
-                        <textarea
-                          ref={demoInputRef}
-                          value={demoDraft}
-                          rows={5}
-                          onChange={(event) => setDemoDraft(event.target.value)}
-                        />
-                      </label>
-                      <p className="onboarding-task-privacy" role="status">
-                        {locale === "zh"
-                          ? "草稿已填入，可直接编辑。此预览不会保存或发送；APP 中会打开真实聊天输入框。"
-                          : "Draft ready to edit. This preview never saves or sends; the app opens the real chat input."}
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => enterAstro()}
-                  >
-                    <MessageSquare size={15} aria-hidden />
-                    {copy.enter}
-                  </Button>
-                </div>
-              ) : null}
-
-              {step !== "complete" ? (
-                <footer className="onboarding-actions">
-                  {step !== "personalize" ? (
-                    <Button
-                      variant="ghost"
-                      disabled={finishing}
-                      onClick={() =>
-                        goTo(step === "workspace" ? "provider" : "personalize")
-                      }
-                    >
-                      <ArrowLeft size={16} aria-hidden />
-                      {copy.back}
-                    </Button>
-                  ) : (
-                    <span />
-                  )}
-                  {step === "workspace" ? (
-                    <Button
-                      variant="primary"
-                      busy={finishing}
-                      disabled={
-                        !workspaceReady ||
-                        (!previewProviders &&
-                          (providerStatus !== "success" || !verified.current))
-                      }
-                      busyLabel={copy.finishing}
-                      onClick={() => void finish()}
-                    >
-                      {copy.finish}
-                      <ChevronRight size={16} aria-hidden />
-                    </Button>
-                  ) : (
-                    <Button
-                      ref={continueButtonRef}
-                      variant="primary"
-                      disabled={
-                        step === "provider" && providerStatus !== "success"
-                      }
-                      onClick={() =>
-                        goTo(step === "personalize" ? "provider" : "workspace")
-                      }
-                    >
-                      {copy.continue}
-                      <ChevronRight size={16} aria-hidden />
-                    </Button>
-                  )}
-                </footer>
-              ) : null}
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
+                        {copy.continue}
+                        <ChevronRight size={16} aria-hidden />
+                      </Button>
+                    )}
+                  </footer>
+                ) : null}
+              </div>
+            </OnboardingScene>
+          )}
+        </AnimatePresence>
+      </div>
     </main>
   );
 }

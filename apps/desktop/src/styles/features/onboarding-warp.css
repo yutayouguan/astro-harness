@@ -24,6 +24,28 @@
   animation-name: onboarding-warp-arrival;
 }
 
+.onboarding-scenes {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.onboarding-scenes > section {
+  grid-area: 1 / 1;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden auto;
+  /* Each page keeps its own scroll; the next page always arrives from its top. */
+  transform-origin: 50% 45dvh;
+}
+
+.onboarding-scenes > section[data-exiting="true"] {
+  z-index: 3;
+  pointer-events: none;
+}
+
 .onboarding-warp-core {
   position: absolute;
   top: calc(45% - 22vmin);
@@ -99,7 +121,12 @@
 
 /* App mounts immediately underneath; the portal never delays loading or input. */
 .onboarding-app-host[data-arriving="true"] {
-  animation: onboarding-app-reveal 980ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+  /* display:contents has no paint box and cannot show a page-flight transform. */
+  display: block;
+  position: fixed;
+  inset: 0;
+  transform-origin: 50% 45%;
+  animation: onboarding-app-reveal 980ms cubic-bezier(0.32, 0.05, 0.25, 1) both;
 }
 
 .onboarding-arrival-preview {
@@ -211,10 +238,13 @@
 }
 
 @keyframes onboarding-app-reveal {
-  from {
-    opacity: 0.2;
+  0%,
+  16% {
+    transform: perspective(1200px) translateZ(-1100px);
+    opacity: 0;
   }
-  to {
+  100% {
+    transform: perspective(1200px) translateZ(0);
     opacity: 1;
   }
 }
@@ -228,6 +258,18 @@
   .onboarding-warp,
   .onboarding-app-host[data-arriving="true"] {
     animation-duration: 160ms;
+  }
+  .onboarding-app-host[data-arriving="true"] {
+    animation-name: onboarding-app-reduced;
+  }
+}
+
+@keyframes onboarding-app-reduced {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

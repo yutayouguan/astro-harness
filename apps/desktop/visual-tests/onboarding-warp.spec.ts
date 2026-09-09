@@ -46,6 +46,11 @@ for (const reduced of [false, true]) {
     if (!reduced) {
       await expect(page.locator(".onboarding-warp")).toHaveAttribute("data-mode", "app");
       await expect(page.locator(".onboarding-app-host")).toHaveAttribute("data-arriving", "true");
+      const host = page.locator(".onboarding-app-host");
+      await host.evaluate(el => el.getAnimations().forEach(animation => { animation.pause(); animation.currentTime = 420; }));
+      const projection = await host.evaluate(el => el.getBoundingClientRect().width / (el as HTMLElement).offsetWidth);
+      expect(projection).toBeGreaterThan(0.5);
+      expect(projection).toBeLessThan(0.95);
       await page.locator(".onboarding-warp").evaluate(el => el.getAnimations({ subtree: true }).forEach(animation => { animation.pause(); animation.currentTime = 450; }));
       await page.screenshot({ path: testInfo.outputPath("app-arrival.png") });
     }
@@ -53,6 +58,7 @@ for (const reduced of [false, true]) {
     await expect(page.locator(".onboarding-brand-motion")).toHaveCount(0);
     await expect(page.locator(".onboarding-app-host")).toHaveCount(1);
     await expect(page.locator(".onboarding-app-host")).toHaveAttribute("data-arriving", "false");
+    await expect(page.locator(".onboarding-app-host")).toHaveCSS("display", "contents");
     const input = page.getByRole("textbox", { name: "聊天输入框（演示）" });
     await expect(input).toHaveValue(/至少 5 个/);
     await input.fill("修改后的草稿");
@@ -64,10 +70,35 @@ for (const reduced of [false, true]) {
   });
 }
 
-test("missing brand target and suppressed CSS animation cannot trap App entry", async ({ page }) => {
+test("suppressed CSS animation cannot trap App entry", async ({ page }) => {
   await page.goto("/iframe.html?id=app-first-run-onboarding--enter-app&viewMode=story");
-  await page.addStyleTag({ content: ".onboarding-warp { animation: none !important; } [data-onboarding-brand-target] { display: none !important; }" });
+  await page.addStyleTag({ content: ".onboarding-warp { animation: none !important; }" });
   await page.getByRole("button", { name: "空白开始", exact: true }).click();
   await expect(page.locator(".onboarding-root")).toHaveCount(0, { timeout: 4000 });
   await expect(page.getByRole("textbox", { name: "聊天输入框（演示）" })).toBeEditable();
+});
+
+test("pages share a flight corridor with an inert departing plane", async ({ page }, testInfo) => {
+  await page.goto("/iframe.html?id=app-first-run-onboarding--personalize&viewMode=story");
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await page.locator(".onboarding-scenes").evaluate(async el => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    el.getAnimations({ subtree: true }).forEach(animation => { animation.pause(); animation.currentTime = 260; });
+  });
+  const departing = page.locator('.onboarding-scenes > section[data-exiting="true"]');
+  const arriving = page.locator('.onboarding-scenes > section[data-exiting="false"]');
+  await expect(departing).toHaveCount(1);
+  await expect(departing).toHaveAttribute("inert", "");
+  await expect(departing).toHaveAttribute("aria-hidden", "true");
+  const oldScale = await departing.evaluate(el => el.getBoundingClientRect().width / (el as HTMLElement).offsetWidth);
+  const newScale = await arriving.evaluate(el => el.getBoundingClientRect().width / (el as HTMLElement).offsetWidth);
+  expect(oldScale).toBeGreaterThan(1.15);
+  expect(newScale).toBeLessThan(0.95);
+  await page.screenshot({ path: testInfo.outputPath("page-corridor.png") });
+  await page.locator(".onboarding-scenes").evaluate(el => el.getAnimations({ subtree: true }).forEach(animation => animation.play()));
+  await expect(departing).toHaveCount(0);
+  expect(await arriving.evaluate(el => el.scrollTop)).toBe(0);
+  await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeInViewport();
+  await page.getByLabel("服务地址", { exact: true }).fill("https://example.com/v1");
+  await expect(page.getByLabel("服务地址", { exact: true })).toHaveValue("https://example.com/v1");
 });
