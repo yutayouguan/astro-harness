@@ -8,6 +8,7 @@
 |---|---|---|
 | UI Provider 列表、端点、模型与活动选择 | `desktop.providers` | 维持原 Provider ID、fallback 与媒体模型；API key 仍由现有环境变量/安全存储解析 |
 | 全局工具开关 | `desktop.tools` | 缺失项运行时默认启用；读取默认值不写盘 |
+| 全局工具组加载策略 | `desktop.tool_loading` | `auto` / `always` / `on_demand`；缺失或 Auto 使用内置默认，不改变启用开关 |
 | 全局 Skill 开关 | `desktop.skills` | 只持久化明确设置，不把扫描结果当用户配置写回 |
 | Agent 默认设置 | `desktop.agents.<id>` | 包含名称、默认模型、温度、轮次上限与工具覆盖 |
 | Agent Skill 覆盖 | `desktop.agent_skills.<id>` | 缺失时回退全局；默认 Agent 与全局开关在一次事务中同步 |
@@ -49,6 +50,30 @@ additional_params_json = '{"vendor_option":null}'
 ```
 
 高级 Provider 参数可能含 JSON null/数组，Agent 的 `additional_params_json` 用 JSON 字符串无损保存；不允许与原生 `additional_params` 表同时设置。未设置的 optional 字段省略，不用 TOML 不支持的 null。
+
+## 工具组加载策略
+
+桌面「工具 → 详情 → 工具组加载策略」可调整普通工具组的加载方式；这是全局设置，
+适用于所有 Agent，与按 Agent 的启用开关分开。每次只保存一个工具组，失败时界面保留
+最后确认的值并显示错误，不在首次读取时自动写盘。
+
+```toml
+[desktop.tool_loading]
+browser = "on_demand"
+memory = "always"
+```
+
+- `auto`：使用内置默认。Browser 的 16 个工具默认 Deferred；选择 Auto 时移除该组覆盖。
+- `always`：启用且环境可用时，直接提供完整工具定义。
+- `on_demand`：不进入首次普通工具请求，经 `tool_search` 发现后从下一 Step 起可调用。
+  已发现工具保留在当前线程的发现历史中，不是每次调用后卸载。
+- 所选模型不支持 `tool_search` 时，允许降级的工具会提前加载，且移除请求中的
+  `defer_loading` 标记。界面显示该降级，能力未知时明确提示未知；模型目录
+  CodeModeOnly 则显示 `exec` 间接调用。显示的是所选模型预期行为，会话模型与权限仍优先。
+- 加载策略在下一次采样捕获 Step 时重新读取，不能修改已发请求的路由快照，也不绕过
+  Plan、审批、沙箱、工具开关或 Skill 原有授权规则。
+- 系统控制、隐藏、模型专用、freeform 及禁止 eager fallback 的工具不允许该设置改写；
+  含此类工具的组不提供选择器。MCP/Workflow 仍使用各自的既有策略。
 
 ## 不迁入 config.toml 的内容
 

@@ -4,6 +4,9 @@ pub mod agent_icons;
 pub mod auto_icon;
 pub mod scan;
 pub mod tools_enabled;
+pub mod tool_loading;
+
+pub use tool_loading::{load_tool_loading_modes, set_tool_loading_mode, ToolLoadingMode};
 
 pub use agent_icons::{
     apply_pending_agent_icons, clear_pending_agent_icon, pending_icons_dir, resolve_icon_field,

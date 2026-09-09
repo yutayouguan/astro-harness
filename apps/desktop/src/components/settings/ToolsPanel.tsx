@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAgentTools } from "../../hooks/providers/useAgentTools";
+import { useToolLoading } from "../../hooks/providers/useToolLoading";
+import { toolLoadingStatus, type ToolLoadingMode } from "../../lib/tools/toolLoading";
+import type { ModelInfo } from "../../types";
 import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useConfirm } from "../../hooks/ui/DialogContext";
@@ -408,6 +411,7 @@ const VIEW_OPTIONS = [
 
 /** Tools 面板入参 */
 type Props = {
+  modelInfo?: ModelInfo | null;
   /** 面板是否可见（用于刷新统计） */
   active?: boolean;
   /** 打开时落到该 tab；消费后通知父级清空 */
@@ -421,6 +425,7 @@ function isTauri(): boolean {
 }
 
 export default function ToolsPanel({
+  modelInfo,
   active = true,
   initialTab = null,
   onInitialTabConsumed,
@@ -439,6 +444,7 @@ export default function ToolsPanel({
     tools: agentTools,
   } = useAgentTools(agentId);
   const query = search.trim().toLowerCase();
+  const loading = useToolLoading(active);
 
   useEffect(() => {
     if (!initialTab) return;
@@ -545,7 +551,10 @@ export default function ToolsPanel({
   const detailApiName =
     activeFn?.name ?? selectedTool?.tools?.[0] ?? selectedTool?.id ?? "";
   const detailNamespace = activeFn?.namespace ?? selectedTool?.namespace;
-  const detailExposure = activeFn?.exposure ?? selectedTool?.exposure;
+  const loadingMode = loading.settings?.adjustableToolsets.includes(selectedTool?.id ?? "")
+    ? loading.settings.modes[selectedTool?.id ?? ""] ?? "auto" : "auto";
+  const defaultExposure = activeFn?.exposure ?? selectedTool?.exposure;
+  const detailExposure = defaultExposure;
   const detailExposureLabel =
     detailExposure === "deferred"
       ? t("loop.agentToolDeferred")
@@ -721,10 +730,10 @@ export default function ToolsPanel({
                                 {detailExposure ? (
                                   <span
                                     className="tools-detail-id-chip"
-                                    title={t("tools.detail.exposure")}
+                                    title={t("tools.loading.default")}
                                   >
                                     <span className="tools-detail-id-label">
-                                      {t("tools.detail.exposure")}
+                                      {t("tools.loading.default")}
                                     </span>
                                     <code>{detailExposureLabel}</code>
                                   </span>
@@ -761,6 +770,38 @@ export default function ToolsPanel({
                           </div>
                         </header>
                         <div className="tools-detail-scroll">
+                          <section className="tools-detail-section">
+                            <h4 className="tools-detail-label">{t("tools.loading.title")}</h4>
+                            {loading.settings?.adjustableToolsets.includes(selectedTool.id) ? (
+                              <>
+                                <SelectMenu
+                                  value={loadingMode}
+                                  options={[
+                                    { value: "auto", label: t("tools.loading.auto") },
+                                    { value: "always", label: t("tools.loading.always") },
+                                    { value: "on_demand", label: t("tools.loading.onDemand") },
+                                  ]}
+                                  aria-label={t("tools.loading.title")}
+                                  disabled={loading.saving}
+                                  onChange={(value) => void loading.change(selectedTool.id, value as ToolLoadingMode)}
+                                />
+                                <p className="tools-detail-body" role="status">
+                                  {t(`tools.loading.${toolLoadingStatus(loadingMode, defaultExposure, !!enabled[selectedTool.id], modelInfo)}`)}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="tools-detail-body">{t(loading.settings ? "tools.loading.fixed" : "tools.loading.unavailable")}</p>
+                            )}
+                            <p className="tools-detail-api-desc">{t("tools.loading.scope")}</p>
+                            {loading.error && (
+                              <div role="alert">
+                                <p className="tools-detail-body">{loading.error}</p>
+                                <button type="button" onClick={() => void loading.refresh()} disabled={loading.saving}>
+                                  {t("modelRankings.retry")}
+                                </button>
+                              </div>
+                            )}
+                          </section>
                           <section className="tools-detail-section">
                             <h4 className="tools-detail-label">
                               <FileText

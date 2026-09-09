@@ -260,7 +260,7 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 
 | Namespace | 暴露策略 | 子工具 |
 | --- | --- | --- |
-| `browser` | Direct，受本机浏览器可用性和 Plan 模式过滤 | `open`、`snapshot`、`click`、`type`、`scroll`、`wait`、`screenshot`、`tabs`、`tab_open`、`tab_switch`、`tab_close`、`back`、`forward`、`reload`、`downloads`、`close` |
+| `astro_browser` | 默认 Deferred；可通过全局加载策略切换，仍受本机浏览器可用性和 Plan 模式过滤 | `open`、`snapshot`、`click`、`type`、`scroll`、`wait`、`screenshot`、`tabs`、`tab_open`、`tab_switch`、`tab_close`、`back`、`forward`、`reload`、`downloads`、`close` |
 | `media` | Deferred，由 `tool_search` 发现；Skill 可放宽对应 toolset 开关 | `image_gen`、`video_gen`、`speech_gen`、`music_gen` |
 | `cron` | Direct | `add`、`list`、`remove`、`enable`、`disable` |
 | `workflow` | 按工作流配置，默认 Deferred | 已启用 Workflow 的 Agent 工具名，另有 `get_run` / `cancel_run` |
@@ -286,6 +286,11 @@ MCP 同样使用原生身份：模型看到 `namespace: "mcp__calendar"` + `name
 浏览器使用应用自有 `astro_browser` 命名空间，避免 Azure/OpenAI Responses 的
 `browser` 保留域冲突（例如 `browser.back` 会被拒绝）。子工具名保持 `open`、`back`
 等短名，内部执行键与 Plan 模式权限仍使用 `browser_*`，toolset 开关仍为 `browser`。
+
+默认 16 个 Browser 工具均为 Deferred。Desktop 详情页可选择全局工具组加载策略
+`auto` / `always` / `on_demand`，保存到 `desktop.tool_loading`。Registry 每次采样前
+从内置 exposure 恢复并叠加配置；Auto 不会继承上次 Always 的修改。执行器、内部名、
+审批和权限保持不变，已发 Step 的 Registry 快照不变。
 
 ### 4.5 ToolSearch
 
@@ -367,7 +372,6 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 | 类别 | 当前 Direct 工具 |
 | --- | --- |
 | Shell / 文件 | `exec_command`、`apply_patch`、`get_context_remaining`、`new_context_window`、`tool_search` |
-| Browser（本机有可用浏览器时） | `astro_browser.open`、`astro_browser.snapshot`、`astro_browser.click`、`astro_browser.type`、`astro_browser.scroll`、`astro_browser.wait`、`astro_browser.screenshot`、`astro_browser.tabs`、`astro_browser.tab_*`、`astro_browser.back`、`astro_browser.forward`、`astro_browser.reload`、`astro_browser.downloads`、`astro_browser.close` |
 | HITL | `ask_user`、`request_user_input_async`、`switch_mode` |
 | 上下文 / 记忆 / Skill | `context_search`、`pin_context`、`memory`、`skills`、`todo` |
 | 自动化 | `cron.add`、`cron.list`、`cron.remove`、`cron.enable`、`cron.disable`（内部注册名为 `cron_*`） |
@@ -378,6 +382,7 @@ Context usage 与延迟激活使用同一 `StepContext` 边界：本 step 采样
 
 - 终端与环境：`write_stdin`、`code_exec`、`request_permissions`、`request_plugin_install`、`wait_for_environment`；
 - Web：`web_search`、`web_fetch`；
+- Browser：`astro_browser` 下全部 16 个工具（仍需本机浏览器可用）；
 - 媒体生成：`media.image_gen`、`media.video_gen`、`media.speech_gen`、`media.music_gen`；
 - 媒体理解：`image_analyze`、`audio_analyze`、`video_analyze`、`robotics`；
 - MCP：当 `tool_search` 可用时，当前 MCP Hub 发现的 `(mcp__{server}, {tool})` 原生子工具也默认进入 Deferred。

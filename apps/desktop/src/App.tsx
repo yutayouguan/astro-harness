@@ -165,6 +165,7 @@ import {
 } from "./lib/ui/shellGradient";
 import type {
   ModelCapabilities,
+  ModelInfo,
   ModelPricingMeta,
   ModelReasoningMeta,
   ProjectDto,
@@ -341,6 +342,7 @@ export default function App() {
   );
   const [activeModelCapabilities, setActiveModelCapabilities] =
     useState<ModelCapabilities | null>(null);
+  const [loadingModelInfo, setLoadingModelInfo] = useState<{ providerId: string; info: ModelInfo } | null>(null);
   const [activeModelReasoning, setActiveModelReasoning] =
     useState<ModelReasoningMeta | null>(null);
   const [activeModelPricing, setActiveModelPricing] =
@@ -740,6 +742,7 @@ export default function App() {
         );
         if (cancelled) return;
         const match = cached?.models?.find((m) => m.id === modelId);
+        setLoadingModelInfo(match ? { providerId, info: match } : null);
         const win = match?.context_window;
         setModelContextWindow(typeof win === "number" && win > 0 ? win : null);
         setActiveModelCapabilities(match?.capabilities ?? null);
@@ -772,6 +775,7 @@ export default function App() {
         if (!cancelled) {
           setModelContextWindow(null);
           setActiveModelCapabilities(null);
+          setLoadingModelInfo(null);
           setActiveModelReasoning(null);
           setActiveModelPricing(null);
         }
@@ -2096,6 +2100,7 @@ export default function App() {
                   {settingsTab === "tools" && (
                     <ToolsPanel
                       active={nav === "settings"}
+                      modelInfo={loadingModelInfo?.providerId === activeProvider?.id && loadingModelInfo?.info.id === activeProvider?.model ? loadingModelInfo?.info : null}
                       initialTab={toolsInitialTab}
                       onInitialTabConsumed={() => setToolsInitialTab(null)}
                     />

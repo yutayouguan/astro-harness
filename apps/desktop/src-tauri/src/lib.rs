@@ -430,6 +430,8 @@ pub fn run() {
             // — config —
             commands::config::get_tools_enabled,
             commands::config::set_tools_enabled,
+            commands::config::get_tool_loading_settings,
+            commands::config::set_tool_loading_mode,
             commands::config::get_tool_catalog,
             commands::config::get_mcp_servers,
             commands::config::get_mcp_server_statuses,

@@ -23,6 +23,7 @@ pub use infra::logging::{init_logging, logs_dir};
 pub use infra::tool_calls::record_tool_call;
 
 pub use config::{
+    load_tool_loading_modes, set_tool_loading_mode, ToolLoadingMode,
     apply_auto_lucide_icon, apply_pending_agent_icons, clear_pending_agent_icon,
     is_tool_call_allowed, is_toolset_enabled, load_tools_enabled, load_tools_enabled_for_agent,
     lucide_svg_bytes, patch_tools_enabled_for_agent, pending_icons_dir, resolve_icon_field,

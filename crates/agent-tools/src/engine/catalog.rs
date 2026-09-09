@@ -373,7 +373,7 @@ mod tests {
             .expect("astro_browser.open catalog function");
         assert_eq!(open["namespace"], "astro_browser");
         assert_eq!(open["registeredName"], "browser_open");
-        assert_eq!(open["exposure"], "direct");
+        assert_eq!(open["exposure"], "deferred");
     }
 
     #[test]

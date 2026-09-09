@@ -186,7 +186,7 @@ macro_rules! submit_builtin_tool {
                     registered_name: $name,
                     entry: entry.clone(),
                 });
-                registry.register_runtime(entry, runtime);
+                registry.attach_runtime($name, runtime);
             )+
         }
 

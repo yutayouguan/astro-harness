@@ -39,7 +39,61 @@ pub async fn set_tools_enabled(
     home::patch_tools_enabled_for_agent(id.as_deref(), &enabled).map_err(|e| e.to_string())
 }
 
-/// 内置工具目录（schemars 派生参数），供前端 Tools 面板展示
+/// Persisted global preferences and tool groups safe to configure from Desktop.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolLoadingSettings {
+    modes: HashMap<String, home::ToolLoadingMode>,
+    adjustable_toolsets: Vec<String>,
+}
+
+/// Global loading preferences; enable gates remain independently Agent-scoped.
+#[tauri::command]
+pub fn get_tool_loading_settings() -> Result<ToolLoadingSettings, String> {
+    let mut registry = tools::ToolRegistry::new();
+    tools::register_all(&mut registry);
+    Ok(ToolLoadingSettings {
+        modes: home::load_tool_loading_modes().map_err(|error| error.to_string())?,
+        adjustable_toolsets: home::KNOWN_TOOLSET_IDS.iter()
+            .filter(|toolset| registry.toolset_loading_adjustable(toolset))
+            .map(|toolset| (*toolset).to_string()).collect(),
+    })
+}
+
+#[tauri::command]
+pub fn set_tool_loading_mode(toolset: String, mode: home::ToolLoadingMode) -> Result<ToolLoadingSettings, String> {
+    let mut registry = tools::ToolRegistry::new();
+    tools::register_all(&mut registry);
+    if !registry.toolset_loading_adjustable(&toolset) {
+        return Err(format!("toolset loading policy is fixed: {toolset}"));
+    }
+    home::set_tool_loading_mode(&toolset, mode).map_err(|error| error.to_string())?;
+    get_tool_loading_settings()
+}
+
+#[cfg(test)]
+mod tool_loading_tests {
+    use super::*;
+
+    #[test]
+    fn tool_loading_commands_round_trip_without_changing_enable_gates() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let initial = get_tool_loading_settings().unwrap();
+        assert!(initial.modes.is_empty());
+        assert!(initial.adjustable_toolsets.iter().any(|id| id == "browser"));
+        assert!(!home::settings::path(dir.path()).exists());
+        let saved = set_tool_loading_mode("browser".into(), home::ToolLoadingMode::Always).unwrap();
+        assert_eq!(saved.modes["browser"], home::ToolLoadingMode::Always);
+        assert!(home::load_tools_enabled().unwrap().is_empty());
+        assert!(get_tool_loading_settings().unwrap().modes.contains_key("browser"));
+        assert!(set_tool_loading_mode("apply_patch".into(), home::ToolLoadingMode::OnDemand).is_err());
+        assert!(set_tool_loading_mode("system".into(), home::ToolLoadingMode::OnDemand).is_err());
+        assert!(set_tool_loading_mode("browser".into(), home::ToolLoadingMode::Auto).unwrap().modes.is_empty());
+    }
+}
+
+/// Builtin default disclosure, not per-sampling effective availability.
 #[tauri::command]
 pub async fn get_tool_catalog() -> Result<Vec<tools::ToolCatalogItem>, String> {
     let mut registry = tools::ToolRegistry::new();

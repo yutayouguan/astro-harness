@@ -601,6 +601,7 @@ pub fn register(registry: &mut ToolRegistry) {
             check_fn: Some(std::sync::Arc::new(browser_available)),
             icon,
             exclusive_access: true,
+            exposure: types::ToolExposure::Deferred,
             ..ToolEntry::lifecycle_defaults()
         });
     }

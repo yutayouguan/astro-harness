@@ -246,6 +246,19 @@ pub(crate) fn build_tool_router(
     }
     let mut discovered_specs = tools::filter_schemas(interaction_mode, discovered_specs);
     if !supports_search_tool {
+        // These definitions are being eagerly disclosed, not advertised for
+        // discovery. Keeping defer_loading=true would contradict the fallback.
+        for spec in &mut discovered_specs {
+            if spec["type"] == "namespace" {
+                if let Some(children) = spec["tools"].as_array_mut() {
+                    for child in children {
+                        child.as_object_mut().unwrap().remove("defer_loading");
+                    }
+                }
+            } else if let Some(object) = spec.as_object_mut() {
+                object.remove("defer_loading");
+            }
+        }
         model_visible_specs =
             merge_model_visible_specs(model_visible_specs, std::mem::take(&mut discovered_specs));
     }
@@ -770,6 +783,7 @@ mod tests {
             );
             assert!(children.iter().any(|child| child["name"] == "back"));
             for child in children {
+                assert_ne!(child["defer_loading"], true);
                 let name = child["name"].as_str().unwrap();
                 let item = serde_json::from_value(serde_json::json!({
                     "type": "function_call",
@@ -816,6 +830,92 @@ mod tests {
         .unwrap();
         assert!(router.model_visible_specs.is_empty());
         assert!(!router.has_tool(Some("astro_browser"), "back"));
+    }
+
+    #[test]
+    fn browser_loading_policy_respects_discovery_snapshot_and_mode_boundaries() {
+        let mut builtins = ToolRegistry::new();
+        tools::register_all(&mut builtins);
+        let mut registry = ToolRegistry::new();
+        for mut entry in builtins
+            .all_tools()
+            .into_iter()
+            .filter(|entry| {
+                entry.toolset == "browser"
+                    || matches!(entry.name.as_str(), "exec" | "wait" | "tool_search")
+            })
+            .cloned()
+        {
+            entry.check_fn = None;
+            registry.register_runtime(entry.clone(), builtins.runtime(&entry.name).unwrap());
+        }
+        let discovered = HashSet::from([types::ToolName::namespaced("astro_browser", "snapshot")]);
+        let build = |registry: &ToolRegistry, mode, tool_mode, names: &HashSet<types::ToolName>| {
+            build_tool_router(registry, mode, tool_mode, true, names).unwrap()
+        };
+        let first = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        );
+        assert!(!first.has_tool(Some("astro_browser"), "snapshot"));
+        assert!(first
+            .model_visible_specs
+            .iter()
+            .all(|spec| spec["name"] != "astro_browser"));
+        let next = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &discovered,
+        );
+        assert!(next.model_can_call(Some("astro_browser"), "snapshot"));
+        assert!(!next.has_tool(Some("astro_browser"), "click"));
+        registry.set_loading_modes(HashMap::from([(
+            "browser".into(),
+            home::ToolLoadingMode::Always,
+        )]));
+        let always = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        );
+        assert!(always.model_can_call(Some("astro_browser"), "click"));
+        assert!(!first.has_tool(Some("astro_browser"), "snapshot"));
+        assert!(!next.has_tool(Some("astro_browser"), "click"));
+        let plan = build(
+            &registry,
+            types::InteractionMode::Plan,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        );
+        assert!(!plan.has_tool(Some("astro_browser"), "click"));
+        let code = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::CodeModeOnly,
+            &HashSet::new(),
+        );
+        assert!(!code.model_can_call(Some("astro_browser"), "click"));
+        assert!(code.has_tool(None, "astro_browser_click"));
+        registry.set_loading_modes(HashMap::new());
+        let restored = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &HashSet::new(),
+        );
+        assert!(!restored.has_tool(Some("astro_browser"), "click"));
+        registry.set_enabled_map(HashMap::from([("browser".into(), false)]));
+        let disabled = build(
+            &registry,
+            types::InteractionMode::Agent,
+            types::ToolMode::Direct,
+            &discovered,
+        );
+        assert!(!disabled.has_tool(Some("astro_browser"), "snapshot"));
     }
 
     #[test]
