@@ -1,16 +1,13 @@
 import { useEffect, useId, useState } from "react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { Bell, ImageOff, PawPrint, Power } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { Bell, PawPrint, Power } from "lucide-react";
 import { DesktopPreferenceSwitch } from "../settings/DesktopPreferenceSwitch";
 import { Button } from "../ui";
-import companion from "../../assets/onboarding-companion.svg";
 
 type PetInfo = {
   enabled: boolean;
   hasAsset: boolean;
   previewPath: string | null;
-  spriteVersionNumber: number | null;
-  displayName: string | null;
 };
 export function OnboardingPreferences({
   locale,
@@ -30,8 +27,6 @@ export function OnboardingPreferences({
           enabled: false,
           hasAsset: false,
           previewPath: null,
-          spriteVersionNumber: null,
-          displayName: null,
         }
       : null,
   );
@@ -55,10 +50,6 @@ export function OnboardingPreferences({
   }, [preview, retry]);
   const enabled = petChoice ?? pet?.enabled ?? false;
   const missingAsset = Boolean(pet?.previewPath && !pet.hasAsset);
-  const previewSrc =
-    pet?.hasAsset && pet.previewPath
-      ? convertFileSrc(pet.previewPath)
-      : companion;
   return (
     <section
       className="onboarding-preferences"
@@ -78,33 +69,11 @@ export function OnboardingPreferences({
           : "Notification and login preferences save immediately; your companion appears after setup."}
       </p>
       <div className="onboarding-preference-row onboarding-pet-preference">
-        {missingAsset ? (
-          <span
-            className="onboarding-pet-preview is-missing"
-            role="img"
-            aria-label={zh ? "桌宠资源不可用" : "Pet asset unavailable"}
-          >
-            <ImageOff size={22} aria-hidden />
-          </span>
-        ) : pet?.hasAsset && pet.spriteVersionNumber === 2 ? (
-          <div
-            className="onboarding-pet-preview is-atlas"
-            style={{ backgroundImage: `url("${previewSrc}")` }}
-            role="img"
-            aria-label={
-              pet.displayName || (zh ? "已有桌宠预览" : "Current pet preview")
-            }
-          />
-        ) : (
-          <img
-            className="onboarding-pet-preview"
-            src={previewSrc}
-            alt={zh ? "桌面小伙伴预览" : "Desktop companion preview"}
-          />
-        )}
+        <span className="onboarding-preference-icon" aria-hidden="true">
+          <PawPrint size={18} />
+        </span>
         <div className="onboarding-preference-copy">
           <strong>
-            <PawPrint size={15} aria-hidden />
             {zh ? "桌面宠物" : "Desktop companion"}
           </strong>
           <p id={petHintId}>

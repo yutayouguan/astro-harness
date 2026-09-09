@@ -208,7 +208,8 @@ test("optional preferences default off, pet stays pending until completion", asy
     await expect(page.getByRole("switch", { name, exact: true })).toBeEnabled();
     await expect(page.getByRole("switch", { name, exact: true })).not.toBeChecked();
   }
-  await expect(page.getByAltText("桌面小伙伴预览")).toBeVisible();
+  await expect(page.locator(".onboarding-pet-preference svg.lucide-paw-print")).toHaveCount(1);
+  await expect(page.locator(".onboarding-pet-preference img, .onboarding-pet-preview")).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["set_task_notifications_enabled", "set_desktop_autostart"].includes(x.cmd)))).toEqual([]);
   await page.getByRole("switch", { name: "桌面宠物", exact: true }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.pet_enabled)).toBe(true);
@@ -233,7 +234,7 @@ test("missing existing pet is not silently replaced with the builtin companion",
   await startProvider(page);
   await page.getByRole("button", { name: "返回", exact: true }).click();
   await expect(page.getByRole("switch", { name: "桌面宠物", exact: true })).toBeDisabled();
-  await expect(page.getByRole("img", { name: "桌宠资源不可用" })).toBeVisible();
+  await expect(page.getByText("原有资源不可用，请在桌宠设置中重新选择。", { exact: true })).toBeVisible();
   await expect(page.getByAltText("桌面小伙伴预览")).toHaveCount(0);
 });
 
