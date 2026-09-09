@@ -15,5 +15,15 @@
 .storage-diagnostics-domains small { opacity: 0.65; }
 .storage-diagnostics-warning { padding: 10px 12px; border-left: 2px solid var(--color-accent, currentColor); }
 .storage-diagnostics-cache-policy { display: grid; gap: 5px; padding: 10px 0; }
+.storage-cleanup-controls { display: grid; gap: 10px; margin: 12px 0; }
+.storage-cleanup-controls > button { justify-self: start; }
+.storage-cleanup-result { display: grid; gap: 8px; }
+.storage-cleanup-confirmation { display: grid; gap: 12px; font-size: 12px; }
+.storage-cleanup-confirmation p { margin: 0; line-height: 1.5; }
+.storage-cleanup-confirmation code { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 11px; }
+.storage-cleanup-list { max-height: min(38vh, 300px); overflow: auto; padding-left: 18px; margin: 0; }
+.storage-cleanup-list li { padding: 6px 0; }
+.storage-cleanup-list span { display: block; font-variant-numeric: tabular-nums; }
+.storage-cleanup-ack { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
 @media (max-width: 680px) { .storage-diagnostics-domains { grid-template-columns: 1fr; } .storage-diagnostics-paths { grid-template-columns: 1fr; gap: 5px; } }
 @media (prefers-contrast: more) { .storage-diagnostics-domains > div { border-bottom-width: 1px; } }

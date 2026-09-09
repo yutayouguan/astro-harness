@@ -16,6 +16,7 @@ paths! {
     hook_trust_path => "security/hooks/trust.json",
     hook_runs_dir => "logs/hooks",
     extension_migration_marker => "backups/extensions-in-progress.json",
+    layout_migration_marker => "backups/layout-in-progress.json",
     backups_dir => "backups",
     skills_dir => "skills",
     skill_origins_path => "skills/origins.json",
@@ -39,6 +40,11 @@ paths! {
     tool_spills_dir => "sessions/tool_spills",
     workflow_db_path => "automation/workflows/workflow.db",
     dreaming_state_path => "memory/dreaming.json",
+}
+
+pub(crate) const STORAGE_CLEANUP_RECOVERY_SUBDIR: &str = "backups/storage-cleanup";
+pub fn storage_cleanup_recovery_dir(base: &Path) -> PathBuf {
+    base.join(STORAGE_CLEANUP_RECOVERY_SUBDIR)
 }
 
 /// Only durable domain roots are ensured here; caches are created by their owners.

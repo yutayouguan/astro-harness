@@ -4,7 +4,7 @@ test("storage inspection explains protected data and only previews cleanup", asy
   await page.setViewportSize({ width: 1100, height: 1100 });
   await page.goto("/iframe.html?id=settings-storagediagnostics--ready&viewMode=story");
   await expect(page.getByRole("heading", { name: "存储与配置" })).toBeVisible();
-  await expect(page.getByText("只读检查 · 不迁移、不修改配置、不删除文件")).toBeVisible();
+  await expect(page.getByText("检查与预览只读 · 移动文件需单独确认")).toBeVisible();
   await expect(page.getByText("资源引用已失效", { exact: true })).toBeVisible();
   await page.getByText(/^清理预览/).click();
   await expect(page.getByText("models/cache/old-model-metadata.json")).toBeVisible();
@@ -14,7 +14,7 @@ test("storage inspection explains protected data and only previews cleanup", asy
   await expect(page.getByText("数据根以外的目录未扫描", { exact: true })).toBeVisible();
   await expect(page.getByText(/部分缓存目录或文件未验证/)).toBeVisible();
   await expect(page.getByText(/会话、数据库、rollout、工作区/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /删除|清理|Delete|Clean/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /永久删除|确认移入恢复区|Delete permanently/ })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("storage-diagnostics.png"), fullPage: true });
 });
 

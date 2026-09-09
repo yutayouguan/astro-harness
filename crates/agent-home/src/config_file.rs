@@ -5,6 +5,9 @@ use std::path::Path;
 
 pub struct ConfigWriteGuard(File);
 
+pub(crate) const CONFIG_LOCK_DIRECTORY: &str = "security/locks";
+pub(crate) const CONFIG_LOCK_FILENAME: &str = "config.lock";
+
 impl Drop for ConfigWriteGuard {
     fn drop(&mut self) {
         let _ = self.0.unlock();
@@ -15,14 +18,14 @@ pub fn lock_config_file(path: &Path) -> anyhow::Result<ConfigWriteGuard> {
     let base = path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("config has no parent"))?;
-    let locks = base.join("security/locks");
+    let locks = base.join(CONFIG_LOCK_DIRECTORY);
     fs::create_dir_all(&locks)?;
     let file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(locks.join("config.lock"))?;
+        .open(locks.join(CONFIG_LOCK_FILENAME))?;
     file.lock()?;
     Ok(ConfigWriteGuard(file))
 }

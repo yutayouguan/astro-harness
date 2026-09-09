@@ -95,7 +95,7 @@ test("every diagnostic status and issue has matching Chinese and English copy", 
     Object.keys(storageCopy.en.domainNames),
   );
 });
-test("storage panel uses a read-only command, no polling, no deletion, and invalidates stale requests", () => {
+test("inspection stays read-only and delegates mutations to explicit confirmation", () => {
   const source = readFileSync(
     new URL(
       "../../components/settings/StorageDiagnostics.tsx",
@@ -104,10 +104,11 @@ test("storage panel uses a read-only command, no polling, no deletion, and inval
     "utf8",
   );
   assert.match(source, /invoke\("inspect_home_storage"/);
+  assert.match(source, /<StorageCleanup/);
   assert.match(source, /requestId\.current/);
   assert.doesNotMatch(
     source,
-    /setInterval|setTimeout|invoke\("(?:delete|remove|clean|migrate)/,
+    /setInterval|setTimeout|invoke\("(?:delete|remove|clean|migrate|execute_storage_cleanup|prepare_storage_cleanup)/,
   );
   assert.match(source, /aria-live="polite"/);
 });

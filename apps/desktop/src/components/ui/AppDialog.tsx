@@ -24,6 +24,9 @@ export type AppDialogProps = {
   confirmLabel: string;
   cancelLabel: string;
   confirmDisabled?: boolean;
+  /** Destructive flows can require explicit button activation, not a global Enter shortcut. */
+  confirmOnEnter?: boolean;
+  trapFocus?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -39,6 +42,8 @@ export default function AppDialog({
   confirmLabel,
   cancelLabel,
   confirmDisabled = false,
+  confirmOnEnter = true,
+  trapFocus = false,
   onConfirm,
   onCancel,
   children,
@@ -48,21 +53,25 @@ export default function AppDialog({
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
   const { layer, bringToFront } = useDynamicOverlayLayer(open);
 
   const startClose = useCallback((action: () => void) => {
+    if (closingRef.current) return;
     const bd = backdropRef.current;
     if (!bd) {
       action();
       return;
     }
     setClosing(true);
+    closingRef.current = true;
     let done = false;
     const finish = () => {
       if (done) return;
       done = true;
       bd.removeEventListener("animationend", finish);
       setClosing(false);
+      closingRef.current = false;
       action();
     };
     bd.addEventListener("animationend", finish);
@@ -92,12 +101,34 @@ export default function AppDialog({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (trapFocus && event.key === "Tab") {
+        const panel = panelRef.current;
+        const items = panel
+          ? Array.from(
+              panel.querySelectorAll<HTMLElement>(
+                "button:not([disabled]), input:not([disabled]), [tabindex='0']",
+              ),
+            )
+          : [];
+        const first = items[0],
+          last = items[items.length - 1];
+        if (
+          first &&
+          last &&
+          (!panel?.contains(document.activeElement) ||
+            (event.shiftKey && document.activeElement === first) ||
+            (!event.shiftKey && document.activeElement === last))
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         startClose(onCancel);
         return;
       }
-      if (event.key === "Enter" && !event.isComposing) {
+      if (confirmOnEnter && event.key === "Enter" && !event.isComposing) {
         const target = event.target as HTMLElement | null;
         if (target?.tagName === "TEXTAREA") return;
         if (confirmDisabled) return;
@@ -107,7 +138,15 @@ export default function AppDialog({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onCancel, onConfirm, confirmDisabled, startClose]);
+  }, [
+    open,
+    onCancel,
+    onConfirm,
+    confirmDisabled,
+    confirmOnEnter,
+    trapFocus,
+    startClose,
+  ]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -170,6 +209,7 @@ export default function AppDialog({
           <button
             type="button"
             className="app-dialog-btn is-cancel"
+            disabled={closing}
             onClick={() => startClose(onCancel)}
           >
             {cancelLabel}
@@ -180,7 +220,7 @@ export default function AppDialog({
             className={`app-dialog-btn is-confirm ${
               variant === "danger" ? "is-danger" : ""
             }`}
-            disabled={confirmDisabled}
+            disabled={confirmDisabled || closing}
             onClick={() => startClose(onConfirm)}
           >
             {confirmLabel}

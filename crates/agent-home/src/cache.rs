@@ -99,24 +99,7 @@ pub fn directory(base: &Path, domain: Domain, policy: &Policy) -> Result<PathBuf
             "cache directory must not be the user home"
         );
     }
-    for durable in [
-        "sessions",
-        "agents",
-        "security",
-        "browser",
-        "workspace",
-        "artifacts",
-        "usage",
-        "backups",
-        "memory",
-        "skills",
-        "ui",
-        "evolution",
-        "tools",
-        "automation",
-        "hooks",
-        "logs",
-    ] {
+    for durable in CACHE_PROTECTED_SUBDIRS {
         ensure!(
             !dir.starts_with(root.join(durable)),
             "cache directory overlaps durable data"
@@ -124,6 +107,25 @@ pub fn directory(base: &Path, domain: Domain, policy: &Policy) -> Result<PathBuf
     }
     Ok(dir)
 }
+
+pub(crate) const CACHE_PROTECTED_SUBDIRS: &[&str] = &[
+    "sessions",
+    "agents",
+    "security",
+    "browser",
+    "workspace",
+    "artifacts",
+    "usage",
+    "backups",
+    "memory",
+    "skills",
+    "ui",
+    "evolution",
+    "tools",
+    "automation",
+    "hooks",
+    "logs",
+];
 pub fn fingerprint(value: &impl Serialize) -> Result<String> {
     fn sorted(value: serde_json::Value) -> serde_json::Value {
         match value {
@@ -231,6 +233,8 @@ pub fn read<T: DeserializeOwned>(
     Ok(serde_json::from_value(entry.payload).ok())
 }
 
+pub(crate) const CACHE_LOCK_FILENAME: &str = ".astro-cache.lock";
+
 struct CacheLock(File);
 impl Drop for CacheLock {
     fn drop(&mut self) {
@@ -262,7 +266,7 @@ pub fn write(
     }
     let dir = directory(base, domain, &policy)?;
     fs::create_dir_all(&dir)?;
-    let lock_path = dir.join(".astro-cache.lock");
+    let lock_path = dir.join(CACHE_LOCK_FILENAME);
     ensure!(
         !lock_path
             .symlink_metadata()

@@ -10,6 +10,7 @@ import {
   type StorageReport,
 } from "../../lib/settings/storageDiagnostics";
 import "../../styles/features/settings/storage-diagnostics.css";
+import StorageCleanup from "./StorageCleanup";
 
 export default function StorageDiagnostics({
   active,
@@ -26,6 +27,7 @@ export default function StorageDiagnostics({
     initialReport ?? null,
   );
   const [busy, setBusy] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
   const [error, setError] = useState(false);
   const requestId = useRef(0);
   const referenceKey = JSON.stringify([...new Set(references)].slice(0, 100));
@@ -68,7 +70,7 @@ export default function StorageDiagnostics({
         <button
           type="button"
           className="prefs-diag-btn"
-          disabled={busy}
+          disabled={busy || cleanupBusy}
           onClick={() => void refresh()}
         >
           <RefreshCw size={13} aria-hidden />
@@ -159,6 +161,19 @@ export default function StorageDiagnostics({
               </p>
             )}
             <p>{copy.sample}</p>
+            <StorageCleanup
+              active={active}
+              enabled={
+                report.state === "ready" &&
+                (totals.previewFiles > 0 ||
+                  report.partial ||
+                  report.previewPartial) &&
+                !busy
+              }
+              rootPath={report.rootPath}
+              onChanged={() => void refresh()}
+              onBusyChange={setCleanupBusy}
+            />
             {report.cleanupPreview.length ? (
               <ul>
                 {report.cleanupPreview.map((item) => (

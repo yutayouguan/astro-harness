@@ -116,7 +116,7 @@ struct ProviderEntry {
     enabled: bool,
 }
 
-fn validate_desktop(doc: &toml_edit::DocumentMut) -> anyhow::Result<Option<i64>> {
+pub(crate) fn validate_desktop(doc: &toml_edit::DocumentMut) -> anyhow::Result<Option<i64>> {
     let shape: DesktopShape = crate::settings::get(doc, &["desktop"])?.unwrap_or_default();
     anyhow::ensure!(
         shape.settings_version.is_none_or(|v| v == 1),
@@ -606,7 +606,7 @@ fn is_legacy_setting(name: &str) -> bool {
         && (name.ends_with("/config.json") || name.ends_with("/skills-enabled.json")))
 }
 
-fn cleanup_policy(name: &str, meta: &fs::Metadata, now: SystemTime) -> Option<&'static str> {
+pub(crate) fn cleanup_policy(name: &str, meta: &fs::Metadata, now: SystemTime) -> Option<&'static str> {
     let age = now.duration_since(meta.modified().ok()?).ok()?.as_secs();
     let filename = name.strip_prefix("logs/")?;
     let date = filename

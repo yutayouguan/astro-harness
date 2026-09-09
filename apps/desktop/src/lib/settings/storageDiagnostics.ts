@@ -129,7 +129,7 @@ export function storageBytes(bytes: number): string {
 export const storageCopy = {
   zh: {
     title: "存储与配置",
-    sub: "只读检查 · 不迁移、不修改配置、不删除文件",
+    sub: "检查与预览只读 · 移动文件需单独确认",
     refresh: "检查存储",
     loading: "正在检查…",
     error: "无法完成存储检查，请重试。",
@@ -232,7 +232,7 @@ export const storageCopy = {
   },
   en: {
     title: "Storage & configuration",
-    sub: "Read-only · No migration, settings changes or deletion",
+    sub: "Read-only inspection · Moving files requires separate confirmation",
     refresh: "Inspect storage",
     loading: "Inspecting…",
     error: "Storage inspection failed. Please retry.",

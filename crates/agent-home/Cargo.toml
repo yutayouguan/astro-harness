@@ -12,6 +12,9 @@ toml            = "0.8"
 toml_edit       = { version = "0.22", features = ["serde"] }
 tempfile        = "3"
 sha2            = "0.10"
+cap-std         = "4.0.3"
+cap-fs-ext      = "4.0.3"
+same-file       = "1"
 chrono          = { version = "0.4", features = ["clock", "serde"] }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
@@ -21,3 +24,6 @@ uuid            = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
