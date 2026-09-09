@@ -111,3 +111,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const Empty: Story = {
+  beforeEach: () => {
+    mockIPC((command) => {
+      if (command === "list_loops" || command === "list_loop_runs") return [];
+      return null;
+    });
+    return () => clearMocks();
+  },
+};
