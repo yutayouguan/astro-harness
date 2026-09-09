@@ -25,6 +25,15 @@ export type StorageReport = {
   domains: StorageDomain[];
   issues: { code: string; path: string }[];
   cleanupPreview: { path: string; bytes: number; policy: string }[];
+  previewPartial: boolean;
+  cachePolicies: {
+    domain: string;
+    directory: string;
+    enabled: boolean;
+    ttlSeconds: number;
+    maxSizeMb: number;
+    status: string;
+  }[];
 };
 
 const states: HomeStorageState[] = [
@@ -48,6 +57,18 @@ export function parseStorageReport(value: unknown): StorageReport {
     !states.includes(value.state as HomeStorageState) ||
     typeof value.partial !== "boolean" ||
     typeof value.configPresent !== "boolean" ||
+    typeof value.previewPartial !== "boolean" ||
+    !Array.isArray(value.cachePolicies) ||
+    !value.cachePolicies.every(
+      (p) =>
+        object(p) &&
+        typeof p.domain === "string" &&
+        typeof p.directory === "string" &&
+        typeof p.enabled === "boolean" &&
+        count(p.ttlSeconds) &&
+        count(p.maxSizeMb) &&
+        typeof p.status === "string",
+    ) ||
     !count(value.inspectedEntries) ||
     !(value.settingsVersion === null || count(value.settingsVersion)) ||
     !Array.isArray(value.domains) ||
@@ -128,8 +149,19 @@ export const storageCopy = {
     empty: "没有符合当前保留策略的候选文件。",
     sample: "最多展示 30 个样本；预览不代表可立即安全删除。",
     policies: "保留策略",
+    enabled: "已启用",
+    disabled: "已停用",
+    ttl: "TTL（秒）",
+    capacity: "容量上限",
+    previewPartial: "部分缓存目录或文件未验证，未纳入候选；此预览可能不完整。",
+    policyStates: {
+      external: "数据根以外的目录未扫描",
+      unverified: "目录无法安全验证",
+      invalid: "目录策略无效",
+      overlap: "缓存目录重叠，未生成候选",
+    },
     cache:
-      "模型缓存：7 天未更新可列为候选，可重新获取；实际清理前仍需检查占用。",
+      "模型与 MCP 缓存：按 config.toml 的当前目录和 TTL 检查，仅列出已验证归属且过期的 Astro 缓存。停用缓存、未知文件不自动列入。",
     logs: "运行日志：保留至少 30 天；安全审计不在清理范围内。",
     backups: "备份：仅人工审阅，按完整备份集处理，不拆删单个文件。",
     protected:
@@ -159,6 +191,8 @@ export const storageCopy = {
       unreadable: "请检查路径、文件类型和访问权限；软链接不会被自动跟随。",
     },
     domainNames: {
+      mcp: "MCP 扩展",
+      hooks: "Hooks 定义",
       agents: "Agent",
       artifacts: "文件与知识",
       automation: "自动化",
@@ -178,6 +212,11 @@ export const storageCopy = {
       other: "根配置及其他文件",
     },
     issueNames: {
+      cache_policy_invalid: "缓存策略无效",
+      cache_external_not_scanned: "外部缓存未计入占用和预览",
+      cache_directory_unverified: "缓存目录未安全验证",
+      cache_directories_overlap: "缓存目录重叠，预览已跳过",
+      cache_entry_unverified: "缓存封装无效或超过读取预算，已跳过",
       root_unreadable: "数据根不可读",
       migration_incomplete: "迁移未完成",
       layout_migration_required: "发现旧目录",
@@ -215,8 +254,20 @@ export const storageCopy = {
     sample:
       "Up to 30 samples. A candidate is not a guarantee of safe deletion.",
     policies: "Retention policies",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    ttl: "TTL (seconds)",
+    capacity: "Capacity limit",
+    previewPartial:
+      "Some cache directories or files could not be verified and were excluded. This preview may be incomplete.",
+    policyStates: {
+      external: "Directory outside the data root was not scanned",
+      unverified: "Directory could not be safely verified",
+      invalid: "Invalid directory policy",
+      overlap: "Overlapping cache directories excluded",
+    },
     cache:
-      "Model cache: candidates after 7 days without updates; check active use before any cleanup.",
+      "Model and MCP caches: use the configured directory and TTL. Only verified, expired Astro entries are candidates. Disabled caches and unknown files are excluded.",
     logs: "Runtime logs: keep at least 30 days. Security audits are excluded.",
     backups: "Backups: manual review only. Treat each backup set as a unit.",
     protected:
@@ -249,6 +300,8 @@ export const storageCopy = {
         "Check paths, file types and permissions. Symlinks are not followed automatically.",
     },
     domainNames: {
+      mcp: "MCP extensions",
+      hooks: "Hook definitions",
       agents: "Agents",
       artifacts: "Files & knowledge",
       automation: "Automation",
@@ -268,6 +321,12 @@ export const storageCopy = {
       other: "Root settings & other files",
     },
     issueNames: {
+      cache_policy_invalid: "Invalid cache policy",
+      cache_external_not_scanned:
+        "External cache excluded from totals and preview",
+      cache_directory_unverified: "Unverified cache directory",
+      cache_directories_overlap: "Overlapping cache directories excluded",
+      cache_entry_unverified: "Invalid or over-budget cache envelope excluded",
       root_unreadable: "Unreadable data root",
       migration_incomplete: "Incomplete migration",
       layout_migration_required: "Retired layout found",

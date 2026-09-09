@@ -293,6 +293,7 @@ impl ProviderConfig {
     }
 
     /// 创建默认禁用的 Provider 条目。
+    #[cfg(test)]
     pub fn new_disabled(kind: ProviderKind) -> Self {
         let mut p = Self::new(kind);
         p.enabled = false;

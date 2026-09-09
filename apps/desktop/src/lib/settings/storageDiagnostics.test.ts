@@ -19,6 +19,8 @@ const report: StorageReport = {
   inspectedEntries: 3,
   issues: [],
   cleanupPreview: [],
+  previewPartial: false,
+  cachePolicies: [],
   domains: [
     {
       id: "models",
@@ -41,6 +43,14 @@ const report: StorageReport = {
 
 test("storage reports validate metadata without requiring configuration contents", () => {
   assert.deepEqual(parseStorageReport(report), report);
+  assert.throws(
+    () => parseStorageReport({ ...report, cachePolicies: [{}] }),
+    /invalid_storage_report/,
+  );
+  assert.throws(
+    () => parseStorageReport({ ...report, previewPartial: undefined }),
+    /invalid_storage_report/,
+  );
   for (const invalid of [
     [],
     null,
@@ -68,6 +78,10 @@ test("byte formatting is bounded and handles zero and invalid input", () => {
   assert.ok(!storageBytes(0.5).includes("undefined"));
 });
 test("every diagnostic status and issue has matching Chinese and English copy", () => {
+  assert.deepEqual(
+    Object.keys(storageCopy.zh.policyStates),
+    Object.keys(storageCopy.en.policyStates),
+  );
   assert.deepEqual(
     Object.keys(storageCopy.zh.states),
     Object.keys(storageCopy.en.states),

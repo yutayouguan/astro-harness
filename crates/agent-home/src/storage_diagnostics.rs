@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,8 @@ const MAX_ENTRIES: usize = 20_000;
 const MAX_SAMPLES: usize = 30;
 const MAX_DEPTH: usize = 24;
 const SCAN_TIME: Duration = Duration::from_secs(2);
+const MAX_CACHE_ENTRY_BYTES: u64 = 512 * 1024;
+const MAX_CACHE_READ_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -53,6 +55,23 @@ pub struct CleanupCandidate {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CachePolicyReport {
+    pub domain: String,
+    pub directory: String,
+    pub enabled: bool,
+    pub ttl_seconds: u64,
+    pub max_size_mb: u64,
+    pub status: &'static str,
+}
+
+struct CacheInspection {
+    domain: crate::cache::Domain,
+    relative: PathBuf,
+    policy: crate::cache::Policy,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StorageReport {
     pub root_path: String,
     pub config_path: String,
@@ -64,6 +83,8 @@ pub struct StorageReport {
     pub domains: Vec<StorageDomain>,
     pub issues: Vec<StorageIssue>,
     pub cleanup_preview: Vec<CleanupCandidate>,
+    pub cache_policies: Vec<CachePolicyReport>,
+    pub preview_partial: bool,
 }
 
 #[derive(Default, Deserialize)]
@@ -145,6 +166,8 @@ fn inspect_at(base: &Path, references: &[String], now: SystemTime, limit: usize)
         domains: vec![],
         issues: vec![],
         cleanup_preview: vec![],
+        cache_policies: vec![],
+        preview_partial: false,
     };
     match fs::symlink_metadata(&root) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -158,8 +181,14 @@ fn inspect_at(base: &Path, references: &[String], now: SystemTime, limit: usize)
             return report;
         }
     }
+    let document = inspect_configuration(&root, &mut report);
+    let caches = inspect_cache_policies(&root, document.as_ref(), &mut report);
     let mut domains = BTreeMap::<String, StorageDomain>::new();
-    for dir in crate::DOMAIN_DIRS.iter().copied().chain(["backups"]) {
+    for dir in crate::DOMAIN_DIRS
+        .iter()
+        .copied()
+        .chain(["backups", "mcp", "hooks"])
+    {
         let id = dir.split('/').next().unwrap();
         domains.entry(id.into()).or_insert_with(|| StorageDomain {
             id: id.into(),
@@ -174,60 +203,46 @@ fn inspect_at(base: &Path, references: &[String], now: SystemTime, limit: usize)
         report: &mut report,
         domains: &mut domains,
         legacy_settings: false,
+        caches: &caches,
+        cache_bytes_remaining: MAX_CACHE_READ_BYTES,
     };
     scanner.walk(Path::new(""), 0);
     let legacy_settings = scanner.legacy_settings;
     report.domains = domains.into_values().collect();
     // Direct status checks are independent of a potentially partial size scan.
-    let marker = safe_metadata(&root, Path::new("backups/layout-in-progress.json"));
-    if marker.is_err() {
-        report.state = HomeState::Unreadable;
-        issue(
-            &mut report,
-            "scan_unreadable",
-            "backups/layout-in-progress.json",
-        );
-    } else if marker.is_ok_and(|v| v.is_some()) {
-        report.state = HomeState::MigrationIncomplete;
-        issue(
-            &mut report,
-            "migration_incomplete",
-            "backups/layout-in-progress.json",
-        );
-    } else if crate::RETIRED_LAYOUT_PATHS
-        .iter()
-        .any(|p| root.join(p).symlink_metadata().is_ok())
+    for marker in [
+        PathBuf::from("backups/layout-in-progress.json"),
+        crate::extension_migration_marker(&root)
+            .strip_prefix(&root)
+            .unwrap()
+            .to_path_buf(),
+    ] {
+        match safe_metadata(&root, &marker) {
+            Ok(Some(_)) => {
+                report.state = HomeState::MigrationIncomplete;
+                issue(
+                    &mut report,
+                    "migration_incomplete",
+                    &marker.to_string_lossy(),
+                );
+            }
+            Err(_) => {
+                if report.state != HomeState::MigrationIncomplete {
+                    report.state = HomeState::Unreadable;
+                }
+                issue(&mut report, "scan_unreadable", &marker.to_string_lossy());
+            }
+            Ok(None) => {}
+        }
+    }
+    if report.state != HomeState::MigrationIncomplete
+        && report.state != HomeState::Unreadable
+        && crate::RETIRED_LAYOUT_PATHS
+            .iter()
+            .any(|p| root.join(p).symlink_metadata().is_ok())
     {
         report.state = HomeState::LayoutMigrationRequired;
         issue(&mut report, "layout_migration_required", "");
-    }
-    report.config_present = root.join("config.toml").symlink_metadata().is_ok();
-    match read_small(&root, Path::new("config.toml"), MAX_CONFIG_BYTES) {
-        Ok(Some(text)) => {
-            report.config_present = true;
-            match text
-                .parse::<toml_edit::DocumentMut>()
-                .ok()
-                .and_then(|doc| validate_desktop(&doc).ok())
-            {
-                Some(version) => {
-                    report.settings_version = version;
-                }
-                None => {
-                    if report.state == HomeState::Ready {
-                        report.state = HomeState::InvalidConfig;
-                    }
-                    issue(&mut report, "config_invalid", "config.toml");
-                }
-            }
-        }
-        Ok(None) => {}
-        Err(_) => {
-            if report.state == HomeState::Ready {
-                report.state = HomeState::Unreadable;
-            }
-            issue(&mut report, "config_unreadable", "config.toml");
-        }
     }
     if report.state == HomeState::Ready && report.settings_version.is_none() && legacy_settings {
         report.state = HomeState::SettingsMigrationRequired;
@@ -276,7 +291,151 @@ fn inspect_at(base: &Path, references: &[String], now: SystemTime, limit: usize)
         Err(_) => issue(&mut report, "resource_skipped", "ui/style/active.json"),
         Ok(None) => {}
     }
+    if report.state != HomeState::Ready {
+        report.cleanup_preview.clear();
+        for domain in &mut report.domains {
+            domain.preview_bytes = 0;
+            domain.preview_files = 0;
+        }
+    }
     report
+}
+
+fn inspect_configuration(
+    root: &Path,
+    report: &mut StorageReport,
+) -> Option<toml_edit::DocumentMut> {
+    report.config_present = root.join("config.toml").symlink_metadata().is_ok();
+    match read_small(root, Path::new("config.toml"), MAX_CONFIG_BYTES) {
+        Ok(Some(text)) => match text.parse::<toml_edit::DocumentMut>() {
+            Ok(doc) => match validate_desktop(&doc) {
+                Ok(version) => {
+                    report.settings_version = version;
+                    Some(doc)
+                }
+                Err(_) => {
+                    report.state = HomeState::InvalidConfig;
+                    issue(report, "config_invalid", "config.toml");
+                    None
+                }
+            },
+            Err(_) => {
+                report.state = HomeState::InvalidConfig;
+                issue(report, "config_invalid", "config.toml");
+                None
+            }
+        },
+        Ok(None) => Some(toml_edit::DocumentMut::new()),
+        Err(_) => {
+            report.state = HomeState::Unreadable;
+            issue(report, "config_unreadable", "config.toml");
+            None
+        }
+    }
+}
+
+fn inspect_cache_policies(
+    root: &Path,
+    doc: Option<&toml_edit::DocumentMut>,
+    report: &mut StorageReport,
+) -> Vec<CacheInspection> {
+    let Some(doc) = doc else {
+        return vec![];
+    };
+    let mut inspections = Vec::new();
+    for domain in [crate::cache::Domain::Models, crate::cache::Domain::Mcp] {
+        let policy = match crate::cache::policy_from_document(doc, domain) {
+            Ok(policy) => policy,
+            Err(_) => {
+                report.state = HomeState::InvalidConfig;
+                issue(
+                    report,
+                    "cache_policy_invalid",
+                    &format!("config.toml [cache.{}]", domain.key()),
+                );
+                continue;
+            }
+        };
+        let default = match domain {
+            crate::cache::Domain::Models => crate::models_cache_dir(root),
+            crate::cache::Domain::Mcp => crate::mcp_cache_dir(root),
+        };
+        let directory = policy
+            .directory
+            .as_ref()
+            .map(|path| {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    root.join(path)
+                }
+            })
+            .unwrap_or(default);
+        let mut status = "in_home";
+        match directory.strip_prefix(root) {
+            Err(_) => {
+                status = "external";
+                report.preview_partial = true;
+                issue(
+                    report,
+                    "cache_external_not_scanned",
+                    &directory.to_string_lossy(),
+                );
+            }
+            Ok(relative) => {
+                let safe = !relative.as_os_str().is_empty()
+                    && relative
+                        .components()
+                        .all(|c| matches!(c, Component::Normal(_)))
+                    && safe_metadata(root, relative).is_ok_and(|m| m.is_none_or(|m| m.is_dir()));
+                if !safe {
+                    status = "unverified";
+                    report.preview_partial = true;
+                    issue(
+                        report,
+                        "cache_directory_unverified",
+                        &relative.to_string_lossy(),
+                    );
+                } else if crate::cache::directory(root, domain, &policy).is_err() {
+                    status = "invalid";
+                    report.state = HomeState::InvalidConfig;
+                    issue(report, "cache_policy_invalid", &relative.to_string_lossy());
+                } else {
+                    inspections.push(CacheInspection {
+                        domain,
+                        relative: relative.to_path_buf(),
+                        policy: policy.clone(),
+                    });
+                }
+            }
+        }
+        report.cache_policies.push(CachePolicyReport {
+            domain: domain.key().into(),
+            directory: directory.to_string_lossy().into_owned(),
+            enabled: policy.enabled,
+            ttl_seconds: policy.ttl_seconds,
+            max_size_mb: policy.max_size_mb,
+            status,
+        });
+    }
+    if inspections.len() == 2
+        && (inspections[0]
+            .relative
+            .starts_with(&inspections[1].relative)
+            || inspections[1]
+                .relative
+                .starts_with(&inspections[0].relative))
+    {
+        for policy in &mut report.cache_policies {
+            if policy.status == "in_home" {
+                policy.status = "overlap";
+            }
+        }
+        inspections.clear();
+        report.preview_partial = true;
+        issue(report, "cache_directories_overlap", "config.toml");
+    }
+    inspections
 }
 
 fn issue(report: &mut StorageReport, code: &str, path: &str) {
@@ -301,6 +460,8 @@ struct Scanner<'a> {
     report: &'a mut StorageReport,
     domains: &'a mut BTreeMap<String, StorageDomain>,
     legacy_settings: bool,
+    caches: &'a [CacheInspection],
+    cache_bytes_remaining: u64,
 }
 impl Scanner<'_> {
     fn walk(&mut self, relative: &Path, depth: usize) {
@@ -343,7 +504,13 @@ impl Scanner<'_> {
                 self.legacy_settings = true;
             }
             let top = name.split('/').next().unwrap_or("other");
-            let id = if self.domains.contains_key(top) {
+            let cache = self
+                .caches
+                .iter()
+                .find(|cache| rel.starts_with(&cache.relative));
+            let id = if let Some(cache) = cache {
+                cache.domain.key()
+            } else if self.domains.contains_key(top) {
                 top
             } else {
                 "other"
@@ -368,7 +535,54 @@ impl Scanner<'_> {
             }
             domain.bytes = domain.bytes.saturating_add(meta.len());
             domain.files += 1;
-            if let Some(policy) = cleanup_policy(&name, &meta, self.now) {
+            let cache_candidate = cache
+                .filter(|c| c.policy.enabled && rel.parent() == Some(c.relative.as_path()))
+                .filter(|c| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(&format!("astro-cache-v1-{}-", c.domain.key()))
+                });
+            let mut candidate_policy = cleanup_policy(&name, &meta, self.now);
+            if let Some(cache) = cache_candidate {
+                // Charge the EOF-probe byte too; concurrent growth cannot
+                // exceed the byte budget reserved for this entry.
+                let cap = meta.len().min(MAX_CACHE_ENTRY_BYTES);
+                let reserved = meta.len().saturating_add(1);
+                if meta.len() > cap || reserved > self.cache_bytes_remaining {
+                    self.report.preview_partial = true;
+                    issue(self.report, "cache_entry_unverified", &name);
+                } else {
+                    self.cache_bytes_remaining =
+                        self.cache_bytes_remaining.saturating_sub(reserved);
+                    let expired =
+                        read_small(self.root, &rel, cap)
+                            .ok()
+                            .flatten()
+                            .and_then(|text| {
+                                crate::cache::expired_owned_entry(
+                                    &text,
+                                    &entry.file_name().to_string_lossy(),
+                                    cache.domain,
+                                    cache.policy.ttl_seconds,
+                                    self.now
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .ok()?
+                                        .as_secs(),
+                                )
+                                .ok()
+                            });
+                    match expired {
+                        Some(true) => candidate_policy = Some("cache_expired"),
+                        Some(false) => {}
+                        None => {
+                            self.report.preview_partial = true;
+                            issue(self.report, "cache_entry_unverified", &name);
+                        }
+                    }
+                }
+            }
+            if let Some(policy) = candidate_policy {
                 domain.preview_bytes = domain.preview_bytes.saturating_add(meta.len());
                 domain.preview_files += 1;
                 if self.report.cleanup_preview.len() < MAX_SAMPLES {
@@ -394,9 +608,6 @@ fn is_legacy_setting(name: &str) -> bool {
 
 fn cleanup_policy(name: &str, meta: &fs::Metadata, now: SystemTime) -> Option<&'static str> {
     let age = now.duration_since(meta.modified().ok()?).ok()?.as_secs();
-    if name.starts_with("models/cache/") && age >= 7 * 86400 {
-        return Some("cache_7_days");
-    }
     let filename = name.strip_prefix("logs/")?;
     let date = filename
         .strip_prefix("agent.log.")
@@ -483,6 +694,19 @@ mod tests {
         let path = root.join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, body).unwrap();
+    }
+
+    fn owned_cache(root: &Path, directory: &str, domain: &str, id: u64, written_at: u64) -> String {
+        let key = format!("{id:064x}");
+        let relative = format!("{directory}/astro-cache-v1-{domain}-{key}.json");
+        write(
+            root,
+            &relative,
+            &serde_json::json!({"version":1,"domain":domain,"key":key,"written_at":written_at,
+            "payload":{"private":"CACHE_PAYLOAD_MUST_NOT_APPEAR"}})
+            .to_string(),
+        );
+        relative
     }
 
     #[test]
@@ -586,6 +810,16 @@ mod tests {
                 )
                 .unwrap();
         }
+        let owned = owned_cache(
+            root,
+            "models/cache",
+            "models",
+            1,
+            now.duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                - 601,
+        );
         let report = inspect_at(root, &[], now, MAX_ENTRIES);
         let paths: BTreeSet<_> = report
             .cleanup_preview
@@ -594,9 +828,12 @@ mod tests {
             .collect();
         assert_eq!(
             paths,
-            BTreeSet::from(["models/cache/old.json", "logs/agent.log.2020-01-01"])
+            BTreeSet::from([owned.as_str(), "logs/agent.log.2020-01-01"])
         );
         assert!(root.join("models/cache/old.json").exists());
+        assert!(!serde_json::to_string(&report)
+            .unwrap()
+            .contains("CACHE_PAYLOAD_MUST_NOT_APPEAR"));
     }
 
     #[test]
@@ -604,7 +841,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         for n in 0..40 {
-            write(root, &format!("models/cache/{n}.json"), "x");
+            owned_cache(root, "models/cache", "models", n, 0);
         }
         let report = inspect_at(
             root,
@@ -620,6 +857,127 @@ mod tests {
         let limited = inspect_at(root, &[], SystemTime::now(), 2);
         assert!(limited.partial);
         assert!(limited.inspected_entries <= 2);
+    }
+
+    #[test]
+    fn cache_preview_uses_configured_ttl_directory_and_enabled_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let now = SystemTime::now();
+        let seconds = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        write(root, "config.toml", "[cache.models]\nttl_seconds=900\ndirectory='custom/models'\n[cache.mcp]\nenabled=false\n");
+        let expired = owned_cache(root, "custom/models", "models", 1, seconds - 901);
+        owned_cache(root, "custom/models", "models", 2, seconds - 900);
+        owned_cache(root, "models/cache", "models", 3, 0); // retired default location is not the configured cache
+        owned_cache(root, "mcp/cache", "mcp", 4, 0); // disabled domain is retained
+        let report = inspect_at(root, &[], now, MAX_ENTRIES);
+        assert_eq!(report.cleanup_preview.len(), 1);
+        assert_eq!(report.cleanup_preview[0].path, expired);
+        assert_eq!(report.cache_policies[0].ttl_seconds, 900);
+        assert!(!report.cache_policies[1].enabled);
+        write(root, "config.toml", "[cache.models]\nttl_seconds=900\ndirectory='custom/models'\n[cache.mcp]\nttl_seconds=1800\n");
+        owned_cache(root, "mcp/cache", "mcp", 5, seconds - 1700);
+        let report = inspect_at(root, &[], now, MAX_ENTRIES);
+        assert_eq!(report.cache_policies[1].ttl_seconds, 1800);
+        assert_eq!(
+            report
+                .domains
+                .iter()
+                .find(|d| d.id == "mcp")
+                .unwrap()
+                .preview_files,
+            1
+        );
+        assert_eq!(report.cleanup_preview.len(), 2);
+    }
+
+    #[test]
+    fn unverified_and_future_cache_files_never_become_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let now = SystemTime::now();
+        let seconds = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let bad = owned_cache(root, "models/cache", "models", 1, 0);
+        write(
+            root,
+            &bad,
+            r#"{"version":1,"domain":"mcp","key":"wrong","written_at":0,"payload":"SECRET"}"#,
+        );
+        let large = owned_cache(root, "models/cache", "models", 2, 0);
+        write(
+            root,
+            &large,
+            &"x".repeat(MAX_CACHE_ENTRY_BYTES as usize + 1),
+        );
+        owned_cache(root, "models/cache", "models", 3, seconds + 100);
+        let report = inspect_at(root, &[], now, MAX_ENTRIES);
+        assert!(report.cleanup_preview.is_empty());
+        assert!(report.preview_partial);
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .filter(|i| i.code == "cache_entry_unverified")
+                .count(),
+            2
+        );
+        assert!(!serde_json::to_string(&report).unwrap().contains("SECRET"));
+    }
+
+    #[test]
+    fn external_overlapping_and_invalid_cache_policies_are_explicit() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let external = tempfile::tempdir().unwrap();
+        write(
+            root,
+            "config.toml",
+            &format!(
+                "[cache.models]\ndirectory={}\n",
+                serde_json::to_string(&external.path().to_string_lossy()).unwrap()
+            ),
+        );
+        let report = inspect_home(root, &[]);
+        assert_eq!(report.cache_policies[0].status, "external");
+        assert!(report.preview_partial);
+        assert_eq!(fs::read_dir(external.path()).unwrap().count(), 0);
+        write(root, "config.toml", "[cache.models]\ndirectory='shared-cache'\n[cache.mcp]\ndirectory='shared-cache/nested'\n");
+        let report = inspect_home(root, &[]);
+        assert!(report.cache_policies.iter().all(|p| p.status == "overlap"));
+        assert!(!root.join("shared-cache").exists());
+        write(root, "config.toml", "[cache.models]\nttl_seconds=0\n");
+        assert_eq!(inspect_home(root, &[]).state, HomeState::InvalidConfig);
+        write(
+            root,
+            "config.toml",
+            "[cache.models]\ndirectory='ui/cache'\n",
+        );
+        assert_eq!(inspect_home(root, &[]).state, HomeState::InvalidConfig);
+    }
+
+    #[test]
+    fn extension_migration_blocks_all_cleanup_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        owned_cache(root, "models/cache", "models", 1, 0);
+        write(root, "backups/extensions-in-progress.json", "{}");
+        let report = inspect_home(root, &[]);
+        assert_eq!(report.state, HomeState::MigrationIncomplete);
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.path == "backups/extensions-in-progress.json"));
+        assert!(report.cleanup_preview.is_empty());
+        assert_eq!(
+            report.domains.iter().map(|d| d.preview_files).sum::<u64>(),
+            0
+        );
     }
 
     #[test]

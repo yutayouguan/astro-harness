@@ -15,7 +15,7 @@ pub enum Domain {
     Mcp,
 }
 impl Domain {
-    fn key(self) -> &'static str {
+    pub(crate) fn key(self) -> &'static str {
         match self {
             Self::Models => "models",
             Self::Mcp => "mcp",
@@ -42,7 +42,11 @@ impl Default for Policy {
 }
 pub fn policy(base: &Path, domain: Domain) -> Result<Policy> {
     let doc = crate::settings::read_document(&crate::config_path(base))?;
-    let policy: Policy = crate::settings::get(&doc, &["cache", domain.key()])?.unwrap_or_default();
+    policy_from_document(&doc, domain)
+}
+
+pub(crate) fn policy_from_document(doc: &toml_edit::DocumentMut, domain: Domain) -> Result<Policy> {
+    let policy: Policy = crate::settings::get(doc, &["cache", domain.key()])?.unwrap_or_default();
     ensure!(
         (1..=2_592_000).contains(&policy.ttl_seconds),
         "cache TTL must be 1..2592000 seconds"
@@ -104,6 +108,14 @@ pub fn directory(base: &Path, domain: Domain, policy: &Policy) -> Result<PathBuf
         "artifacts",
         "usage",
         "backups",
+        "memory",
+        "skills",
+        "ui",
+        "evolution",
+        "tools",
+        "automation",
+        "hooks",
+        "logs",
     ] {
         ensure!(
             !dir.starts_with(root.join(durable)),
@@ -138,6 +150,39 @@ struct Entry {
     key: String,
     written_at: u64,
     payload: serde_json::Value,
+}
+
+/// Validate ownership/expiry without constructing or exposing the cached payload.
+/// The caller owns the read budget and must first reject symlinks/non-files.
+pub(crate) fn expired_owned_entry(
+    text: &str,
+    name: &str,
+    domain: Domain,
+    ttl: u64,
+    now: u64,
+) -> Result<bool> {
+    #[derive(Deserialize)]
+    struct Header {
+        version: u32,
+        domain: String,
+        key: String,
+        written_at: u64,
+        #[serde(rename = "payload")]
+        _payload: serde::de::IgnoredAny,
+    }
+    let entry: Header = serde_json::from_str(text).context("invalid owned cache envelope")?;
+    ensure!(
+        entry.version == 1
+            && entry.domain == domain.key()
+            && entry.key.len() == 64
+            && entry
+                .key
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            && name == filename(domain, &entry.key),
+        "cache ownership mismatch"
+    );
+    Ok(now >= entry.written_at && now - entry.written_at > ttl)
 }
 fn now() -> Result<u64> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
@@ -344,5 +389,35 @@ mod tests {
             }
         )
         .is_err());
+    }
+
+    #[test]
+    fn cache_directories_cannot_overlap_other_durable_domains() {
+        let root = tempfile::tempdir().unwrap();
+        for name in [
+            "memory",
+            "skills",
+            "ui",
+            "evolution",
+            "tools",
+            "automation",
+            "hooks",
+            "logs",
+        ] {
+            let candidate = format!("{name}/cache");
+            assert!(
+                directory(
+                    root.path(),
+                    Domain::Models,
+                    &Policy {
+                        directory: Some(candidate.clone().into()),
+                        ..Policy::default()
+                    }
+                )
+                .is_err(),
+                "accepted {candidate}"
+            );
+            assert!(!root.path().join(name).exists());
+        }
     }
 }

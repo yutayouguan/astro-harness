@@ -14,5 +14,6 @@
 .storage-diagnostics-domains dd { display: grid; text-align: right; gap: 2px; margin: 0; font-variant-numeric: tabular-nums; }
 .storage-diagnostics-domains small { opacity: 0.65; }
 .storage-diagnostics-warning { padding: 10px 12px; border-left: 2px solid var(--color-accent, currentColor); }
+.storage-diagnostics-cache-policy { display: grid; gap: 5px; padding: 10px 0; }
 @media (max-width: 680px) { .storage-diagnostics-domains { grid-template-columns: 1fr; } .storage-diagnostics-paths { grid-template-columns: 1fr; gap: 5px; } }
 @media (prefers-contrast: more) { .storage-diagnostics-domains > div { border-bottom-width: 1px; } }

@@ -57,7 +57,7 @@ mod tests {
         let modes = load_tool_loading_modes().unwrap();
         assert_eq!(modes["browser"], ToolLoadingMode::Always);
         assert_eq!(modes["memory"], ToolLoadingMode::OnDemand);
-        assert_eq!(crate::load_tools_enabled().unwrap()["browser"], false);
+        assert!(!crate::load_tools_enabled().unwrap()["browser"]);
         set_tool_loading_mode("browser", ToolLoadingMode::Auto).unwrap();
         let modes = load_tool_loading_modes().unwrap();
         assert!(!modes.contains_key("browser"));

@@ -153,6 +153,11 @@ export default function StorageDiagnostics({
               {copy.preview} · {storageBytes(totals.previewBytes)} /{" "}
               {totals.previewFiles} {copy.candidates}
             </summary>
+            {report.previewPartial && (
+              <p className="storage-diagnostics-warning">
+                {copy.previewPartial}
+              </p>
+            )}
             <p>{copy.sample}</p>
             {report.cleanupPreview.length ? (
               <ul>
@@ -169,6 +174,31 @@ export default function StorageDiagnostics({
           </details>
           <details>
             <summary>{copy.policies}</summary>
+            {report.cachePolicies.map((policy) => (
+              <div
+                className="storage-diagnostics-cache-policy"
+                key={policy.domain}
+              >
+                <strong>
+                  {copy.domainNames[
+                    policy.domain as keyof typeof copy.domainNames
+                  ] ?? policy.domain}{" "}
+                  · {policy.enabled ? copy.enabled : copy.disabled}
+                </strong>
+                <code>{policy.directory}</code>
+                <span>
+                  {copy.ttl}: {policy.ttlSeconds} · {copy.capacity}:{" "}
+                  {policy.maxSizeMb} MiB
+                </span>
+                {policy.status !== "in_home" && (
+                  <span>
+                    {copy.policyStates[
+                      policy.status as keyof typeof copy.policyStates
+                    ] ?? policy.status}
+                  </span>
+                )}
+              </div>
+            ))}
             <ul>
               {[copy.cache, copy.logs, copy.backups, copy.protected].map(
                 (text) => (

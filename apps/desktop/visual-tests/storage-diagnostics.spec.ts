@@ -9,6 +9,10 @@ test("storage inspection explains protected data and only previews cleanup", asy
   await page.getByText(/^清理预览/).click();
   await expect(page.getByText("models/cache/old-model-metadata.json")).toBeVisible();
   await page.getByText("保留策略", { exact: true }).click();
+  await expect(page.getByText(/TTL（秒）: 600/)).toBeVisible();
+  await expect(page.getByText("/Volumes/cache/astro-mcp", { exact: true })).toBeVisible();
+  await expect(page.getByText("数据根以外的目录未扫描", { exact: true })).toBeVisible();
+  await expect(page.getByText(/部分缓存目录或文件未验证/)).toBeVisible();
   await expect(page.getByText(/会话、数据库、rollout、工作区/)).toBeVisible();
   await expect(page.getByRole("button", { name: /删除|清理|Delete|Clean/ })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("storage-diagnostics.png"), fullPage: true });

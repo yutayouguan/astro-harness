@@ -18,7 +18,7 @@ const report: StorageReport = {
       bytes: 3250585,
       files: 19,
       skippedLinks: 0,
-      previewBytes: 1048576,
+      previewBytes: 131072,
       previewFiles: 1,
     },
     {
@@ -52,8 +52,27 @@ const report: StorageReport = {
   cleanupPreview: [
     {
       path: "models/cache/old-model-metadata.json",
-      bytes: 1048576,
-      policy: "cache_7_days",
+      bytes: 131072,
+      policy: "cache_expired",
+    },
+  ],
+  previewPartial: true,
+  cachePolicies: [
+    {
+      domain: "models",
+      directory: "/Users/demo/.astro/models/cache",
+      enabled: true,
+      ttlSeconds: 600,
+      maxSizeMb: 256,
+      status: "in_home",
+    },
+    {
+      domain: "mcp",
+      directory: "/Volumes/cache/astro-mcp",
+      enabled: true,
+      ttlSeconds: 1800,
+      maxSizeMb: 128,
+      status: "external",
     },
   ],
 };
