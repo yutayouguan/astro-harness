@@ -36,14 +36,7 @@ pub async fn set_tools_enabled(
     agent_id: Option<String>,
 ) -> Result<(), String> {
     let id = normalize_agent_id(agent_id);
-    let mut merged = home::load_tools_enabled_for_agent(id.as_deref());
-    for (k, v) in enabled {
-        merged.insert(k, v);
-    }
-    for known in home::KNOWN_TOOLSET_IDS {
-        merged.entry((*known).to_string()).or_insert(true);
-    }
-    home::save_tools_enabled_for_agent(id.as_deref(), &merged).map_err(|e| e.to_string())
+    home::patch_tools_enabled_for_agent(id.as_deref(), &enabled).map_err(|e| e.to_string())
 }
 
 /// 内置工具目录（schemars 派生参数），供前端 Tools 面板展示

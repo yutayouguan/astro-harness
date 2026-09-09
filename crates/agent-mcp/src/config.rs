@@ -604,11 +604,12 @@ fn read_toml_value(path: &Path) -> anyhow::Result<toml::Value> {
 }
 
 fn write_toml_value(path: &Path, value: &toml::Value) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let rendered = toml::to_string_pretty(value)?;
-    home::config_file::write_config_file(path, &format!("{rendered}\n"))
+    let servers = value
+        .get("mcp_servers")
+        .ok_or_else(|| anyhow::anyhow!("missing MCP section"))?;
+    let mut doc = home::settings::read_document(path)?;
+    home::settings::put(&mut doc, &["mcp_servers"], servers)?;
+    home::settings::write_document(path, &doc)
 }
 
 fn merge_servers(
@@ -728,6 +729,9 @@ pub fn save_mcp_servers_scoped(
         }
         _ => mcp_config_path_global(),
     };
+    if scope == "project" && servers.is_empty() && !path.exists() {
+        return Ok(());
+    }
     let _guard = home::config_file::lock_config_file(&path)?;
     let mut root = read_toml_value(&path)?;
     let table = root
@@ -827,6 +831,25 @@ mod tests {
     use tempfile::TempDir;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn mcp_writes_preserve_desktop_settings_and_foreign_comments() {
+        let dir = TempDir::new().unwrap();
+        let project = TempDir::new().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let path = mcp_config_path_global();
+        fs::write(
+            &path,
+            "# keep\n[desktop.tools]\nexec_command = false # keep setting\n[mcp_servers]\n",
+        )
+        .unwrap();
+        save_mcp_servers(&[]).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("# keep setting"));
+        assert!(text.contains("exec_command = false"));
+        save_mcp_servers_scoped("project", Some(project.path()), &[]).unwrap();
+        assert!(!project.path().join(".astro").exists());
+    }
 
     #[test]
     fn decodes_inline_agent_mcp_servers() {
@@ -938,8 +961,12 @@ url = "https://example.invalid/mcp"
         assert!(saved.contains("[agents]"));
         assert!(saved.contains("enabled = false"));
         assert!(saved.contains("[custom]"));
-        assert!(saved.contains("value = \"keep\""));
-        assert!(saved.contains("[mcp_servers.docs]"));
+        let parsed: toml::Value = saved.parse().unwrap();
+        assert_eq!(parsed["custom"]["value"].as_str(), Some("keep"));
+        assert_eq!(
+            parsed["mcp_servers"]["docs"]["command"].as_str(),
+            Some("docs-server")
+        );
     }
 
     #[test]

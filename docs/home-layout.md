@@ -10,9 +10,9 @@
 | 领域 | 文件和路径 API |
 | --- | --- |
 | 全局配置 | `config.toml`；`config_path`、`config_file::lock_config_file` |
-| Agent | `agents/default/config.json`、Agent 级技能开关、`agents/*.toml` |
-| 模型 | `models/providers.json`、`models/cache/`；`providers_path`、`models_cache_dir` |
-| 工具与技能 | `tools/enabled.json`；`skills/` 内的包、全局启用表、来源、锁与备份 |
+| Agent | `agents/active.json`、`agents/*.toml`；默认设置位于全局 TOML `desktop.agents` |
+| 模型 | `models/cache/`；`models_cache_dir`；Provider 注册信息位于全局 TOML `desktop.providers` |
+| 工具与技能 | 全局 TOML `desktop.tools` / `desktop.skills`；`skills/` 内的包、来源、锁与备份 |
 | 会话 | `sessions/state.db`、`rollouts/`、`tool_spills/`、`subagents/subagents-v2.db` |
 | 文件与知识 | `artifacts/artifacts.db`、`knowledge.db`、`uploads/` |
 | 用量 | `usage/usage.db`、`usage/agents/{id}/stats.json` |
@@ -25,7 +25,7 @@
 `home::ensure_workspace_dirs` 只确保领域目录，不打开 SQLite；数据库由所属领域按需创建。
 `home::ensure_workspace` 补齐缺失的默认状态和工作区模板，但不覆盖已有个性化文件。
 MCP 与记忆/权限设置写同一 TOML 时，锁必须覆盖完整的读取—修改—原子写入过程。
-全局技能/工具默认值与 Agent 级覆写仍是不同语义，不因内容相同就删除其中一份。
+全局技能/工具默认值与 Agent 级覆写仍是不同语义，但统一写入同一 TOML 的不同段，不再初始化可编辑 JSON 副本。
 
 项目工作规则只从项目根 `AGENTS.md` 加载；项目 `.astro/` 只用于显式项目配置。
 读取规则、打开项目不得创建项目 `.astro/`，现有项目配置不能因本机目录调整被删除。
@@ -45,6 +45,8 @@ python3 tools/migrate_home_layout.py --root /absolute/path/to/astro-home --apply
 
 脚本不会扫描或恢复废纸篓。请不要把废纸篓或整个用户目录传给 `--root`。
 新安装不需要迁移。应用启动不会自动执行该脚本。
+
+若存在 Provider、工具/Skill 开关或 Agent 默认设置的旧 JSON，先完成上述目录迁移，再执行 [全局设置迁移](global-settings.md)。目录迁移负责历史与资源位置，第二步负责配置格式；在第二步完成前，新设置读取会明确报错，不能启动后用默认值覆盖用户配置。
 
 迁移步骤：预检目标及冲突 → 确认没有文件持有进程 → 私有完整 tar 备份 →
 读取验证备份 → 写入进行中标记 → SQLite checkpoint → 写新位置 →

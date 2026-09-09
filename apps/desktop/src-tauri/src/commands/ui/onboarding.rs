@@ -415,9 +415,11 @@ mod tests {
     #[tokio::test]
     async fn generated_bootstrap_files_do_not_hide_first_run() {
         let temp = tempfile::tempdir().unwrap();
-        fs::create_dir_all(home::models_dir(temp.path())).unwrap();
-        fs::write(home::providers_path(temp.path()), "{}").unwrap();
-        fs::write(temp.path().join("config.toml"), "").unwrap();
+        fs::write(
+            temp.path().join("config.toml"),
+            "[desktop.providers]\nproviders = []\n",
+        )
+        .unwrap();
         let database = home::session_db_path(temp.path());
         session::SessionStore::open(&database).await.unwrap();
         let state = load_at(temp.path()).await.unwrap();

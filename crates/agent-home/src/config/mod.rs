@@ -16,7 +16,7 @@ pub use auto_icon::{
 pub use scan::scan_memory_content;
 pub use tools_enabled::{
     is_tool_call_allowed, is_toolset_enabled, load_tools_enabled, load_tools_enabled_for_agent,
-    save_tools_enabled, save_tools_enabled_for_agent, sync_tools_enabled_defaults,
-    sync_tools_enabled_defaults_for_agent, tool_name_to_toolset, tools_enabled_path,
-    KNOWN_TOOLSET_IDS,
+    patch_tools_enabled_for_agent, save_tools_enabled, save_tools_enabled_for_agent,
+    sync_tools_enabled_defaults, sync_tools_enabled_defaults_for_agent, tool_name_to_toolset,
+    tools_enabled_path, KNOWN_TOOLSET_IDS,
 };

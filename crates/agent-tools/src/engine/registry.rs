@@ -2,7 +2,7 @@
 //!
 //! `ToolRegistry` 是 Agent 与 LLM API 之间的桥梁，同时持有可调用工具的
 //! [`ToolEntry`] 和 [`crate::CoreToolRuntime`]，并按当前 Agent 的 `tools_enabled`（或全局
-//! `~/.astro/tools/enabled.json`）与运行时 `check_fn` 过滤出当前会话实际可用的
+//! `config.toml [desktop.tools]`）与运行时 `check_fn` 过滤出当前会话实际可用的
 //! 工具列表，供 `schemas_for_api` 下发给模型。
 
 use std::collections::{HashMap, HashSet};
@@ -29,7 +29,7 @@ inventory::collect!(BuiltinToolRegistrar);
 /// 工具注册表：以工具名为键的全局索引。
 ///
 /// 同时维护 toolset 级别的启用映射；MCP 工具（`mcp__` 前缀）的开关在注册阶段
-/// 已过滤，不走 `tools/enabled.json`。
+/// 已过滤，不走 `desktop.tools`。
 /// 动态工具 handler（MCP 工具等运行时注册的异步调用闭包）。
 ///
 /// 动态工具不需要 `ToolContext` — MCP 工具通过捕获的
@@ -59,6 +59,7 @@ pub struct ToolRegistry {
     runtimes: HashMap<String, Arc<dyn crate::engine::executor::CoreToolRuntime>>,
     /// 与当前 Agent / 全局 `tools-enabled` 对齐的 toolset 开关；缺失键视为启用。
     enabled: HashMap<String, bool>,
+    config_unavailable: bool,
     /// Skill 加载后 additive 放宽的 toolset（即使 enabled 映射为 false 也允许）。
     skill_override_enabled: std::collections::HashSet<String>,
     /// 当前 turn 的 ExtensionSnapshot 声明的 toolset；每次发布 snapshot 时整体替换。
@@ -159,6 +160,7 @@ impl ToolRegistry {
             tools: HashMap::new(),
             runtimes: HashMap::new(),
             enabled: HashMap::new(),
+            config_unavailable: false,
             skill_override_enabled: std::collections::HashSet::new(),
             extension_override_enabled: std::collections::HashSet::new(),
         }
@@ -218,21 +220,34 @@ impl ToolRegistry {
     /// 用外部加载的 toolset 启用映射覆盖当前状态（通常来自 Tauri 或磁盘同步）。
     pub fn set_enabled_map(&mut self, enabled: HashMap<String, bool>) {
         self.enabled = enabled;
+        self.config_unavailable = false;
     }
 
     /// 从磁盘重新加载指定 Agent 的 toolset 启用表并覆盖 `enabled` 映射。
     ///
-    /// `agent_id` 为 `None` 时读全局 `~/.astro/tools/enabled.json`；否则读
+    /// `agent_id` 为 `None` 时读全局 `config.toml [desktop.tools]`；否则读
     /// `AgentRuntimeConfig.tools_enabled`（缺失时回退全局），与前端
     /// `save_tools_enabled_for_agent` 对齐。
     pub fn reload_enabled_from_disk(&mut self, agent_id: Option<&str>) {
-        self.enabled = home::sync_tools_enabled_defaults_for_agent(agent_id).unwrap_or_default();
+        match home::sync_tools_enabled_defaults_for_agent(agent_id) {
+            Ok(enabled) => {
+                self.enabled = enabled;
+                self.config_unavailable = false;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "tool settings unavailable; fail closed");
+                self.config_unavailable = true;
+            }
+        }
     }
 
     /// 判断指定 toolset 是否启用；未在映射中出现时默认返回 `true`。
     ///
     /// Skill 激活的 `skill_override_enabled` 可 additive 放宽被禁用的 toolset。
     pub fn is_toolset_enabled(&self, toolset: &str) -> bool {
+        if self.config_unavailable {
+            return false;
+        }
         if self.skill_override_enabled.contains(toolset)
             || self.extension_override_enabled.contains(toolset)
         {
@@ -286,6 +301,9 @@ impl ToolRegistry {
     ///
     /// MCP 工具（`mcp__` 前缀）以是否已注册为准；其余工具按名称映射到 toolset 后检查开关。
     pub fn is_tool_allowed(&self, name: &str) -> bool {
+        if self.config_unavailable {
+            return false;
+        }
         if name.starts_with("mcp__") {
             return self.tools.contains_key(name);
         }
@@ -365,7 +383,7 @@ impl ToolRegistry {
 
     /// 返回当前会话可用的工具：toolset 已启用且 `check_fn` 通过（若有）。
     ///
-    /// MCP toolset 不受 `tools/enabled.json` 门控，仅依赖注册时的过滤逻辑。
+    /// MCP toolset 不受 `desktop.tools` 门控，仅依赖注册时的过滤逻辑。
     pub fn available_tools(&self) -> Vec<&ToolEntry> {
         self.tools
             .values()
@@ -532,6 +550,19 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use tempfile::TempDir;
+
+    #[test]
+    fn invalid_config_cannot_be_relaxed_by_skill_overrides() {
+        let dir = TempDir::new().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        std::fs::write(home::settings::path(dir.path()), "bad = [").unwrap();
+        let mut registry = ToolRegistry::new();
+        registry.reload_enabled_from_disk(None);
+        registry.activate_skill_toolsets(&["exec_command".into()]);
+        assert!(!registry.is_toolset_enabled("exec_command"));
+        assert!(!registry.is_tool_allowed("exec_command"));
+        assert!(!registry.is_tool_allowed("mcp__example__tool"));
+    }
 
     fn schema_names(reg: &ToolRegistry) -> Vec<String> {
         reg.schemas_for_api()

@@ -567,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn persist_amendment_preserves_other_yaml_keys() {
+    fn persist_amendment_preserves_other_toml_keys() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("config.toml"),
@@ -589,7 +589,11 @@ mod tests {
             .unwrap();
 
         let text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
-        assert!(text.contains("mode = \"user\""), "other keys lost: {text}");
+        let doc = home::settings::read_document(&dir.path().join("config.toml")).unwrap();
+        let approvals: std::collections::HashMap<String, String> =
+            home::settings::get(&doc, &["approvals"]).unwrap().unwrap();
+        assert_eq!(approvals.get("mode").map(String::as_str), Some("user"));
+        assert!(text.contains(r#""approvals" = { "mode" = "user" }"#));
         assert!(
             text.contains("api.example.com"),
             "amendment missing: {text}"

@@ -2,7 +2,7 @@
 //! preferred + 可选 fallback 的具体调用凭据，供 `start_chat` 透传给 backend。
 //!
 //! `auto`：preferred 就是当前会话主模型（`primary`），fallback 为 `None`。
-//! 显式路由的 `provider` 字段保存 **UI Provider ID**（`providers.json` 条目 `id`，
+//! 显式路由的 `provider` 字段保存 **UI Provider ID**（`config.toml [desktop.providers]` 条目 `id`，
 //! 与 `backend_id`/registry kind 不同）；查不到、已禁用或无可用凭据时静默退回
 //! primary（不阻塞主聊天）。有效且与 primary 目标不完全相同时，追加
 //! `fallback = Some(primary)`（含同 Provider 不同 model）。

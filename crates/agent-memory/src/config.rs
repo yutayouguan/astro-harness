@@ -1044,8 +1044,10 @@ fn load_config_root(base: &Path) -> anyhow::Result<serde_yaml::Value> {
 fn save_config_root(base: &Path, root: &serde_yaml::Value) -> anyhow::Result<()> {
     fs::create_dir_all(base)?;
     let path = config_toml_path(base);
-    let text = toml::to_string_pretty(&toml::Value::try_from(root)?)?;
-    home::config_file::write_config_file(&path, &text)
+    let previous = load_config_root(base)?;
+    let mut document = home::settings::read_document(&path)?;
+    home::settings::replace_changed_root(&mut document, &previous, root)?;
+    home::settings::write_document(&path, &document)
 }
 
 /// 确保 `root[seg…]` 为 Mapping，返回最内层可变 Mapping。
@@ -1689,8 +1691,9 @@ mod tests {
         assert_eq!(saved.keep_tail_bubbles, 5);
 
         let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
-        assert!(text.contains("[hooks]"));
-        assert!(text.contains("enabled = true"));
+        let parsed: toml::Value = text.parse().unwrap();
+        assert_eq!(parsed["hooks"]["enabled"].as_bool(), Some(true));
+        assert!(text.contains(r#""hooks" = { "enabled" = true }"#));
 
         let reset = reset_compression_config(dir.path()).unwrap();
         assert_eq!(reset, CompressionConfig::default());
@@ -2173,7 +2176,7 @@ mod tests {
     }
 
     #[test]
-    fn set_route_preserves_unrelated_yaml() {
+    fn set_route_preserves_unrelated_toml() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("config.toml"),
@@ -2192,8 +2195,9 @@ mod tests {
         )
         .unwrap();
         let text = fs::read_to_string(dir.path().join("config.toml")).unwrap();
-        assert!(text.contains("enabled = true"));
-        assert!(text.contains("write_approval = true"));
+        let parsed: toml::Value = text.parse().unwrap();
+        assert_eq!(parsed["hooks"]["enabled"].as_bool(), Some(true));
+        assert_eq!(parsed["memory"]["write_approval"].as_bool(), Some(true));
         assert_eq!(load_auxiliary_config(dir.path()).compaction.model, "small");
     }
 

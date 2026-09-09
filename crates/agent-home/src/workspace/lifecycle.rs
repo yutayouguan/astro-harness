@@ -41,11 +41,7 @@ pub fn write_agent_config(
 
     // 若继承：保留 persona 工具开关快照；MCP 始终来自统一 config.toml。
     if inherit && id != DEFAULT_AGENT_ID {
-        if let Ok(tools) = fs::read_to_string(crate::global_tools_path(base)) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&tools) {
-                cfg.tools_enabled = Some(v);
-            }
-        }
+        cfg.tools_enabled = crate::settings::read(base, &["desktop", "tools"])?;
     }
 
     cfg.save(base)?;
@@ -118,7 +114,7 @@ fn read_agent_display_name(ws: &Path, fallback: &str) -> String {
     if let Some(name) = fields.name.filter(|n| !n.is_empty()) {
         return name;
     }
-    // 回退：读 agents/{id}/config.json
+    // 回退：读 config.toml [desktop.agents.<id>]
     if let Ok(cfg) = AgentRuntimeConfig::load(
         ws.parent().unwrap_or(ws),
         &agent_id_from_workspace_dir_name(
@@ -175,7 +171,7 @@ fn replace_identity_name(text: &str, name: &str) -> String {
 
 /// 更新单专家模式下默认 Agent 的显示名称。
 ///
-/// `IDENTITY.md` 是 UI 列表的首选事实源，`config.json` 也同步更新，避免重启后显示不一致。
+/// `IDENTITY.md` 是 UI 列表的首选事实源，Agent 配置段 也同步更新，避免重启后显示不一致。
 pub fn set_default_agent_display_name(base: &Path, name: &str) -> anyhow::Result<AgentInfo> {
     let name = name.trim();
     anyhow::ensure!(!name.is_empty(), "Agent 名称不能为空");
@@ -191,14 +187,8 @@ pub fn set_default_agent_display_name(base: &Path, name: &str) -> anyhow::Result
     let identity = fs::read_to_string(&identity_path)?;
     fs::write(&identity_path, replace_identity_name(&identity, name))?;
 
-    let mut config = AgentRuntimeConfig::load(base, id)
-        .or_else(|_| write_agent_config(base, id, name, false))?;
-    let previous_config_name = config.name.clone();
-    config.name = name.to_string();
-    if let Err(error) = config.save(base) {
+    if let Err(error) = AgentRuntimeConfig::update_name(base, id, name) {
         let _ = fs::write(&identity_path, identity);
-        config.name = previous_config_name;
-        let _ = config.save(base);
         return Err(error);
     }
 
@@ -213,7 +203,7 @@ pub fn set_default_agent_display_name(base: &Path, name: &str) -> anyhow::Result
 pub struct AgentInfo {
     /// 规范化 id
     pub id: String,
-    /// 显示名（IDENTITY → config.json → id 回退）
+    /// 显示名（IDENTITY → Agent 配置段 → id 回退）
     pub name: String,
     /// 工作区目录绝对路径
     pub path: String,
@@ -272,7 +262,7 @@ pub struct AgentProfile {
     pub preferences: String,
 }
 
-/// 新建 Agent = 新建 `workspace-{id}` + `agents/{id}/config.json`
+/// 新建 Agent = 新建 `workspace-{id}` + `config.toml [desktop.agents.<id>]`
 pub fn create_agent(base: &Path, name: &str) -> anyhow::Result<AgentInfo> {
     create_agent_with_profile(base, name, None, None, true, true)
 }
@@ -550,8 +540,8 @@ pub fn ensure_agent_space(
         }
     }
 
-    if !AgentRuntimeConfig::path(base, &id).is_file() {
-        let _ = write_agent_config(base, &id, &name, id != DEFAULT_AGENT_ID);
+    if AgentRuntimeConfig::load_optional(base, &id)?.is_none() {
+        write_agent_config(base, &id, &name, id != DEFAULT_AGENT_ID)?;
     }
 
     Ok(workspace)
@@ -567,7 +557,7 @@ pub fn ensure_agent_space(
 /// ├── config.toml                ← 全局设置、项目信任与 MCP
 /// ├── agents/*.toml              ← 全局自定义 Agent 角色
 /// ├── workspace/                 ← 默认 Agent 工作区
-/// ├── agents/default/config.json ← 单专家运行时配置
+/// ├── config.toml [desktop.agents.default] ← 单专家运行时配置
 /// ├── agents/active.json         ← 当前专家标识
 /// └── 各领域目录                 ← 见 home::layout::DOMAIN_DIRS
 /// ```
@@ -591,7 +581,11 @@ pub fn ensure_workspace(base: &Path) -> anyhow::Result<EnsureWorkspaceReport> {
             created_files.push(format!("workspace/{name}"));
         }
     }
+    let created_config = !crate::settings::path(base).exists();
     let _ = ensure_agent_space(base, DEFAULT_AGENT_ID, Some("Astro"))?;
+    if created_config && crate::settings::path(base).is_file() {
+        created_files.push("config.toml".into());
+    }
 
     for (rel, content) in STATE_FILES {
         let path = base.join(rel);
@@ -688,14 +682,6 @@ mod tests {
             .iter()
             .any(|f| f == "automation/cron/jobs.json"));
         assert!(!dir.path().join("models.json").exists());
-        assert!(report
-            .created_files
-            .iter()
-            .any(|f| f == "skills/enabled.json"));
-        assert!(report
-            .created_files
-            .iter()
-            .any(|f| f == "tools/enabled.json"));
         assert!(report.created_files.iter().any(|f| f == "config.toml"));
         assert!(report
             .created_files
@@ -706,8 +692,8 @@ mod tests {
         assert!(dir.path().join("automation/cron/jobs.json").is_file());
         assert!(dir.path().join("automation/cron/output").is_dir());
         assert!(!dir.path().join("models.json").exists());
-        assert!(dir.path().join("skills/enabled.json").is_file());
-        assert!(crate::global_tools_path(dir.path()).is_file());
+        assert!(!dir.path().join("skills/enabled.json").exists());
+        assert!(!dir.path().join("tools/enabled.json").exists());
         assert!(dir.path().join("config.toml").is_file());
     }
 

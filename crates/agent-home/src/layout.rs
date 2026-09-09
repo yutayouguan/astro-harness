@@ -11,14 +11,11 @@ paths! {
     config_path => "config.toml",
     sessions_dir => "sessions",
     models_dir => "models",
-    providers_path => "models/providers.json",
     models_cache_dir => "models/cache",
     skills_dir => "skills",
-    skills_enabled_path => "skills/enabled.json",
     skill_origins_path => "skills/origins.json",
     skill_lock_path => "skills/lock.json",
     skill_backups_dir => "skills/backups",
-    global_tools_path => "tools/enabled.json",
     active_agent_path => "agents/active.json",
     cron_dir => "automation/cron",
     workflows_dir => "automation/workflows",
@@ -62,8 +59,6 @@ pub const DOMAIN_DIRS: &[&str] = &[
 /// Bootstrap state lives beside its owning domain, never in retired root files.
 pub(crate) const INITIAL_STATE_FILES: &[(&str, &str)] = &[
     ("config.toml", "# Astro configuration\n"),
-    ("skills/enabled.json", "{\n}\n"),
-    ("tools/enabled.json", "{\n}\n"),
     ("memory/dreaming.json", "{\n  \"enabled\": false\n}\n"),
     ("automation/cron/jobs.json", "{\n  \"jobs\": []\n}\n"),
     ("agents/active.json", "{\n  \"id\": \"default\"\n}\n"),
@@ -104,10 +99,9 @@ mod tests {
     #[test]
     fn domain_paths_are_relative_to_the_requested_root() {
         let root = Path::new("test-home");
-        assert_eq!(providers_path(root), root.join("models/providers.json"));
+        assert_eq!(config_path(root), root.join("config.toml"));
         assert_eq!(cron_dir(root), root.join("automation/cron"));
         assert_eq!(tool_spills_dir(root), root.join("sessions/tool_spills"));
-        assert_eq!(global_tools_path(root), root.join("tools/enabled.json"));
     }
 
     #[test]

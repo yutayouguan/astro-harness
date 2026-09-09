@@ -2,7 +2,7 @@
 //!
 //! 凭据解析后异步认领到期任务并执行。
 //!
-//! 凭据解析：读 `providers.json` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
+//! 凭据解析：读 `config.toml [desktop.providers]` + **仅环境变量** API Key（无 keyring；GUI 手动跑走 Tauri）。
 
 use agent::exec::cron::{self as cron_exec, CronExecCredentials};
 use cron::{CronJob, CronStore};
@@ -43,7 +43,7 @@ fn default_true() -> bool {
     true
 }
 
-/// `providers.json` 的 kind → providers crate backend id。
+/// `config.toml [desktop.providers]` 的 kind → providers crate backend id。
 fn kind_to_backend(kind: &str) -> &str {
     match kind.trim() {
         "anthropic" => "claude",
@@ -52,10 +52,8 @@ fn kind_to_backend(kind: &str) -> &str {
     }
 }
 
-fn load_providers_file() -> Option<ProvidersFile> {
-    let path = home::providers_path(&default_memory_dir());
-    let raw = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&raw).ok()
+fn load_providers_file() -> anyhow::Result<Option<ProvidersFile>> {
+    home::settings::read(&default_memory_dir(), &["desktop", "providers"])
 }
 
 fn entry_supports_agent_responses(entry: &ProviderEntry) -> bool {
@@ -120,10 +118,13 @@ fn find_primary_entry<'a>(file: &'a ProvidersFile, job: &CronJob) -> Option<&'a 
         .find(|p| p.enabled && entry_supports_agent_responses(p))
 }
 
-/// 从任务字段、`providers.json` 与环境变量解析执行凭据（含 fallback 链）。
-fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
-    if let Some(file) = load_providers_file() {
-        if let Some(primary_entry) = find_primary_entry(&file, job) {
+/// 从任务字段、`config.toml [desktop.providers]` 与环境变量解析执行凭据（含 fallback 链）。
+fn resolve_cron_credentials(
+    job: &CronJob,
+    providers: Option<&ProvidersFile>,
+) -> CronExecCredentials {
+    if let Some(file) = providers {
+        if let Some(primary_entry) = find_primary_entry(file, job) {
             if let Some(mut primary) = entry_to_target(primary_entry) {
                 if let Some(m) = job
                     .model
@@ -184,6 +185,15 @@ fn resolve_cron_credentials(job: &CronJob) -> CronExecCredentials {
 
 /// 认领到期任务并逐个执行；打开 store / claim 失败时提前返回。
 pub async fn tick_and_execute() {
+    // Validate settings before claiming jobs. A migration/config error must not
+    // run a job using a silently substituted provider or consume its schedule.
+    let providers = match load_providers_file() {
+        Ok(providers) => providers,
+        Err(error) => {
+            tracing::warn!(%error, "cron provider configuration unavailable");
+            return;
+        }
+    };
     if let Err(err) = cron_exec::reconcile_orphaned_runs().await {
         tracing::warn!(error = %err, "cron tick: reconcile orphaned runs failed");
     }
@@ -207,7 +217,7 @@ pub async fn tick_and_execute() {
     };
 
     for job in jobs {
-        let creds = resolve_cron_credentials(&job);
+        let creds = resolve_cron_credentials(&job, providers.as_ref());
         let label = cron_notify_label(&job);
         match cron_exec::execute_job(&job, creds, "due").await {
             Ok(row) => {
@@ -276,6 +286,19 @@ fn cron_notify_label(job: &CronJob) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cron_reads_shared_provider_config_without_json_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        home::settings::write(dir.path(), &["desktop", "providers"], &serde_json::json!({
+            "providers":[{"id":"local-test","kind":"ollama","endpoint":"http://127.0.0.1:7777","model":"test","enabled":true}]
+        })).unwrap();
+        let stored = load_providers_file().unwrap().unwrap();
+        assert_eq!(stored.providers[0].id, "local-test");
+        std::fs::write(home::settings::path(dir.path()), "invalid = [").unwrap();
+        assert!(load_providers_file().is_err());
+    }
 
     #[test]
     fn kind_maps_anthropic_to_claude() {

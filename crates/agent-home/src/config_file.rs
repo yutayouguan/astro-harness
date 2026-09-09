@@ -29,24 +29,20 @@ pub fn lock_config_file(path: &Path) -> anyhow::Result<ConfigWriteGuard> {
 
 /// Call while holding `lock_config_file`, including the preceding read/modify phase.
 pub fn write_config_file(path: &Path, text: &str) -> anyhow::Result<()> {
-    let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().simple()));
-    let result = (|| -> anyhow::Result<()> {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary)?;
-        file.write_all(text.as_bytes())?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temporary, path)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
+    if let Ok(metadata) = path.symlink_metadata() {
+        anyhow::ensure!(
+            !metadata.file_type().is_symlink(),
+            "refusing to replace symlink configuration: {}",
+            path.display()
+        );
     }
-    result
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("config has no parent"))?;
+    fs::create_dir_all(parent)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(text.as_bytes())?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }

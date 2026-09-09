@@ -58,7 +58,7 @@ pub async fn execute_workflow(
         trigger_input,
         trigger_type,
         run_db,
-        environment_provider_configs(),
+        environment_provider_configs()?,
     )
     .await
 }
@@ -90,13 +90,13 @@ struct StoredProvider {
 /// Headless workflow runs cannot access the desktop keyring. They still resolve
 /// persisted provider IDs to backend IDs/endpoints and obtain credentials from
 /// the provider's documented environment variables.
-fn environment_provider_configs() -> HashMap<String, RuntimeProviderConfig> {
-    let path = home::providers_path(&home::default_memory_dir());
-    let Ok(raw) = std::fs::read_to_string(path) else {
-        return HashMap::new();
-    };
-    let Ok(stored) = serde_json::from_str::<StoredProviders>(&raw) else {
-        return HashMap::new();
+fn environment_provider_configs() -> Result<HashMap<String, RuntimeProviderConfig>> {
+    let Some(stored) = home::settings::read::<StoredProviders>(
+        &home::default_memory_dir(),
+        &["desktop", "providers"],
+    )?
+    else {
+        return Ok(HashMap::new());
     };
     let mut configs = HashMap::new();
     for provider in stored
@@ -127,7 +127,7 @@ fn environment_provider_configs() -> HashMap<String, RuntimeProviderConfig> {
         configs.insert(backend_id, runtime.clone());
         configs.insert(provider.id, runtime);
     }
-    configs
+    Ok(configs)
 }
 
 /// 执行工作流，并传入只存在于本次运行内存中的 Provider 凭据。
@@ -1123,6 +1123,23 @@ fn truncate_utf8_safe(s: &str, max_bytes: usize) -> String {
 mod tests {
     use super::*;
     use crate::model::{Position, WorkflowAgentTool};
+
+    #[test]
+    fn headless_provider_registry_uses_shared_toml_and_rejects_invalid_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        home::settings::write(dir.path(), &["desktop", "providers"], &serde_json::json!({
+            "providers":[{"id":"local-test","kind":"ollama","endpoint":"http://127.0.0.1:7777","model":"test","enabled":true}]
+        })).unwrap();
+        let configs = environment_provider_configs().unwrap();
+        assert_eq!(configs["local-test"].config.model, "test");
+        assert_eq!(
+            configs["local-test"].config.base_url.as_deref(),
+            Some("http://127.0.0.1:7777")
+        );
+        std::fs::write(home::settings::path(dir.path()), "invalid = [").unwrap();
+        assert!(environment_provider_configs().is_err());
+    }
 
     fn workflow_with_middle(node_type: NodeType) -> Workflow {
         Workflow {

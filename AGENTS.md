@@ -8,6 +8,8 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 项目 `.astro/` 仅存放项目特有配置（例如显式配置的 `config.toml`、自定义 Agent 定义）。没有项目特有配置时无需创建该目录；读取工作规则或打开项目不得为此创建 `.astro/`。既有项目配置不得因规则路径调整而删除。
 
+Provider 注册信息、工具/Skill 开关和 Agent 默认设置统一在全局 `config.toml` 的 `desktop` 段读写；数据库、rollout、缓存和使用统计仍是运行数据。旧 JSON 必须通过显式迁移导入，运行时不双写或回退；参见 `docs/global-settings.md`。写 TOML 时使用 `home::settings` 的同一文件锁和分段更新，不覆盖其他配置段。
+
 ## Project Overview
 
 Astro Agent（阿童木）— 本地 AI 桌面工作站。技术栈：**Rust workspace + Tauri 2 + React/Vite**。
@@ -71,7 +73,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-subagents` | `subagents` | Codex V2 Agent Threads：持久化 Agent Graph/mailbox/status、自定义 agent TOML、root-scoped 控制面与恢复。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
 | `crates/agent-delegate` | `worktree` | 显式桌面多任务用的 git worktree 工具；Subagent 不会隐式创建 worktree。 |
-| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、全局 TOML 与 Agent JSON 配置、tool-enable gates。无 SQLite。 |
+| `crates/agent-home` | `home` | `~/.astro` 路径约定、日志、全局 TOML（含桌面与 Agent 默认设置）、tool-enable gates。无 SQLite。 |
 | `crates/agent-skills` | `skills` | Skill 管理 — 安装、加载、注册表、摘要、备份。Skill frontmatter `astro_tools` 可 additive 开放 toolset。 |
 | `crates/agent-sandbox` | `sandbox` | 派生进程平台沙箱、typed denial、audit 与 attempt-scoped `SandboxPolicy`；managed network 只放行已绑定代理的精确 loopback port。 |
 | `crates/agent-network-proxy` | `network-proxy` | Codex 对齐的受管子进程网络边界：host allow/deny、本地地址防御、DNS rebinding 防御、decision attribution 与 attempt-scoped loopback HTTP/1 CONNECT listener；已接入前台 terminal/code_exec，plain HTTP/SOCKS 尚未实现。 |
@@ -234,10 +236,10 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 ~/.astro/
   config.toml          # 唯一全局配置入口（原 YAML 已退役）
   .env                 # 凭证环境入口
-  agents/              # *.toml 自定义 Agent；default/config.json 运行时配置
-  models/              # providers.json 与 cache/ 模型元数据、定价
-  tools/enabled.json   # 全局 tool gate
-  skills/              # 技能包、enabled.json、origins.json、lock.json、backups/
+  agents/              # *.toml 自定义 Agent；active.json 当前专家标识
+  models/              # cache/ 模型元数据、定价；Provider 设置在 config.toml
+  tools/               # 工具领域运行数据；tool gate 在 config.toml
+  skills/              # 技能包、origins.json、lock.json、backups/；开关在 config.toml
   sessions/
     state.db           # ResponseItem、会话、FTS5、线程检查点（schema v23）
     rollouts/          # append-only 事件事实源
@@ -262,6 +264,8 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 新运行时不读写旧目录，也不在启动时搬迁数据。旧安装必须离线迁移；发现旧布局或
 未完成迁移时拒绝初始化，避免生成空的平行数据库。详细布局与迁移边界见
 `docs/home-layout.md`。项目根 `AGENTS.md` 和项目 `.astro/config.toml` 的边界不变。
+
+可编辑 JSON 设置的迁移必须在目录迁移完成后执行，使用 `astro-migrate-config` 的预览与 `--apply`；旧 JSON 保留备份但不作为运行时回退。详见 `docs/global-settings.md`。
 
 ## Key Invariants
 

@@ -719,7 +719,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         }
     }
 
-    // 从 providers.json + keyring 解析 primary 与聊天后备链
+    // 从 config.toml 的 desktop.providers + keyring 解析 primary 与聊天后备链
     let targets = resolve_model_targets(provider_id.as_deref(), &provider, &model)?;
     let primary = targets
         .first()
