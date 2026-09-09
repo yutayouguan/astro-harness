@@ -1127,46 +1127,6 @@ fn default_code_mode_max_tokens() -> usize {
     10_000
 }
 
-fn code_mode_nested_tools(
-    session: &AgentLoop,
-    step_context: &StepContext,
-) -> Vec<crate::runtime::code_mode::NestedToolMetadata> {
-    let registry = session
-        .services
-        .tool_registry
-        .read()
-        .expect("tool registry lock poisoned");
-    let mut by_identifier = std::collections::BTreeMap::new();
-    for entry in registry.available_tools() {
-        if matches!(entry.name.as_str(), "exec" | "wait" | "tool_search")
-            || entry.exposure == types::ToolExposure::Hidden
-        {
-            continue;
-        }
-        let wire_name = entry.tool_name().wire_name();
-        if !step_context.routes_tool(&wire_name) {
-            continue;
-        }
-        let name = crate::runtime::code_mode::normalize_identifier(&wire_name);
-        by_identifier.entry(name.clone()).or_insert_with(|| {
-            // 与 Codex 一致：ALL_TOOLS 只保留 name/description，但 description
-            // 自带精确调用声明，因此不需要维护另一套 getToolSchema API。
-            let description = tools::render_code_mode_tool_description(
-                &name,
-                &entry.description,
-                &tools::sanitize_tool_schema(entry.schema.clone()),
-                entry.freeform_format.as_ref(),
-            );
-            crate::runtime::code_mode::NestedToolMetadata {
-                name,
-                wire_name,
-                description,
-            }
-        });
-    }
-    by_identifier.into_values().collect()
-}
-
 fn code_mode_nested_result(output: types::ToolOutput) -> serde_json::Value {
     let (text, media) = output.into_parts();
     if media.is_empty() {
@@ -1344,7 +1304,7 @@ async fn execute_code_mode_tool(
                 .ok_or_else(|| anyhow::anyhow!("exec expects raw JavaScript source text"))?;
             let source =
                 crate::runtime::code_mode::parse_exec_source(source).map_err(anyhow::Error::msg)?;
-            let tools = code_mode_nested_tools(session, &step_context);
+            let tools = step_context.tool_router.code_mode_tools();
             let execution_root = step_context
                 .turn
                 .project_root()
@@ -1353,7 +1313,7 @@ async fn execute_code_mode_tool(
             let cell_id = session
                 .services
                 .code_mode
-                .execute(&source, &tools, &execution_root)
+                .execute(&source, tools, &execution_root)
                 .await
                 .map_err(crate::runtime::ToolCallError::from)?;
             drive_code_mode_cell(
@@ -2741,6 +2701,118 @@ pub(crate) async fn execute_tools_concurrent(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn code_mode_namespaced_tools_execute_through_frozen_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let router = {
+            let mut registry = session.services.tool_registry.write().unwrap();
+            let mut browser = registry.get("browser_snapshot").unwrap().clone();
+            browser.check_fn = None;
+            let counter = Arc::clone(&calls);
+            registry.register_dynamic(
+                browser,
+                Arc::new(move |name, args| {
+                    assert_eq!(name, "browser_snapshot");
+                    assert_eq!(args["screenshot"], false);
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Box::pin(async { Ok(json!({"source":"frozen-browser"}).to_string().into()) })
+                }),
+            );
+            let counter = Arc::clone(&calls);
+            registry.register_dynamic(
+                tools::ToolEntry {
+                    name: "mcp__review__read-page".into(),
+                    model_name: Some("read-page".into()),
+                    namespace: "mcp__review".into(),
+                    toolset: "mcp".into(),
+                    exposure: types::ToolExposure::Deferred,
+                    ..tools::ToolEntry::lifecycle_defaults()
+                },
+                Arc::new(move |name, _args| {
+                    assert_eq!(name, "mcp__review__read-page");
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Box::pin(async { Ok(json!({"source":"frozen-mcp"}).to_string().into()) })
+                }),
+            );
+            crate::runtime::tool_router::build_tool_router(
+                &registry,
+                types::InteractionMode::Agent,
+                types::ToolMode::CodeModeOnly,
+                true,
+                &std::collections::HashSet::new(),
+            )
+            .unwrap()
+        };
+        let turn = Arc::new(TurnContext::new(
+            "namespaced-exec".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::READ_ONLY_PROFILE.into()),
+            Some(dir.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+        let step = Arc::new(StepContext::new(
+            Arc::clone(&turn),
+            Vec::new(),
+            Vec::new(),
+            Arc::new(router),
+        ));
+        // A later reload must not remove the issued Step's metadata or runtime.
+        session
+            .services
+            .tool_registry
+            .write()
+            .unwrap()
+            .unregister("browser_snapshot");
+        session
+            .services
+            .tool_registry
+            .write()
+            .unwrap()
+            .unregister("mcp__review__read-page");
+        let result = execute_tools_serial(&session, Arc::clone(&step), &[
+            types::ParsedToolCall::with_id("exec-browser", "exec", json!(
+                "const entry = ALL_TOOLS.find(t => t.name === 'astro_browser_snapshot'); if (!entry || !entry.description.includes('astro_browser_snapshot(args:')) throw new Error('missing browser declaration'); text(await tools.astro_browser_snapshot({screenshot:false})); text(await tools.mcp__review_read_page({}));"
+            ))
+        ], &PauseControl::new(), &turn, None).await.unwrap();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "{result:?}"
+        );
+        assert!(result[0].text().contains("frozen-browser"), "{result:?}");
+        assert!(result[0].text().contains("frozen-mcp"), "{result:?}");
+        // Knowing the JS identifier must not make it callable by the model.
+        let blocked = execute_tools_serial(
+            &session,
+            step,
+            &[types::ParsedToolCall::with_id(
+                "direct-browser",
+                "astro_browser_snapshot",
+                json!({"screenshot":false}),
+            )],
+            &PauseControl::new(),
+            &turn,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "{blocked:?}"
+        );
+    }
 
     fn term(cmd: &str) -> serde_json::Value {
         json!({ "command": cmd })

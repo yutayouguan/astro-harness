@@ -657,7 +657,14 @@ if (candidates.length === 0) throw new Error("no matching tool");
 text(candidates.slice(0, 5)); // description 已含调用声明
 ```
 
-声明在 Rust 侧从当前 `ToolRegistry.available_tools()` 快照生成，Function parameters 先经过 `sanitize_tool_schema()` 清理，再转换为 TypeScript；Freeform 工具使用 `input: string`。`Hidden`、`exec`、`wait` 和 `tool_search` 不进入 cell 目录。`ALL_TOOLS` 数组及条目均冻结，脚本不能篡改后续查询结果。
+声明在 Rust 侧与 Step 的嵌套路由一起冻结到 `ToolRouter`，执行 `exec` 时不再读取实时 Registry。Function parameters 先经过 `sanitize_tool_schema()` 清理，再转换为 TypeScript；Freeform 工具使用 `input: string`。`Hidden`、`exec`、`wait` 和 `tool_search` 不进入 cell 目录。`ALL_TOOLS` 数组及条目均冻结，脚本不能篡改后续查询结果。
+
+JavaScript 调用名、QuickJS host 回调名和嵌套路由键使用同一规范化标识符，例如
+`astro_browser.snapshot` → `tools.astro_browser_snapshot(...)`，
+`mcp__review.read-page` → `tools.mcp__review_read_page(...)`。
+该标识符只用于 Code Mode 内部调用；原生 Responses 的 `(namespace, name)` 和
+Rust 内部 registered name 不变。规范化产生重名时，Step 构建直接报错，不能按注册顺序
+任意选择执行器。重载工具设置不会改变已发 Step 的声明或执行器。
 
 这一设计消除了“先查名称、再调用另一个 Schema API”的重复协议，但不会掩盖延迟披露的成本：模型若事先不知道某个 Deferred 工具，仍需先输出筛选到的 description，再经过一次模型采样生成实际调用。常用 Direct 工具通过预置声明避免这次额外往返。
 

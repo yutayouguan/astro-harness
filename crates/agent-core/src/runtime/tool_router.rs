@@ -23,9 +23,15 @@ pub(crate) struct ToolRouter {
     /// 模型可以直接发起的路由；Code Mode 嵌套路由不在其中。
     model_routes: HashSet<types::ToolName>,
     model_visible_specs: Arc<[serde_json::Value]>,
+    /// QuickJS declarations use the exact identifiers of this Step's nested routes.
+    code_mode_tools: Vec<super::code_mode::NestedToolMetadata>,
 }
 
 impl ToolRouter {
+    pub(crate) fn code_mode_tools(&self) -> &[super::code_mode::NestedToolMetadata] {
+        &self.code_mode_tools
+    }
+
     /// 将 Provider 原生 ResponseItem 解析为保留 namespace 的执行调用。
     pub(crate) fn build_tool_call(
         item: &agent_protocol::ResponseItem,
@@ -290,6 +296,23 @@ pub(crate) fn build_tool_router(
             anyhow::bail!("tool `{registered_name}` is model-visible but has no CoreToolRuntime");
         }
     }
+    // JavaScript identifier normalization is lossy (e.g. `read-page` and
+    // `read_page`). Never select an arbitrary runtime when names collide.
+    let mut code_mode_names: HashMap<String, String> = canonical_names
+        .iter()
+        .filter(|(name, _)| name.namespace().is_none())
+        .map(|(name, registered)| (name.name().to_string(), registered.clone()))
+        .collect();
+    for spec in &nested_specs {
+        for (name, registered) in spec_route_names(registry, spec) {
+            let identifier = super::code_mode::normalize_identifier(&name.wire_name());
+            if let Some(existing) = code_mode_names.insert(identifier.clone(), registered.clone()) {
+                if existing != registered {
+                    anyhow::bail!("Code Mode identifier collision for `{identifier}` between `{existing}` and `{registered}`");
+                }
+            }
+        }
+    }
     Ok(finalize_tool_router(
         (*registry).clone(),
         &discovered_specs,
@@ -335,6 +358,7 @@ pub(crate) fn finalize_tool_router(
 ) -> ToolRouter {
     let mut routes = HashMap::new();
     let mut model_routes = HashSet::new();
+    let mut code_mode_tools = std::collections::BTreeMap::new();
     for spec in additional_callable_specs
         .iter()
         .chain(model_visible_specs.iter())
@@ -354,14 +378,24 @@ pub(crate) fn finalize_tool_router(
     }
     for spec in nested_callable_specs {
         for (tool_name, registered_name) in spec_route_names(&registry, spec) {
-            if registry.get(&registered_name).is_none() {
+            let Some(entry) = registry.get(&registered_name) else {
                 continue;
-            }
-            let code_mode_name = types::ToolName::plain(super::code_mode::normalize_identifier(
-                &tool_name.wire_name(),
-            ));
+            };
+            let name = super::code_mode::normalize_identifier(&tool_name.wire_name());
+            let code_mode_name = types::ToolName::plain(name.clone());
             routes.entry(code_mode_name).or_insert_with(|| ToolRoute {
                 registered_name: registered_name.clone(),
+            });
+            code_mode_tools.entry(name.clone()).or_insert_with(|| {
+                super::code_mode::NestedToolMetadata {
+                    description: tools::render_code_mode_tool_description(
+                        &name,
+                        &entry.description,
+                        &tools::sanitize_tool_schema(entry.schema.clone()),
+                        entry.freeform_format.as_ref(),
+                    ),
+                    name,
+                }
             });
         }
     }
@@ -370,6 +404,7 @@ pub(crate) fn finalize_tool_router(
         routes,
         model_routes,
         model_visible_specs: model_visible_specs.into(),
+        code_mode_tools: code_mode_tools.into_values().collect(),
     }
 }
 
@@ -434,6 +469,63 @@ impl fmt::Debug for ToolRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_mode_rejects_lossy_identifier_collisions() {
+        for plain_collision in [false, true] {
+            let mut registry = ToolRegistry::new();
+            tools::register_all(&mut registry);
+            for (registered, namespace, model_name) in [
+                ("collision-one", "mcp__review", Some("read-page")),
+                (
+                    if plain_collision {
+                        "mcp__review_read_page"
+                    } else {
+                        "collision-two"
+                    },
+                    if plain_collision { "" } else { "mcp__review" },
+                    if plain_collision {
+                        None
+                    } else {
+                        Some("read_page")
+                    },
+                ),
+            ] {
+                registry.register_dynamic(
+                    tools::ToolEntry {
+                        name: registered.into(),
+                        model_name: model_name.map(str::to_string),
+                        namespace: namespace.into(),
+                        toolset: "mcp".into(),
+                        ..tools::ToolEntry::lifecycle_defaults()
+                    },
+                    Arc::new(|_, _| Box::pin(async { Ok("unused".into()) })),
+                );
+            }
+            for mode in [types::ToolMode::CodeMode, types::ToolMode::CodeModeOnly] {
+                let error = build_tool_router(
+                    &registry,
+                    types::InteractionMode::Agent,
+                    mode,
+                    true,
+                    &HashSet::new(),
+                )
+                .unwrap_err();
+                assert!(
+                    error.to_string().contains("Code Mode identifier collision"),
+                    "{error}"
+                );
+            }
+            assert!(build_tool_router(
+                &registry,
+                types::InteractionMode::Agent,
+                types::ToolMode::Direct,
+                true,
+                &HashSet::new()
+            )
+            .is_ok());
+        }
+    }
 
     #[test]
     fn build_tool_call_rejects_invalid_json_before_dispatch() {

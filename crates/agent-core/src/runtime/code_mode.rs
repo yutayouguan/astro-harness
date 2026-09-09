@@ -57,7 +57,7 @@ const toolMetadata = JSON.parse(globalThis.__astroToolMetadataJson);
 for (const tool of toolMetadata) {
   tools[tool.name] = async (input) => decodeResponse(
     await hostInvoke(
-      tool.wire_name,
+      tool.name,
       JSON.stringify(input === undefined ? null : input),
     ),
   );
@@ -129,7 +129,6 @@ globalThis.Function = undefined;
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct NestedToolMetadata {
     pub(crate) name: String,
-    pub(crate) wire_name: String,
     pub(crate) description: String,
 }
 
@@ -720,7 +719,6 @@ mod tests {
                 &source,
                 &[NestedToolMetadata {
                     name: "echo".into(),
-                    wire_name: "echo".into(),
                     description: "echo input".into(),
                 }],
                 std::env::current_dir().unwrap().as_path(),
@@ -757,7 +755,6 @@ mod tests {
         .unwrap();
         let tools = vec![NestedToolMetadata {
             name: "echo".into(),
-            wire_name: "echo".into(),
             description: concat!(
                 "echo input\n\n",
                 "exec tool declaration:\n",
