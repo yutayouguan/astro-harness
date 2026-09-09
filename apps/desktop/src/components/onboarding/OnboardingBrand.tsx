@@ -1,4 +1,10 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { AstroLogoMark } from "../icons/AstroLogoMark";
@@ -52,7 +58,7 @@ export function OnboardingLogo({ compact = false }: { compact?: boolean }) {
 
 type Bounds = { x: number; y: number; width: number; height: number };
 /** One persistent visual object; anchors are measured, never hard-coded to a window size. */
-export function OnboardingBrandMotion({
+export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
   phase,
   onArrive,
 }: {
@@ -160,4 +166,4 @@ export function OnboardingBrandMotion({
     </motion.div>,
     document.body,
   );
-}
+});

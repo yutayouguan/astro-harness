@@ -73,3 +73,8 @@ test("registered commands support progress, completion, and settings reset", () 
   assert.match(app, /startNewChat\(\)\.then/);
   assert.match(app, /setInput\(starterPrompt\)/);
 });
+
+test("draft disk writes are dispatched off the UI thread", () => {
+  const native = readFileSync(new URL("../../../src-tauri/src/commands/ui/onboarding.rs", import.meta.url), "utf8");
+  assert.match(native, /pub async fn save_onboarding_progress[\s\S]*?spawn_blocking\(move \|\| save_step_at/);
+});

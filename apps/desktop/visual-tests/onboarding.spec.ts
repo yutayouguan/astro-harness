@@ -266,7 +266,7 @@ for (const [message, title] of [
     await page.getByRole("button", { name: "修改配置", exact: true }).click();
     if (title === "密钥或访问权限有问题") await expect(page.getByLabel("API Key", { exact: true })).toBeFocused();
     if (title === "模型或部署不存在") await expect(page.getByLabel("默认模型", { exact: true })).toBeFocused();
-    if (title === "连接测试超时" || title === "暂时无法连接服务") await expect(page.getByLabel("服务地址（base_url）", { exact: true })).toBeFocused();
+    if (title === "连接测试超时" || title === "暂时无法连接服务") await expect(page.getByLabel("服务地址", { exact: true })).toBeFocused();
     await page.unroute("**/__onboarding_mock/responses");
     await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: true, model: "qa-small", latency_ms: 1, message: "ok" } }));
     await page.getByRole("button", { name: "重试连接", exact: true }).click();
@@ -571,7 +571,7 @@ test("welcome and wizard reuse one moving brand element", async ({ page }) => {
 test("base_url is directly editable and edits invalidate model verification", async ({ page }, testInfo) => {
   await installTransport(page);
   await startProvider(page);
-  const address = page.getByLabel("服务地址（base_url）", { exact: true });
+  const address = page.getByLabel("服务地址", { exact: true });
   await expect(address).toBeVisible();
   await expect(address).toBeEditable();
   await expect(address).toHaveValue("http://127.0.0.1/mock/v1");
@@ -646,10 +646,41 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test("service address supports in-place typing without per-character saves or focus jumps", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  const address = page.getByLabel("服务地址", { exact: true });
+  await expect(page.locator(".onboarding-provider-form")).not.toContainText("base_url");
+  const template = "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1";
+  await address.fill(template);
+  await address.press("Tab");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe(template);
+  await address.focus();
+  await address.evaluate((input: HTMLInputElement) => {
+    input.dataset.qaField = "stable";
+    input.setSelectionRange(8, 21);
+  });
+  const savesBefore = await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "save_onboarding_progress").length);
+  // Slower than the old 180ms debounce: this used to trigger disk writes while typing.
+  await address.pressSequentially("my-resource", { delay: 220 });
+  await expect(address).toHaveValue("https://my-resource.services.ai.azure.com/openai/v1");
+  await expect(address).toBeFocused();
+  await expect(address).toHaveAttribute("data-qa-field", "stable");
+  expect(await address.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([19, 19]);
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "save_onboarding_progress").length)).toBe(savesBefore);
+  await address.press("ArrowLeft");
+  await address.press("Backspace");
+  await address.pressSequentially("X");
+  await expect(address).toHaveValue("https://my-resourXe.services.ai.azure.com/openai/v1");
+  await address.press("Tab");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("https://my-resourXe.services.ai.azure.com/openai/v1");
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["list_provider_models", "verify_onboarding_provider"].includes(x.cmd)))).toEqual([]);
+});
+
 test("credential URL is not saved and cannot be tested", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);
-  await page.getByLabel("服务地址（base_url）", { exact: true }).fill("https://example.com?api_key=qa-must-not-persist");
+  await page.getByLabel("服务地址", { exact: true }).fill("https://example.com?api_key=qa-must-not-persist");
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("暂时无法连接服务");

@@ -45,7 +45,7 @@ export const COPY = {
     searchModels: "搜索模型名称或 ID",
     noMatchingModels: "没有匹配的模型，试试其他关键词",
     modelLoadHint: "先获取模型列表，再选择默认模型。此步骤不发起聊天生成请求。",
-    endpoint: "服务地址（base_url）",
+    endpoint: "服务地址",
     test: "保存并测试连接",
     testing: "正在验证连接",
     testSuccess: "连接成功",
@@ -142,7 +142,7 @@ export const COPY = {
     noMatchingModels: "No matching models. Try another keyword.",
     modelLoadHint:
       "Load the provider's model list, then choose a default. This step does not generate a chat response.",
-    endpoint: "Service address (base_url)",
+    endpoint: "Service address",
     test: "Save and test connection",
     testing: "Verifying connection",
     testSuccess: "Connection successful",

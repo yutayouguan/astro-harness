@@ -351,11 +351,14 @@ pub async fn get_onboarding_state() -> Result<OnboardingStateDto, String> {
 }
 
 #[tauri::command]
-pub fn save_onboarding_progress(
+pub async fn save_onboarding_progress(
     step: String,
     draft: OnboardingDraft,
 ) -> Result<OnboardingStateDto, String> {
-    save_step_at(&home::default_memory_dir(), step.trim(), draft)
+    let base = home::default_memory_dir();
+    tauri::async_runtime::spawn_blocking(move || save_step_at(&base, step.trim(), draft))
+        .await
+        .map_err(|_| "初始化草稿保存任务失败".to_string())?
 }
 
 #[tauri::command]

@@ -246,6 +246,15 @@ export function FirstRunOnboarding({
   );
   const selectedProvider =
     providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  const providerOptions = useMemo(
+    () =>
+      providers.map((provider) => ({
+        value: provider.id,
+        label: provider.display_name,
+        icon: <ProviderBrandIcon kind={provider.kind} />,
+      })),
+    [providers],
+  );
 
   const draft: OnboardingDraft = {
     agent_name: agentName,
@@ -287,10 +296,15 @@ export function FirstRunOnboarding({
     [previewProviders],
   );
   useEffect(() => {
+    // Navigation is a checkpoint; only in-field editing is debounced.
+    if (step === "intro" || step === "complete" || handoff) return;
+    void saveProgress(step).catch(() => {});
+  }, [step, saveProgress, handoff]);
+  useEffect(() => {
     if (step === "intro" || step === "complete" || finishing || handoff) return;
     const timer = window.setTimeout(() => {
       void saveProgress(step).catch(() => {});
-    }, 180);
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [
     step,
@@ -1081,11 +1095,7 @@ export function FirstRunOnboarding({
                             modelsStatus === "loading"
                           }
                           onChange={selectProvider}
-                          options={providers.map((provider) => ({
-                            value: provider.id,
-                            label: provider.display_name,
-                            icon: <ProviderBrandIcon kind={provider.kind} />,
-                          }))}
+                          options={providerOptions}
                         />
                       </div>
 
@@ -1094,11 +1104,16 @@ export function FirstRunOnboarding({
                         <input
                           ref={endpointInputRef}
                           value={endpoint}
+                          inputMode="url"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          autoComplete="off"
                           disabled={
                             providerStatus === "testing" ||
                             modelsStatus === "loading"
                           }
                           spellCheck={false}
+                          onBlur={() => void saveProgress(step).catch(() => {})}
                           onChange={(event) => {
                             invalidateModelList();
                             setEndpoint(event.target.value);
