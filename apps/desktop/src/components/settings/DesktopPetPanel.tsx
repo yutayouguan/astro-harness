@@ -20,6 +20,7 @@ import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import { DESKTOP_PET_SCALE } from "../../lib/ui/desktopPetState";
 
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
@@ -640,9 +641,9 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               <span>{copy.size}</span>
               <input
                 type="range"
-                min="0.65"
-                max="1.35"
-                step="0.05"
+                min={DESKTOP_PET_SCALE.min}
+                max={DESKTOP_PET_SCALE.max}
+                step={DESKTOP_PET_SCALE.step}
                 value={scaleDraft ?? state.scale}
                 disabled={busy != null}
                 onChange={(event) => {

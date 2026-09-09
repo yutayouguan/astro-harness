@@ -16,6 +16,8 @@ pub const DESKTOP_PET_V2_WIDTH: u32 = DESKTOP_PET_V2_COLUMNS * DESKTOP_PET_V2_CE
 pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL_HEIGHT;
 pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
 pub const DESKTOP_PET_GROOMING_WIDTH: u32 = 6 * DESKTOP_PET_V2_CELL_WIDTH;
+pub const DESKTOP_PET_MIN_SCALE: f64 = 0.30;
+pub const DESKTOP_PET_MAX_SCALE: f64 = 1.35;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -179,8 +181,9 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
         style.validate().map_err(anyhow::Error::msg)?;
     }
     anyhow::ensure!(
-        state.scale.is_finite() && (0.65..=1.35).contains(&state.scale),
-        "桌宠大小必须在 0.65..=1.35 之间"
+        state.scale.is_finite()
+            && (DESKTOP_PET_MIN_SCALE..=DESKTOP_PET_MAX_SCALE).contains(&state.scale),
+        "桌宠大小必须在 0.30..=1.35 之间"
     );
     anyhow::ensure!(
         state.sprite_version_number.is_none() || state.sprite_version_number == Some(2),
@@ -297,6 +300,36 @@ mod tests {
         assert_eq!(
             fs::read(desktop_pet_state_path(temp.path())).unwrap(),
             before
+        );
+    }
+
+    #[test]
+    fn desktop_pet_small_scale_round_trips_without_clamping() {
+        let temp = tempfile::tempdir().unwrap();
+        for scale in [
+            DESKTOP_PET_MIN_SCALE,
+            0.325,
+            0.5,
+            0.65,
+            DESKTOP_PET_MAX_SCALE,
+        ] {
+            update_desktop_pet_state(temp.path(), |state| {
+                state.scale = scale;
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, scale);
+        }
+        for scale in [0.29, 1.36, f64::INFINITY] {
+            assert!(update_desktop_pet_state(temp.path(), |state| {
+                state.scale = scale;
+                Ok(())
+            })
+            .is_err());
+        }
+        assert_eq!(
+            read_desktop_pet_state(temp.path()).unwrap().scale,
+            DESKTOP_PET_MAX_SCALE
         );
     }
 

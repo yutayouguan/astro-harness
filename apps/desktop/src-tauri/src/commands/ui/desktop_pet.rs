@@ -673,7 +673,10 @@ pub async fn set_desktop_pet_scale(
     }
     let base = home::default_memory_dir();
     let state = types::update_desktop_pet_state(&base, |state| {
-        state.scale = scale.clamp(0.65, 1.35);
+        state.scale = scale.clamp(
+            types::desktop_pet::DESKTOP_PET_MIN_SCALE,
+            types::desktop_pet::DESKTOP_PET_MAX_SCALE,
+        );
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
     })
@@ -707,6 +710,15 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smallest_desktop_pet_window_is_less_than_half_the_previous_minimum() {
+        let size = window_size(types::desktop_pet::DESKTOP_PET_MIN_SCALE);
+        assert_eq!(size, LogicalSize::new(90.0, 102.0));
+        assert!(size.width <= window_size(0.65).width / 2.0);
+        // Two 28px toolbar buttons + gap/padding/border + 12px right inset.
+        assert!(size.width >= 28.0 * 2.0 + 6.0 + 10.0 + 2.0 + 12.0);
+    }
 
     #[test]
     fn builtin_naitang_assets_satisfy_native_animation_contract() {

@@ -42,7 +42,7 @@ pub struct DesktopPetArgs {
     /// apply 可选：生成所依据的原始宠物照片路径，用于设置页保留来源预览。
     #[serde(default)]
     pub source_path: Option<String>,
-    /// configure/apply 可选：窗口缩放，范围 0.65..=1.35。
+    /// configure/apply 可选：窗口缩放，范围 0.30..=1.35。
     #[serde(default)]
     pub scale: Option<f64>,
     /// configure/apply 可选：是否保持置顶。
@@ -345,7 +345,10 @@ fn apply_display_options(
     always_on_top: Option<bool>,
 ) {
     if let Some(scale) = scale.filter(|scale| scale.is_finite()) {
-        state.scale = scale.clamp(0.65, 1.35);
+        state.scale = scale.clamp(
+            types::desktop_pet::DESKTOP_PET_MIN_SCALE,
+            types::desktop_pet::DESKTOP_PET_MAX_SCALE,
+        );
     }
     if let Some(always_on_top) = always_on_top {
         state.always_on_top = always_on_top;
@@ -539,6 +542,15 @@ fn store_asset(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_pet_display_options_support_smaller_sizes() {
+        let mut state = types::DesktopPetState::default();
+        for (requested, expected) in [(-1.0, 0.3), (0.325, 0.325), (0.5, 0.5), (2.0, 1.35)] {
+            apply_display_options(&mut state, Some(requested), None);
+            assert_eq!(state.scale, expected);
+        }
+    }
     #[test]
     fn desktop_pet_matte_preserves_white_fur_connected_to_pastel_background() {
         let mut image = image::RgbaImage::from_pixel(12, 12, image::Rgba([220, 250, 235, 255]));

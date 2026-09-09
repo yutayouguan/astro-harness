@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
 description: 从用户照片生成 Astro 桌宠、可选配套壁纸、保存和切换宠物场景。用户说“生成桌宠”“配套宠物壁纸”“宠物场景”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 4
+astro_bundled_rev: 5
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 
@@ -54,7 +54,7 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 
 1. 使用 `image_gen` 原样返回的图片路径，不猜测文件名。
 2. 调用 `desktop_pet action=apply`，将路径放入 `imagePath`。如果使用了用户照片，同时把原图路径放入 `sourcePath`；`image_gen` 返回了 `provider` / `model` 时也原样传入。
-3. 默认启用桌宠并保持置顶；用户指定大小时将比例换算到 `scale` 的 `0.65..1.35` 范围。
+3. 默认启用桌宠并保持置顶；用户指定大小时将比例换算到 `scale` 的 `0.30..1.35` 范围。
 4. 成功后简短报告桌宠已显示，以及实际使用的形象方向；不要重复输出内部绝对路径。
 
 用户明确说“设为桌宠”“换成这个桌宠”时可直接应用，不需要二次确认。

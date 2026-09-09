@@ -5,6 +5,10 @@ the key/main window when shown, updated, clicked or restored.
 
 ## Focus and click routing
 
+The size slider supports 30%–135% in 5% steps. Native commands, chat tools and
+shared persistence use the same bounds. The minimum window is 90×102 logical
+pixels, less than half the former 65% minimum; existing saved sizes are preserved.
+
 - Native creation uses `focused(false)`, `focusable(false)` and first-mouse
   acceptance. Main also accepts its first click. On macOS, `show()` reaches
   `makeKeyAndOrderFront`; initial focus settings alone do not protect later shows.

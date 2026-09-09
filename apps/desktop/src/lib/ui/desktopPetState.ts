@@ -1,3 +1,5 @@
+export const DESKTOP_PET_SCALE = { min: 0.3, max: 1.35, step: 0.05 } as const;
+
 export type DesktopPetState = {
   revision: number;
   enabled: boolean;
