@@ -141,3 +141,46 @@ cargo test -p server --test config_sources_restart_test -- --test-threads=1
 项目 server 整体覆盖、缓存删除后定义与审批状态保留、配置/凭证变更使缓存失效、Hook
 内容变更不沿用旧审批，以及引用缺失时明确报错。每个子进程有超时和执行回执校验。
 此测试不启动真实 App、不执行 Hook 命令、不连接 MCP，也不等同于原生界面启动验收。
+
+## 原生 macOS 验收
+
+沿用仓库现有 Tauri 构建流程，使用专用验收入口，不改变普通开发启动命令：
+
+```bash
+node tools/verify-config-native.mjs
+# 恢复脚本上次输出的私有清单，不覆盖已有验收配置
+node tools/verify-config-native.mjs --resume /absolute/path/to/astro-config-native-XXXXXX/manifest.json
+```
+
+脚本创建独立应用标识、回环前端端口和临时数据根，内置一个禁用的 MCP server 和一条禁用
+Hook。专用 debug 二进制通过编译期 `ASTRO_NATIVE_ACCEPTANCE_ROOT` 绑定数据根，在日志与
+凭证加载前校验目录和标记；缺失、错误或软链接标记都会拒绝启动，不回落真实数据根。
+普通构建不设置该变量，release 构建不包含此分支。复制 QA 包后重新构建普通 dev 工件，
+避免共享 `target/debug/astro-agent` 留下验收专用身份。
+
+`ASTRO_ENV_HYDRATE=disabled` 显式跳过 Astro 的 `.env` 加载、登录 shell 密钥发现和自动
+持久化，默认行为不变。此开关不清空进程原有环境变量，也不禁用其他代码的 Keychain 访问；
+验收中不要添加真实账号或调用模型。必须使用自己的私有清单，恢复校验不是不可信二进制的
+安全沙箱。脚本会在执行前核对二进制中包含预期数据根，防止误拷贝普通构建产物。
+
+恢复入口校验应用标识、数据与日志路径、回环 URL、标记和二进制绑定；只跟踪精确 QA
+可执行路径，不按 `astro-agent` 名称结束其他实例。退出 QA 或中断脚本会停止其私有前端，
+保留验收文件。稍后重新打开 QA 包时仍绑定相同数据根，但必须恢复其私有前端；可以刷新
+窗口重新加载页面。屏幕锁定时停止 GUI 操作，解锁后再继续，不以后台进程存活代替 UI 验收。
+
+验证命令：
+
+```bash
+node --test tools/verify-config-native.test.mjs
+cargo test -p astro-agent --bin astro-agent native_acceptance -- --test-threads=1
+cargo test -p astro-agent --lib hydration_is_enabled -- --test-threads=1
+```
+
+2026-09-09 已观察到原生 MCP 页面显示独立 `mcp/servers.toml` 来源；将禁用 server 的默认
+审批改为“每次询问”后，原来源保存 `default_tools_approval_mode = "prompt"`，入口 TOML
+字节未变，server 仍禁用。没有执行 MCP/Hook 或模型调用；真实网络连接不在此验收结论内。
+
+验收故障记录：最初仅通过 `open --env` 传入隔离变量，重新唤起时未继承这些变量，曾打开
+真实数据根的日志和数据库。该实例已停止、失败 QA 包已禁用，未回滚或清理真实数据；当时
+真实 `config.toml` 和 `.env` 校验值未变。此后改为 debug 二进制绑定数据根，并核对实际打开
+的数据库路径与 `.env` 未生成；不能把早期失败尝试描述为“真实目录完全未被触及”。

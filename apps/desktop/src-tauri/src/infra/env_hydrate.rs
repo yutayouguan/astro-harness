@@ -339,6 +339,11 @@ fn persist_discovered_to_dotenv(
 
 /// 进程启动时调用一次。
 pub fn hydrate_process_env() {
+    // Explicit isolated launches must not import or persist the user's login-shell keys.
+    if !hydration_enabled(std::env::var("ASTRO_ENV_HYDRATE").ok().as_deref()) {
+        tracing::info!("environment hydration explicitly disabled");
+        return;
+    }
     let wanted = known_api_key_names();
     let path = astro_env_file();
 
@@ -364,5 +369,21 @@ pub fn hydrate_process_env() {
 
     if from_file == 0 && from_platform == 0 && persisted == 0 {
         tracing::debug!("no API env discovered; relying on keyring / manual provider keys");
+    }
+}
+
+fn hydration_enabled(setting: Option<&str>) -> bool {
+    setting != Some("disabled")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hydration_is_enabled_by_default_and_explicitly_disabled_for_isolation() {
+        assert!(hydration_enabled(None));
+        assert!(hydration_enabled(Some("enabled")));
+        assert!(!hydration_enabled(Some("disabled")));
     }
 }
