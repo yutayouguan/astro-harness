@@ -65,6 +65,7 @@ import MotionSwitch from "../ui/MotionSwitch";
 import { IconRefresh } from "../icons/NavIcons";
 import { SelectMenu } from "../ui/SelectMenu";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
+import { mcpDisplayState } from "../../lib/settings/mcpStatus";
 
 /** 新增抽屉的两种录入方式 */
 type AddTab = "json" | "form";
@@ -618,13 +619,27 @@ function serverEndpoint(server: McpServer): string {
   return server.url || "—";
 }
 
-function McpStatusBadge({ status }: { status?: McpRuntimeStatus }) {
+function McpStatusIndicator({
+  status,
+  enabled,
+  reconnecting = false,
+}: {
+  status?: McpRuntimeStatus;
+  enabled: boolean;
+  reconnecting?: boolean;
+}) {
   const { t } = useI18n();
-  if (!status) return null;
+  const state = mcpDisplayState(enabled, status, reconnecting);
+  const label = `${t("mcpTools.runtimeStatus")}: ${t(MCP_STATUS_LABEL[state])}`;
   return (
-    <span className="mcp-runtime-status" data-status={status.status}>
+    <span
+      className="mcp-runtime-status"
+      data-status={state}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
       <span className="mcp-runtime-status-dot" aria-hidden />
-      {t(MCP_STATUS_LABEL[status.status])}
     </span>
   );
 }
@@ -650,7 +665,7 @@ function McpRetryNote({ status }: { status?: McpRuntimeStatus }) {
 }
 
 /** 单个 MCP Server 卡片（开关、工具列表、刷新） */
-function McpServerCard({
+export function McpServerCard({
   server,
   onToggle,
   onToggleTool,
@@ -721,13 +736,19 @@ function McpServerCard({
         </div>
         <div className="mcp-server-meta">
           <div className="mcp-server-title-row">
-            <span className="mcp-server-name" title={server.sourcePath}>{server.name}</span>
+            <McpStatusIndicator
+              status={runtimeStatus}
+              enabled={server.enabled}
+              reconnecting={reconnecting}
+            />
+            <span className="mcp-server-name" title={server.sourcePath}>
+              {server.name}
+            </span>
             <span className="mcp-server-type">
               {t(MCP_TYPE_LABEL[server.type])}
             </span>
           </div>
           <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
-          <McpStatusBadge status={runtimeStatus} />
         </div>
         <button
           type="button"
@@ -893,7 +914,7 @@ function McpServerCard({
         {runtimeStatus?.status === "auth-required" ? (
           <button
             type="button"
-            className="mcp-btn-ghost"
+            className="mcp-server-action"
             disabled={authenticating}
             onClick={() => onAuthenticate(server.id)}
           >
@@ -906,7 +927,7 @@ function McpServerCard({
         {runtimeStatus?.authenticated ? (
           <button
             type="button"
-            className="mcp-btn-ghost"
+            className="mcp-server-action"
             disabled={authenticating}
             onClick={() => onLogout(server.id)}
           >
@@ -916,7 +937,7 @@ function McpServerCard({
         ) : null}
         <button
           type="button"
-          className="mcp-btn-ghost mcp-reconnect-btn"
+          className="mcp-server-action mcp-reconnect-btn"
           disabled={reconnecting}
           onClick={() => onReconnect(server.id)}
         >
@@ -929,7 +950,7 @@ function McpServerCard({
         </button>
         <button
           type="button"
-          className="mcp-server-remove"
+          className="mcp-server-action mcp-server-remove"
           onClick={() => onRemove(server.id)}
           aria-label={t("mcpTools.remove")}
         >
@@ -1324,13 +1345,20 @@ export function useMcpSection({
                 className={`tools-detail-item ${selectedDetailId === server.id ? "is-selected" : ""} ${catalogMode || server.enabled ? "" : "is-disabled"}`}
                 onClick={() => setSelectedDetailId(server.id)}
               >
-                <span className="tools-detail-item-title">{server.name}</span>
+                <span className="tools-detail-item-title">
+                  {!catalogMode ? (
+                    <McpStatusIndicator
+                      status={runtimeStatuses[server.id]}
+                      enabled={server.enabled}
+                      reconnecting={reconnectingServerIds.has(server.id)}
+                    />
+                  ) : null}
+                  {server.name}
+                </span>
                 <span className="tools-detail-item-meta">
-                  {!catalogMode && runtimeStatuses[server.id]
-                    ? t(MCP_STATUS_LABEL[runtimeStatuses[server.id]!.status])
-                    : server.catalogInstallable === false
-                      ? t("plugins.mcpPublic.discoveryOnly")
-                      : t(MCP_TYPE_LABEL[server.type])}
+                  {server.catalogInstallable === false
+                    ? t("plugins.mcpPublic.discoveryOnly")
+                    : t(MCP_TYPE_LABEL[server.type])}
                 </span>
               </button>
             ))}
@@ -1409,7 +1437,7 @@ export function useMcpSection({
                         {selectedRuntimeStatus?.status === "auth-required" ? (
                           <button
                             type="button"
-                            className="mcp-btn-ghost"
+                            className="mcp-server-action"
                             disabled={authenticatingServerIds.has(
                               selectedServer.id,
                             )}
@@ -1426,7 +1454,7 @@ export function useMcpSection({
                         {selectedRuntimeStatus?.authenticated ? (
                           <button
                             type="button"
-                            className="mcp-btn-ghost"
+                            className="mcp-server-action"
                             disabled={authenticatingServerIds.has(
                               selectedServer.id,
                             )}
@@ -1440,7 +1468,7 @@ export function useMcpSection({
                         ) : null}
                         <button
                           type="button"
-                          className="mcp-btn-ghost mcp-reconnect-btn"
+                          className="mcp-server-action mcp-reconnect-btn"
                           disabled={reconnectingServerIds.has(
                             selectedServer.id,
                           )}
@@ -1463,7 +1491,7 @@ export function useMcpSection({
                         </button>
                         <button
                           type="button"
-                          className="mcp-server-remove"
+                          className="mcp-server-action mcp-server-remove"
                           onClick={() => removeServer(selectedServer.id)}
                           aria-label={t("mcpTools.remove")}
                         >
@@ -1498,11 +1526,13 @@ export function useMcpSection({
                       <span className="tools-detail-label">
                         {t("mcpTools.runtimeStatus")}
                       </span>
-                      {selectedRuntimeStatus ? (
-                        <McpStatusBadge status={selectedRuntimeStatus} />
-                      ) : (
-                        <span>{t("mcpTools.status.loading")}</span>
-                      )}
+                      <McpStatusIndicator
+                        status={selectedRuntimeStatus}
+                        enabled={selectedServer.enabled}
+                        reconnecting={reconnectingServerIds.has(
+                          selectedServer.id,
+                        )}
+                      />
                     </div>
                   ) : null}
                   {selectedServer.catalogInstallable === false ? (
