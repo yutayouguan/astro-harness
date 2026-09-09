@@ -1013,6 +1013,10 @@ export const zh = {
   "mcpTools.refresh": "刷新工具",
   "mcpTools.refreshing": "刷新中…",
   "mcpTools.noToolsYet": "尚未发现工具，点击刷新连接服务器",
+  "mcpTools.noToolsTitle": "暂无工具",
+  "mcpTools.noToolsHint": "刷新以获取服务器提供的工具。",
+  "mcpTools.noToolsDisabledHint": "启用服务器后，可刷新工具列表。",
+  "mcpTools.serverToggle": "启用 {name}",
   "mcpTools.legacySseError":
     "不再支持旧版 SSE 传输。请改用服务器提供的 Streamable HTTP /mcp 地址；/sse 地址不能自动转换。",
 
@@ -3979,6 +3983,10 @@ export const en: Record<MessageKey, string> = {
   "mcpTools.refresh": "Refresh tools",
   "mcpTools.refreshing": "Refreshing…",
   "mcpTools.noToolsYet": "No tools discovered yet — click refresh to connect",
+  "mcpTools.noToolsTitle": "No tools yet",
+  "mcpTools.noToolsHint": "Refresh to discover the tools provided by this server.",
+  "mcpTools.noToolsDisabledHint": "Enable the server to refresh its tool list.",
+  "mcpTools.serverToggle": "Enable {name}",
   "mcpTools.legacySseError":
     "Legacy SSE transport is no longer supported. Use the server's Streamable HTTP /mcp endpoint; an /sse URL cannot be converted automatically.",
 

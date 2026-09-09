@@ -708,6 +708,14 @@ export function McpServerCard({
   const envKeys = Object.keys(server.env ?? {});
   const forwardedEnvKeys = server.envVars ?? [];
   const envHeaderEntries = Object.entries(server.envHttpHeaders ?? {});
+  const hasConnectionDetails = Boolean(
+    server.cwd ||
+      envKeys.length ||
+      forwardedEnvKeys.length ||
+      headerKeys.length ||
+      server.bearerTokenEnvVar ||
+      envHeaderEntries.length,
+  );
   const approvalOptions = MCP_APPROVAL_MODES.map((mode) => ({
     value: mode,
     label: t(`mcpTools.approval.${mode}` as MessageKey),
@@ -728,7 +736,7 @@ export function McpServerCard({
         }));
   return (
     <article
-      className={`mcp-server-card ${server.enabled ? "is-on" : "is-off"}`}
+      className={`mcp-server-card mcp-server-card--personal ${server.enabled ? "is-on" : "is-off"}`}
     >
       <header className="mcp-server-head">
         <div className="mcp-server-icon" aria-hidden>
@@ -741,20 +749,36 @@ export function McpServerCard({
               enabled={server.enabled}
               reconnecting={reconnecting}
             />
-            <span className="mcp-server-name" title={server.sourcePath}>
+            <span
+              className="mcp-server-name"
+              title={
+                server.sourcePath
+                  ? `${server.name}\n${server.sourcePath}`
+                  : server.name
+              }
+            >
               {server.name}
             </span>
-            <span className="mcp-server-type">
-              {t(MCP_TYPE_LABEL[server.type])}
-            </span>
           </div>
-          <code className="mcp-server-cmd">{serverEndpoint(server)}</code>
+          <div className="mcp-server-subtitle">
+            <span
+              className="mcp-server-type"
+              title={t(MCP_TYPE_LABEL[server.type])}
+              aria-label={t(MCP_TYPE_LABEL[server.type])}
+            >
+              {server.type === "stdio" ? "stdio" : "HTTP"}
+            </span>
+            <code className="mcp-server-cmd" title={serverEndpoint(server)}>
+              {serverEndpoint(server)}
+            </code>
+          </div>
         </div>
         <button
           type="button"
           role="switch"
           className="tool-toggle"
           aria-checked={server.enabled}
+          aria-label={t("mcpTools.serverToggle", { name: server.name })}
           onClick={() => onToggle(server.id)}
         >
           <span className="tool-toggle-thumb" />
@@ -770,71 +794,85 @@ export function McpServerCard({
         </p>
       ) : null}
       <McpRetryNote status={runtimeStatus} />
-      <div className="mcp-server-env">
-        <span className="mcp-server-env-key">
-          {t("mcpTools.startupTimeout")}: {server.startupTimeoutSecs}s
-        </span>
-        <span className="mcp-server-env-key">
-          {t("mcpTools.toolTimeout")}: {server.toolTimeoutSecs}s
-        </span>
-        {server.required ? (
-          <span className="mcp-server-env-key">{t("mcpTools.required")}</span>
-        ) : null}
-        {server.cwd ? (
-          <span className="mcp-server-env-key">
-            {t("mcpTools.cwd")}: {server.cwd}
+      <div className="mcp-card-configuration">
+        <div className="mcp-server-facts">
+          <span className="mcp-server-fact">
+            <Clock3 size={12} aria-hidden />
+            {t("mcpTools.startupTimeout")}{" "}
+            <strong>{server.startupTimeoutSecs}s</strong>
           </span>
-        ) : null}
-        {envKeys.map((k) => (
-          <span key={`env-${k}`} className="mcp-server-env-key">
-            {k}
+          <span className="mcp-server-fact">
+            <Timer size={12} aria-hidden />
+            {t("mcpTools.toolTimeout")}{" "}
+            <strong>{server.toolTimeoutSecs}s</strong>
           </span>
-        ))}
-        {forwardedEnvKeys.map((k) => (
-          <span key={`env-ref-${k}`} className="mcp-server-env-key">
-            {k} ← env
-          </span>
-        ))}
-        {headerKeys.map((k) => (
-          <span key={`hdr-${k}`} className="mcp-server-env-key">
-            {k}
-          </span>
-        ))}
-        {server.bearerTokenEnvVar ? (
-          <span className="mcp-server-env-key">
-            Authorization ← {server.bearerTokenEnvVar}
-          </span>
-        ) : null}
-        {envHeaderEntries.map(([header, envVar]) => (
-          <span key={`env-hdr-${header}`} className="mcp-server-env-key">
-            {header} ← {envVar}
-          </span>
-        ))}
-      </div>
-      <div className="mcp-approval-setting">
-        <div>
-          <span className="mcp-tool-list-label">
-            {t("mcpTools.approval.default")}
-          </span>
-          <span className="mcp-approval-hint">
-            {t(
-              `mcpTools.approval.hint.${server.defaultToolsApprovalMode}` as MessageKey,
-            )}
-          </span>
+          {server.required ? (
+            <span className="mcp-server-env-key">{t("mcpTools.required")}</span>
+          ) : null}
         </div>
-        <SelectMenu
-          size="sm"
-          value={server.defaultToolsApprovalMode}
-          options={approvalOptions}
-          onChange={(value) =>
-            onSetServerApprovalMode(server.id, value as McpToolApprovalMode)
-          }
-          aria-label={t("mcpTools.approval.default")}
-        />
+        {hasConnectionDetails ? (
+          <div className="mcp-server-env">
+            {server.cwd ? (
+              <span className="mcp-server-env-key">
+                {t("mcpTools.cwd")}: {server.cwd}
+              </span>
+            ) : null}
+            {envKeys.map((k) => (
+              <span key={`env-${k}`} className="mcp-server-env-key">
+                {k}
+              </span>
+            ))}
+            {forwardedEnvKeys.map((k) => (
+              <span key={`env-ref-${k}`} className="mcp-server-env-key">
+                {k} ← env
+              </span>
+            ))}
+            {headerKeys.map((k) => (
+              <span key={`hdr-${k}`} className="mcp-server-env-key">
+                {k}
+              </span>
+            ))}
+            {server.bearerTokenEnvVar ? (
+              <span className="mcp-server-env-key">
+                Authorization ← {server.bearerTokenEnvVar}
+              </span>
+            ) : null}
+            {envHeaderEntries.map(([header, envVar]) => (
+              <span key={`env-hdr-${header}`} className="mcp-server-env-key">
+                {header} ← {envVar}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="mcp-approval-setting">
+          <div>
+            <span className="mcp-tool-list-label">
+              {t("mcpTools.approval.default")}
+            </span>
+            <span className="mcp-approval-hint">
+              {t(
+                `mcpTools.approval.hint.${server.defaultToolsApprovalMode}` as MessageKey,
+              )}
+            </span>
+          </div>
+          <SelectMenu
+            size="sm"
+            className="mcp-card-approval-select"
+            value={server.defaultToolsApprovalMode}
+            options={approvalOptions}
+            onChange={(value) =>
+              onSetServerApprovalMode(server.id, value as McpToolApprovalMode)
+            }
+            aria-label={t("mcpTools.approval.default")}
+          />
+        </div>
       </div>
       <div className={`mcp-tool-list ${server.enabled ? "" : "is-disabled"}`}>
         <div className="mcp-tool-list-head">
-          <span className="mcp-tool-list-label">{t("mcpTools.tools")}</span>
+          <span className="mcp-tool-list-label">
+            {t("mcpTools.tools")}{" "}
+            <span className="mcp-tool-count">{toolRows.length}</span>
+          </span>
           <button
             type="button"
             className="mcp-btn-ghost mcp-refresh-btn"
@@ -850,7 +888,21 @@ export function McpServerCard({
           </button>
         </div>
         {toolRows.length === 0 ? (
-          <p className="mcp-tool-empty">{t("mcpTools.noToolsYet")}</p>
+          <div className="mcp-card-empty">
+            <List size={18} aria-hidden />
+            <div>
+              <p className="mcp-card-empty-title">
+                {t("mcpTools.noToolsTitle")}
+              </p>
+              <p className="mcp-tool-empty">
+                {t(
+                  server.enabled
+                    ? "mcpTools.noToolsHint"
+                    : "mcpTools.noToolsDisabledHint",
+                )}
+              </p>
+            </div>
+          </div>
         ) : (
           <ul className="mcp-tool-rows">
             {toolRows.map((tool) => {
@@ -910,54 +962,58 @@ export function McpServerCard({
           </ul>
         )}
       </div>
-      <div className="mcp-server-actions">
-        {runtimeStatus?.status === "auth-required" ? (
+      <footer className="mcp-server-footer">
+        <div className="mcp-server-actions">
+          {runtimeStatus?.status === "auth-required" ? (
+            <button
+              type="button"
+              className="mcp-server-action"
+              disabled={authenticating}
+              onClick={() => onAuthenticate(server.id)}
+            >
+              <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+              {authenticating
+                ? t("mcpTools.authenticating")
+                : t("mcpTools.authenticate")}
+            </button>
+          ) : null}
+          {runtimeStatus?.authenticated ? (
+            <button
+              type="button"
+              className="mcp-server-action"
+              disabled={authenticating}
+              onClick={() => onLogout(server.id)}
+            >
+              <KeyRound size={13} strokeWidth={2.2} aria-hidden />
+              {authenticating ? t("mcpTools.loggingOut") : t("mcpTools.logout")}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="mcp-server-action"
-            disabled={authenticating}
-            onClick={() => onAuthenticate(server.id)}
+            className="mcp-server-action mcp-reconnect-btn"
+            disabled={reconnecting}
+            onClick={() => onReconnect(server.id)}
           >
-            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-            {authenticating
-              ? t("mcpTools.authenticating")
-              : t("mcpTools.authenticate")}
+            <IconRefresh
+              width={13}
+              height={13}
+              className={reconnecting ? "is-spin" : undefined}
+            />
+            {reconnecting
+              ? t("mcpTools.reconnecting")
+              : t("mcpTools.reconnect")}
           </button>
-        ) : null}
-        {runtimeStatus?.authenticated ? (
           <button
             type="button"
-            className="mcp-server-action"
-            disabled={authenticating}
-            onClick={() => onLogout(server.id)}
+            className="mcp-server-action mcp-server-remove"
+            onClick={() => onRemove(server.id)}
+            aria-label={t("mcpTools.remove")}
           >
-            <KeyRound size={13} strokeWidth={2.2} aria-hidden />
-            {authenticating ? t("mcpTools.loggingOut") : t("mcpTools.logout")}
+            <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+            {t("mcpTools.remove")}
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="mcp-server-action mcp-reconnect-btn"
-          disabled={reconnecting}
-          onClick={() => onReconnect(server.id)}
-        >
-          <IconRefresh
-            width={13}
-            height={13}
-            className={reconnecting ? "is-spin" : undefined}
-          />
-          {reconnecting ? t("mcpTools.reconnecting") : t("mcpTools.reconnect")}
-        </button>
-        <button
-          type="button"
-          className="mcp-server-action mcp-server-remove"
-          onClick={() => onRemove(server.id)}
-          aria-label={t("mcpTools.remove")}
-        >
-          <Trash2 size={13} strokeWidth={2.25} aria-hidden />
-          {t("mcpTools.remove")}
-        </button>
-      </div>
+        </div>
+      </footer>
     </article>
   );
 }

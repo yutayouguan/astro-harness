@@ -14,11 +14,15 @@ function Fixture({
   state,
   list = false,
   pending = false,
+  longContent = false,
+  withTools = false,
 }: {
   enabled?: boolean;
   state?: McpRuntimeState;
   list?: boolean;
   pending?: boolean;
+  longContent?: boolean;
+  withTools?: boolean;
 }) {
   const [reconnecting, setReconnecting] = useState(pending);
   const [server] = parseMcpJson(
@@ -39,7 +43,44 @@ function Fixture({
       style={{ gridTemplateColumns: "minmax(0, 1fr)" }}
     >
       <McpServerCard
-        server={{ ...server, enabled, name: "Config QA" }}
+        server={{
+          ...server,
+          enabled,
+          name: longContent
+            ? "Research Workspace — 一个很长的服务器名称，用于验证窄屏布局"
+            : "Config QA",
+          command: longContent
+            ? "/workspace/team/research/integrations/documentation/mcp-server --namespace=engineering-knowledge-base"
+            : server.command,
+          cwd: longContent
+            ? "/workspace/team/research/very-long-project-directory/engineering-documentation"
+            : undefined,
+          envVars: longContent
+            ? [
+                "DOCUMENTATION_WORKSPACE_SERVICE_TOKEN",
+                "RESEARCH_SERVER_CONFIG_PATH",
+              ]
+            : [],
+          discovered: withTools
+            ? [
+                {
+                  name: "search_documents_in_engineering_knowledge_base",
+                  description: "Search documents by title and content.",
+                  readOnlyHint: true,
+                },
+                {
+                  name: "read_document",
+                  description: "Read a selected document.",
+                  readOnlyHint: true,
+                },
+                {
+                  name: "update_document",
+                  description: "Update document content.",
+                  destructiveHint: true,
+                },
+              ]
+            : [],
+        }}
         runtimeStatus={
           state
             ? normalizeMcpRuntimeStatus({ id: server.id, status: state })
@@ -94,6 +135,23 @@ export const Connected: Story = { args: { enabled: true, state: "connected" } };
 export const CompactList: Story = { args: { enabled: false, list: true } };
 export const Reconnecting: Story = {
   args: { enabled: true, state: "error", pending: true },
+};
+export const LongContent: Story = {
+  args: {
+    enabled: true,
+    state: "connected",
+    longContent: true,
+    withTools: true,
+  },
+};
+export const LongContentList: Story = {
+  args: {
+    enabled: true,
+    state: "connected",
+    longContent: true,
+    withTools: true,
+    list: true,
+  },
 };
 export const AllStates: Story = {
   render: () => (

@@ -19,6 +19,11 @@ for (const story of ["disabled", "compact-list"]) {
       expect(second.height).toBe(first.height);
       expect(second.y).toBe(first.y);
       expect(second.x - (first.x + first.width)).toBeCloseTo(8, 0);
+      const footer = (await page.locator(".mcp-server-footer").boundingBox())!;
+      expect(second.x + second.width).toBeCloseTo(footer.x + footer.width, 0);
+      await expect(page.getByText("暂无工具", { exact: true })).toBeVisible();
+      await expect(page.locator(".mcp-tool-count")).toHaveText("0");
+      expect(await page.locator(".mcp-card-approval-select .select-menu-value").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
       const styles = await page.locator(".mcp-server-action").evaluateAll(buttons => buttons.map(button => {
         const style = getComputedStyle(button);
         return [style.padding, style.borderRadius, style.borderWidth, style.lineHeight, style.fontWeight, style.backgroundImage, style.boxShadow];
@@ -44,6 +49,27 @@ test("every runtime state has a visible, labelled status light", async ({ page }
   expect(await color("connected")).not.toBe(await color("error"));
   expect(await color("connected")).not.toBe(await color("connecting"));
 });
+
+for (const story of ["long-content", "long-content-list"]) {
+  for (const width of [320, 420, 1100]) {
+    test(`${story} wraps metadata and tools at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 1100 });
+      await page.goto(`/iframe.html?id=settings-mcpservercard--${story}&viewMode=story`);
+      await expect(page.locator(".mcp-tool-count")).toHaveText("3");
+      await expect(page.locator(".mcp-card-empty")).toHaveCount(0);
+      await expect(page.locator(".mcp-server-name")).toHaveAttribute("title", /一个很长的服务器名称/);
+      await expect(page.locator(".mcp-server-cmd")).toHaveAttribute("title", /engineering-knowledge-base/);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      expect(await page.locator(".mcp-card-approval-select .select-menu-value").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      const card = (await page.locator(".mcp-server-card").boundingBox())!;
+      for (const control of await page.locator(".mcp-tool-controls").all()) {
+        const box = (await control.boundingBox())!;
+        expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width);
+      }
+      await page.locator(".mcp-server-card").screenshot({ path: testInfo.outputPath(`${story}-${width}.png`) });
+    });
+  }
+}
 
 test("reconnect preserves button layout while pending", async ({ page }) => {
   await page.goto("/iframe.html?id=settings-mcpservercard--connected&viewMode=story");

@@ -718,6 +718,209 @@ html[data-theme="dark"] .mcp-brand-icon-shell {
   white-space: nowrap;
 }
 
+/* Personal MCP cards: identity, configuration, tools, then a stable action footer. */
+.mcp-server-card--personal {
+  container: mcp-card / inline-size;
+  gap: 12px;
+}
+
+.mcp-server-card--personal .mcp-server-meta {
+  gap: 5px;
+}
+
+.mcp-server-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-server-subtitle .mcp-server-type {
+  max-width: none;
+  padding: 2px 6px;
+  line-height: 1.2;
+}
+
+.mcp-server-subtitle .mcp-server-cmd {
+  flex: 1;
+  min-width: 0;
+}
+
+.mcp-card-configuration {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-server-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  color: var(--ink-mute);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mcp-server-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mcp-server-fact strong {
+  color: var(--ink-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-server-card--personal .mcp-server-env-key {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.mcp-server-card--personal .mcp-approval-setting {
+  gap: 12px;
+  padding: 10px 12px;
+  border-width: var(--settings-panel-border-width, 0.5px);
+  border-radius: 12px;
+}
+
+.mcp-server-card--personal .mcp-approval-setting > div:first-child {
+  flex: 1;
+  gap: 4px;
+}
+
+.mcp-server-card--personal .mcp-card-approval-select {
+  width: 136px;
+  min-width: 136px;
+  max-width: none;
+}
+
+.mcp-server-card--personal .mcp-approval-hint {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mcp-server-card--personal .mcp-tool-list {
+  min-width: 0;
+  width: 100%;
+  margin-top: 0;
+}
+
+.mcp-server-card--personal .mcp-tool-list.is-disabled {
+  opacity: 1;
+}
+
+.mcp-server-card--personal .mcp-tool-list-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+.mcp-tool-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  color: var(--ink-mute);
+  font-size: 10px;
+  line-height: 1.6;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-server-card--personal .mcp-tool-list-head > .mcp-refresh-btn {
+  height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.mcp-card-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: var(--settings-panel-border-width, 0.5px) dashed var(--header-chip-border);
+  border-radius: 10px;
+  color: var(--ink-mute);
+}
+
+.mcp-card-empty > svg {
+  flex: 0 0 auto;
+}
+
+.mcp-card-empty > div {
+  min-width: 0;
+}
+
+.mcp-card-empty-title {
+  margin: 0 0 3px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mcp-card-empty .mcp-tool-empty {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mcp-server-card--personal .mcp-tool-name {
+  overflow-wrap: anywhere;
+}
+
+.mcp-server-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: var(--settings-panel-border-width, 0.5px) solid var(--header-chip-border);
+}
+
+.mcp-server-footer .mcp-server-actions {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.mcp-server-grid.is-list .mcp-server-card.mcp-server-card--personal {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.mcp-server-grid.is-list .mcp-server-card--personal .mcp-server-head {
+  flex: none;
+}
+
+.mcp-server-grid.is-list .mcp-server-card--personal .mcp-server-env {
+  display: flex;
+}
+
+@container mcp-card (max-width: 300px) {
+  .mcp-server-card--personal .mcp-approval-setting {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .mcp-server-card--personal .mcp-card-approval-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mcp-server-card--personal .mcp-tool-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mcp-server-card--personal .mcp-tool-controls {
+    justify-content: space-between;
+  }
+}
+
 /* ── MCP add dialog ── */
 /* 添加 MCP：右侧抽屉（对齐 skills-preview / cron-run-drawer） */
 .mcp-add-drawer-backdrop {
