@@ -69,6 +69,8 @@ import { ProviderBrandIcon } from "../icons/ProviderIcons";
 import { Button, SelectMenu } from "../ui";
 import { OnboardingLogo, OnboardingBrandMotion } from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
+import { OnboardingPreferences } from "./OnboardingPreferences";
+import { DesktopPreferencePreviewContext } from "../../hooks/settings/useDesktopPreference";
 import { ConnectionIssue } from "./ConnectionIssue";
 import { COPY } from "./onboardingCopy";
 import { onboardingModelOptions } from "../../lib/ui/onboardingModels";
@@ -149,6 +151,13 @@ export function FirstRunOnboarding({
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [direction, setDirection] = useState(1);
   const [agentName, setAgentName] = useState(initialDraft.agent_name);
+  const [petChoice, setPetChoice] = useState<boolean | null>(
+    initialDraft.pet_enabled ?? null,
+  );
+  const [previewUsage, setPreviewUsage] = useState({
+    notifications: false,
+    autostart: false,
+  });
   const [currentAgentName, setCurrentAgentName] = useState("Astro");
   const [providersState, setProvidersState] =
     useState<ProvidersStateDto | null>(
@@ -284,6 +293,7 @@ export function FirstRunOnboarding({
     endpoint,
     workspace_path: workspacePath,
     permission_preset: permissionPreset,
+    pet_enabled: petChoice,
   };
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -335,6 +345,7 @@ export function FirstRunOnboarding({
     endpoint,
     workspacePath,
     permissionPreset,
+    petChoice,
     saveProgress,
     finishing,
     handoff,
@@ -1084,6 +1095,27 @@ export function FirstRunOnboarding({
                       }}
                     />
                   </label>
+                  <DesktopPreferencePreviewContext.Provider
+                    value={{
+                      values: previewUsage,
+                      change: (kind, value) =>
+                        setPreviewUsage((current) => ({
+                          ...current,
+                          [kind]: value,
+                        })),
+                    }}
+                  >
+                    <OnboardingPreferences
+                      locale={locale}
+                      preview={Boolean(previewProviders)}
+                      petChoice={petChoice}
+                      onPetChoice={(value) => {
+                        setPetChoice(value);
+                        draftRef.current.pet_enabled = value;
+                        void saveProgress(step).catch(() => {});
+                      }}
+                    />
+                  </DesktopPreferencePreviewContext.Provider>
                 </>
               ) : null}
 

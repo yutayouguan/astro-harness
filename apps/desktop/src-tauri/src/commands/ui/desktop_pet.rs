@@ -360,6 +360,12 @@ fn place_near_bottom_right<R: Runtime>(window: &WebviewWindow<R>) {
 }
 
 fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> Result<(), String> {
+    if !super::onboarding::pet_visibility_allowed_at(&home::default_memory_dir()) {
+        if let Some(window) = app.get_webview_window(PET_WINDOW_LABEL) {
+            window.hide().map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
     // ASTRO_MEMORY_DIR may live outside $HOME. Grant only the configured UI asset domain,
     // never arbitrary source directories, so custom homes work with the asset protocol.
     app.asset_protocol_scope()

@@ -42,6 +42,11 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
     if (!localStorage.getItem("qa.providers")) localStorage.setItem("qa.providers", JSON.stringify(initialProviders));
     const readState = () => JSON.parse(localStorage.getItem("qa.state")!);
     const readProviders = () => JSON.parse(localStorage.getItem("qa.providers")!);
+    if (!localStorage.getItem("qa.preferences")) localStorage.setItem("qa.preferences", JSON.stringify({
+      notifications: false, autostart: false,
+      pet: { enabled: false, hasAsset: false, previewPath: null, spriteVersionNumber: null, displayName: null },
+    }));
+    const readPreferences = () => JSON.parse(localStorage.getItem("qa.preferences")!);
     let projects = [{ id: "default", name: "主空间", roots: ["/tmp/qa-default"], position: 0, createdAt: "", updatedAt: "" }];
     let agentName = "Astro";
     let receipt: string | null = null;
@@ -71,6 +76,11 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           case "complete_onboarding": {
             if (args.verificationToken !== "qa-proof" || receipt !== snapshot() || w.__invalidateProof) throw Error("ONBOARDING_VERIFICATION_REQUIRED");
             const state = { ...readState(), step: "complete", completed: true, should_show: false };
+            if (typeof state.draft.pet_enabled === "boolean") {
+              const prefs = readPreferences();
+              prefs.pet.enabled = state.draft.pet_enabled;
+              localStorage.setItem("qa.preferences", JSON.stringify(prefs));
+            }
             localStorage.setItem("qa.state", JSON.stringify(state)); return state;
           }
           case "get_providers_state":
@@ -115,6 +125,17 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
               workspace_dir: "/tmp/qa-default", memory_dir: "/tmp/qa-home", grpc_address: "",
               default_workspace_dir: "/tmp/qa-default",
               default_workspace_display_path: "/tmp/qa-default" };
+          case "get_onboarding_pet": return readPreferences().pet;
+          case "get_task_notifications_enabled": return readPreferences().notifications;
+          case "get_desktop_autostart": return readPreferences().autostart;
+          case "set_task_notifications_enabled":
+          case "set_desktop_autostart": {
+            if (w.__denyPreference === cmd) throw Error("preference denied");
+            const prefs = readPreferences();
+            prefs[cmd === "set_desktop_autostart" ? "autostart" : "notifications"] = args.enabled;
+            localStorage.setItem("qa.preferences", JSON.stringify(prefs));
+            return args.enabled;
+          }
           case "check_onboarding_workspace":
             return { path: args.path, status: w.__workspaceStatus ?? "ready" };
           case "set_default_agent_name": agentName = args.name; return { id: "default", name: agentName };
@@ -177,6 +198,76 @@ async function finishVerified(page: Page) {
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await page.getByRole("button", { name: "完成设置", exact: true }).click();
   await expect(page.getByRole("heading", { name: "一切准备就绪", exact: true })).toBeVisible();
+}
+
+test("optional preferences default off, pet stays pending until completion", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  for (const name of ["桌面宠物", "任务通知", "登录时启动"]) {
+    await expect(page.getByRole("switch", { name, exact: true })).toBeEnabled();
+    await expect(page.getByRole("switch", { name, exact: true })).not.toBeChecked();
+  }
+  await expect(page.getByAltText("桌面小伙伴预览")).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["set_task_notifications_enabled", "set_desktop_autostart"].includes(x.cmd)))).toEqual([]);
+  await page.getByRole("switch", { name: "桌面宠物", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.pet_enabled)).toBe(true);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.preferences")!).pet.enabled)).toBe(false);
+  await page.getByRole("switch", { name: "任务通知", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "任务通知", exact: true })).toBeChecked();
+  await page.getByRole("switch", { name: "登录时启动", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "登录时启动", exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await verifyProvider(page);
+  await finishVerified(page);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.preferences")!).pet.enabled)).toBe(true);
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd.includes("generate_desktop_pet")))).toEqual([]);
+});
+
+test("missing existing pet is not silently replaced with the builtin companion", async ({ page }) => {
+  await installTransport(page);
+  await page.addInitScript(() => localStorage.setItem("qa.preferences", JSON.stringify({
+    notifications: false, autostart: false,
+    pet: { enabled: false, hasAsset: false, previewPath: "/missing/user-pet.png", spriteVersionNumber: null, displayName: "Existing pet" },
+  })));
+  await startProvider(page);
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "桌面宠物", exact: true })).toBeDisabled();
+  await expect(page.getByRole("img", { name: "桌宠资源不可用" })).toBeVisible();
+  await expect(page.getByAltText("桌面小伙伴预览")).toHaveCount(0);
+});
+
+test("rerun preserves current preferences when unchanged", async ({ page }) => {
+  await installTransport(page);
+  await page.addInitScript(() => localStorage.setItem("qa.preferences", JSON.stringify({
+    notifications: true, autostart: true,
+    pet: { enabled: true, hasAsset: true, previewPath: null, spriteVersionNumber: null, displayName: "Existing pet" },
+  })));
+  await startProvider(page);
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  for (const name of ["桌面宠物", "任务通知", "登录时启动"]) await expect(page.getByRole("switch", { name, exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await verifyProvider(page);
+  await finishVerified(page);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.preferences")!))).toMatchObject({ notifications: true, autostart: true, pet: { enabled: true } });
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["set_task_notifications_enabled", "set_desktop_autostart"].includes(x.cmd)))).toEqual([]);
+});
+
+for (const [label, cmd] of [["任务通知", "set_task_notifications_enabled"], ["登录时启动", "set_desktop_autostart"]]) {
+  test(`failed optional preference rolls back: ${label}`, async ({ page }) => {
+    await installTransport(page);
+    await startProvider(page);
+    await page.getByRole("button", { name: "返回", exact: true }).click();
+    await page.evaluate(cmd => { (window as any).__denyPreference = cmd; }, cmd);
+    const control = page.getByRole("switch", { name: label, exact: true });
+    await control.click();
+    await expect(page.locator(".desktop-preference-error")).toBeVisible();
+    await expect(control).not.toBeChecked();
+    await expect(control).toBeEnabled();
+    await page.evaluate(() => { (window as any).__denyPreference = null; });
+    await control.click();
+    await expect(control).toBeChecked();
+  });
 }
 
 test("model connection is mandatory; credentials alone do not unlock setup", async ({ page }) => {

@@ -133,6 +133,7 @@ pub struct OnboardingDraft {
     pub endpoint: String,
     pub workspace_path: String,
     pub permission_preset: String,
+    pub pet_enabled: Option<bool>,
 }
 
 impl Default for OnboardingDraft {
@@ -144,6 +145,7 @@ impl Default for OnboardingDraft {
             endpoint: String::new(),
             workspace_path: String::new(),
             permission_preset: "ask_for_approval".into(),
+            pet_enabled: None,
         }
     }
 }
@@ -362,7 +364,20 @@ pub async fn save_onboarding_progress(
 }
 
 #[tauri::command]
-pub fn complete_onboarding(verification_token: String) -> Result<OnboardingStateDto, String> {
+pub async fn complete_onboarding(
+    app: tauri::AppHandle,
+    verification_token: String,
+) -> Result<OnboardingStateDto, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved = complete_onboarding_inner(verification_token)?;
+        super::desktop_pet::restore_window(&app);
+        Ok(saved)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn complete_onboarding_inner(verification_token: String) -> Result<OnboardingStateDto, String> {
     let state = provider_commands::get_providers_state()?;
     let active = state
         .active_provider_id
@@ -395,21 +410,76 @@ fn complete_verified_at(
     if inspect_workspace(&workspace).status != WorkspaceStatus::Ready {
         return Err("ONBOARDING_WORKSPACE_UNAVAILABLE".into());
     }
+    super::desktop_preferences::apply_pet_choice_at(base, state.draft.pet_enabled)?;
     state.completed = true;
     state.step = "complete".into();
     write_at(base, state)
 }
 
 #[tauri::command]
-pub fn reset_onboarding_state() -> Result<OnboardingStateDto, String> {
-    VERIFIED.lock().map_err(|_| VERIFICATION_REQUIRED)?.clear();
-    let _guard = STATE_LOCK.lock().map_err(|_| "初始化状态锁不可用")?;
-    write_at(&home::default_memory_dir(), OnboardingStateDto::fresh())
+pub async fn reset_onboarding_state(app: tauri::AppHandle) -> Result<OnboardingStateDto, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved = {
+            VERIFIED.lock().map_err(|_| VERIFICATION_REQUIRED)?.clear();
+            let _guard = STATE_LOCK.lock().map_err(|_| "初始化状态锁不可用")?;
+            write_at(&home::default_memory_dir(), OnboardingStateDto::fresh())?
+        };
+        super::desktop_pet::restore_window(&app);
+        Ok(saved)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub(super) fn pet_visibility_allowed_at(base: &Path) -> bool {
+    !state_path(base).exists() || read_saved_at(base).is_ok_and(|state| state.completed)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pet_choice_stays_pending_until_verified_completion_and_survives_reset() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(home::agent_workspace_dir(
+            root.path(),
+            home::DEFAULT_AGENT_ID,
+        ))
+        .unwrap();
+        save_step_at(
+            root.path(),
+            "workspace",
+            OnboardingDraft {
+                pet_enabled: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!pet_visibility_allowed_at(root.path()));
+        assert!(types::read_desktop_pet_state(root.path())
+            .unwrap()
+            .pet_path
+            .is_none());
+        let snapshot = test_connection();
+        assert!(complete_verified_at(root.path(), None, &snapshot).is_err());
+        assert!(types::read_desktop_pet_state(root.path())
+            .unwrap()
+            .pet_path
+            .is_none());
+        let receipt = VerifiedConnection {
+            snapshot: snapshot.clone(),
+            created: Instant::now(),
+        };
+        complete_verified_at(root.path(), Some(&receipt), &snapshot).unwrap();
+        assert!(pet_visibility_allowed_at(root.path()));
+        let pet = types::read_desktop_pet_state(root.path()).unwrap();
+        assert!(pet.enabled);
+        assert!(Path::new(pet.pet_path.as_ref().unwrap()).is_file());
+        write_at(root.path(), OnboardingStateDto::fresh()).unwrap();
+        assert!(!pet_visibility_allowed_at(root.path()));
+        assert!(types::read_desktop_pet_state(root.path()).unwrap().enabled);
+    }
 
     #[tokio::test]
     async fn isolated_install_restart_and_verified_completion_use_real_persistence() {

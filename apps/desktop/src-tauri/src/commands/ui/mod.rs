@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod desktop_pet;
+pub mod desktop_preferences;
 pub mod icon;
 pub mod onboarding;
 pub mod pet_generation;

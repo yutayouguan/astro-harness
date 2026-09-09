@@ -2,37 +2,87 @@
 
 use std::sync::Arc;
 
+use crate::commands::chat::ChatStreamEvent;
 use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_notification::{NotificationExt, PermissionState};
 
-/// 向操作系统弹出一条通知（失败仅打日志）。
-pub fn show<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
-    if let Err(err) = app.notification().builder().title(title).body(body).show() {
-        tracing::warn!(error = %err, title, "desktop notification failed");
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TaskNotice {
+    Complete,
+    Failed,
+    NeedsInput,
+}
+
+fn notice_copy(kind: TaskNotice) -> &'static str {
+    match (kind, types::notify::notify_locale()) {
+        (TaskNotice::Complete, "en") => "Task completed",
+        (TaskNotice::Failed, "en") => "Task failed",
+        (TaskNotice::NeedsInput, "en") => "Action required",
+        (TaskNotice::Complete, _) => "任务已完成",
+        (TaskNotice::Failed, _) => "任务执行失败",
+        (TaskNotice::NeedsInput, _) => "任务需要你的确认",
     }
 }
 
-/// 启动时请求权限，并把 `types::notify_important` 接到系统通知（主线程 show）。
-pub fn install<R: Runtime>(app: &AppHandle<R>) {
-    match app.notification().permission_state() {
-        Ok(PermissionState::Granted) => {}
-        Ok(_) => {
-            if let Err(err) = app.notification().request_permission() {
-                tracing::warn!(error = %err, "notification permission request failed");
-            }
-        }
-        Err(err) => {
-            tracing::warn!(error = %err, "notification permission_state failed");
+/// Never expose task titles, prompts, tool arguments, or error bodies on the lock screen.
+pub(crate) fn show_task<R: Runtime>(app: &AppHandle<R>, kind: TaskNotice) {
+    if !crate::commands::ui::desktop_preferences::notifications_enabled_at(
+        &home::default_memory_dir(),
+    )
+    .unwrap_or(false)
+    {
+        return;
+    }
+    if !matches!(
+        app.notification().permission_state(),
+        Ok(PermissionState::Granted)
+    ) {
+        return;
+    }
+    if let Err(err) = app
+        .notification()
+        .builder()
+        .title("Astro Agent")
+        .body(notice_copy(kind))
+        .show()
+    {
+        tracing::warn!(error = %err, "desktop notification failed");
+    }
+}
+
+pub(crate) fn notice_for_event(event: &ChatStreamEvent) -> Option<TaskNotice> {
+    match event {
+        ChatStreamEvent::RunFinished { outcome_type, .. } => match outcome_type.as_str() {
+            "success" => Some(TaskNotice::Complete),
+            "error" => Some(TaskNotice::Failed),
+            "hitl_waiting" => Some(TaskNotice::NeedsInput),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn emit_live_task_notices(app: &AppHandle, events: &[ChatStreamEvent]) {
+    for event in events {
+        if let Some(kind) = notice_for_event(event) {
+            let cloned = app.clone();
+            let _ = app.run_on_main_thread(move || show_task(&cloned, kind));
         }
     }
+}
 
+/// Register delivery only. Permission prompts are exclusively user-triggered.
+pub fn install<R: Runtime>(app: &AppHandle<R>) {
     let notify_app = app.clone();
     types::set_important_notify_handler(Arc::new(move |notice| {
+        let kind = match notice.kind {
+            Some(types::ImportantKind::CronSuccess) => TaskNotice::Complete,
+            Some(types::ImportantKind::CronFailure) => TaskNotice::Failed,
+            _ => return,
+        };
         let app2 = notify_app.clone();
-        let title = notice.title;
-        let body = notice.body;
         if let Err(err) = notify_app.run_on_main_thread(move || {
-            show(&app2, &title, &body);
+            show_task(&app2, kind);
         }) {
             tracing::warn!(error = %err, "schedule notification on main thread failed");
         }
@@ -44,4 +94,35 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
             tracing::warn!(%error, "emit ui-style-changed failed");
         }
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn only_terminal_or_action_required_events_notify_without_content() {
+        for (outcome, expected) in [
+            ("success", Some(TaskNotice::Complete)),
+            ("error", Some(TaskNotice::Failed)),
+            ("hitl_waiting", Some(TaskNotice::NeedsInput)),
+            ("interrupt", None),
+        ] {
+            let event = ChatStreamEvent::RunFinished {
+                run_id: "private-thread".into(),
+                outcome_type: outcome.into(),
+                interrupts_json: "SECRET task contents".into(),
+            };
+            assert_eq!(notice_for_event(&event), expected);
+            if let Some(kind) = expected {
+                assert!(!notice_copy(kind).contains("SECRET"));
+            }
+        }
+        assert_eq!(
+            notice_for_event(&ChatStreamEvent::Token {
+                content: "secret".into()
+            }),
+            None
+        );
+        assert_eq!(notice_for_event(&ChatStreamEvent::Done), None);
+    }
 }

@@ -1889,6 +1889,7 @@ async fn process_live_event(
         Vec::new()
     };
     emit_live_desktop_pet_events(app, &thread_id, &events);
+    crate::infra::notify::emit_live_task_notices(app, &events);
     emit_chat_events(app, &thread_id, events);
 }
 

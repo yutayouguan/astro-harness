@@ -12,8 +12,13 @@
 | 全局 Skill 开关 | `desktop.skills` | 只持久化明确设置，不把扫描结果当用户配置写回 |
 | Agent 默认设置 | `desktop.agents.<id>` | 包含名称、默认模型、温度、轮次上限与工具覆盖 |
 | Agent Skill 覆盖 | `desktop.agent_skills.<id>` | 缺失时回退全局；默认 Agent 与全局开关在一次事务中同步 |
+| 任务系统通知开关 | `desktop.notifications.enabled` | 缺失默认关闭；只改该字段，不在启动时申请系统权限；通知内容固定脱敏 |
 
 磁盘中默认 Agent 的键固定为 `default`，不随运行时旧 ID `workspace` 的更名发生二次迁移。其他 Agent 名称经现有 ID 规范化函数处理。
+
+登录启动由操作系统登录项（Tauri autostart）管理，不在 TOML 保存易失同步的副本。
+桌宠继续使用 `ui/desktop-pet/state.json` 的共享事务与 revision；引导里的待应用开关只是
+`ui/onboarding.json` 草稿，完成后才应用，未操作的 null 不覆盖既有偏好。
 
 这些桌面设置属于机器本地配置，项目 `config.toml` 不能通过 `[desktop]` 替换 Provider 端点或开关。原有项目级模型/权限等受支持字段仍走既有分层契约；本次没有扩大项目权限。
 

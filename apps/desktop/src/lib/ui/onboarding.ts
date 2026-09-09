@@ -91,6 +91,7 @@ export type OnboardingDraft = {
   endpoint: string;
   workspace_path: string;
   permission_preset: "ask_for_approval" | "approve_for_me";
+  pet_enabled?: boolean | null;
 };
 export const EMPTY_ONBOARDING_DRAFT: OnboardingDraft = {
   agent_name: "Astro",

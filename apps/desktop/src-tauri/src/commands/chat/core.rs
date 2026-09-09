@@ -945,6 +945,8 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
                 .await;
             let delivery_acceptance =
                 bridge.spawn_provisional_delivery_cleanup(sid2.clone(), activation);
+            // These are accepted live events buffered until the submit ACK, not history replay.
+            crate::infra::notify::emit_live_task_notices(&app2, &terminal);
             emit_chat_events(&app2, &sid2, terminal);
             let _ = delivery_acceptance.send(());
             Ok::<(), String>(())
@@ -953,7 +955,9 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
 
         if let Err(err) = result {
             let is_current = bridge.fail_activation(&sid2, activation).await;
-            for event in submission_failure_events(is_current, friendly_error(&err)) {
+            let events = submission_failure_events(is_current, friendly_error(&err));
+            crate::infra::notify::emit_live_task_notices(&app2, &events);
+            for event in events {
                 let _ = app2.emit(&event_name2, event);
             }
         }

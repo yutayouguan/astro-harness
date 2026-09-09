@@ -9,12 +9,13 @@ use std::sync::{Arc, OnceLock};
 /// 一条面向用户的重要通知。
 #[derive(Debug, Clone)]
 pub struct ImportantNotice {
+    pub kind: Option<ImportantKind>,
     pub title: String,
     pub body: String,
 }
 
 /// 预置重要事件类型（标题双语，正文由调用方拼）。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportantKind {
     CronSuccess,
     CronFailure,
@@ -46,6 +47,14 @@ fn is_en() -> bool {
     LOCALE.load(Ordering::Relaxed) == 1
 }
 
+pub fn notify_locale() -> &'static str {
+    if is_en() {
+        "en"
+    } else {
+        "zh"
+    }
+}
+
 impl ImportantKind {
     fn title(self) -> &'static str {
         match (self, is_en()) {
@@ -65,6 +74,7 @@ impl ImportantKind {
 pub fn notify_important(title: impl Into<String>, body: impl Into<String>) {
     if let Some(handler) = HANDLER.get() {
         handler(ImportantNotice {
+            kind: None,
             title: title.into(),
             body: body.into(),
         });
@@ -73,7 +83,13 @@ pub fn notify_important(title: impl Into<String>, body: impl Into<String>) {
 
 /// 按当前语言发预置标题的重要通知。
 pub fn notify_kind(kind: ImportantKind, body: impl Into<String>) {
-    notify_important(kind.title(), body);
+    if let Some(handler) = HANDLER.get() {
+        handler(ImportantNotice {
+            kind: Some(kind),
+            title: kind.title().into(),
+            body: body.into(),
+        });
+    }
 }
 
 /// 入梦成功通知正文（双语）。

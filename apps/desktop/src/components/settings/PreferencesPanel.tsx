@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowUp,
   Brain,
+  Bell,
   ChevronsUpDown,
   Clock,
   Copyright,
@@ -30,6 +31,7 @@ import {
 } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import StorageDiagnostics from "./StorageDiagnostics";
+import { DesktopPreferenceSwitch } from "./DesktopPreferenceSwitch";
 import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "framer-motion";
 import appIconAsset from "../../assets/astro-app-icon.png";
@@ -203,54 +205,6 @@ const ABOUT_COPY = {
     onboardingAction: "Run again",
   },
 } as const;
-
-function AutostartSwitch({ tone }: { tone: string }) {
-  const [enabled, setEnabled] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    import("@tauri-apps/plugin-autostart")
-      .then((mod) => {
-        mod
-          .isEnabled()
-          .then((v) => {
-            setEnabled(v);
-            setLoading(false);
-          })
-          .catch(() => setLoading(false));
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const toggle = async () => {
-    try {
-      const mod = await import("@tauri-apps/plugin-autostart");
-      if (enabled) {
-        await mod.disable();
-      } else {
-        await mod.enable();
-      }
-      setEnabled(!enabled);
-    } catch (e) {
-      console.error("autostart toggle failed", e);
-    }
-  };
-
-  if (loading) return null;
-
-  return (
-    <button
-      type="button"
-      role="switch"
-      className="prefs-switch"
-      aria-checked={enabled}
-      data-tone={tone}
-      onClick={toggle}
-    >
-      <span className="prefs-switch-thumb" />
-    </button>
-  );
-}
 
 /** 行数预设 */
 const LINE_PRESETS = [50, 100, 200, 500] as const;
@@ -1529,8 +1483,13 @@ export default function PreferencesPanel({
             ))}
           </div>
 
-          <StorageDiagnostics active={activeCategory === "diagnostics"}
-            references={[wallpaper.prefs.current?.path, ...wallpaper.prefs.recent.map(asset => asset.path)].filter((path): path is string => !!path)} />
+          <StorageDiagnostics
+            active={activeCategory === "diagnostics"}
+            references={[
+              wallpaper.prefs.current?.path,
+              ...wallpaper.prefs.recent.map((asset) => asset.path),
+            ].filter((path): path is string => !!path)}
+          />
 
           <section className="prefs-card prefs-card--diagnostics">
             <div className="prefs-card-head">
@@ -1974,7 +1933,29 @@ export default function PreferencesPanel({
                     {t("prefs.system.autostartDesc" as never)}
                   </span>
                 </span>
-                <AutostartSwitch tone={tone} />
+                <DesktopPreferenceSwitch
+                  kind="autostart"
+                  label={t("prefs.system.autostart" as never)}
+                />
+              </label>
+              <label className="prefs-toggle-row">
+                <span className="prefs-toggle-icon" aria-hidden>
+                  <Bell size={15} strokeWidth={2.25} />
+                </span>
+                <span className="prefs-toggle-text">
+                  <span className="prefs-toggle-label">
+                    {locale === "zh" ? "任务通知" : "Task notifications"}
+                  </span>
+                  <span className="prefs-toggle-desc">
+                    {locale === "zh"
+                      ? "仅提醒完成、失败和需要确认，不显示任务正文。"
+                      : "Completion, failure and action-required alerts. No task content."}
+                  </span>
+                </span>
+                <DesktopPreferenceSwitch
+                  kind="notifications"
+                  label={locale === "zh" ? "任务通知" : "Task notifications"}
+                />
               </label>
               <SidebarVisibleSetting tone={tone} />
             </div>

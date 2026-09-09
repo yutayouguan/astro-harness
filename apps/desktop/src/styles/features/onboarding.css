@@ -455,6 +455,116 @@
   gap: 15px;
 }
 
+.onboarding-preferences {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 0.5px solid var(--surface-panel-border);
+}
+
+.onboarding-preferences h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.onboarding-preferences h2 small {
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+.onboarding-preference-save-hint {
+  margin: 0 0 8px;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.onboarding-preference-row {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.onboarding-preference-row + .onboarding-preference-row {
+  border-top: 0.5px solid var(--surface-panel-border);
+}
+
+.onboarding-preference-copy { min-width: 0; }
+.onboarding-preference-copy strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.onboarding-preference-copy p {
+  margin: 4px 0 0;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.onboarding-preference-icon {
+  display: grid;
+  place-items: center;
+  color: var(--ink-secondary);
+}
+.onboarding-pet-preview {
+  display: block;
+  width: 46px;
+  height: 50px;
+  object-fit: contain;
+}
+.onboarding-pet-preview.is-atlas {
+  background-size: 800% 1100%;
+  background-repeat: no-repeat;
+}
+.onboarding-pet-preview.is-missing {
+  display: grid;
+  place-items: center;
+  color: var(--ink-secondary);
+}
+.onboarding-preference-error,
+.desktop-preference-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--danger, #dc2626);
+}
+.desktop-preference-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 180px;
+}
+.desktop-preference-error button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.onboarding-preference-row .prefs-switch:disabled,
+.desktop-preference-control .prefs-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+@media (max-width: 520px) {
+  .onboarding-preference-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .onboarding-pet-preview { width: 32px; height: 35px; }
+  .desktop-preference-control { max-width: 84px; }
+}
+
 .onboarding-provider-form > label,
 .onboarding-provider-field {
   display: grid;
