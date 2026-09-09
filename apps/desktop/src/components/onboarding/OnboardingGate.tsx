@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -75,7 +76,10 @@ import {
 import { StarterTaskChooser } from "./StarterTaskChooser";
 import { OnboardingWarp } from "./OnboardingWarp";
 import { OnboardingScene } from "./OnboardingScene";
-import { onboardingStageVariants } from "../../lib/ui/onboardingMotion";
+import {
+  onboardingStageVariants,
+  ONBOARDING_WARP_MS,
+} from "../../lib/ui/onboardingMotion";
 import { OnboardingPreferences } from "./OnboardingPreferences";
 import { DesktopPreferencePreviewContext } from "../../hooks/settings/useDesktopPreference";
 import { ConnectionIssue } from "./ConnectionIssue";
@@ -365,7 +369,7 @@ export function FirstRunOnboarding({
       ? undefined
       : window.setTimeout(
           () => goTo("personalize"),
-          reducedMotion ? 200 : 2200,
+          reducedMotion ? 200 : ONBOARDING_WARP_MS.intro,
         );
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") goTo("personalize");
@@ -964,6 +968,8 @@ export function FirstRunOnboarding({
           {step === "intro" ? (
             <OnboardingScene
               key="intro"
+              portal={false}
+              reduced={reducedMotion}
               className="onboarding-intro"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -989,6 +995,7 @@ export function FirstRunOnboarding({
           ) : (
             <OnboardingScene
               key={step}
+              reduced={reducedMotion}
               className={`onboarding-stage onboarding-stage--${step}`}
               custom={direction}
               variants={variants}
@@ -1843,11 +1850,21 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
       )}
       {(state === "entering" || state === "ready") && (
         <div
-          className="onboarding-app-host"
+          className="onboarding-app-aperture"
           data-arriving={state === "entering"}
+          style={
+            {
+              "--portal-duration": `${ONBOARDING_WARP_MS.app}ms`,
+            } as CSSProperties
+          }
           key="app"
         >
-          {children}
+          <div
+            className="onboarding-app-host"
+            data-arriving={state === "entering"}
+          >
+            {children}
+          </div>
         </div>
       )}
     </>

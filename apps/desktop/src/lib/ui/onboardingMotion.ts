@@ -1,8 +1,8 @@
 /** One timing contract for the portal, stage changes, and App handoff. */
 export const ONBOARDING_WARP_MS = {
-  intro: 2200,
-  step: 760,
-  app: 980,
+  intro: 2800,
+  step: 1100,
+  app: 1400,
   reduced: 160,
 } as const;
 
@@ -19,23 +19,23 @@ export function onboardingStageVariants(reduced: boolean) {
   return {
     enter: (direction: number) => ({
       opacity: 0,
-      transform: depth(direction >= 0 ? -1100 : 650),
+      transform: depth(direction >= 0 ? -650 : 500),
     }),
     center: {
       opacity: 1,
       transform: depth(0),
       transition: {
-        transform: { duration: 0.68, ease: [0.32, 0.05, 0.25, 1] as const },
-        opacity: { duration: 0.3, delay: 0.08, ease: "linear" as const },
+        transform: { duration: 1.02, ease: [0.4, 0, 0.2, 1] as const },
+        opacity: { duration: 0.45, delay: 0.16, ease: "linear" as const },
       },
     },
     // AnimatePresence passes the latest direction, including when reversing a step.
     exit: (direction: number) => ({
       opacity: 0,
-      transform: depth(direction >= 0 ? 650 : -1100),
+      transform: depth(direction >= 0 ? 500 : -650),
       transition: {
-        transform: { duration: 0.44, ease: [0.4, 0, 0.65, 1] as const },
-        opacity: { duration: 0.26, delay: 0.1, ease: "linear" as const },
+        transform: { duration: 0.7, ease: [0.4, 0, 0.4, 1] as const },
+        opacity: { duration: 0.46, delay: 0.08, ease: "linear" as const },
       },
     }),
   };

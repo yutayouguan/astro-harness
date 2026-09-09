@@ -16,10 +16,10 @@ test("forward and backward steps travel consistently through depth", () => {
     return;
   assert.equal(variants.enter(1).transform, variants.exit(-1).transform);
   assert.equal(variants.enter(-1).transform, variants.exit(1).transform);
-  assert.match(variants.enter(1).transform, /-1100px/);
-  assert.match(variants.exit(1).transform, /\(650px\)/);
-  assert.equal(ONBOARDING_WARP_MS.step, 760);
-  assert.ok(ONBOARDING_WARP_MS.app < 1200);
+  assert.match(variants.enter(1).transform, /-650px/);
+  assert.match(variants.exit(1).transform, /\(500px\)/);
+  assert.equal(ONBOARDING_WARP_MS.step, 1100);
+  assert.equal(ONBOARDING_WARP_MS.app, 1400);
 });
 
 test("reduced motion has no scale or spatial movement", () => {

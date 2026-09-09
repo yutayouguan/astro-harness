@@ -1,4 +1,4 @@
-/* The tunnel is an event, not an idle background. Only transform/opacity animate. */
+/* One-shot portal: transform/opacity for depth, a matching circular aperture for reveal. */
 .onboarding-warp {
   position: fixed;
   z-index: 1;
@@ -16,6 +16,7 @@
 }
 
 .onboarding-warp[data-mode="app"] {
+  --portal-duration: var(--warp-duration);
   background: radial-gradient(
     ellipse at 50% 45%,
     color-mix(in srgb, var(--tone) 18%, var(--shell-bg)),
@@ -32,8 +33,25 @@
   isolation: isolate;
 }
 
-.onboarding-scenes > section {
+.onboarding-scene-window {
   grid-area: 1 / 1;
+  position: relative;
+  z-index: 2;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.onboarding-scene-aperture {
+  height: 100%;
+}
+
+.onboarding-scene-window[data-portal="true"] .onboarding-scene-aperture,
+.onboarding-app-aperture[data-arriving="true"] {
+  animation: onboarding-portal-open var(--portal-duration)
+    cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.onboarding-scene-aperture > section {
   height: 100dvh;
   min-height: 0;
   overflow: hidden auto;
@@ -41,9 +59,42 @@
   transform-origin: 50% 45dvh;
 }
 
-.onboarding-scenes > section[data-exiting="true"] {
+.onboarding-scene-window[data-exiting="true"] {
   z-index: 3;
   pointer-events: none;
+}
+
+.onboarding-scene-window .onboarding-card > *,
+.onboarding-scene-window .onboarding-header {
+  transition: opacity 180ms ease;
+}
+
+.onboarding-scene-window[data-portal="true"] .onboarding-card > * {
+  animation: onboarding-page-content var(--portal-duration) ease both;
+}
+
+.onboarding-scene-window[data-exiting="true"] .onboarding-card > *,
+.onboarding-scene-window[data-exiting="true"] .onboarding-header,
+.onboarding-scene-window[data-exiting="true"] .onboarding-intro-copy {
+  animation: none;
+  opacity: 0 !important;
+  transition: opacity 180ms ease;
+}
+
+.onboarding-portal-rim {
+  position: absolute;
+  z-index: 4;
+  top: calc(45% - 6vmax);
+  left: calc(50% - 6vmax);
+  width: 12vmax;
+  height: 12vmax;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--tone) 72%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-2) 32%, transparent);
+  pointer-events: none;
+  animation: onboarding-portal-rim var(--portal-duration)
+    cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .onboarding-warp-core {
@@ -107,6 +158,12 @@
   height: 2px;
 }
 
+.onboarding-warp[data-mode="step"] .onboarding-warp-rays,
+.onboarding-warp[data-mode="step"] .onboarding-warp-rings,
+.onboarding-warp[data-mode="step"] .onboarding-warp-core {
+  opacity: 0.4;
+}
+
 .onboarding-warp[data-direction="backward"] .onboarding-warp-rings i,
 .onboarding-warp[data-direction="backward"] .onboarding-warp-rays i,
 .onboarding-warp[data-direction="backward"] .onboarding-warp-core {
@@ -120,13 +177,24 @@
 }
 
 /* App mounts immediately underneath; the portal never delays loading or input. */
+.onboarding-app-aperture {
+  display: contents;
+}
+
+.onboarding-app-aperture[data-arriving="true"] {
+  display: block;
+  position: fixed;
+  inset: 0;
+}
+
 .onboarding-app-host[data-arriving="true"] {
   /* display:contents has no paint box and cannot show a page-flight transform. */
   display: block;
   position: fixed;
   inset: 0;
   transform-origin: 50% 45%;
-  animation: onboarding-app-reveal 980ms cubic-bezier(0.32, 0.05, 0.25, 1) both;
+  animation: onboarding-app-reveal var(--portal-duration)
+    cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .onboarding-arrival-preview {
@@ -240,7 +308,7 @@
 @keyframes onboarding-app-reveal {
   0%,
   16% {
-    transform: perspective(1200px) translateZ(-1100px);
+    transform: perspective(1200px) translateZ(-650px);
     opacity: 0;
   }
   100% {
@@ -249,10 +317,43 @@
   }
 }
 
+/* The mask radius and rim scale use the same duration/easing and 6 → 100vmax radius. */
+@keyframes onboarding-portal-open {
+  from {
+    clip-path: circle(6vmax at 50% 45%);
+  }
+  to {
+    clip-path: circle(100vmax at 50% 45%);
+  }
+}
+
+@keyframes onboarding-portal-rim {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(16.666667);
+    opacity: 0;
+  }
+}
+
+@keyframes onboarding-page-content {
+  0%,
+  25% {
+    opacity: 0;
+  }
+  70%,
+  100% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-warp-core,
   .onboarding-warp-rings,
-  .onboarding-warp-rays {
+  .onboarding-warp-rays,
+  .onboarding-portal-rim {
     display: none;
   }
   .onboarding-warp,
@@ -261,6 +362,13 @@
   }
   .onboarding-app-host[data-arriving="true"] {
     animation-name: onboarding-app-reduced;
+  }
+  .onboarding-app-aperture[data-arriving="true"] {
+    animation: none;
+  }
+  .onboarding-scene-window .onboarding-card > * {
+    animation: none;
+    transition-duration: 80ms;
   }
 }
 

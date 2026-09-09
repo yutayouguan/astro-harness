@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
+import { ONBOARDING_WARP_MS } from "../lib/ui/onboardingMotion";
 import { FirstRunOnboarding } from "../components/onboarding/OnboardingGate";
 import { AstroLogoMark } from "../components/icons/AstroLogoMark";
 import { Button } from "../components/ui";
@@ -68,45 +69,55 @@ function JourneyPreview({ step, journey = false }: PreviewProps) {
       )}
       {phase !== "setup" && (
         <div
-          className="onboarding-app-host"
+          className="onboarding-app-aperture"
           data-arriving={phase === "entering"}
+          style={
+            {
+              "--portal-duration": `${ONBOARDING_WARP_MS.app}ms`,
+            } as CSSProperties
+          }
         >
-          <main className="onboarding-arrival-preview">
-            <span className="onboarding-demo-label">
-              {zh
-                ? "APP 进入动画演示 · 不保存、不发送"
-                : "App arrival preview · nothing saved or sent"}
-            </span>
-            <div className="onboarding-arrival-preview-content">
-              <AstroLogoMark
-                className="onboarding-arrival-preview-logo"
-                data-onboarding-brand-target
-              />
-              <h1>{zh ? "从这里，开始协作" : "Let's work together"}</h1>
-              <p>
+          <div
+            className="onboarding-app-host"
+            data-arriving={phase === "entering"}
+          >
+            <main className="onboarding-arrival-preview">
+              <span className="onboarding-demo-label">
                 {zh
-                  ? "已抵达你的工作空间。下面的草稿可以继续编辑。"
-                  : "Welcome to your workspace. Your draft is ready to edit."}
-              </p>
-              <label className="onboarding-task-input">
-                {zh ? "聊天输入框（演示）" : "Chat input (demo)"}
-                <textarea
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  rows={5}
+                  ? "APP 进入动画演示 · 不保存、不发送"
+                  : "App arrival preview · nothing saved or sent"}
+              </span>
+              <div className="onboarding-arrival-preview-content">
+                <AstroLogoMark
+                  className="onboarding-arrival-preview-logo"
+                  data-onboarding-brand-target
                 />
-              </label>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setPhase("setup");
-                  setPrompt("");
-                }}
-              >
-                {zh ? "重新体验" : "Replay journey"}
-              </Button>
-            </div>
-          </main>
+                <h1>{zh ? "从这里，开始协作" : "Let's work together"}</h1>
+                <p>
+                  {zh
+                    ? "已抵达你的工作空间。下面的草稿可以继续编辑。"
+                    : "Welcome to your workspace. Your draft is ready to edit."}
+                </p>
+                <label className="onboarding-task-input">
+                  {zh ? "聊天输入框（演示）" : "Chat input (demo)"}
+                  <textarea
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    rows={5}
+                  />
+                </label>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPhase("setup");
+                    setPrompt("");
+                  }}
+                >
+                  {zh ? "重新体验" : "Replay journey"}
+                </Button>
+              </div>
+            </main>
+          </div>
         </div>
       )}
     </>

@@ -155,7 +155,7 @@ export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
       transition={
         reduced
           ? { duration: 0 }
-          : { type: "spring", bounce: 0, duration: 0.46 }
+          : { type: "spring", bounce: 0, duration: 0.64 }
       }
     >
       <OnboardingLogo compact={phase !== "intro"} />
