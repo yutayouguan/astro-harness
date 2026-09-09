@@ -291,14 +291,12 @@ test("verified setup prepares an editable App draft without sending", async ({ p
   await verifyProvider(page);
   await finishVerified(page);
   await expect(page.getByText("本次连接测试已通过", { exact: true })).toBeVisible();
-  await page.getByLabel("填入你想处理的内容").fill("明天完成文档，周五复核预算。");
-  await expect(page.locator(".onboarding-task-preview pre")).toContainText("三个简明要点");
-  await expect(page.locator(".onboarding-task-preview pre")).toContainText("明天完成文档");
-  await page.getByRole("button", { name: "填入新对话", exact: true }).click();
+  await expect(page.locator(".onboarding-task-card")).toHaveCount(6);
+  await page.getByRole("button", { name: "看看我的桌面 · 填入输入框", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".onboarding-root")).toHaveCount(0);
   await expect(page.locator(".onboarding-brand-motion")).toHaveCount(0);
-  await expect(page.locator(".composer-input")).toHaveValue(/明天完成文档/);
+  await expect(page.locator(".composer-input")).toHaveValue(/请看看我桌面的文件.*至少 5 个/);
   await expect(page.locator(".composer-input")).toBeEditable();
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "start_chat"))).toEqual([]);
@@ -608,8 +606,10 @@ test("reduced-motion narrow layout remains keyboard usable", async ({ page }) =>
   await page.keyboard.press("Enter");
   await verifyProvider(page);
   await finishVerified(page);
-  await page.getByLabel("填入你想处理的内容").fill("hello");
   expect(await page.locator(".onboarding-root").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.getByRole("button", { name: "读懂一份文档 · 填入输入框", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".composer-input")).toHaveValue(/帮我快速读懂一份文档/);
 });
 
 test("hung provider times out without bypassing validation", async ({ page }) => {

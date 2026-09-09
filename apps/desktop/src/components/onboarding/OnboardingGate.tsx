@@ -67,7 +67,11 @@ import {
 } from "../../lib/ui/onboarding";
 import { ProviderBrandIcon } from "../icons/ProviderIcons";
 import { Button, SelectMenu } from "../ui";
-import { OnboardingLogo, OnboardingBrandMotion } from "./OnboardingBrand";
+import {
+  OnboardingLogo,
+  OnboardingBrandMotion,
+  OnboardingIntroParticles,
+} from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
 import { OnboardingPreferences } from "./OnboardingPreferences";
 import { DesktopPreferencePreviewContext } from "../../hooks/settings/useDesktopPreference";
@@ -222,7 +226,9 @@ export function FirstRunOnboarding({
   );
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState("");
-  const [demoDraftPrepared, setDemoDraftPrepared] = useState(false);
+  const [demoDraft, setDemoDraft] = useState<string | null>(null);
+  const demoInputRef = useRef<HTMLTextAreaElement>(null);
+  const [introReplay, setIntroReplay] = useState(0);
   const [connectionIssue, setConnectionIssue] =
     useState<ConnectionIssueKind | null>(null);
   const [progressError, setProgressError] = useState(false);
@@ -889,7 +895,11 @@ export function FirstRunOnboarding({
   const currentIndex = Math.max(0, stepIndex(step));
   const enterAstro = (prompt?: string) => {
     if (previewProviders) {
-      setDemoDraftPrepared(true);
+      setDemoDraft(prompt ?? "");
+      requestAnimationFrame(() => {
+        demoInputRef.current?.focus();
+        demoInputRef.current?.scrollIntoView({ block: "nearest" });
+      });
       return;
     }
     if (prompt) storeOnboardingStarterPrompt(prompt);
@@ -902,6 +912,7 @@ export function FirstRunOnboarding({
       data-step={step}
     >
       <OnboardingBrandMotion
+        key={introReplay}
         phase={handoff ? "app" : step === "intro" ? "intro" : "header"}
         onArrive={onHandoffComplete}
       />
@@ -925,6 +936,17 @@ export function FirstRunOnboarding({
         <span />
       </div>
 
+      {step === "intro" && <OnboardingIntroParticles key={introReplay} />}
+      {step === "intro" && previewProviders && (
+        <button
+          type="button"
+          className="onboarding-skip onboarding-replay"
+          onClick={() => setIntroReplay((value) => value + 1)}
+        >
+          <RotateCcw size={14} aria-hidden />
+          {locale === "zh" ? "重播动画" : "Replay intro"}
+        </button>
+      )}
       {step === "intro" ? (
         <button
           type="button"
@@ -1632,12 +1654,28 @@ export function FirstRunOnboarding({
                     </div>
                   )}
                   <StarterTaskChooser locale={locale} onUse={enterAstro} />
-                  {demoDraftPrepared && (
-                    <p role="status">
-                      {locale === "zh"
-                        ? "演示草稿已准备，未保存或发送。"
-                        : "Demo draft prepared; not saved or sent."}
-                    </p>
+                  {demoDraft !== null && (
+                    <div className="onboarding-demo-composer">
+                      <label className="onboarding-task-input">
+                        <span className="onboarding-inline-label">
+                          <MessageSquare size={16} aria-hidden />
+                          {locale === "zh"
+                            ? "聊天输入框（演示）"
+                            : "Chat input (demo)"}
+                        </span>
+                        <textarea
+                          ref={demoInputRef}
+                          value={demoDraft}
+                          rows={5}
+                          onChange={(event) => setDemoDraft(event.target.value)}
+                        />
+                      </label>
+                      <p className="onboarding-task-privacy" role="status">
+                        {locale === "zh"
+                          ? "草稿已填入，可直接编辑。此预览不会保存或发送；APP 中会打开真实聊天输入框。"
+                          : "Draft ready to edit. This preview never saves or sends; the app opens the real chat input."}
+                      </p>
+                    </div>
                   )}
                   <Button
                     variant="ghost"

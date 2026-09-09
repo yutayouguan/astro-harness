@@ -1,18 +1,22 @@
-import { useState } from "react";
 import {
-  Eye,
   FileText,
-  Languages,
-  Lightbulb,
+  FolderTree,
+  Laptop,
+  ListChecks,
   MessageSquarePlus,
+  Workflow,
+  FolderCode,
 } from "lucide-react";
-import { Button } from "../ui";
-import {
-  buildStarterPrompt,
-  STARTER_TASKS,
-  STARTER_INPUT_LIMIT,
-  type StarterTask,
-} from "../../lib/ui/onboardingTasks";
+import { STARTER_TASKS } from "../../lib/ui/onboardingTasks";
+
+const TASK_ICONS = {
+  desktop: Laptop,
+  organize: FolderTree,
+  documents: FileText,
+  weekly: ListChecks,
+  project: FolderCode,
+  automation: Workflow,
+};
 
 export function StarterTaskChooser({
   locale,
@@ -21,83 +25,44 @@ export function StarterTaskChooser({
   locale: "zh" | "en";
   onUse: (prompt: string) => void;
 }) {
-  const [task, setTask] = useState<StarterTask>("summarize");
-  const [text, setText] = useState("");
   const zh = locale === "zh";
-  const titles = zh
-    ? ["整理一段文字", "翻译一小段", "解释一段内容"]
-    : ["Summarize text", "Translate a passage", "Explain a snippet"];
-  const icons = [FileText, Languages, Lightbulb];
-  const prompt = buildStarterPrompt(task, text, locale);
   return (
     <section
       className="onboarding-starters"
-      aria-label={zh ? "30 秒小任务" : "A small first task"}
+      aria-label={zh ? "实用任务示例" : "Practical first tasks"}
     >
       <h2>
-        {zh ? "从一个 30 秒小任务开始" : "Start with a small, 30-second task"}
+        {zh
+          ? "选一件实用的小事，开始协作"
+          : "Pick something useful to start with"}
       </h2>
-      <div className="onboarding-task-tabs">
-        {STARTER_TASKS.map((value, index) => {
-          const Icon = icons[index];
+      <div className="onboarding-task-grid">
+        {STARTER_TASKS.map((task) => {
+          const Icon = TASK_ICONS[task.id];
+          const copy = task[locale];
           return (
             <button
-              key={value}
+              key={task.id}
               type="button"
-              aria-pressed={task === value}
-              onClick={() => setTask(value)}
+              className="onboarding-task-card"
+              aria-label={`${copy.title} · ${zh ? "填入输入框" : "Fill chat input"}`}
+              onClick={() => onUse(copy.prompt)}
             >
-              <Icon size={16} aria-hidden />
-              <span>{titles[index]}</span>
+              <Icon size={18} aria-hidden />
+              <span>
+                <strong>{copy.title}</strong>
+                <small>{copy.description}</small>
+              </span>
+              <MessageSquarePlus size={15} aria-hidden />
             </button>
           );
         })}
       </div>
-      <label className="onboarding-task-input">
-        <span>
-          {zh ? "填入你想处理的内容" : "Paste the content to work with"}
-        </span>
-        <textarea
-          value={text}
-          maxLength={STARTER_INPUT_LIMIT}
-          rows={3}
-          onChange={(event) => setText(event.target.value)}
-          placeholder={
-            zh
-              ? "粘贴一小段文字或代码，不需要选择文件或开放目录权限。"
-              : "Paste a short passage or snippet. No file or folder access is needed."
-          }
-        />
-      </label>
-      <details className="onboarding-task-preview" open>
-        <summary>
-          <span className="onboarding-inline-label">
-            <Eye size={14} aria-hidden />
-            {zh ? "发送内容预览" : "Prompt preview"}
-          </span>
-        </summary>
-        <pre>
-          {prompt ??
-            (zh
-              ? "填写内容后，这里会显示完整提示词。"
-              : "Enter content to preview the complete prompt.")}
-        </pre>
-      </details>
       <p className="onboarding-task-privacy">
         {zh
-          ? "这里只预填草稿，不会自动发送。点击聊天中的发送后，内容才会交给你配置的模型；请勿粘贴敏感信息。"
-          : "This only prepares a draft. Content reaches your configured model only after you press Send in chat. Avoid sensitive information."}
+          ? "点击示例即可填入聊天输入框，可继续编辑，不会自动发送。发送后才会开始协作；涉及文件的任务会先确认范围，请留意隐私内容。"
+          : "Click an example to fill the chat input. Edit it before sending; nothing is sent automatically. File tasks confirm scope first. Be mindful of private information."}
       </p>
-      <Button
-        variant="primary"
-        disabled={!prompt}
-        onClick={() => {
-          if (prompt) onUse(prompt);
-        }}
-      >
-        <MessageSquarePlus size={16} aria-hidden />
-        {zh ? "填入新对话" : "Prepare a new chat"}
-      </Button>
     </section>
   );
 }

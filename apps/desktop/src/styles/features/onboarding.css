@@ -111,8 +111,10 @@
 }
 
 .onboarding-intro {
+  position: relative;
   display: grid;
-  min-height: 100%;
+  min-height: 100dvh;
+  box-sizing: border-box;
   place-content: center;
   justify-items: center;
   padding: 72px 24px;
@@ -145,22 +147,23 @@
 }
 
 .onboarding-particle-field {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 
 .onboarding-particle-field i {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: var(--particle-origin-y, 50%);
+  left: var(--particle-origin-x, 50%);
   width: var(--particle-size);
   height: var(--particle-size);
   border-radius: 50%;
   background: color-mix(in srgb, var(--tone) 78%, white);
   box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 72%, transparent);
   opacity: 0;
-  animation: onboarding-particle-converge 1.18s var(--particle-delay)
+  animation: onboarding-particle-converge 1.6s var(--particle-delay)
     cubic-bezier(0.2, 0.78, 0.22, 1) both;
 }
 
@@ -925,11 +928,11 @@
   text-align: left;
 }
 
-.onboarding-task-tabs button {
+.onboarding-task-card {
   display: grid;
   width: 100%;
-  min-height: 42px;
-  padding: 8px 12px;
+  min-height: 78px;
+  padding: 14px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: 11px;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -945,8 +948,8 @@
     background 150ms ease;
 }
 
-.onboarding-task-tabs button:hover,
-.onboarding-task-tabs button:focus-visible {
+.onboarding-task-card:hover,
+.onboarding-task-card:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   outline: none;
   color: var(--ink);
@@ -981,7 +984,12 @@
 
 @keyframes onboarding-particle-converge {
   0% {
-    transform: translate3d(var(--particle-x), var(--particle-y), 0) scale(0.45);
+    transform: translate3d(
+        calc(var(--particle-x) - var(--particle-origin-x, 50vw)),
+        calc(var(--particle-y) - var(--particle-origin-y, 50dvh)),
+        0
+      )
+      scale(0.7);
     opacity: 0;
   }
   18% {
@@ -1277,17 +1285,44 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
 .onboarding-workspace-check > span {
   min-width: 0;
 }
-.onboarding-task-tabs {
-  display: flex;
+.onboarding-task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.onboarding-task-card strong,
+.onboarding-task-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.onboarding-task-card strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.onboarding-task-card small {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.onboarding-task-card:active {
+  background: color-mix(in srgb, var(--tone) 15%, var(--shell-bg));
+}
+.onboarding-task-card:focus-visible,
+.onboarding-task-input textarea:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+.onboarding-replay {
+  left: 28px;
+  right: auto;
+  display: inline-flex;
+  align-items: center;
   gap: 7px;
 }
-.onboarding-task-tabs button {
-  display: flex;
-  justify-content: center;
-  font-size: 12px;
-}
-.onboarding-task-tabs button[aria-pressed="true"] {
-  border-color: var(--tone, #6366f1);
+.onboarding-demo-composer {
+  width: min(100%, 640px);
+  margin-bottom: 16px;
 }
 .onboarding-task-input {
   display: grid;
@@ -1304,24 +1339,6 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
   background: color-mix(in srgb, var(--shell-bg) 80%, transparent);
   color: var(--ink);
   padding: 10px 12px;
-  font: inherit;
-  line-height: 1.5;
-}
-.onboarding-task-preview {
-  text-align: left;
-  font-size: 12px;
-}
-.onboarding-task-preview summary {
-  cursor: pointer;
-}
-.onboarding-task-preview pre {
-  max-height: 150px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
   font: inherit;
   line-height: 1.5;
 }
@@ -1351,8 +1368,8 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
   }
 }
 @media (max-width: 520px) {
-  .onboarding-task-tabs {
-    flex-direction: column;
+  .onboarding-task-grid {
+    grid-template-columns: 1fr;
   }
   .onboarding-actions {
     flex-wrap: wrap;
@@ -1364,7 +1381,7 @@ html[data-onboarding-entering] [data-onboarding-brand-target] {
 }
 @media (prefers-contrast: more) {
   .onboarding-task-input textarea,
-  .onboarding-task-tabs button {
+  .onboarding-task-card {
     border-color: currentColor;
   }
 }

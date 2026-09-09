@@ -29,8 +29,8 @@ for (const theme of ["light", "dark"] as const) {
       if (step === "complete") {
         await expect(card.locator(".onboarding-health-grid > div > svg")).toHaveCount(4);
         await expect(card.locator(".onboarding-health-grid")).not.toContainText("○");
-        await expect(page.getByRole("button", { name: "填入新对话", exact: true }).locator("svg.lucide-message-square-plus")).toHaveCount(1);
-        await expect(card.locator(".onboarding-task-preview summary svg.lucide-eye")).toHaveCount(1);
+        await expect(card.locator(".onboarding-task-card svg.lucide-message-square-plus")).toHaveCount(6);
+        await expect(card.locator(".onboarding-task-card > svg[aria-hidden=true]")).toHaveCount(12);
       }
       for (const icon of await card.locator(".onboarding-field-label > svg, .onboarding-inline-label > svg, .onboarding-workspace-check > svg").all()) {
         await expect(icon).toHaveAttribute("aria-hidden", "true");

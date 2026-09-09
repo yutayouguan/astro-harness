@@ -9,39 +9,66 @@ import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { AstroLogoMark } from "../icons/AstroLogoMark";
 import { WelcomeLogoEffect } from "../chat/WelcomeLogoEffect";
-const INTRO_PARTICLES = Array.from({ length: 28 }, (_, index) => {
-  const angle = (index / 28) * Math.PI * 2 + (index % 3) * 0.18;
-  const radius = 118 + (index % 6) * 25;
+const INTRO_PARTICLES = Array.from({ length: 54 }, (_, index) => {
   return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius * 0.72,
+    x: 5 + (index % 9) * 11.2 + (index % 3) * 0.4,
+    y: 6 + Math.floor(index / 9) * 17.4 + (index % 4) * 0.8,
     delay: (index % 7) * 34,
     size: 2 + (index % 3),
   };
 });
+/** Viewport-sized field, converging on the measured logo rather than a fixed point. */
+export function OnboardingIntroParticles() {
+  const field = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const anchor = document.querySelector(
+      '[data-onboarding-brand-anchor="intro"]',
+    );
+    if (!anchor) return;
+    const update = () => {
+      const bounds = anchor.getBoundingClientRect();
+      field.current?.style.setProperty(
+        "--particle-origin-x",
+        `${bounds.x + bounds.width / 2}px`,
+      );
+      field.current?.style.setProperty(
+        "--particle-origin-y",
+        `${bounds.y + bounds.height / 2}px`,
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(anchor);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  return (
+    <div ref={field} className="onboarding-particle-field" aria-hidden>
+      {INTRO_PARTICLES.map((particle, index) => (
+        <i
+          key={index}
+          style={
+            {
+              "--particle-x": `${particle.x.toFixed(1)}vw`,
+              "--particle-y": `${particle.y.toFixed(1)}dvh`,
+              "--particle-delay": `${particle.delay}ms`,
+              "--particle-size": `${particle.size}px`,
+            } as CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
 export function OnboardingLogo({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={`onboarding-logo ${compact ? "is-compact" : ""}`}
       aria-hidden
     >
-      {!compact ? (
-        <span className="onboarding-particle-field">
-          {INTRO_PARTICLES.map((particle, index) => (
-            <i
-              key={index}
-              style={
-                {
-                  "--particle-x": `${particle.x.toFixed(1)}px`,
-                  "--particle-y": `${particle.y.toFixed(1)}px`,
-                  "--particle-delay": `${particle.delay}ms`,
-                  "--particle-size": `${particle.size}px`,
-                } as CSSProperties
-              }
-            />
-          ))}
-        </span>
-      ) : null}
       <span className="onboarding-logo-halo" />
       <AstroLogoMark className="onboarding-logo-base" />
       {!compact && (

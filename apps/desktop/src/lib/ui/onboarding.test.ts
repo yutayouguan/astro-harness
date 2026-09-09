@@ -15,7 +15,7 @@ import {
   withDeadline,
   resumeOnboardingStep,
 } from "./onboarding.ts";
-import { buildStarterPrompt } from "./onboardingTasks.ts";
+import { STARTER_TASKS } from "./onboardingTasks.ts";
 
 const provider: ProviderDto = {
   id: "openai-main",
@@ -113,17 +113,26 @@ test("connection failures classify quota before generic 429 and never expose raw
   assert.equal(classifyConnectionIssue("unexpected"), "unknown");
 });
 
-test("small tasks require bounded input and preserve the exact text", () => {
-  assert.equal(buildStarterPrompt("summarize", " ", "zh"), null);
-  assert.equal(buildStarterPrompt("explain", "x".repeat(4001), "en"), null);
-  assert.match(
-    buildStarterPrompt("summarize", "line 1\nline 2", "zh")!,
-    /三个简明要点/,
+test("practical examples are complete bilingual drafts with a read-only desktop starting point", () => {
+  assert.ok(STARTER_TASKS.length >= 5);
+  assert.equal(
+    new Set(STARTER_TASKS.map((task) => task.id)).size,
+    STARTER_TASKS.length,
   );
-  assert.ok(
-    buildStarterPrompt("explain", "const a = 1", "en")!.endsWith("const a = 1"),
-  );
-  assert.match(buildStarterPrompt("translate", "你好", "en")!, /Translate/);
+  for (const task of STARTER_TASKS) {
+    for (const locale of ["zh", "en"] as const) {
+      assert.ok(task[locale].title.length > 0);
+      assert.ok(task[locale].description.length > 0);
+      assert.ok(
+        task[locale].prompt.length > 40 && task[locale].prompt.length < 4000,
+      );
+      assert.doesNotMatch(task[locale].prompt, /\{\{|YOUR_|\/Users\//);
+    }
+  }
+  assert.match(STARTER_TASKS[0].zh.prompt, /至少 5 个/);
+  assert.match(STARTER_TASKS[0].zh.prompt, /不要移动、删除或修改/);
+  assert.match(STARTER_TASKS[0].en.prompt, /at least 5/);
+  assert.match(STARTER_TASKS[0].en.prompt, /ask before reading file contents/);
 });
 
 test("credential-bearing and invalid endpoints are excluded from drafts", () => {
