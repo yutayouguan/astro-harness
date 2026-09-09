@@ -9,6 +9,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
 import { useReducedMotion } from "framer-motion";
@@ -95,6 +96,10 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
   } = useDesktopPetState(active);
   const [description, setDescription] = useState("");
   const [sceneName, setSceneName] = useState("");
+  const [petName, setPetName] = useState("");
+  const generationId = useRef<string | null>(null);
+  const generationCancelled = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
   const [withWallpaper, setWithWallpaper] = useState(false);
   const [sceneDescription, setSceneDescription] = useState("");
   const [includePet, setIncludePet] = useState(false);
@@ -143,8 +148,12 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     setPhase("generate");
     setLocalError("");
     setNotice("");
+    generationCancelled.current = false;
+    generationId.current = crypto.randomUUID();
     try {
       const saved = await mutate("create_pet_scene", {
+        requestId: generationId.current,
+        petName: petName.trim() || (zh ? "我的宠物" : "My pet"),
         name: sceneName.trim() || (zh ? "我的宠物场景" : "My companion scene"),
         description: description.trim() || null,
         useCurrent: false,
@@ -155,10 +164,13 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           : "Pet saved below. Preview your scene before applying.",
       );
       if (withWallpaper) {
+        if (generationCancelled.current) return;
+        generationId.current = crypto.randomUUID();
         setPhase("wallpaper");
         const sceneId = saved.scenes[saved.scenes.length - 1]?.id;
         if (!sceneId) throw new Error("Missing saved scene");
         await mutate("generate_pet_scene_wallpaper", {
+          requestId: generationId.current,
           sceneId,
           description:
             sceneDescription.trim() ||
@@ -169,7 +181,28 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     } catch (cause) {
       setLocalError(errorMessage(cause));
     } finally {
+      generationId.current = null;
+      setCancelling(false);
       setPhase(null);
+    }
+  }
+
+  async function cancelGeneration() {
+    generationCancelled.current = true;
+    setCancelling(true);
+    try {
+      if (generationId.current)
+        await invoke("cancel_pet_generation", {
+          requestId: generationId.current,
+        });
+      setNotice(
+        zh
+          ? "已请求取消。已保存的桌宠保留，远端请求可能仍计费。"
+          : "Cancellation requested. Saved pets are kept; submitted requests may still be billed.",
+      );
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
+      setCancelling(false);
     }
   }
 
@@ -287,6 +320,16 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
             />
           </label>
           <label className="desktop-pet-field">
+            <span>{zh ? "宠物名字" : "Pet name"}</span>
+            <input
+              value={petName}
+              maxLength={80}
+              disabled={busy != null}
+              placeholder={zh ? "例如：奶糖" : "For example: Mochi"}
+              onChange={(e) => setPetName(e.currentTarget.value)}
+            />
+          </label>
+          <label className="desktop-pet-field">
             <span>{zh ? "场景名称" : "Scene name"}</span>
             <input
               value={sceneName}
@@ -397,6 +440,34 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
             </p>
           ) : null}
           {notice && <p role="status">{notice}</p>}
+          {(phase === "generate" || phase === "wallpaper") && (
+            <div className="pet-generation-progress" role="status">
+              <ol>
+                <li aria-current={phase === "generate" ? "step" : undefined}>
+                  {phase === "wallpaper" ? "✓ " : "1. "}
+                  {zh ? "生成桌宠" : "Create pet"}
+                </li>
+                {withWallpaper && (
+                  <li aria-current={phase === "wallpaper" ? "step" : undefined}>
+                    2. {zh ? "生成配套壁纸" : "Create wallpaper"}
+                  </li>
+                )}
+              </ol>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => void cancelGeneration()}
+              >
+                {cancelling
+                  ? zh
+                    ? "取消中…"
+                    : "Cancelling…"
+                  : zh
+                    ? "取消生成"
+                    : "Cancel generation"}
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="prefs-card desktop-pet-card">

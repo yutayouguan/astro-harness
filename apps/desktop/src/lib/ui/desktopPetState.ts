@@ -14,6 +14,8 @@ export type DesktopPetState = {
   followWallpaper: boolean;
   lastWallpaperPath: string | null;
   scenes: Array<{ id: string; name: string }>;
+  favoriteSceneIds: string[];
+  animationPaused: boolean;
 };
 
 export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
@@ -32,6 +34,8 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   followWallpaper: false,
   lastWallpaperPath: null,
   scenes: [],
+  favoriteSceneIds: [],
+  animationPaused: false,
 };
 
 export function acceptDesktopPetState(

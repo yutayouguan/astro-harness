@@ -1,9 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWallpaperSync, sceneWallpaperAsset } from "./petScene.ts";
+import {
+  createWallpaperSync,
+  sceneWallpaperAsset,
+  groupPetScenes,
+  type PetScene,
+} from "./petScene.ts";
 import type { ActiveUiStyle } from "./activeUiStyle.ts";
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test("pet groups retain identity across homes and sort favorites without mutating input", () => {
+  const pet = {
+    petPath: "/managed/pet.png",
+    sourcePath: null,
+    spriteVersionNumber: null,
+    displayName: "Mochi",
+    description: null,
+    provider: null,
+    model: null,
+  };
+  const a: PetScene = {
+    id: "a",
+    name: "Forest",
+    pet,
+    style: null,
+    wallpaperPath: null,
+    inUse: false,
+    favorite: false,
+  };
+  const b = { ...a, id: "b", name: "Beach", favorite: true };
+  const c = { ...a, id: "c", pet: { ...pet, petPath: "/managed/other.png" } };
+  const scenes = [a, b, c];
+  const groups = groupPetScenes(scenes);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(
+    groups[0].scenes.map((s) => s.id),
+    ["b", "a"],
+  );
+  assert.deepEqual(
+    scenes.map((s) => s.id),
+    ["a", "b", "c"],
+  );
+});
 
 test("scene wallpaper switching is serialized and intermediate picks collapse", async () => {
   let release!: () => void;

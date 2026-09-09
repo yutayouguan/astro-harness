@@ -14,6 +14,8 @@ import {
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation";
 import DesktopPetCanvas from "./DesktopPetCanvas";
+import { Menu } from "@tauri-apps/api/menu";
+import type { PetScene } from "../../lib/ui/petScene";
 
 type SessionStatusPayload = {
   sessionId?: unknown;
@@ -30,6 +32,75 @@ type PetActivityPayload = {
 
 export default function DesktopPetSurface() {
   const { state, error, mutate } = useDesktopPetState();
+  const menuRef = useRef<Menu | null>(null);
+  const menuOpening = useRef(false);
+  const [menuError, setMenuError] = useState("");
+  useEffect(
+    () => () => {
+      void menuRef.current?.close();
+    },
+    [],
+  );
+  async function showMenu() {
+    if (menuOpening.current) return;
+    menuOpening.current = true;
+    setMenuError("");
+    try {
+      const scenes = await invoke<PetScene[]>("get_pet_scenes");
+      const act = (command: string, args: Record<string, unknown>) => {
+        void mutate(command, args).catch((e) => setMenuError(String(e)));
+      };
+      await menuRef.current?.close();
+      menuRef.current = await Menu.new({
+        items: [
+          {
+            id: "pet-settings",
+            text: "桌宠设置…",
+            action: () => {
+              void invoke("open_desktop_pet_main", { settings: true }).catch(
+                (e) => setMenuError(String(e)),
+              );
+            },
+          },
+          {
+            id: "pet-pause",
+            text: state.animationPaused ? "恢复动画" : "暂停动画",
+            action: () =>
+              act("edit_pet_scene", {
+                request: { action: "pause", paused: !state.animationPaused },
+              }),
+          },
+          {
+            id: "pet-hide",
+            text: "暂时隐藏",
+            action: () => act("set_desktop_pet_enabled", { enabled: false }),
+          },
+          {
+            id: "pet-scenes",
+            text: "切换场景",
+            enabled: scenes.length > 0,
+            items: scenes
+              .sort((a, b) => Number(b.favorite) - Number(a.favorite))
+              .slice(0, 20)
+              .map((scene) => ({
+                id: scene.id,
+                text: (scene.favorite ? "★ " : "") + scene.name,
+                action: () =>
+                  act("apply_pet_scene", {
+                    sceneId: scene.id,
+                    mode: scene.wallpaperPath ? "all" : "pet",
+                  }),
+              })),
+          },
+        ],
+      });
+      await menuRef.current.popup(undefined, getCurrentWindow());
+    } catch (e) {
+      setMenuError(String(e));
+    } finally {
+      menuOpening.current = false;
+    }
+  }
   const [activity, setActivity] = useState<DesktopPetAnimationState>("idle");
   const [dragState, setDragState] = useState<
     "running-left" | "running-right" | null
@@ -192,6 +263,11 @@ export default function DesktopPetSurface() {
 
   return (
     <main className="desktop-pet-surface">
+      {menuError && (
+        <p className="desktop-pet-error" role="alert">
+          {menuError}
+        </p>
+      )}
       {error ? (
         <p className="desktop-pet-error" role="alert">
           {error}
@@ -199,8 +275,30 @@ export default function DesktopPetSurface() {
       ) : null}
       <div
         className="desktop-pet-stage"
+        role="group"
+        aria-label="桌面宠物，右键或 Shift+F10 打开菜单"
+        tabIndex={0}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          void showMenu();
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key === "ContextMenu" ||
+            (event.shiftKey && event.key === "F10")
+          ) {
+            event.preventDefault();
+            void showMenu();
+          }
+        }}
         onPointerMove={(event) => {
-          if (reducedMotion || activity !== "idle" || dragState) return;
+          if (
+            reducedMotion ||
+            state.animationPaused ||
+            activity !== "idle" ||
+            dragState
+          )
+            return;
           const rect = event.currentTarget.getBoundingClientRect();
           const dx = event.clientX - (rect.left + rect.width / 2);
           const dy = event.clientY - (rect.top + rect.height / 2);
@@ -224,7 +322,7 @@ export default function DesktopPetSurface() {
             src={petSrc}
             state={renderedState}
             lookAngle={lookAngle}
-            reducedMotion={reducedMotion}
+            reducedMotion={reducedMotion || state.animationPaused}
             className="desktop-pet-character desktop-pet-character--canvas"
             label={state.displayName || "Animated desktop pet"}
           />

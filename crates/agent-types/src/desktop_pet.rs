@@ -49,6 +49,8 @@ pub struct DesktopPetState {
     pub follow_wallpaper: bool,
     pub last_wallpaper_path: Option<String>,
     pub scenes: Vec<crate::pet_scene::PetScene>,
+    pub favorite_scene_ids: Vec<String>,
+    pub animation_paused: bool,
     /// Durable outbox: recovered before reads, so a crash cannot lose a scene wallpaper apply.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_scene_style: Option<crate::UiStyleManifest>,
@@ -72,13 +74,15 @@ impl Default for DesktopPetState {
             follow_wallpaper: false,
             last_wallpaper_path: None,
             scenes: Vec::new(),
+            favorite_scene_ids: Vec::new(),
+            animation_paused: false,
             pending_scene_style: None,
         }
     }
 }
 
 pub fn desktop_pet_root(base: &Path) -> PathBuf {
-    base.join("ui").join("desktop-pet")
+    home::desktop_pet_dir(base)
 }
 
 pub fn desktop_pet_state_path(base: &Path) -> PathBuf {
@@ -156,6 +160,11 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
         scene.validate()?;
         anyhow::ensure!(ids.insert(&scene.id), "场景 id 重复");
     }
+    anyhow::ensure!(
+        state.favorite_scene_ids.len() <= 100
+            && state.favorite_scene_ids.iter().all(|id| ids.contains(id)),
+        "收藏场景不存在"
+    );
     if let Some(style) = &state.pending_scene_style {
         style.validate().map_err(anyhow::Error::msg)?;
     }

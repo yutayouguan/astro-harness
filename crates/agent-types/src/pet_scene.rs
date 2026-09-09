@@ -99,7 +99,7 @@ impl PetScene {
 }
 
 pub fn managed_file(base: &Path, path: &Path) -> anyhow::Result<PathBuf> {
-    let root = base.join("ui").canonicalize()?;
+    let root = home::ui_dir(base).canonicalize()?;
     let path = path.canonicalize()?;
     anyhow::ensure!(
         path.starts_with(root) && path.is_file(),
@@ -132,6 +132,218 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     temporary.as_file().sync_all()?;
     temporary.persist(path).map_err(|error| error.error)?;
     Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+#[serde(
+    tag = "action",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum PetSceneEdit {
+    Rename {
+        scene_id: String,
+        name: String,
+    },
+    RenamePet {
+        scene_id: String,
+        name: String,
+    },
+    Favorite {
+        scene_id: String,
+        favorite: bool,
+    },
+    Delete {
+        scene_id: String,
+        confirm_active: bool,
+    },
+    Duplicate {
+        scene_id: String,
+        name: String,
+    },
+    Pause {
+        paused: bool,
+    },
+}
+
+fn validate_name(name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !name.trim().is_empty()
+            && name.chars().count() <= 80
+            && !name.chars().any(char::is_control),
+        "名称应为 1–80 个字符"
+    );
+    Ok(())
+}
+
+pub fn scene_is_in_use(base: &Path, state: &DesktopPetState, scene: &PetScene) -> bool {
+    state.pet_path.as_ref() == Some(&scene.pet.pet_path)
+        || state.last_wallpaper_path.as_ref().is_some_and(|current| {
+            scene
+                .wallpaper_path(base)
+                .is_some_and(|p| wallpaper_key(&p) == *current)
+                || scene
+                    .wallpaper_source_path
+                    .as_ref()
+                    .is_some_and(|p| wallpaper_key(Path::new(p)) == *current)
+        })
+}
+
+/// Library deletion is non-destructive: active visuals and files remain usable.
+pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetState> {
+    let state = crate::update_desktop_pet_state(base, |state| {
+        let id = match &edit {
+            PetSceneEdit::Rename { scene_id, .. }
+            | PetSceneEdit::RenamePet { scene_id, .. }
+            | PetSceneEdit::Favorite { scene_id, .. }
+            | PetSceneEdit::Delete { scene_id, .. }
+            | PetSceneEdit::Duplicate { scene_id, .. } => Some(scene_id),
+            PetSceneEdit::Pause { .. } => None,
+        };
+        let index = id
+            .map(|id| {
+                state
+                    .scenes
+                    .iter()
+                    .position(|s| &s.id == id)
+                    .ok_or_else(|| anyhow::anyhow!("场景不存在"))
+            })
+            .transpose()?;
+        match edit {
+            PetSceneEdit::Pause { paused } => state.animation_paused = paused,
+            PetSceneEdit::Rename { name, .. } => {
+                validate_name(&name)?;
+                let scene = &mut state.scenes[index.unwrap()];
+                scene.name = name.trim().into();
+                if let Some(style) = &mut scene.style {
+                    style.name = scene.name.clone();
+                }
+            }
+            PetSceneEdit::RenamePet { name, .. } => {
+                validate_name(&name)?;
+                let path = state.scenes[index.unwrap()].pet.pet_path.clone();
+                for scene in &mut state.scenes {
+                    if scene.pet.pet_path == path {
+                        scene.pet.display_name = Some(name.trim().into());
+                    }
+                }
+                if state.pet_path.as_ref() == Some(&path) {
+                    state.display_name = Some(name.trim().into());
+                }
+            }
+            PetSceneEdit::Favorite { scene_id, favorite } => {
+                state.favorite_scene_ids.retain(|id| id != &scene_id);
+                if favorite {
+                    state.favorite_scene_ids.push(scene_id);
+                }
+            }
+            PetSceneEdit::Delete {
+                scene_id,
+                confirm_active,
+            } => {
+                let index = index.unwrap();
+                anyhow::ensure!(
+                    confirm_active || !scene_is_in_use(base, state, &state.scenes[index]),
+                    "此场景的宠物或壁纸正在使用，请确认移出收藏；当前显示和素材文件会保留"
+                );
+                state.scenes.remove(index);
+                state.favorite_scene_ids.retain(|id| id != &scene_id);
+            }
+            PetSceneEdit::Duplicate { name, .. } => {
+                validate_name(&name)?;
+                let pet = state.scenes[index.unwrap()].pet.clone();
+                state.scenes.push(PetScene {
+                    id: format!("pet-{}", uuid::Uuid::new_v4().simple()),
+                    name: name.trim().into(),
+                    pet,
+                    style: None,
+                    wallpaper_source_path: None,
+                });
+            }
+        }
+        Ok(())
+    })?;
+    crate::notify_desktop_pet_changed();
+    Ok(state)
+}
+
+/// Export derived assets only, never the user's source photo or credentials.
+pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result<PathBuf> {
+    anyhow::ensure!(destination.is_dir(), "请选择导出文件夹");
+    let state = crate::read_desktop_pet_state(base)?;
+    let mut scene = state
+        .scenes
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| anyhow::anyhow!("场景不存在"))?;
+    let pet_path = managed_file(base, Path::new(&scene.pet.pet_path))?;
+    let pet = read_limited_pet_file(&pet_path, 50 * 1024 * 1024)?;
+    let wallpaper = scene
+        .wallpaper_path(base)
+        .map(|p| -> anyhow::Result<_> {
+            let p = managed_file(base, &p)?;
+            let bytes = read_limited_pet_file(&p, 25 * 1024 * 1024)?;
+            Ok((p, bytes))
+        })
+        .transpose()?;
+    let package = destination.join(format!("{}-{}", scene.id, uuid::Uuid::new_v4().simple()));
+    let temporary = tempfile::Builder::new()
+        .prefix(".pet-export-")
+        .tempdir_in(destination)?;
+    let pet_name = format!(
+        "pet.{}",
+        pet_path
+            .extension()
+            .and_then(|x| x.to_str())
+            .unwrap_or("png")
+    );
+    fs::write(temporary.path().join(&pet_name), pet)?;
+    scene.pet.pet_path = pet_name.clone();
+    scene.pet.source_path = None;
+    scene.wallpaper_source_path = None;
+    if scene.pet.sprite_version_number == Some(2) {
+        let manifest = crate::DesktopPetManifest {
+            id: scene.id.clone(),
+            display_name: scene
+                .pet
+                .display_name
+                .clone()
+                .unwrap_or_else(|| scene.name.clone()),
+            description: scene
+                .pet
+                .description
+                .clone()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "Exported Astro companion".into()),
+            sprite_version_number: 2,
+            spritesheet_path: pet_name,
+        };
+        fs::write(
+            temporary.path().join("pet.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+    }
+    if let Some((path, bytes)) = wallpaper {
+        let name = format!(
+            "wallpaper.{}",
+            path.extension().and_then(|x| x.to_str()).unwrap_or("png")
+        );
+        fs::write(temporary.path().join(&name), bytes)?;
+        scene
+            .style
+            .as_mut()
+            .unwrap()
+            .wallpaper
+            .as_mut()
+            .unwrap()
+            .path = name;
+    }
+    fs::write(
+        temporary.path().join("scene.json"),
+        serde_json::to_vec_pretty(&scene)?,
+    )?;
+    fs::rename(temporary.path(), &package)?;
+    Ok(package)
 }
 
 pub(crate) fn publish_style(base: &Path, style: &UiStyleManifest) -> anyhow::Result<()> {
@@ -457,5 +669,113 @@ mod tests {
         let state = sync_wallpaper(dir.path(), Some("late-previous-wallpaper")).unwrap();
         assert_eq!(state.pet_path, applied.pet_path);
         assert_eq!(state.last_wallpaper_path, applied.last_wallpaper_path);
+    }
+
+    #[test]
+    fn pet_scene_management_reuses_identity_and_renames_all_homes() {
+        let (dir, scene) = fixture();
+        save_scene(dir.path(), scene.clone()).unwrap();
+        let duplicate = edit_scene(
+            dir.path(),
+            PetSceneEdit::Duplicate {
+                scene_id: scene.id.clone(),
+                name: "Beach".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(duplicate.scenes.len(), 2);
+        assert_eq!(duplicate.scenes[1].pet, scene.pet);
+        assert!(duplicate.scenes[1].style.is_none());
+        let renamed = edit_scene(
+            dir.path(),
+            PetSceneEdit::RenamePet {
+                scene_id: scene.id.clone(),
+                name: "Mochi".into(),
+            },
+        )
+        .unwrap();
+        assert!(renamed
+            .scenes
+            .iter()
+            .all(|s| s.pet.display_name.as_deref() == Some("Mochi")));
+        let renamed_scene = edit_scene(
+            dir.path(),
+            PetSceneEdit::Rename {
+                scene_id: scene.id.clone(),
+                name: "Garden".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(renamed_scene.scenes[0].name, "Garden");
+        assert_eq!(renamed_scene.scenes[1].name, "Beach");
+    }
+
+    #[test]
+    fn pet_scene_active_delete_requires_confirmation_and_keeps_files() {
+        let (dir, scene) = fixture();
+        save_scene(dir.path(), scene.clone()).unwrap();
+        apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
+        edit_scene(
+            dir.path(),
+            PetSceneEdit::Favorite {
+                scene_id: scene.id.clone(),
+                favorite: true,
+            },
+        )
+        .unwrap();
+        assert!(edit_scene(
+            dir.path(),
+            PetSceneEdit::Delete {
+                scene_id: scene.id.clone(),
+                confirm_active: false
+            }
+        )
+        .is_err());
+        let state = edit_scene(
+            dir.path(),
+            PetSceneEdit::Delete {
+                scene_id: scene.id.clone(),
+                confirm_active: true,
+            },
+        )
+        .unwrap();
+        assert!(state.scenes.is_empty() && state.favorite_scene_ids.is_empty());
+        assert_eq!(state.pet_path.as_deref(), Some(scene.pet.pet_path.as_str()));
+        assert!(Path::new(&scene.pet.pet_path).exists());
+        assert!(scene.wallpaper_path(dir.path()).unwrap().exists());
+    }
+
+    #[test]
+    fn pet_scene_export_is_portable_and_excludes_original_photo() {
+        let (dir, mut scene) = fixture();
+        scene.pet.source_path = Some("private-original-photo.jpg".into());
+        save_scene(dir.path(), scene.clone()).unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let package = export_scene(dir.path(), &scene.id, output.path()).unwrap();
+        let data = fs::read_to_string(package.join("scene.json")).unwrap();
+        assert!(!data.contains("private-original"));
+        let exported: PetScene = serde_json::from_str(&data).unwrap();
+        assert!(exported.pet.source_path.is_none());
+        assert!(package.join(exported.pet.pet_path).is_file());
+        assert!(package
+            .join(exported.style.unwrap().wallpaper.unwrap().path)
+            .is_file());
+        assert_ne!(
+            export_scene(dir.path(), &scene.id, output.path()).unwrap(),
+            package
+        );
+    }
+
+    #[test]
+    fn pet_scene_pause_survives_scene_switch_and_restart() {
+        let (dir, scene) = fixture();
+        save_scene(dir.path(), scene.clone()).unwrap();
+        edit_scene(dir.path(), PetSceneEdit::Pause { paused: true }).unwrap();
+        apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
+        assert!(
+            crate::read_desktop_pet_state(dir.path())
+                .unwrap()
+                .animation_paused
+        );
     }
 }

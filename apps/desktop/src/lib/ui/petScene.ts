@@ -16,7 +16,28 @@ export type PetScene = {
   > & { petPath: string };
   style: ActiveUiStyle | null;
   wallpaperPath: string | null;
+  inUse: boolean;
+  favorite: boolean;
 };
+
+export function groupPetScenes(scenes: PetScene[]) {
+  const groups = new Map<
+    string,
+    { petPath: string; name: string | null; scenes: PetScene[] }
+  >();
+  for (const scene of scenes) {
+    const group = groups.get(scene.pet.petPath) ?? {
+      petPath: scene.pet.petPath,
+      name: scene.pet.displayName,
+      scenes: [],
+    };
+    group.scenes.push(scene);
+    groups.set(group.petPath, group);
+  }
+  for (const group of groups.values())
+    group.scenes.sort((a, b) => Number(b.favorite) - Number(a.favorite));
+  return [...groups.values()];
+}
 
 export function sceneWallpaperAsset(
   style: ActiveUiStyle,

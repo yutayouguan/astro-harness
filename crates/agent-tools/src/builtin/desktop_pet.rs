@@ -28,6 +28,7 @@ pub enum DesktopPetAction {
     Configure,
     SaveScene,
     ApplyScene,
+    EditScene,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -67,6 +68,9 @@ pub struct DesktopPetArgs {
     pub mode: Option<types::pet_scene::SceneApplyMode>,
     #[serde(default)]
     pub follow_wallpaper: Option<bool>,
+    /// edit_scene: rename/rename_pet/favorite/duplicate/delete/pause。删除使用中场景需用户确认。
+    #[serde(default)]
+    pub edit: Option<types::pet_scene::PetSceneEdit>,
 }
 
 struct ValidatedImage {
@@ -110,6 +114,12 @@ fn handle(
     let state = match action {
         DesktopPetAction::Status => read_state(ctx)?,
         DesktopPetAction::Apply => apply(ctx, parsed)?,
+        DesktopPetAction::EditScene => types::pet_scene::edit_scene(
+            &ctx.memory_dir,
+            parsed
+                .edit
+                .ok_or_else(|| anyhow::anyhow!("edit_scene 需要 edit"))?,
+        )?,
         DesktopPetAction::SaveScene => save_scene(ctx, parsed)?,
         DesktopPetAction::ApplyScene => types::pet_scene::apply_scene(
             &ctx.memory_dir,
@@ -442,6 +452,10 @@ pub fn normalize_pet_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
             (red * red + green * green + blue * blue).sqrt()
         };
         if corners.iter().all(|pixel| distance(pixel) <= 36.0) {
+            // A pastel key color can be close to white fur in RGB distance. Require
+            // its chroma direction too, otherwise flood fill leaks through the coat.
+            let background_chroma = [background[0] - background[1], background[2] - background[1]];
+            let chroma_norm = background_chroma[0].powi(2) + background_chroma[1].powi(2);
             // Only remove the edge-connected background, never similarly colored
             // enclosed fur/eyes/body details. Do not recolor pre-existing alpha art.
             let mut visited = vec![false; (width as usize) * (height as usize)];
@@ -461,6 +475,17 @@ pub fn normalize_pet_image(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
                 }
                 visited[index] = true;
                 let pixel = image.get_pixel_mut(x, y);
+                if chroma_norm >= 144.0 {
+                    let chroma = [
+                        f32::from(pixel[0]) - f32::from(pixel[1]),
+                        f32::from(pixel[2]) - f32::from(pixel[1]),
+                    ];
+                    let projection =
+                        chroma[0] * background_chroma[0] + chroma[1] * background_chroma[1];
+                    if projection < chroma_norm * 0.45 {
+                        continue;
+                    }
+                }
                 let difference = distance(pixel);
                 if difference >= 66.0 {
                     continue;
@@ -512,6 +537,28 @@ fn store_asset(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn desktop_pet_matte_preserves_white_fur_connected_to_pastel_background() {
+        let mut image = image::RgbaImage::from_pixel(12, 12, image::Rgba([220, 250, 235, 255]));
+        for y in 3..9 {
+            for x in 3..9 {
+                image.put_pixel(x, y, image::Rgba([245, 245, 245, 255]));
+            }
+        }
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        let result = image::load_from_memory(&normalize_pet_image(bytes.get_ref()).unwrap())
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(result.get_pixel(0, 0)[3], 0);
+        for y in 3..9 {
+            for x in 3..9 {
+                assert_eq!(result.get_pixel(x, y)[3], 255);
+            }
+        }
+    }
     use image::{DynamicImage, Rgba, RgbaImage};
     use std::sync::RwLock;
 

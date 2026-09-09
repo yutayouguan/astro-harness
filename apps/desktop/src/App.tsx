@@ -330,6 +330,23 @@ export default function App() {
     setSettingsTab(tab);
     setNav("settings");
   }, []);
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("desktop-pet-open-settings", () => openSettingsTab("desktop-pet")),
+      )
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [openSettingsTab]);
   const [toolsInitialTab, setToolsInitialTab] = useState<"builtin" | null>(
     null,
   );

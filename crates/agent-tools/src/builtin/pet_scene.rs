@@ -87,6 +87,47 @@ pub fn attach_wallpaper(
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "prepares an explicitly selected empty temporary home from live acceptance images"]
+    fn prepare_native_pet_acceptance_home() {
+        let root = std::path::PathBuf::from(std::env::var("ASTRO_PET_QA_HOME").unwrap())
+            .canonicalize()
+            .unwrap();
+        assert!(root.starts_with(std::path::Path::new("/tmp").canonicalize().unwrap()));
+        assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+        let input = std::path::PathBuf::from(std::env::var("ASTRO_PET_QA_OUTPUT").unwrap());
+        let raw =
+            types::desktop_pet::read_limited_pet_file(&input.join("pet.png"), 25 * 1024 * 1024)
+                .unwrap();
+        let pet = super::super::desktop_pet::normalize_pet_image(&raw).unwrap();
+        let path = types::desktop_pet_root(&root).join("acceptance-pet.png");
+        atomic_write(&path, &pet).unwrap();
+        let scene = PetScene {
+            id: "pet-acceptance".into(),
+            name: "森林小屋 · 实测".into(),
+            pet: types::pet_scene::PetIdentity {
+                pet_path: path.to_string_lossy().into_owned(),
+                source_path: None,
+                sprite_version_number: None,
+                display_name: Some("验收小猫".into()),
+                description: None,
+                provider: Some("azure".into()),
+                model: Some("gpt-image-2".into()),
+            },
+            style: None,
+            wallpaper_source_path: None,
+        };
+        types::pet_scene::save_scene(&root, scene.clone()).unwrap();
+        let wallpaper = types::desktop_pet::read_limited_pet_file(
+            &input.join("wallpaper.png"),
+            25 * 1024 * 1024,
+        )
+        .unwrap();
+        attach_wallpaper(&root, &scene, &wallpaper, None).unwrap();
+        types::pet_scene::apply_scene(&root, &scene.id, types::pet_scene::SceneApplyMode::All)
+            .unwrap();
+        println!("Native acceptance home prepared: {}", root.display());
+    }
+    #[test]
     fn pet_scene_failed_and_stale_wallpapers_preserve_saved_pet() {
         let dir = tempfile::tempdir().unwrap();
         let pet_path = dir.path().join("ui/pet.png");

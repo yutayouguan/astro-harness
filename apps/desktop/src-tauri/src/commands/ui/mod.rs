@@ -2,6 +2,7 @@ pub mod browser;
 pub mod desktop_pet;
 pub mod icon;
 pub mod onboarding;
+pub mod pet_generation;
 pub mod pet_scene;
 pub mod ui_style;
 pub mod updater;

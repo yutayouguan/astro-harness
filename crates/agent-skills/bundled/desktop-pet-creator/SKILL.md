@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
 description: 从用户照片生成 Astro 桌宠、可选配套壁纸、保存和切换宠物场景。用户说“生成桌宠”“配套宠物壁纸”“宠物场景”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 3
+astro_bundled_rev: 4
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 
@@ -41,6 +41,14 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 - 用户确认应用后调用 `desktop_pet action=apply_scene`，传 `sceneId` 和 `mode`：`all` 整套并开启联动；`pet` 仅桌宠并关闭联动；`wallpaper` 仅壁纸；`linked` 根据现有联动设置切换。没有壁纸的场景仅可用 `pet`。
 - `desktop_pet action=status` 可查看收藏。切换已有场景不调用 `image_gen`。`configure followWallpaper=true/false` 控制联动；未绑定壁纸保留当前桌宠，关闭的桌宠不会因普通壁纸切换自动显示。
 - 用户明确要求“生成并应用整套”时，可完成生成后直接 `apply_scene`；仅“生成”则先预览。
+
+### 宠物与场景管理
+
+- `state.scenes` 中 `pet.petPath` 相同的场景属于同一只宠物。用户说“给奶糖换一个海边的家”时，先 `status` 找到它，再 `edit_scene`，`edit={action:"duplicate",sceneId:"已有场景 id",name:"海边的家"}`，新场景复用形象，不重新生成宠物。用新场景身份图生成壁纸后再绑定。
+- 改宠物名：`edit={action:"rename_pet",sceneId:"...",name:"奶糖"}`，所有同身份场景同步；改场景名使用 `rename`。
+- 收藏：`edit={action:"favorite",sceneId:"...",favorite:true}`；暂停/恢复：`edit={action:"pause",paused:true/false}`。
+- 移除收藏使用 `delete`，传 `sceneId` 和 `confirmActive:false`。如果返回正在使用，先说明移除只删除场景记录、当前画面和素材保留，并取得用户确认后才传 `confirmActive:true`。不通过 shell 删除素材。
+- 桌面设置页可导出场景素材包；默认只导出桌宠及壁纸，不包含原始照片。原生桌宠右键菜单支持场景切换、暂停、隐藏和打开设置。
 
 ### 直接应用已有图片
 

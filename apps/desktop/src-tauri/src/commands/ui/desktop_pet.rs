@@ -294,6 +294,11 @@ fn place_near_bottom_right<R: Runtime>(window: &WebviewWindow<R>) {
 }
 
 fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> Result<(), String> {
+    // ASTRO_MEMORY_DIR may live outside $HOME. Grant only the configured UI asset domain,
+    // never arbitrary source directories, so custom homes work with the asset protocol.
+    app.asset_protocol_scope()
+        .allow_directory(home::ui_dir(&home::default_memory_dir()), true)
+        .map_err(|error| format!("无法授权桌宠素材目录：{error}"))?;
     if let Some(window) = app.get_webview_window(PET_WINDOW_LABEL) {
         window
             .set_always_on_top(state.always_on_top)
@@ -563,8 +568,11 @@ pub async fn set_desktop_pet_always_on_top(
 }
 
 #[tauri::command]
-pub fn open_desktop_pet_main(app: AppHandle) {
+pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
     crate::ui::tray::show_main_window(&app);
+    if settings == Some(true) {
+        let _ = app.emit_to("main", "desktop-pet-open-settings", ());
+    }
 }
 
 #[cfg(test)]

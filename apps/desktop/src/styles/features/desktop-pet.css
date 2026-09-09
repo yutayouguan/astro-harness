@@ -14,6 +14,21 @@ html[data-window-surface="desktop-pet"] #root {
   margin-top: 20px;
 }
 
+.pet-identity-group { display: grid; gap: 12px; min-width: 0; }
+.pet-identity-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.pet-identity-header h4 { flex: 1; margin: 8px 0; }
+.pet-identity-header small { color: var(--text-muted); font-size: 12px; font-weight: normal; }
+.pet-identity-header button, .pet-scene-editor button, .pet-generation-progress button {
+  padding: 7px 12px; min-height: 34px; border-radius: 8px; border: 0.5px solid var(--border); color: var(--text); background: var(--glass-fill); cursor: pointer;
+}
+.pet-scene-editor { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px; border: 0.5px solid var(--border); border-radius: 12px; }
+.pet-scene-editor p { width: 100%; margin: 0; }
+.pet-scene-editor label { display: grid; flex: 1; gap: 8px; }
+.pet-scene-editor input { min-width: 0; padding: 8px; color: var(--text); background: var(--glass-fill); border: 0.5px solid var(--border); border-radius: 6px; }
+.pet-scene-active { padding: 3px 6px; font-size: 11px; border-radius: 6px; background: var(--glass-fill); color: var(--accent); }
+.pet-generation-progress ol { display: flex; flex-wrap: wrap; gap: 16px; list-style: none; padding: 0; font-size: 12px; color: var(--text-muted); }
+.pet-generation-progress [aria-current="step"] { color: var(--accent); font-weight: 600; }
+
 .pet-scene-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
@@ -109,6 +124,11 @@ html[data-window-surface="desktop-pet"] #root {
 }
 
 @media (prefers-contrast: more) {
+  .pet-identity-header button,
+  .pet-scene-editor,
+  .pet-scene-editor input,
+  .pet-scene-editor button,
+  .pet-generation-progress button,
   .pet-scene-card,
   .pet-scene-actions button,
   .pet-scene-actions select,

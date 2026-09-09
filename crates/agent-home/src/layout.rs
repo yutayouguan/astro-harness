@@ -27,6 +27,7 @@ paths! {
     uploads_dir => "artifacts/uploads",
     usage_dir => "usage",
     ui_dir => "ui",
+    desktop_pet_dir => "ui/desktop-pet",
     app_icon_path => "ui/app-icon.json",
     onboarding_path => "ui/onboarding.json",
     pending_agent_icons_dir => "agents/pending-icons",

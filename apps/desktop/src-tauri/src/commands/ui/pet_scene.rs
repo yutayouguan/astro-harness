@@ -1,5 +1,6 @@
 //! Native UI adapters for shared scene storage. Generation never replaces the active scene.
 use super::desktop_pet::{present_committed_state, DesktopPetStateDto};
+use super::pet_generation::PetGeneration;
 use std::{io::Cursor, path::Path};
 use tauri::AppHandle;
 use types::pet_scene::{PetIdentity, PetScene, SceneApplyMode};
@@ -10,6 +11,8 @@ pub struct PetScenePreview {
     #[serde(flatten)]
     scene: PetScene,
     wallpaper_path: Option<String>,
+    in_use: bool,
+    favorite: bool,
 }
 
 #[tauri::command]
@@ -18,9 +21,12 @@ pub fn get_pet_scenes() -> Result<Vec<PetScenePreview>, String> {
     let state = types::read_desktop_pet_state(&base).map_err(|e| e.to_string())?;
     Ok(state
         .scenes
-        .into_iter()
+        .iter()
+        .cloned()
         .rev()
         .map(|scene| PetScenePreview {
+            in_use: types::pet_scene::scene_is_in_use(&base, &state, &scene),
+            favorite: state.favorite_scene_ids.contains(&scene.id),
             wallpaper_path: scene
                 .wallpaper_path(&base)
                 .map(|p| p.to_string_lossy().into_owned()),
@@ -35,9 +41,12 @@ pub async fn create_pet_scene(
     name: String,
     description: Option<String>,
     use_current: bool,
+    request_id: String,
+    pet_name: Option<String>,
 ) -> Result<DesktopPetStateDto, String> {
     let base = home::default_memory_dir();
     let state = types::read_desktop_pet_state(&base).map_err(|e| e.to_string())?;
+    let mut generation = PetGeneration::start(&request_id)?;
     // Validate before a billable request.
     if name.trim().is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
         return Err("场景名称应为 1–80 个字符".into());
@@ -45,17 +54,27 @@ pub async fn create_pet_scene(
     if state.scenes.len() >= 100 {
         return Err("场景收藏已达 100 个上限".into());
     }
-    let pet = if use_current {
+    if pet_name.as_ref().is_some_and(|name| {
+        name.trim().is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control)
+    }) {
+        return Err("宠物名称应为 1–80 个字符".into());
+    }
+    let mut pet = if use_current {
         PetIdentity::from_state(&state).map_err(|e| e.to_string())?
     } else {
         let source = state.source_path.as_deref().ok_or("请先上传宠物照片")?;
-        super::desktop_pet::generate_pet_identity(
-            &base,
-            source,
-            description.as_deref().unwrap_or_default(),
-        )
-        .await?
+        generation
+            .run(super::desktop_pet::generate_pet_identity(
+                &base,
+                source,
+                description.as_deref().unwrap_or_default(),
+            ))
+            .await?
     };
+    generation.check()?;
+    if !use_current {
+        pet.display_name = pet_name.map(|s| s.trim().to_string());
+    }
     let scene = PetScene {
         id: format!("pet-{}", uuid::Uuid::new_v4().simple()),
         name: name.trim().into(),
@@ -82,9 +101,11 @@ pub async fn generate_pet_scene_wallpaper(
     scene_id: String,
     description: String,
     include_pet: bool,
+    request_id: String,
 ) -> Result<DesktopPetStateDto, String> {
     let base = home::default_memory_dir();
     let scene = find_scene(&base, &scene_id)?;
+    let mut generation = PetGeneration::start(&request_id)?;
     if description.chars().count() > 2000 {
         return Err("场景描述不能超过 2000 个字符".into());
     }
@@ -121,13 +142,15 @@ pub async fn generate_pet_scene_wallpaper(
             "image/png"
         };
     let prompt = wallpaper_prompt(&description, include_pet);
-    let generated = crate::commands::chat::generate_image_data_with_reference(
-        &prompt,
-        1536,
-        1024,
-        Some((&bytes, mime, "pet-reference.png")),
-    )
-    .await?;
+    let generated = generation
+        .run(crate::commands::chat::generate_image_data_with_reference(
+            &prompt,
+            1536,
+            1024,
+            Some((&bytes, mime, "pet-reference.png")),
+        ))
+        .await?;
+    generation.check()?;
     // Compare against the captured scene so late generation cannot replace a newer binding.
     let state = tools::builtin::pet_scene::attach_wallpaper(&base, &scene, &generated.data, None)
         .map_err(|e| e.to_string())?;
@@ -136,6 +159,31 @@ pub async fn generate_pet_scene_wallpaper(
 
 fn wallpaper_prompt(description: &str, include_pet: bool) -> String {
     format!("Create a polished landscape wallpaper for an app background, matching the reference pet's art style and palette. Scene: {}. {} Keep the center quiet for readable UI and leave open space near the lower right for a separate floating desktop pet. No text, logo, watermark, collage, or sprite grid.", description.trim(), if include_pet { "Include exactly one portrait of the reference pet, preserving its identity and markings." } else { "Environment only: do NOT depict any pet, animal, character, or duplicate of the reference. Use the reference only for style and colors." })
+}
+
+#[tauri::command]
+pub async fn edit_pet_scene(
+    app: AppHandle,
+    request: types::pet_scene::PetSceneEdit,
+) -> Result<DesktopPetStateDto, String> {
+    let state = types::pet_scene::edit_scene(&home::default_memory_dir(), request)
+        .map_err(|e| e.to_string())?;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
+pub async fn export_pet_scene(scene_id: String, destination: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        types::pet_scene::export_scene(
+            &home::default_memory_dir(),
+            &scene_id,
+            Path::new(&destination),
+        )
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

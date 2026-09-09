@@ -20,18 +20,20 @@ const meta = {
       petPath: photo,
       sourcePath: photo,
       spriteVersionNumber: null,
-      displayName: null,
+      displayName: "奶糖",
       description: null,
       provider: "Fixture",
       model: "No API calls",
     };
-    const scenes = [
+    let scenes = [
       {
         id: "pet-demo",
         name: "奶糖 · 场景预览样例",
         pet,
         style: null,
         wallpaperPath: photo,
+        favorite: true,
+        inUse: true,
       },
       {
         id: "pet-draft",
@@ -39,6 +41,8 @@ const meta = {
         pet,
         style: null,
         wallpaperPath: null,
+        favorite: false,
+        inUse: false,
       },
     ];
     mockIPC((command, payload) => {
@@ -47,6 +51,35 @@ const meta = {
       if (command === "plugin:event|listen") return 1;
       if (command === "plugin:event|unlisten") return null;
       if (command === "get_desktop_pet_state") return state;
+      if (command === "cancel_pet_generation") return true;
+      if (command === "edit_pet_scene") {
+        const edit = args.request as {
+          action: string;
+          sceneId: string;
+          name: string;
+          favorite: boolean;
+        };
+        const target = scenes.find((s) => s.id === edit.sceneId);
+        if (edit.action === "rename" && target) target.name = edit.name;
+        if (edit.action === "rename_pet" && target)
+          scenes.forEach((s) => {
+            if (s.pet.petPath === target.pet.petPath)
+              s.pet.displayName = edit.name;
+          });
+        if (edit.action === "favorite" && target)
+          target.favorite = edit.favorite;
+        if (edit.action === "duplicate" && target)
+          scenes.push({
+            ...target,
+            id: `pet-home-${state.revision}`,
+            name: edit.name,
+            wallpaperPath: null,
+            favorite: false,
+            inUse: false,
+          });
+        if (edit.action === "delete")
+          scenes = scenes.filter((s) => s.id !== edit.sceneId);
+      }
       if (command === "generate_pet_scene_wallpaper")
         throw new Error("验收样例：壁纸请求失败，已保留桌宠，可单独重试。");
       if (command === "set_pet_scene_follow_wallpaper")
@@ -64,6 +97,8 @@ const meta = {
           pet,
           style: null,
           wallpaperPath: null,
+          favorite: false,
+          inUse: false,
         };
         scenes.unshift(scene);
         state = {
