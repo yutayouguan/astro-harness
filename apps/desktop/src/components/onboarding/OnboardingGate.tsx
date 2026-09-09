@@ -19,10 +19,10 @@ import {
   LoaderCircle,
   Monitor,
   Moon,
+  Plug,
   ShieldCheck,
   Sparkles,
   Sun,
-  Wifi,
 } from "lucide-react";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
 import { useI18n } from "../../i18n/LocaleContext";
@@ -1222,7 +1222,7 @@ export function FirstRunOnboarding({
                         ) : providerStatus === "success" ? (
                           <Check size={17} aria-hidden />
                         ) : (
-                          <Wifi size={17} aria-hidden />
+                          <Plug size={17} aria-hidden />
                         )}
                         <span>
                           {providerStatus === "testing"
