@@ -73,6 +73,8 @@ import {
   OnboardingIntroParticles,
 } from "./OnboardingBrand";
 import { StarterTaskChooser } from "./StarterTaskChooser";
+import { OnboardingWarp } from "./OnboardingWarp";
+import { onboardingStageVariants } from "../../lib/ui/onboardingMotion";
 import { OnboardingPreferences } from "./OnboardingPreferences";
 import { DesktopPreferencePreviewContext } from "../../hooks/settings/useDesktopPreference";
 import { ConnectionIssue } from "./ConnectionIssue";
@@ -104,6 +106,7 @@ type FirstRunOnboardingProps = {
   initialStep?: OnboardingStep;
   onComplete: () => void;
   previewProviders?: ProviderDto[];
+  onPreviewEnter?: (prompt: string) => void;
   disableIntroAdvance?: boolean;
   initialDraft?: OnboardingDraft;
   handoff?: boolean;
@@ -124,25 +127,11 @@ function stepIndex(step: OnboardingStep): number {
   return STEP_ORDER.indexOf(step);
 }
 
-function slideVariants(direction: number, reducedMotion: boolean) {
-  if (reducedMotion) {
-    return {
-      enter: { opacity: 0 },
-      center: { opacity: 1 },
-      exit: { opacity: 0 },
-    };
-  }
-  return {
-    enter: { opacity: 0, x: direction >= 0 ? 52 : -52 },
-    center: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: direction >= 0 ? -52 : 52 },
-  };
-}
-
 export function FirstRunOnboarding({
   initialStep = "intro",
   onComplete,
   previewProviders,
+  onPreviewEnter,
   disableIntroAdvance = false,
   initialDraft = EMPTY_ONBOARDING_DRAFT,
   handoff = false,
@@ -229,6 +218,13 @@ export function FirstRunOnboarding({
   const [demoDraft, setDemoDraft] = useState<string | null>(null);
   const demoInputRef = useRef<HTMLTextAreaElement>(null);
   const [introReplay, setIntroReplay] = useState(0);
+  const [brandArrived, setBrandArrived] = useState(false);
+  const [warpArrived, setWarpArrived] = useState(false);
+  const brandArrival = useCallback(() => setBrandArrived(true), []);
+  const warpArrival = useCallback(() => setWarpArrived(true), []);
+  useEffect(() => {
+    if (handoff && brandArrived && warpArrived) onHandoffComplete?.();
+  }, [handoff, brandArrived, warpArrived, onHandoffComplete]);
   const [connectionIssue, setConnectionIssue] =
     useState<ConnectionIssueKind | null>(null);
   const [progressError, setProgressError] = useState(false);
@@ -891,10 +887,14 @@ export function FirstRunOnboarding({
     }
   };
 
-  const variants = slideVariants(direction, reducedMotion);
+  const variants = onboardingStageVariants(reducedMotion);
   const currentIndex = Math.max(0, stepIndex(step));
   const enterAstro = (prompt?: string) => {
     if (previewProviders) {
+      if (onPreviewEnter) {
+        onPreviewEnter(prompt ?? "");
+        return;
+      }
       setDemoDraft(prompt ?? "");
       requestAnimationFrame(() => {
         demoInputRef.current?.focus();
@@ -914,7 +914,7 @@ export function FirstRunOnboarding({
       <OnboardingBrandMotion
         key={introReplay}
         phase={handoff ? "app" : step === "intro" ? "intro" : "header"}
-        onArrive={onHandoffComplete}
+        onArrive={brandArrival}
       />
       {step !== "intro" && (
         <div className="onboarding-brand-rail" aria-hidden>
@@ -936,6 +936,13 @@ export function FirstRunOnboarding({
         <span />
       </div>
 
+      <OnboardingWarp
+        key={`${handoff ? "app" : step}-${introReplay}`}
+        mode={handoff ? "app" : step === "intro" ? "intro" : "step"}
+        direction={direction}
+        reduced={reducedMotion}
+        onFinished={handoff ? warpArrival : undefined}
+      />
       {step === "intro" && <OnboardingIntroParticles key={introReplay} />}
       {step === "intro" && previewProviders && (
         <button
@@ -964,8 +971,15 @@ export function FirstRunOnboarding({
             className="onboarding-intro"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
-            transition={{ duration: reducedMotion ? 0.2 : 0.42 }}
+            exit={
+              reducedMotion
+                ? { opacity: 0 }
+                : {
+                    opacity: 0,
+                    transform: "perspective(1200px) translateZ(150px)",
+                  }
+            }
+            transition={{ duration: 0.18 }}
           >
             <div
               className="onboarding-intro-anchor"
@@ -991,11 +1005,6 @@ export function FirstRunOnboarding({
             initial="enter"
             animate="center"
             exit="exit"
-            transition={
-              reducedMotion
-                ? { duration: 0.18 }
-                : { type: "spring", bounce: 0, duration: 0.4 }
-            }
           >
             <header className="onboarding-header" data-tauri-drag-region="true">
               <div className="onboarding-brand-placeholder" aria-hidden />
@@ -1819,7 +1828,11 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
         />
       )}
       {(state === "entering" || state === "ready") && (
-        <div className="onboarding-app-host" key="app">
+        <div
+          className="onboarding-app-host"
+          data-arriving={state === "entering"}
+          key="app"
+        >
           {children}
         </div>
       )}

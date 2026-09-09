@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useCallback, useState } from "react";
 import { FirstRunOnboarding } from "../components/onboarding/OnboardingGate";
-import { LocaleProvider } from "../i18n/LocaleContext";
+import { AstroLogoMark } from "../components/icons/AstroLogoMark";
+import { Button } from "../components/ui";
+import { LocaleProvider, useI18n } from "../i18n/LocaleContext";
 import { ThemeProvider } from "../hooks/app/useTheme";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import type { ProviderDto } from "../types";
@@ -34,21 +37,88 @@ const providers: ProviderDto[] = [
   },
 ];
 
-function Preview({
-  step,
-}: {
+type PreviewProps = {
   step: "intro" | "personalize" | "provider" | "workspace" | "complete";
-}) {
+  journey?: boolean;
+};
+
+/** A clearly labelled local destination; never mounts native transports or sends prompts. */
+function JourneyPreview({ step, journey = false }: PreviewProps) {
+  const { locale } = useI18n();
+  const [phase, setPhase] = useState<"setup" | "entering" | "ready">("setup");
+  const [prompt, setPrompt] = useState("");
+  const arrive = useCallback(() => setPhase("ready"), []);
+  const enter = useCallback((draft: string) => {
+    setPrompt(draft);
+    setPhase("entering");
+  }, []);
+  const zh = locale === "zh";
+  return (
+    <>
+      {phase !== "ready" && (
+        <FirstRunOnboarding
+          initialStep={step}
+          previewProviders={providers}
+          disableIntroAdvance={step === "intro" && !journey}
+          handoff={phase === "entering"}
+          onHandoffComplete={arrive}
+          onPreviewEnter={journey ? enter : undefined}
+          onComplete={() => undefined}
+        />
+      )}
+      {phase !== "setup" && (
+        <div
+          className="onboarding-app-host"
+          data-arriving={phase === "entering"}
+        >
+          <main className="onboarding-arrival-preview">
+            <span className="onboarding-demo-label">
+              {zh
+                ? "APP 进入动画演示 · 不保存、不发送"
+                : "App arrival preview · nothing saved or sent"}
+            </span>
+            <div className="onboarding-arrival-preview-content">
+              <AstroLogoMark
+                className="onboarding-arrival-preview-logo"
+                data-onboarding-brand-target
+              />
+              <h1>{zh ? "从这里，开始协作" : "Let's work together"}</h1>
+              <p>
+                {zh
+                  ? "已抵达你的工作空间。下面的草稿可以继续编辑。"
+                  : "Welcome to your workspace. Your draft is ready to edit."}
+              </p>
+              <label className="onboarding-task-input">
+                {zh ? "聊天输入框（演示）" : "Chat input (demo)"}
+                <textarea
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  rows={5}
+                />
+              </label>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPhase("setup");
+                  setPrompt("");
+                }}
+              >
+                {zh ? "重新体验" : "Replay journey"}
+              </Button>
+            </div>
+          </main>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Preview(props: PreviewProps) {
   return (
     <ThemeProvider>
       <MorphiconProvider>
         <LocaleProvider>
-          <FirstRunOnboarding
-            initialStep={step}
-            previewProviders={providers}
-            disableIntroAdvance={step === "intro"}
-            onComplete={() => undefined}
-          />
+          <JourneyPreview key={`${props.step}-${props.journey}`} {...props} />
         </LocaleProvider>
       </MorphiconProvider>
     </ThemeProvider>
@@ -69,3 +139,5 @@ export const Personalize: Story = { args: { step: "personalize" } };
 export const Provider: Story = { args: { step: "provider" } };
 export const Workspace: Story = { args: { step: "workspace" } };
 export const Complete: Story = { args: { step: "complete" } };
+export const Journey: Story = { args: { step: "intro", journey: true } };
+export const EnterApp: Story = { args: { step: "complete", journey: true } };
