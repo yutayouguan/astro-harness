@@ -288,6 +288,23 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "explicit isolated cross-process fixture; run tools/verify-settings-restart.mjs"]
+    fn settings_restart_read_fixture() {
+        let root = home::test_env::settings_restart_fixture_root();
+        let _env = home::test_env::AstroMemoryDirGuard::set(&root);
+        let stored = load_providers_file().unwrap().unwrap();
+        let entry = stored
+            .providers
+            .iter()
+            .find(|p| p.id == "restart-local")
+            .unwrap();
+        let target = entry_to_target(entry).unwrap();
+        assert_eq!(target.model, "restart-model");
+        assert_eq!(target.base_url, "http://127.0.0.1:19999/v1");
+        assert_eq!(stored.active_provider_id.as_deref(), Some("restart-local"));
+    }
+
+    #[test]
     fn cron_reads_shared_provider_config_without_json_fallback() {
         let dir = tempfile::tempdir().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());

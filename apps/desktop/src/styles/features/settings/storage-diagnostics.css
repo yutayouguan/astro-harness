@@ -1,0 +1,18 @@
+.storage-diagnostics .prefs-card-head { gap: 12px; }
+.storage-diagnostics .prefs-diag-card-heading { flex: 1; }
+.storage-diagnostics-body { display: grid; gap: 14px; padding: 0 18px 18px; min-width: 0; font-size: 12px; }
+.storage-diagnostics-body p { margin: 5px 0 0; line-height: 1.6; color: var(--ink-secondary, var(--ink)); }
+.storage-diagnostics-paths { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; margin: 0; }
+.storage-diagnostics-paths dd { margin: 0; min-width: 0; }
+.storage-diagnostics code { overflow-wrap: anywhere; font-size: 11px; }
+.storage-diagnostics summary { cursor: pointer; padding: 7px 0; font-weight: 550; }
+.storage-diagnostics summary:focus-visible { outline: 2px solid var(--color-accent, currentColor); outline-offset: 2px; border-radius: 4px; }
+.storage-diagnostics ul { display: grid; gap: 8px; padding-left: 18px; }
+.storage-diagnostics li code { display: block; margin-top: 3px; }
+.storage-diagnostics-domains { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 4px 0 0; }
+.storage-diagnostics-domains > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--settings-border, rgb(128 128 128 / 18%)); }
+.storage-diagnostics-domains dd { display: grid; text-align: right; gap: 2px; margin: 0; font-variant-numeric: tabular-nums; }
+.storage-diagnostics-domains small { opacity: 0.65; }
+.storage-diagnostics-warning { padding: 10px 12px; border-left: 2px solid var(--color-accent, currentColor); }
+@media (max-width: 680px) { .storage-diagnostics-domains { grid-template-columns: 1fr; } .storage-diagnostics-paths { grid-template-columns: 1fr; gap: 5px; } }
+@media (prefers-contrast: more) { .storage-diagnostics-domains > div { border-bottom-width: 1px; } }

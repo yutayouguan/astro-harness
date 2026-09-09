@@ -1,5 +1,7 @@
 # Astro Agent 文档
 
+存储检查入口、清理预览边界与保存/重启回归见 [存储诊断](storage-diagnostics.md)。
+
 本机数据目录、唯一 TOML 配置入口及离线迁移边界见 [本机数据的领域布局](home-layout.md)。
 
 Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。

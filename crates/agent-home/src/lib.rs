@@ -9,6 +9,7 @@ pub mod config_file;
 pub mod infra;
 pub mod layout;
 pub mod settings;
+pub mod storage_diagnostics;
 pub mod test_env;
 pub mod workspace;
 

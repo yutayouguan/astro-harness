@@ -12,6 +12,7 @@ on:
       - "apps/desktop/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "tools/**"
       - ".github/workflows/quality.yml"
 
 permissions:
@@ -74,6 +75,11 @@ jobs:
 
       - name: Test Rust workspace
         run: cargo test --workspace --no-fail-fast
+
+      - name: Verify settings across process restarts
+        # Includes explicit process boundaries rather than reusing in-memory state.
+        working-directory: .
+        run: node tools/verify-settings-restart.mjs
 
       - name: Test frontend
         working-directory: apps/desktop

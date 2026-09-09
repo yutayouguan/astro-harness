@@ -1125,6 +1125,21 @@ mod tests {
     use crate::model::{Position, WorkflowAgentTool};
 
     #[test]
+    #[ignore = "explicit isolated cross-process fixture; run tools/verify-settings-restart.mjs"]
+    fn settings_restart_read_fixture() {
+        let root = home::test_env::settings_restart_fixture_root();
+        let _env = home::test_env::AstroMemoryDirGuard::set(&root);
+        let configured = environment_provider_configs().unwrap();
+        let target = &configured["restart-local"];
+        assert_eq!(target.backend_id, "openai");
+        assert_eq!(target.config.model, "restart-model");
+        assert_eq!(
+            target.config.base_url.as_deref(),
+            Some("http://127.0.0.1:19999/v1")
+        );
+    }
+
+    #[test]
     fn headless_provider_registry_uses_shared_toml_and_rejects_invalid_config() {
         let dir = tempfile::tempdir().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());

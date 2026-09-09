@@ -29,6 +29,7 @@ import {
   getVersion,
 } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import StorageDiagnostics from "./StorageDiagnostics";
 import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "framer-motion";
 import appIconAsset from "../../assets/astro-app-icon.png";
@@ -1527,6 +1528,9 @@ export default function PreferencesPanel({
               <DiagnosticStatusCard key={card.id} {...card} />
             ))}
           </div>
+
+          <StorageDiagnostics active={activeCategory === "diagnostics"}
+            references={[wallpaper.prefs.current?.path, ...wallpaper.prefs.recent.map(asset => asset.path)].filter((path): path is string => !!path)} />
 
           <section className="prefs-card prefs-card--diagnostics">
             <div className="prefs-card-head">

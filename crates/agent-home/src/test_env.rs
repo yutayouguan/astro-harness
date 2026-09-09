@@ -34,3 +34,20 @@ impl Drop for AstroMemoryDirGuard {
         }
     }
 }
+
+/// Explicit ignored cross-process fixtures may only use the scratch directory
+/// created by tools/verify-settings-restart.mjs, never a user's Astro home.
+pub fn settings_restart_fixture_root() -> std::path::PathBuf {
+    let root = std::path::PathBuf::from(
+        std::env::var_os("ASTRO_SETTINGS_RESTART_ROOT")
+            .expect("run tools/verify-settings-restart.mjs"),
+    );
+    let root = root.canonicalize().expect("fixture root");
+    assert!(root.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+    assert!(root
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .starts_with("astro-settings-restart-"));
+    root
+}

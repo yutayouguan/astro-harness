@@ -449,6 +449,7 @@ pub fn run() {
             commands::config::get_usage_insights,
             commands::config::get_trace_insights,
             commands::config::get_diagnostics_status,
+            commands::config::inspect_home_storage,
             commands::config::export_diagnostics_bundle,
             commands::config::query_agent_logs,
             commands::environment_dependencies::list_environment_dependencies,

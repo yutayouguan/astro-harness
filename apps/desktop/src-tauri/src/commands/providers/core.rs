@@ -2195,6 +2195,95 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "explicit isolated cross-process fixture; run tools/verify-settings-restart.mjs"]
+    fn settings_restart_write_fixture() {
+        let root = home::test_env::settings_restart_fixture_root();
+        let _env = home::test_env::AstroMemoryDirGuard::set(&root);
+        fs::write(
+            home::config_path(&root),
+            "# preserved foreign section\n[foreign]\nvalue = 42\n",
+        )
+        .unwrap();
+        let mut provider = ProviderConfig::new(ProviderKind::Openai);
+        provider.id = "restart-local".into();
+        provider.model = "restart-model".into();
+        provider.endpoint = "http://127.0.0.1:19999/v1".into();
+        save_state(&ProvidersState {
+            providers: vec![provider],
+            active_provider_id: Some("restart-local".into()),
+            active_image_provider_id: None,
+        })
+        .unwrap();
+        home::save_tools_enabled(&std::collections::HashMap::from([(
+            "exec_command".into(),
+            false,
+        )]))
+        .unwrap();
+        let skill = root.join("skills/restart-fixture");
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: restart-fixture\ndescription: isolated test\n---\nfixture",
+        )
+        .unwrap();
+        skills::installed::set_enabled_for_agent(Some("default"), &skill.to_string_lossy(), false)
+            .unwrap();
+        let agent = home::AgentRuntimeConfig {
+            id: "default".into(),
+            name: "Restart fixture".into(),
+            inherit_from: None,
+            provider_id: Some("restart-local".into()),
+            model: Some("restart-model".into()),
+            temperature: Some(0.3),
+            max_turns: Some(17),
+            additional_params: None,
+            tools_enabled: None,
+            created_at: "fixture".into(),
+        };
+        agent.save(&root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "explicit isolated cross-process fixture; run tools/verify-settings-restart.mjs"]
+    fn settings_restart_read_fixture() {
+        let root = home::test_env::settings_restart_fixture_root();
+        let _env = home::test_env::AstroMemoryDirGuard::set(&root);
+        let state = load_state().unwrap();
+        let provider = state
+            .providers
+            .iter()
+            .find(|p| p.id == "restart-local")
+            .unwrap();
+        assert_eq!(provider.model, "restart-model");
+        assert_eq!(provider.endpoint, "http://127.0.0.1:19999/v1");
+        assert_eq!(state.active_provider_id.as_deref(), Some("restart-local"));
+        assert_eq!(
+            home::load_tools_enabled().unwrap().get("exec_command"),
+            Some(&false)
+        );
+        let skill = skills::installed::list_installed_for_agent(Some("default"), Some("astro"))
+            .into_iter()
+            .find(|s| s.name == "restart-fixture")
+            .unwrap();
+        assert!(!skill.enabled);
+        let agent = home::AgentRuntimeConfig::load(&root, "default").unwrap();
+        assert_eq!(agent.name, "Restart fixture");
+        assert_eq!(agent.max_turns, Some(17));
+        assert_eq!(agent.model.as_deref(), Some("restart-model"));
+        let raw = fs::read_to_string(home::config_path(&root)).unwrap();
+        assert!(raw.contains("# preserved foreign section"));
+        assert!(raw.contains("value = 42"));
+        for old in [
+            "models/providers.json",
+            "tools/enabled.json",
+            "skills/enabled.json",
+            "agents/default/config.json",
+        ] {
+            assert!(!root.join(old).exists(), "recreated {old}");
+        }
+    }
+
+    #[test]
     fn custom_provider_configuration_respects_astro_memory_dir() {
         let dir = tempfile::tempdir().unwrap();
         let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());

@@ -948,6 +948,21 @@ pub struct QueryAgentLogsArgs {
     pub source: Option<String>,
 }
 
+/// Read-only, bounded home inspection; no bootstrap, database open or cleanup.
+#[tauri::command]
+pub async fn inspect_home_storage(
+    reference_paths: Option<Vec<String>>,
+) -> Result<home::storage_diagnostics::StorageReport, String> {
+    let root = home::default_memory_dir();
+    let references = reference_paths.unwrap_or_default();
+    if references.len() > 100 || references.iter().any(|path| path.len() > 4096) {
+        return Err("storage_reference_limit".into());
+    }
+    tokio::task::spawn_blocking(move || home::storage_diagnostics::inspect_home(&root, &references))
+        .await
+        .map_err(|_| "storage_inspection_failed".to_string())
+}
+
 /// Tauri 命令：按 session/turn/level 查询 agent/errors 日志尾部。
 #[tauri::command]
 pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::AgentLogLine>, String> {
@@ -975,6 +990,26 @@ pub async fn query_agent_logs(args: QueryAgentLogsArgs) -> Result<Vec<home::Agen
 #[cfg(test)]
 mod diagnostics_tests {
     use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn storage_command_does_not_bootstrap_or_open_databases() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("absent");
+        let _env = home::test_env::AstroMemoryDirGuard::set(&root);
+        let report = inspect_home_storage(None).await.unwrap();
+        assert_eq!(
+            report.state,
+            home::storage_diagnostics::HomeState::NewInstall
+        );
+        let value = serde_json::to_value(report).unwrap();
+        assert!(value.get("rootPath").is_some());
+        assert!(value.get("cleanupPreview").is_some());
+        assert!(!root.exists());
+        assert!(inspect_home_storage(Some(vec!["path".into(); 101]))
+            .await
+            .is_err());
+        assert!(!root.exists());
+    }
 
     #[test]
     fn diagnostic_export_redacts_common_credential_shapes() {
