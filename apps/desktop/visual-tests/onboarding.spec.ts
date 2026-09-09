@@ -4,6 +4,7 @@ test.setTimeout(60000);
 const RUNTIME_URL = "/iframe.html?id=app-onboarding-runtime--native-transport&viewMode=story";
 type Boot = "fresh" | "existing" | "corrupt";
 async function installTransport(page: Page, boot: Boot = "fresh") {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   // No external/provider requests are permitted in this suite.
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -35,6 +36,7 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
     const provider = { id: "qa", kind: "openai", display_name: "Local QA Provider",
       endpoint: "http://127.0.0.1/mock/v1", model: "qa-small", enabled: true,
       has_api_key: false, key_source: "none", env_key_name: null, backend_id: "openai",
+      official_key_url: "https://platform.openai.com/",
       supports_responses_api: true };
     const initialProviders = { providers: [], provider_templates: [provider], active_provider_id: null, active_image_provider_id: null };
     if (!localStorage.getItem("qa.providers")) localStorage.setItem("qa.providers", JSON.stringify(initialProviders));
@@ -113,6 +115,8 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
               workspace_dir: "/tmp/qa-default", memory_dir: "/tmp/qa-home", grpc_address: "",
               default_workspace_dir: "/tmp/qa-default",
               default_workspace_display_path: "/tmp/qa-default" };
+          case "check_onboarding_workspace":
+            return { path: args.path, status: w.__workspaceStatus ?? "ready" };
           case "set_default_agent_name": agentName = args.name; return { id: "default", name: agentName };
           case "get_permission_settings":
           case "set_permission_preset": return { preset: args.preset ?? "ask_for_approval", sandboxHealth: { status: "available", backend: "qa" } };
@@ -153,12 +157,14 @@ async function startProvider(page: Page) {
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible();
 }
 async function chooseModel(page: Page, model = "qa-small") {
-  await page.getByRole("button", { name: "默认模型", exact: true }).click();
+  const picker = page.getByRole("button", { name: "默认模型", exact: true });
+  if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
   await page.getByRole("option", { name: model, exact: true }).click();
 }
 async function loadModels(page: Page) {
   await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "搜索模型名称或 ID" })).toBeVisible();
   await chooseModel(page);
 }
 async function verifyProvider(page: Page) {
@@ -215,8 +221,10 @@ test("restart restores draft but requires model verification again", async ({ pa
   await verifyProvider(page);
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await page.getByRole("button", { name: /使用默认工作空间/ }).click();
+  await expect(page.locator(".onboarding-folder-picker small")).toHaveText("/tmp/qa-workspace");
   await page.getByText("自动处理常规操作", { exact: true }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.permission_preset)).toBe("approve_for_me");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.workspace_path)).toBe("/tmp/qa-workspace");
   const saved = await page.evaluate(() => localStorage.getItem("qa.state")!);
   expect(saved).not.toContain("qa-placeholder-key");
   expect(saved).not.toContain("qa-proof");
@@ -372,6 +380,62 @@ test("existing installation bypasses welcome but missing credentials still block
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "start_chat"))).toEqual([]);
   await page.getByRole("button", { name: "连接模型", exact: true }).click();
   await expect(page.getByRole("heading", { name: "模型服务", exact: true })).toBeVisible();
+});
+
+test("saved credentials are reused without rewriting provider config; only explicit tests generate", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await page.reload();
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("");
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "搜索模型名称或 ID" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "默认模型", exact: true })).toContainText("qa-small");
+  let calls = await page.evaluate(() => (window as any).__onboardingCalls);
+  expect(calls.filter((x: any) => ["save_provider", "set_provider_api_key", "verify_onboarding_provider"].includes(x.cmd))).toEqual([]);
+  await chooseModel(page, "qa-alt");
+  await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeFocused();
+  await finishVerified(page);
+  await page.reload();
+  await expect(page.locator(".app-shell")).toBeVisible();
+  await expect(page.locator(".onboarding-root")).toHaveCount(0);
+});
+
+for (const status of ["missing", "not_directory", "not_writable", "unavailable"]) {
+  test(`workspace ${status} blocks completion and supports recheck`, async ({ page }) => {
+    await installTransport(page);
+    await startProvider(page);
+    await verifyProvider(page);
+    await page.evaluate(status => { (window as any).__workspaceStatus = status; }, status);
+    await page.getByRole("button", { name: "继续", exact: true }).click();
+    await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "重新检查", exact: true })).toBeVisible();
+    await page.evaluate(() => { (window as any).__workspaceStatus = "ready"; });
+    await page.getByRole("button", { name: "重新检查", exact: true }).click();
+    await expect(page.getByText("目录存在，可以读写", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeEnabled();
+  });
+}
+
+test("workspace is rechecked at completion and quota errors offer the official console", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeEnabled();
+  await page.evaluate(() => { (window as any).__workspaceStatus = "not_writable"; });
+  await page.getByRole("button", { name: "完成设置", exact: true }).click();
+  await expect(page.locator(".onboarding-workspace-check")).toContainText("目录不可写，请更换目录或检查权限");
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "complete_onboarding"))).toEqual([]);
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message: "insufficient_quota" } }));
+  await page.getByRole("button", { name: "保存并测试连接", exact: true }).click();
+  await expect(page.getByRole("button", { name: "官方控制台", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "官方控制台", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
 });
 
 test("state read error provides retry but no bypass", async ({ page }) => {
@@ -543,7 +607,6 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
     await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
     const picker = page.getByRole("button", { name: "默认模型", exact: true });
-    await picker.click();
     const search = page.getByRole("combobox", { name: "搜索模型名称或 ID" });
     const popup = page.getByRole("dialog", { name: "默认模型", exact: true });
     await expect(search).toBeFocused();
@@ -566,10 +629,10 @@ for (const theme of ["light", "dark"] as const) {
     await search.press("ArrowDown");
     await search.press("Enter");
     await expect(popup).toHaveCount(0);
-    await expect(picker).toBeFocused();
+    await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeFocused();
     await expect(picker).toContainText("Deep Think");
     await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
-    await picker.click();
+    if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
     await expect(search).toHaveValue("");
     await expect(page.getByRole("option")).toHaveCount(82);
     await search.fill("rapid");
@@ -577,7 +640,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(popup).toHaveCount(0);
     await expect(picker).toBeFocused();
     await expect(picker).toContainText("Deep Think");
-    await picker.click();
+    if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
     await search.press("Tab");
     await expect(popup).toHaveCount(0);
   });
@@ -605,7 +668,7 @@ for (const theme of ["light", "dark"] as const) {
     const picker = page.getByRole("button", { name: "模型服务", exact: true });
     await expect(picker).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".onboarding-provider-form select")).toHaveCount(0);
-    await picker.click();
+    if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
     const menu = page.getByRole("listbox", { name: "模型服务", exact: true });
     await expect(menu).toBeVisible();
     await expect(page.getByRole("option", { name: "OpenAI", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -627,7 +690,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
     await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toContainText("请选择默认模型");
+    await expect(page.getByRole("button", { name: "默认模型", exact: true })).toContainText("gemini-3.1-pro");
     await chooseModel(page, "gemini-3.1-pro");
     await page.getByRole("button", { name: "默认模型", exact: true }).click();
     await page.screenshot({ path: testInfo.outputPath("model-menu.png"), fullPage: true, animations: "disabled" });
@@ -656,7 +719,7 @@ test("loading models requires an explicit choice and key changes reset it", asyn
   await expect(picker).toBeEnabled();
   await expect(picker).toContainText("请选择默认模型");
   await expect(page.getByRole("button", { name: "保存并测试连接", exact: true })).toBeDisabled();
-  await picker.click();
+  if (await picker.getAttribute("aria-expanded") !== "true") await picker.click();
   await expect(page.getByRole("option")).toHaveCount(2);
   await expect(page.getByRole("option", { name: "text-embedding-3-small" })).toHaveCount(0);
   await page.getByRole("option", { name: "qa-alt", exact: true }).click();

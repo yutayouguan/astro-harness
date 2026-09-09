@@ -65,6 +65,13 @@ const isTauri = () =>
 const STEP_ORDER: OnboardingStep[] = ["personalize", "provider", "workspace"];
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me";
+type WorkspaceStatus =
+  | "ready"
+  | "missing"
+  | "not_directory"
+  | "not_writable"
+  | "unavailable";
+type WorkspaceCheck = { path: string; status: WorkspaceStatus };
 type ProviderStatus = "idle" | "testing" | "success" | "error";
 type AppConfigSlice = {
   default_workspace_dir: string;
@@ -151,6 +158,10 @@ export function FirstRunOnboarding({
   const [modelsStatus, setModelsStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  const [modelOpenRequest, setModelOpenRequest] = useState(0);
+  const [focusTest, setFocusTest] = useState(false);
+  const testButtonRef = useRef<HTMLButtonElement>(null);
+  const continueButtonRef = useRef<HTMLButtonElement>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus>("idle");
   const [providerMessage, setProviderMessage] = useState("");
   const [workspacePath, setWorkspacePath] = useState(
@@ -166,9 +177,16 @@ export function FirstRunOnboarding({
   );
   const [workspaceLoadError, setWorkspaceLoadError] = useState(false);
   const [configRetry, setConfigRetry] = useState(0);
+  const [workspaceCheck, setWorkspaceCheck] = useState<WorkspaceCheck | null>(
+    null,
+  );
+  const [workspaceCheckRetry, setWorkspaceCheckRetry] = useState(0);
   const effectiveWorkspacePath = workspacePath || defaultWorkspace?.path || "";
   const displayedWorkspacePath =
     workspacePath || defaultWorkspace?.displayPath || "";
+  const workspaceReady =
+    workspaceCheck?.path === effectiveWorkspacePath &&
+    workspaceCheck.status === "ready";
   const [permissionPreset, setPermissionPreset] = useState<PermissionPreset>(
     initialDraft.permission_preset,
   );
@@ -322,7 +340,16 @@ export function FirstRunOnboarding({
     let disposed = false;
     void withDeadline(invoke<ProvidersStateDto>("get_providers_state"))
       .then((state) => {
-        if (!disposed) setProvidersState(state);
+        if (disposed) return;
+        setProvidersState(state);
+        const saved = state.providers.find(
+          (provider) => provider.id === initialDraft.provider_id,
+        );
+        if (saved) {
+          // A previous draft may predate the successful model save.
+          if (!initialDraft.model) setModel(saved.model);
+          if (!initialDraft.endpoint) setEndpoint(saved.endpoint);
+        }
       })
       .catch((error) => {
         if (!disposed) {
@@ -378,7 +405,11 @@ export function FirstRunOnboarding({
       providers[0];
     if (!providers.some((provider) => provider.id === selectedProviderId)) {
       setSelectedProviderId(preferred.id);
-      setModel("");
+      setModel(
+        providersState?.providers.some((p) => p.id === preferred.id)
+          ? preferred.model
+          : "",
+      );
       setEndpoint(preferred.endpoint);
     }
   }, [providers, providersState?.active_provider_id, selectedProviderId]);
@@ -390,7 +421,11 @@ export function FirstRunOnboarding({
     const provider = providers.find((item) => item.id === id);
     if (!provider) return;
     setSelectedProviderId(provider.id);
-    setModel("");
+    setModel(
+      providersState?.providers.some((p) => p.id === provider.id)
+        ? provider.model
+        : "",
+    );
     setModelOptions([]);
     setModelsStatus("idle");
     setEndpoint(provider.endpoint);
@@ -409,6 +444,64 @@ export function FirstRunOnboarding({
     setModelsStatus("idle");
     setConnectionIssue(null);
   };
+  const saveProviderIfChanged = async (
+    provider: ProviderDto,
+    nextModel: string,
+  ) => {
+    if (
+      provider.enabled &&
+      provider.model === nextModel &&
+      provider.endpoint === endpoint.trim() &&
+      providersState?.providers.some((p) => p.id === provider.id)
+    )
+      return null;
+    return withDeadline(
+      invoke<ProvidersStateDto>("save_provider", {
+        provider: {
+          ...providerConfigInput(provider, nextModel),
+          endpoint: endpoint.trim(),
+        },
+      }),
+    );
+  };
+  useEffect(() => {
+    if (focusTest && modelsStatus === "ready") {
+      testButtonRef.current?.focus();
+      setFocusTest(false);
+    }
+  }, [focusTest, modelsStatus]);
+  useEffect(() => {
+    if (providerStatus === "success") continueButtonRef.current?.focus();
+  }, [providerStatus]);
+
+  useEffect(() => {
+    if (step !== "workspace" || !effectiveWorkspacePath) return;
+    let disposed = false;
+    setWorkspaceCheck(null);
+    if (previewProviders) {
+      setWorkspaceCheck({ path: effectiveWorkspacePath, status: "ready" });
+    } else {
+      void withDeadline(
+        invoke<WorkspaceCheck>("check_onboarding_workspace", {
+          path: effectiveWorkspacePath,
+        }),
+      )
+        .then((result) => {
+          if (!disposed) setWorkspaceCheck(result);
+        })
+        .catch(() => {
+          if (!disposed)
+            setWorkspaceCheck({
+              path: effectiveWorkspacePath,
+              status: "unavailable",
+            });
+        });
+    }
+    return () => {
+      disposed = true;
+    };
+  }, [step, effectiveWorkspacePath, workspaceCheckRetry, previewProviders]);
+
   const loadModels = async () => {
     if (
       !selectedProvider ||
@@ -457,16 +550,12 @@ export function FirstRunOnboarding({
         );
         setApiKey("");
       } else {
-        const next = await withDeadline(
-          invoke<ProvidersStateDto>("save_provider", {
-            provider: {
-              ...providerConfigInput(selectedProvider, selectedProvider.model),
-              endpoint: endpoint.trim(),
-            },
-          }),
+        const next = await saveProviderIfChanged(
+          selectedProvider,
+          selectedProvider.model,
         );
         if (!currentRequest()) return;
-        setProvidersState(next);
+        if (next) setProvidersState(next);
         if (apiKey.trim()) {
           const keyed = await withDeadline(
             invoke<ProvidersStateDto>("set_provider_api_key", {
@@ -498,6 +587,7 @@ export function FirstRunOnboarding({
         options.some((option) => option.value === current) ? current : "",
       );
       setModelsStatus("ready");
+      setModelOpenRequest((request) => request + 1);
     } catch (error) {
       if (!currentRequest()) return;
       setModelsStatus("error");
@@ -557,16 +647,9 @@ export function FirstRunOnboarding({
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         if (!currentRequest()) return;
       } else {
-        const next = await withDeadline(
-          invoke<ProvidersStateDto>("save_provider", {
-            provider: {
-              ...providerConfigInput(selectedProvider, testedModel),
-              endpoint: testedEndpoint,
-            },
-          }),
-        );
+        const next = await saveProviderIfChanged(selectedProvider, testedModel);
         if (!currentRequest()) return;
-        setProvidersState(next);
+        if (next) setProvidersState(next);
         if (apiKey.trim()) {
           const keyed = await withDeadline(
             invoke<ProvidersStateDto>("set_provider_api_key", {
@@ -636,7 +719,7 @@ export function FirstRunOnboarding({
 
   const finish = async () => {
     if (finishing) return;
-    if (!effectiveWorkspacePath) return;
+    if (!effectiveWorkspacePath || !workspaceReady) return;
     if (
       !previewProviders &&
       (!verified.current || providerStatus !== "success")
@@ -653,6 +736,19 @@ export function FirstRunOnboarding({
         : copy.defaultWorkspace;
       let providerLabel = `${selectedProvider?.display_name ?? copy.provider} · ${model}`;
       if (!previewProviders && isTauri()) {
+        const checked = await withDeadline(
+          invoke<WorkspaceCheck>("check_onboarding_workspace", {
+            path: effectiveWorkspacePath,
+          }),
+        );
+        setWorkspaceCheck(checked);
+        if (
+          checked.path !== effectiveWorkspacePath ||
+          checked.status !== "ready"
+        ) {
+          setFinishing(false);
+          return;
+        }
         await saveProgress("workspace");
         if (
           agentName.trim() &&
@@ -728,6 +824,12 @@ export function FirstRunOnboarding({
     } catch (error) {
       setFinishError(copy.finishFailed);
       setFinishing(false);
+      if (String(error).includes("ONBOARDING_WORKSPACE_UNAVAILABLE")) {
+        setWorkspaceCheck({
+          path: effectiveWorkspacePath,
+          status: "unavailable",
+        });
+      }
       if (String(error).includes("ONBOARDING_VERIFICATION_REQUIRED")) {
         verified.current = null;
         setProviderStatus("idle");
@@ -1062,6 +1164,7 @@ export function FirstRunOnboarding({
                           aria-label={copy.model}
                           value={model}
                           options={modelOptions}
+                          openRequest={modelOpenRequest}
                           placeholder={copy.chooseModel}
                           search={{
                             placeholder: copy.searchModels,
@@ -1074,6 +1177,7 @@ export function FirstRunOnboarding({
                           }
                           onChange={(value) => {
                             setModel(value);
+                            setFocusTest(true);
                             setProviderStatus("idle");
                             verified.current = null;
                             setConnectionIssue(null);
@@ -1084,7 +1188,8 @@ export function FirstRunOnboarding({
                       <p className="onboarding-test-cost">{copy.testCost}</p>
                       <button
                         type="button"
-                        className="onboarding-test-button"
+                        ref={testButtonRef}
+                        className={`onboarding-test-button ${model && modelsStatus === "ready" && providerStatus !== "success" ? "is-next-action" : ""}`}
                         data-status={providerStatus}
                         disabled={
                           providerStatus === "testing" ||
@@ -1124,6 +1229,9 @@ export function FirstRunOnboarding({
                         <ConnectionIssue
                           kind={connectionIssue}
                           locale={locale}
+                          officialConsoleUrl={
+                            selectedProvider?.official_key_url
+                          }
                           onRetry={() =>
                             void (modelsStatus === "ready" && model
                               ? testProvider()
@@ -1216,6 +1324,7 @@ export function FirstRunOnboarding({
                   <button
                     type="button"
                     className="onboarding-folder-picker"
+                    disabled={finishing}
                     onClick={() => void chooseWorkspace()}
                   >
                     <span className="onboarding-folder-icon">
@@ -1238,6 +1347,31 @@ export function FirstRunOnboarding({
                       {workspacePath ? copy.changeFolder : copy.chooseFolder}
                     </span>
                   </button>
+                  {effectiveWorkspacePath && (
+                    <div
+                      className="onboarding-workspace-check"
+                      data-status={workspaceReady ? "ready" : "pending"}
+                      role="status"
+                    >
+                      {previewProviders
+                        ? copy.workspaceCheckDemo
+                        : workspaceCheck?.path !== effectiveWorkspacePath
+                          ? copy.workspaceChecking
+                          : copy.workspaceChecks[workspaceCheck.status]}
+                      {!previewProviders &&
+                        !workspaceReady &&
+                        workspaceCheck?.path === effectiveWorkspacePath && (
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              setWorkspaceCheckRetry((value) => value + 1)
+                            }
+                          >
+                            {copy.workspaceCheckRetry}
+                          </Button>
+                        )}
+                    </div>
+                  )}
                   <p className="onboarding-workspace-confirm">
                     {copy.workspaceConfirm}
                   </p>
@@ -1257,6 +1391,7 @@ export function FirstRunOnboarding({
                       variant="ghost"
                       size="sm"
                       onClick={() => setWorkspacePath("")}
+                      disabled={finishing}
                     >
                       {copy.defaultWorkspace}
                     </Button>
@@ -1276,6 +1411,7 @@ export function FirstRunOnboarding({
                     >
                       <input
                         type="radio"
+                        disabled={finishing}
                         name="onboarding-permission"
                         checked={permissionPreset === "ask_for_approval"}
                         onChange={() => setPermissionPreset("ask_for_approval")}
@@ -1295,6 +1431,7 @@ export function FirstRunOnboarding({
                     >
                       <input
                         type="radio"
+                        disabled={finishing}
                         name="onboarding-permission"
                         checked={permissionPreset === "approve_for_me"}
                         onChange={() => setPermissionPreset("approve_for_me")}
@@ -1433,7 +1570,7 @@ export function FirstRunOnboarding({
                       variant="primary"
                       busy={finishing}
                       disabled={
-                        !effectiveWorkspacePath ||
+                        !workspaceReady ||
                         (!previewProviders &&
                           (providerStatus !== "success" || !verified.current))
                       }
@@ -1445,6 +1582,7 @@ export function FirstRunOnboarding({
                     </Button>
                   ) : (
                     <Button
+                      ref={continueButtonRef}
                       variant="primary"
                       disabled={
                         step === "provider" && providerStatus !== "success"

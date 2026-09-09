@@ -1,5 +1,5 @@
-import { useId } from "react";
-import { RotateCw, Settings2, ShieldAlert } from "lucide-react";
+import { useId, useState } from "react";
+import { ExternalLink, RotateCw, Settings2, ShieldAlert } from "lucide-react";
 import { Button } from "../ui/Button";
 import type { ConnectionIssueKind } from "../../lib/ui/onboarding";
 const COPY = {
@@ -77,15 +77,40 @@ export function ConnectionIssue({
   locale,
   onRetry,
   onEdit,
+  officialConsoleUrl,
 }: {
   kind: ConnectionIssueKind;
   locale: "zh" | "en";
   onRetry: () => void;
   onEdit?: () => void;
+  officialConsoleUrl?: string | null;
 }) {
   const [title, hint] = COPY[locale][kind];
   const titleId = useId();
   const hintId = useId();
+  const [consoleError, setConsoleError] = useState(false);
+  let consoleUrl: string | null = null;
+  try {
+    const url = new URL(officialConsoleUrl ?? "");
+    if (url.protocol === "https:" && !url.username && !url.password)
+      consoleUrl = url.href;
+  } catch {
+    /* Invalid provider metadata is never opened. */
+  }
+  const openConsole = async () => {
+    if (!consoleUrl) return;
+    setConsoleError(false);
+    try {
+      if ("__TAURI_INTERNALS__" in window) {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(consoleUrl);
+      } else {
+        window.open(consoleUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      setConsoleError(true);
+    }
+  };
   return (
     <div
       className="onboarding-connection-issue"
@@ -115,7 +140,20 @@ export function ConnectionIssue({
             <RotateCw size={14} aria-hidden="true" />
             {locale === "zh" ? "重试连接" : "Retry connection"}
           </Button>
+          {consoleUrl && (kind === "quota" || kind === "rate_limit") && (
+            <Button variant="ghost" onClick={() => void openConsole()}>
+              <ExternalLink size={14} aria-hidden="true" />
+              {locale === "zh" ? "官方控制台" : "Provider console"}
+            </Button>
+          )}
         </div>
+        {consoleError && (
+          <p role="status">
+            {locale === "zh"
+              ? "无法打开浏览器，请手动访问服务商控制台。"
+              : "Could not open the browser. Visit the provider console manually."}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -280,6 +280,7 @@ pub fn run() {
             commands::ui_style::get_active_ui_style,
             commands::ui_style::reset_active_ui_style,
             commands::onboarding::get_onboarding_state,
+            commands::ui::workspace_check::check_onboarding_workspace,
             commands::onboarding::verify_onboarding_provider,
             commands::onboarding::save_onboarding_progress,
             commands::onboarding::complete_onboarding,

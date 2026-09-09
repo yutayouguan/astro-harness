@@ -45,6 +45,8 @@ type Props = {
   menuMaxHeight?: number;
   /** Opt-in filtering; labels are supplied by the calling surface for localization. */
   search?: { placeholder: string; emptyLabel: string };
+  /** A new positive request opens the menu once after options become available. */
+  openRequest?: number;
 };
 
 /** 选中项勾选标记 */
@@ -89,8 +91,10 @@ export function SelectMenu({
   selectionIndicator = "check",
   menuMaxHeight = 260,
   search,
+  openRequest = 0,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const handledOpenRequest = useRef(0);
   const [query, setQuery] = useState("");
   const searchEnabled = Boolean(search);
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -142,6 +146,13 @@ export function SelectMenu({
     setQuery("");
     setOpen(true);
   };
+
+  useEffect(() => {
+    if (!disabled && openRequest > handledOpenRequest.current) {
+      handledOpenRequest.current = openRequest;
+      openMenu();
+    }
+  }, [openRequest, disabled]);
 
   const closeMenu = (restoreFocus = false) => {
     setOpen(false);

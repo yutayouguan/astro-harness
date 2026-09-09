@@ -6,3 +6,4 @@ pub mod pet_scene;
 pub mod ui_style;
 pub mod updater;
 pub mod wallpaper;
+pub mod workspace_check;

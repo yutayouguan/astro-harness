@@ -598,6 +598,26 @@
   line-height: 1.6;
 }
 
+.onboarding-workspace-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.onboarding-workspace-check[data-status="ready"] {
+  color: var(--ink);
+}
+
+.onboarding-test-button.is-next-action {
+  background: color-mix(in srgb, var(--tone) 16%, var(--shell-bg));
+  border-color: var(--tone);
+}
+
 .onboarding-workspace-error {
   display: flex;
   align-items: center;

@@ -2,6 +2,7 @@
 //!
 //! 状态由 Desktop 后端持久化，避免 WebView storage 被清理后重复打扰用户。
 
+use super::workspace_check::{inspect_workspace, WorkspaceStatus};
 use crate::commands::providers as provider_commands;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -366,15 +367,34 @@ pub fn complete_onboarding(verification_token: String) -> Result<OnboardingState
         .ok_or(VERIFICATION_REQUIRED)?;
     let current = connection_snapshot(active)?;
     let mut verified = VERIFIED.lock().map_err(|_| VERIFICATION_REQUIRED)?;
-    ensure_verified(verified.get(&verification_token), &current)?;
-    let _guard = STATE_LOCK.lock().map_err(|_| "初始化状态锁不可用")?;
-    let base = home::default_memory_dir();
-    let mut state = read_saved_at(&base)?;
-    state.completed = true;
-    state.step = "complete".into();
-    let saved = write_at(&base, state)?;
+    let saved = complete_verified_at(
+        &home::default_memory_dir(),
+        verified.get(&verification_token),
+        &current,
+    )?;
     verified.remove(&verification_token);
     Ok(saved)
+}
+
+fn complete_verified_at(
+    base: &Path,
+    receipt: Option<&VerifiedConnection>,
+    current: &ConnectionSnapshot,
+) -> Result<OnboardingStateDto, String> {
+    ensure_verified(receipt, current)?;
+    let _guard = STATE_LOCK.lock().map_err(|_| "初始化状态锁不可用")?;
+    let mut state = read_saved_at(base)?;
+    let workspace = if state.draft.workspace_path.is_empty() {
+        home::agent_workspace_dir(base, home::DEFAULT_AGENT_ID)
+    } else {
+        PathBuf::from(&state.draft.workspace_path)
+    };
+    if inspect_workspace(&workspace).status != WorkspaceStatus::Ready {
+        return Err("ONBOARDING_WORKSPACE_UNAVAILABLE".into());
+    }
+    state.completed = true;
+    state.step = "complete".into();
+    write_at(base, state)
 }
 
 #[tauri::command]
@@ -387,6 +407,39 @@ pub fn reset_onboarding_state() -> Result<OnboardingStateDto, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn isolated_install_restart_and_verified_completion_use_real_persistence() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = home::agent_workspace_dir(root.path(), home::DEFAULT_AGENT_ID);
+        fs::create_dir_all(&workspace).unwrap();
+        assert!(load_at(root.path()).await.unwrap().should_show);
+        save_step_at(
+            root.path(),
+            "provider",
+            OnboardingDraft {
+                model: "qa-model".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(load_at(root.path()).await.unwrap().draft.model, "qa-model");
+        let snapshot = test_connection();
+        assert!(complete_verified_at(root.path(), None, &snapshot).is_err());
+        let receipt = VerifiedConnection {
+            snapshot: snapshot.clone(),
+            created: Instant::now(),
+        };
+        fs::remove_dir(&workspace).unwrap();
+        assert!(complete_verified_at(root.path(), Some(&receipt), &snapshot)
+            .unwrap_err()
+            .contains("WORKSPACE"));
+        fs::create_dir_all(&workspace).unwrap();
+        complete_verified_at(root.path(), Some(&receipt), &snapshot).unwrap();
+        assert!(!load_at(root.path()).await.unwrap().should_show);
+        assert!(home::onboarding_path(root.path()).is_file());
+        assert!(!root.path().join("onboarding.json").exists());
+    }
 
     #[tokio::test]
     async fn fresh_install_starts_at_intro() {
