@@ -286,11 +286,14 @@ test("model connection is mandatory; credentials alone do not unlock setup", asy
 });
 
 test("verified setup prepares an editable App draft without sending", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 720 });
   await installTransport(page);
   await startProvider(page);
   await verifyProvider(page);
+  expect(await page.locator(".onboarding-stage--provider").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(2);
   await finishVerified(page);
   await expect(page.getByText("本次连接测试已通过", { exact: true })).toBeVisible();
+  expect(await page.locator(".onboarding-stage--complete").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(2);
   await expect(page.locator(".onboarding-task-card")).toHaveCount(6);
   await page.getByRole("button", { name: "看看我的桌面 · 填入输入框", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible({ timeout: 30000 });
@@ -373,7 +376,7 @@ for (const variant of [
     await installTransport(page);
     await page.addInitScript(theme => localStorage.setItem("astro-theme-mode", theme), variant.theme);
     await page.emulateMedia({ reducedMotion: "reduce", contrast: variant.contrast });
-    await page.setViewportSize({ width: variant.width, height: 1000 });
+    await page.setViewportSize({ width: variant.width, height: variant.width >= 900 ? 720 : 1000 });
     await page.route("**/__onboarding_mock/responses", route => route.fulfill({
       json: { ok: false, message: "401 invalid api key" },
     }));
@@ -383,6 +386,10 @@ for (const variant of [
     await page.getByRole("button", { name: "测试", exact: true }).click();
     const card = page.getByRole("alert", { name: "密钥或访问权限有问题" });
     await expect(card).toBeVisible();
+    if (variant.width >= 900) {
+      expect(await page.locator(".onboarding-stage--provider").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(2);
+      await expect(page.getByRole("button", { name: "继续", exact: true })).toBeInViewport();
+    }
     await expect(card.locator(".onboarding-connection-issue__icon svg")).toHaveCount(1);
     const edit = card.getByRole("button", { name: "修改配置", exact: true });
     const retry = card.getByRole("button", { name: "重试连接", exact: true });
@@ -521,11 +528,25 @@ test("workspace is rechecked at completion and quota errors offer the official c
   await expect(page.locator(".onboarding-workspace-check")).toContainText("目录不可写，请更换目录或检查权限");
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "complete_onboarding"))).toEqual([]);
   await page.getByRole("button", { name: "返回", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "默认模型", exact: true })).toHaveCount(0);
   await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message: "insufficient_quota" } }));
   await page.getByRole("button", { name: "测试", exact: true }).click();
   await expect(page.getByRole("button", { name: "官方控制台", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "官方控制台", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
+});
+
+test("revisiting provider keeps the model menu closed until explicitly reloaded", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.getByRole("button", { name: "完成设置", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "默认模型", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "默认模型", exact: true })).toBeVisible();
 });
 
 test("state read error provides retry but no bypass", async ({ page }) => {
