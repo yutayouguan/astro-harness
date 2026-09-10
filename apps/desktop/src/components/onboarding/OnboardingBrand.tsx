@@ -70,8 +70,9 @@ export function OnboardingLogo({ compact = false }: { compact?: boolean }) {
       aria-hidden
     >
       <span className="onboarding-logo-halo" />
-      <AstroLogoMark className="onboarding-logo-base" />
-      {!compact && (
+      {compact ? (
+        <AstroLogoMark className="onboarding-logo-base" />
+      ) : (
         <span className="chat-welcome-mark onboarding-logo-mark">
           <span className="chat-welcome-mark-glow" />
           <span className="chat-welcome-illust">

@@ -202,9 +202,19 @@
   height: 100%;
 }
 
-.onboarding-logo-mark .chat-welcome-logo {
+.onboarding-logo-mark .chat-welcome-logo,
+.onboarding-logo-mark .chat-welcome-logo-lighting,
+.onboarding-logo-mark .chat-welcome-logo-lighting-fallback {
   width: 100%;
   height: 100%;
+}
+
+/* Match the front face's projection as well as its size; 16px lighting depth
+   magnifies the mask independently of the SVG at 10px. Intro is not hoverable. */
+.onboarding-logo-mark .chat-welcome-logo-lighting,
+.onboarding-logo-mark .chat-welcome-logo-lighting-fallback {
+  transform: translateZ(10px);
+  transform-origin: 50% 50%;
 }
 
 .onboarding-logo.is-compact .onboarding-logo-mark {
@@ -1490,12 +1500,12 @@
   --astro-mark-c1: var(--tone);
   --astro-mark-c2: var(--accent-2);
 }
-.onboarding-brand-motion[data-phase="intro"] .onboarding-logo-base {
+.onboarding-brand-motion[data-phase="intro"] .onboarding-logo-mark {
   animation: onboarding-logo-materialize 1.05s 360ms
     cubic-bezier(0.2, 0.78, 0.22, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-brand-motion[data-phase="intro"] .onboarding-logo-base {
+  .onboarding-brand-motion[data-phase="intro"] .onboarding-logo-mark {
     animation: none;
   }
 }
