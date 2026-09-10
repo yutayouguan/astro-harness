@@ -71,6 +71,29 @@ test("opaque root underlays exclude desktop pets in normal, zoom and macOS modes
   assert.match(backend, /\.transparent\(true\)/);
 });
 
+test("transparent pet surfaces do not add clipped CSS shadows or backdrop blur", async () => {
+  const css = await readFile(
+    new URL("../../styles/features/desktop-pet.css", import.meta.url),
+    "utf8",
+  );
+  for (const selector of [
+    "desktop-pet-character",
+    "desktop-pet-preview-canvas",
+  ]) {
+    const rule = css.match(
+      new RegExp("\\." + selector + "\\s*\\{([^}]+)\\}"),
+    )?.[1];
+    assert.ok(rule);
+    assert.match(rule, /filter:\s*none/);
+    assert.doesNotMatch(rule, /drop-shadow/);
+  }
+  const actions = css.match(/\.desktop-pet-actions\s*\{([^}]+)\}/)?.[1];
+  assert.ok(actions);
+  assert.match(actions, /box-shadow:\s*none/);
+  assert.match(actions, /backdrop-filter:\s*none/);
+  assert.match(backend, /\.shadow\(false\)/);
+});
+
 test("static assets do not advertise working animation controls", () => {
   const pause = surface.split('id: "pet-pause"')[1].split('id: "pet-hide"')[0];
   assert.match(pause, /enabled: state\.spriteVersionNumber === 2/);

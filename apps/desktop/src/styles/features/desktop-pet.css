@@ -227,7 +227,9 @@ html[data-window-surface="desktop-pet"] #root {
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-  filter: drop-shadow(0 18px 20px rgb(18 24 38 / 26%));
+  /* The sprite owns its alpha. A CSS shadow spills into the transparent
+     window and is clipped into a visible gray rectangle on light desktops. */
+  filter: none;
   -webkit-mask-image: radial-gradient(
     ellipse 72% 76% at 50% 48%,
     #000 72%,
@@ -283,8 +285,8 @@ html[data-window-surface="desktop-pet"] #root {
   border: 1px solid rgb(255 255 255 / 52%);
   border-radius: 999px;
   background: rgb(32 29 43 / 58%);
-  box-shadow: 0 8px 24px rgb(15 18 28 / 20%);
-  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: none;
+  backdrop-filter: none;
   opacity: 0;
   transform: translateY(-3px) scale(0.96);
   transition:
@@ -689,7 +691,7 @@ html[data-window-surface="desktop-pet"] #root {
   width: min(78%, 230px);
   height: auto;
   aspect-ratio: 192 / 208;
-  filter: drop-shadow(0 14px 20px rgb(42 34 66 / 18%));
+  filter: none;
 }
 
 .desktop-pet-animation-meta {
