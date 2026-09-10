@@ -11,7 +11,10 @@ test(`service address pointer focus and selection are not filtered or delayed ·
   await page.goto("/iframe.html?id=app-first-run-onboarding--provider&viewMode=story");
   const address = page.getByLabel("服务地址", { exact: true });
   await expect(address).toBeVisible();
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
   await address.fill("https://YOUR_RESOURCE.services.ai.azure.com/openai/v1");
+  // Updating controlled input state must not recreate the finished 3D layer.
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
   expect(await address.evaluate(input => {
     let element: Element | null = input.parentElement;
     while (element) {
@@ -67,6 +70,13 @@ test(`service address pointer focus and selection are not filtered or delayed ·
   expect(selection[1] - selection[0]).toBeGreaterThan(6);
   await expect(address).toBeFocused();
   await expect(address).toHaveValue("https://YOUR_RESOURCE.services.ai.azure.com/openai/v1");
+  expect(await address.evaluate(input => {
+    for (let element = input.parentElement; element; element = element.parentElement) {
+      const style = getComputedStyle(element);
+      if (style.transform !== "none" || style.perspective !== "none" || style.transformStyle === "preserve-3d" || style.willChange.split(",").map(value => value.trim()).includes("transform")) return false;
+    }
+    return true;
+  })).toBe(true);
   console.log(JSON.stringify({ engine: testInfo.project.use.browserName, measurements }));
 });
 }

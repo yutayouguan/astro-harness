@@ -28,12 +28,14 @@ test("step travel reverses, stays interactive, and never bypasses model verifica
   await page.getByRole("button", { name: "继续", exact: true }).click();
   await expect(page.locator(".onboarding-warp")).toHaveAttribute("data-direction", "forward");
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible();
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await page.getByLabel("服务地址", { exact: true }).fill("https://example.com/v1");
   await expect(page.getByLabel("服务地址", { exact: true })).toHaveValue("https://example.com/v1");
   await page.getByRole("button", { name: "返回", exact: true }).click();
   await expect(page.locator(".onboarding-warp")).toHaveAttribute("data-direction", "backward");
   await expect(page.getByRole("heading", { name: "先让这里更像你的工作空间" })).toBeVisible();
+  await expect(page.locator(".onboarding-stage--personalize")).toHaveCSS("transform", "none");
   await expect(page.locator(".onboarding-warp")).toHaveCount(0);
   await expect(page.locator(".onboarding-brand-motion")).toHaveCount(1);
 });
@@ -60,6 +62,7 @@ for (const reduced of [false, true]) {
     await expect(page.locator(".onboarding-app-host")).toHaveCount(1);
     await expect(page.locator(".onboarding-app-host")).toHaveAttribute("data-arriving", "false");
     await expect(page.locator(".onboarding-app-host")).toHaveCSS("display", "contents");
+    await expect(page.locator(".onboarding-app-host")).toHaveCSS("transform", "none");
     await expect(page.locator(".onboarding-app-aperture")).toHaveCSS("clip-path", "none");
     const input = page.getByRole("textbox", { name: "聊天输入框（演示）" });
     await expect(input).toHaveValue(/至少 5 个/);
@@ -111,6 +114,7 @@ test("pages share a flight corridor with an inert departing plane", async ({ pag
   await expect(departing).toHaveCount(0);
   expect(await arriving.locator(".onboarding-scene-aperture > section").evaluate(el => el.scrollTop)).toBe(0);
   await expect(arriving.locator(".onboarding-scene-aperture")).toHaveCSS("clip-path", "none");
+  await expect(arriving.locator(".onboarding-stage")).toHaveCSS("transform", "none");
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeInViewport();
   await page.getByLabel("服务地址", { exact: true }).fill("https://example.com/v1");
   await expect(page.getByLabel("服务地址", { exact: true })).toHaveValue("https://example.com/v1");
@@ -126,4 +130,17 @@ test("system reduced motion removes portals without adding a manual switch", asy
   await expect(page.getByRole("heading", { name: "为 Astro 接入思考能力" })).toBeVisible();
   await expect(page.locator('.onboarding-scene-window[data-exiting="false"] .onboarding-scene-aperture')).toHaveCSS("clip-path", "none");
   await expect(page.locator(".onboarding-portal-rim")).toHaveCount(0);
+});
+
+test("interrupted arrival and re-entry settle back to a plain 2D form", async ({ page }) => {
+  await page.goto("/iframe.html?id=app-first-run-onboarding--personalize&viewMode=story");
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  // Trigger a reversal while the page is still arriving, not after Playwright's stability wait.
+  await page.getByRole("button", { name: "返回", exact: true }).evaluate(button => button.click());
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCount(0);
+  await expect(page.locator(".onboarding-stage--personalize")).toHaveCSS("transform", "none");
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
+  await page.getByLabel("服务地址", { exact: true }).fill("https://example.com/v1");
+  await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
 });

@@ -1,3 +1,5 @@
+import type { Target } from "framer-motion";
+
 /** One timing contract for the portal, stage changes, and App handoff. */
 export const ONBOARDING_WARP_MS = {
   intro: 2800,
@@ -12,7 +14,11 @@ export function onboardingStageVariants(reduced: boolean) {
   if (reduced) {
     return {
       enter: { opacity: 0 },
-      center: { opacity: 1, transition: { duration: 0.12 } },
+      center: {
+        opacity: 1,
+        transition: { duration: 0.12 },
+        transitionEnd: { transform: "none" },
+      },
       exit: { opacity: 0, transition: { duration: 0.08 } },
     };
   }
@@ -24,15 +30,25 @@ export function onboardingStageVariants(reduced: boolean) {
     center: {
       opacity: 1,
       transform: depth(0),
+      // A zero-depth perspective matrix still creates a 3D rendering context.
+      // Release it only after arrival, so editing uses the ordinary 2D path.
+      transitionEnd: { transform: "none" },
       transition: {
         transform: { duration: 1.02, ease: [0.4, 0, 0.2, 1] as const },
         opacity: { duration: 0.45, delay: 0.16, ease: "linear" as const },
       },
     },
     // AnimatePresence passes the latest direction, including when reversing a step.
-    exit: (direction: number) => ({
+    exit: (direction: number, current: Target = {}) => ({
       opacity: 0,
-      transform: depth(direction >= 0 ? 500 : -650),
+      // Reintroduce a valid perspective at rest (never interpolate from
+      // perspective(0)); preserve the live transform if arrival is interrupted.
+      transform: [
+        typeof current.transform === "string" && current.transform !== "none"
+          ? current.transform
+          : depth(0),
+        depth(direction >= 0 ? 500 : -650),
+      ],
       transition: {
         transform: { duration: 0.7, ease: [0.4, 0, 0.4, 1] as const },
         opacity: { duration: 0.46, delay: 0.08, ease: "linear" as const },

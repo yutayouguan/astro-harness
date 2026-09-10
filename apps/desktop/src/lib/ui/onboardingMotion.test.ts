@@ -14,12 +14,32 @@ test("forward and backward steps travel consistently through depth", () => {
     typeof variants.exit !== "function"
   )
     return;
-  assert.equal(variants.enter(1).transform, variants.exit(-1).transform);
-  assert.equal(variants.enter(-1).transform, variants.exit(1).transform);
+  assert.equal(variants.enter(1).transform, variants.exit(-1).transform.at(-1));
+  assert.equal(variants.enter(-1).transform, variants.exit(1).transform.at(-1));
   assert.match(variants.enter(1).transform, /-650px/);
-  assert.match(variants.exit(1).transform, /\(500px\)/);
+  assert.match(variants.exit(1).transform.at(-1)!, /\(500px\)/);
   assert.equal(ONBOARDING_WARP_MS.step, 1100);
   assert.equal(ONBOARDING_WARP_MS.app, 1400);
+});
+
+test("resting pages release perspective and exits restart without a jump", () => {
+  for (const reduced of [false, true]) {
+    assert.equal(
+      onboardingStageVariants(reduced).center.transitionEnd.transform,
+      "none",
+    );
+  }
+  const variants = onboardingStageVariants(false);
+  if (typeof variants.exit !== "function") throw Error("Missing depth exit");
+  assert.equal(
+    variants.exit(1, { transform: "none" }).transform[0],
+    "perspective(1200px) translateZ(0px)",
+  );
+  const interrupted = "perspective(1200px) translateZ(-180px)";
+  assert.equal(
+    variants.exit(-1, { transform: interrupted }).transform[0],
+    interrupted,
+  );
 });
 
 test("reduced motion has no scale or spatial movement", () => {
