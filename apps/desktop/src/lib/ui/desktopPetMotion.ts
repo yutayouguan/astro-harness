@@ -20,20 +20,22 @@ export function stablePetGazeFrame(angle: number, previous: number | null) {
   return Math.round((((angle % 360) + 360) % 360) / 22.5) % 16;
 }
 
-/** One closed-eye beat, separated by varied, deterministic resting intervals. */
+/** Blink with neutral -> closed eyes -> the same neutral pose.
+ * The remaining idle-row cells contain head tilts, not blink in-betweens.
+ */
 export function idlePetFrame(elapsedMs: number) {
   const rests = [3200, 4600, 3800, 5200];
-  const motion = [80, 100, 140, 160, 220];
-  const motionDuration = motion.reduce((a, b) => a + b, 0);
-  const total = rests.reduce((a, b) => a + b + motionDuration, 0);
+  const closedDuration = 80;
+  // Keep the existing cadence while resting instead of playing head-tilt cells.
+  const blinkDuration = closedDuration + 620;
+  const total = rests.reduce((a, b) => a + b + blinkDuration, 0);
   let cursor = ((elapsedMs % total) + total) % total;
   for (const rest of rests) {
     if (cursor < rest) return 0;
     cursor -= rest;
-    for (let i = 0; i < motion.length; i++) {
-      if (cursor < motion[i]) return i + 1;
-      cursor -= motion[i];
-    }
+    if (cursor < closedDuration) return 1;
+    if (cursor < blinkDuration) return 0;
+    cursor -= blinkDuration;
   }
   return 0;
 }

@@ -10,10 +10,26 @@ import {
 test("idle holds between brief blinks and varies resting intervals", () => {
   assert.equal(idlePetFrame(3100), 0);
   assert.equal(idlePetFrame(3200), 1);
-  assert.equal(idlePetFrame(3280), 2);
+  assert.equal(idlePetFrame(3279), 1);
+  assert.equal(idlePetFrame(3280), 0);
   assert.equal(idlePetFrame(3900), 0);
   assert.equal(idlePetFrame(7100), 0);
   assert.equal(idlePetFrame(8500), 1);
+});
+
+test("blinking never plays the head-tilt cells and returns to the identical neutral frame", () => {
+  const rests = [3200, 4600, 3800, 5200];
+  let start = 0;
+  for (const rest of rests) {
+    assert.equal(idlePetFrame(start + rest - 1), 0);
+    assert.equal(idlePetFrame(start + rest), 1);
+    assert.equal(idlePetFrame(start + rest + 80), 0);
+    for (let elapsed = start; elapsed < start + rest + 700; elapsed += 10) {
+      assert.ok([0, 1].includes(idlePetFrame(elapsed)));
+    }
+    start += rest + 700;
+  }
+  assert.equal(idlePetFrame(start), 0);
 });
 test("gaze crosses zero by the short arc and bounds catch-up after suspension", () => {
   assert.equal(shortestAngleDelta(350, 10), 20);
