@@ -17,7 +17,8 @@ pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL
 pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
 pub const DESKTOP_PET_GROOMING_WIDTH: u32 = 6 * DESKTOP_PET_V2_CELL_WIDTH;
 pub const DESKTOP_PET_MIN_SCALE: f64 = 0.30;
-pub const DESKTOP_PET_MAX_SCALE: f64 = 1.35;
+pub const DESKTOP_PET_MAX_SCALE: f64 = 0.60;
+pub const DESKTOP_PET_DEFAULT_SCALE: f64 = 0.40;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,8 @@ pub struct DesktopPetManifest {
     /// Optional Astro-only six-frame paw-grooming strip; base atlas remains Codex v2.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grooming_spritesheet_path: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub motion_clips: crate::pet_motion::PetMotionClips,
 }
 
 type DesktopPetChangeHandler = Arc<dyn Fn() + Send + Sync + 'static>;
@@ -45,6 +48,7 @@ pub struct DesktopPetState {
     pub source_path: Option<String>,
     pub pet_path: Option<String>,
     pub grooming_path: Option<String>,
+    pub motion_clips: crate::pet_motion::PetMotionClips,
     pub scale: f64,
     pub always_on_top: bool,
     pub updated_at: String,
@@ -71,7 +75,8 @@ impl Default for DesktopPetState {
             source_path: None,
             pet_path: None,
             grooming_path: None,
-            scale: 1.0,
+            motion_clips: Default::default(),
+            scale: DESKTOP_PET_DEFAULT_SCALE,
             always_on_top: true,
             updated_at: String::new(),
             provider: None,
@@ -152,6 +157,13 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
     }
     let bytes = read_limited_pet_file(&path, 1024 * 1024)?;
     let mut state: DesktopPetState = serde_json::from_slice(&bytes)?;
+    // Display-size policy changed: old default 1.0 becomes the new default;
+    // other formerly valid oversized choices are capped, without rewriting on read.
+    if state.scale == 1.0 {
+        state.scale = DESKTOP_PET_DEFAULT_SCALE;
+    } else if state.scale > DESKTOP_PET_MAX_SCALE && state.scale <= 1.35 {
+        state.scale = DESKTOP_PET_MAX_SCALE;
+    }
     validate_state(&state)?;
     if let Some(style) = state.pending_scene_style.as_ref() {
         crate::pet_scene::publish_style(base, style)?;
@@ -162,6 +174,7 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    crate::pet_motion::validate_motion_clips(&state.motion_clips)?;
     anyhow::ensure!(
         state.grooming_path.is_none() || state.sprite_version_number == Some(2),
         "舔爪扩展需要 v2 动画桌宠"
@@ -183,7 +196,7 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
     anyhow::ensure!(
         state.scale.is_finite()
             && (DESKTOP_PET_MIN_SCALE..=DESKTOP_PET_MAX_SCALE).contains(&state.scale),
-        "桌宠大小必须在 0.30..=1.35 之间"
+        "桌宠大小必须在 0.30..=0.60 之间（界面 75%–150%）"
     );
     anyhow::ensure!(
         state.sprite_version_number.is_none() || state.sprite_version_number == Some(2),
@@ -246,7 +259,7 @@ mod tests {
         let state = DesktopPetState {
             enabled: true,
             pet_path: Some("/tmp/pet.png".into()),
-            scale: 1.2,
+            scale: 0.5,
             always_on_top: false,
             updated_at: "now".into(),
             ..DesktopPetState::default()
@@ -277,11 +290,11 @@ mod tests {
         };
         write_desktop_pet_state(temp.path(), &initial).unwrap();
         let updated = update_desktop_pet_state(temp.path(), |state| {
-            state.scale = 1.25;
+            state.scale = 0.55;
             Ok(())
         })
         .unwrap();
-        assert_eq!(updated.scale, 1.25);
+        assert_eq!(updated.scale, 0.55);
         assert_eq!(updated.pet_path, initial.pet_path);
         assert_eq!(updated.provider, initial.provider);
         assert_eq!(updated.revision, 2);
@@ -310,7 +323,7 @@ mod tests {
             DESKTOP_PET_MIN_SCALE,
             0.325,
             0.5,
-            0.65,
+            0.55,
             DESKTOP_PET_MAX_SCALE,
         ] {
             update_desktop_pet_state(temp.path(), |state| {
@@ -320,7 +333,7 @@ mod tests {
             .unwrap();
             assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, scale);
         }
-        for scale in [0.29, 1.36, f64::INFINITY] {
+        for scale in [0.29, 0.61, 1.36, f64::INFINITY] {
             assert!(update_desktop_pet_state(temp.path(), |state| {
                 state.scale = scale;
                 Ok(())
@@ -339,7 +352,12 @@ mod tests {
         fs::create_dir_all(desktop_pet_root(temp.path())).unwrap();
         let path = desktop_pet_state_path(temp.path());
         fs::write(&path, br#"{"scale":1.0}"#).unwrap();
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.4);
         assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 0);
+        fs::write(&path, br#"{"scale":0.65}"#).unwrap();
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.6);
+        fs::write(&path, br#"{"scale":0.4}"#).unwrap();
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.4);
         fs::write(&path, "broken").unwrap();
         assert!(write_desktop_pet_state(temp.path(), &DesktopPetState::default()).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "broken");

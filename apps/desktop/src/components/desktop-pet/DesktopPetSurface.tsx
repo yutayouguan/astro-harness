@@ -15,6 +15,7 @@ import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation";
 import DesktopPetCanvas from "./DesktopPetCanvas";
 import { usePetHitTesting } from "./usePetHitTesting";
+import { motionDuration } from "../../lib/ui/petMotionClip";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetScene } from "../../lib/ui/petScene";
 import {
@@ -89,12 +90,16 @@ export default function DesktopPetSurface() {
             text: "暂时隐藏",
             action: () => act("set_desktop_pet_enabled", { enabled: false }),
           },
-          ...(state.groomingPath
+          ...(state.groomingPath ||
+          state.motionClips?.grooming ||
+          state.motionClips?.kneading
             ? [
                 {
                   id: "pet-knead",
                   text: "踩奶",
-                  enabled: leisureAllowed,
+                  enabled:
+                    leisureAllowed &&
+                    Boolean(state.motionClips?.kneading || state.groomingPath),
                   action: () => {
                     setLookAngle(null);
                     setLeisure("kneading");
@@ -103,7 +108,9 @@ export default function DesktopPetSurface() {
                 {
                   id: "pet-groom",
                   text: "舔脚脚",
-                  enabled: leisureAllowed,
+                  enabled:
+                    leisureAllowed &&
+                    Boolean(state.motionClips?.grooming || state.groomingPath),
                   action: () => {
                     setLookAngle(null);
                     setLeisure("grooming");
@@ -297,31 +304,50 @@ export default function DesktopPetSurface() {
     enabled: state.enabled,
     spriteVersionNumber: state.spriteVersionNumber,
     groomingPath: state.groomingPath,
+    hasMotionClips: Boolean(
+      state.motionClips?.grooming || state.motionClips?.kneading,
+    ),
     paused: state.animationPaused,
     reducedMotion,
     activity,
     dragging: dragState != null,
   });
+  const leisureDuration =
+    leisure && state.motionClips?.[leisure]
+      ? motionDuration(state.motionClips[leisure])
+      : leisure
+        ? LEISURE_DURATION[leisure]
+        : 0;
   useEffect(() => {
     if (!leisureAllowed) {
       setLeisure(null);
       return;
     }
     if (leisure) {
-      const timer = window.setTimeout(
-        () => setLeisure(null),
-        LEISURE_DURATION[leisure],
-      );
+      const timer = window.setTimeout(() => setLeisure(null), leisureDuration);
       return () => window.clearTimeout(timer);
     }
     if (lookAngle != null) return;
     const timer = window.setTimeout(() => {
-      const next = leisureNext.current;
+      const available = (["kneading", "grooming"] as const).filter(
+        (name) => state.motionClips?.[name] || state.groomingPath,
+      );
+      const next = available.includes(leisureNext.current)
+        ? leisureNext.current
+        : available[0];
+      if (!next) return;
       leisureNext.current = next === "kneading" ? "grooming" : "kneading";
       setLeisure(next);
     }, 20_000);
     return () => window.clearTimeout(timer);
-  }, [leisureAllowed, leisure, lookAngle, state.petPath, state.groomingPath]);
+  }, [
+    leisureAllowed,
+    leisure,
+    lookAngle,
+    state.petPath,
+    state.groomingPath,
+    leisureDuration,
+  ]);
   const playedLeisure = leisureAllowed ? leisure : null;
   const groomingSrc =
     playedLeisure === "grooming" ? resolveMediaSrc(state.groomingPath) : null;
@@ -385,6 +411,12 @@ export default function DesktopPetSurface() {
           <DesktopPetCanvas
             src={petSrc}
             groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
+            motionClips={state.motionClips}
+            motionName={
+              playedLeisure && state.motionClips?.[playedLeisure]
+                ? playedLeisure
+                : undefined
+            }
             state={groomingSrc ? "idle" : renderedState}
             clip={groomingSrc ? "grooming" : undefined}
             lookAngle={lookAngle}

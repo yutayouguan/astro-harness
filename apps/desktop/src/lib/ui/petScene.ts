@@ -9,6 +9,7 @@ export type PetScene = {
     DesktopPetState,
     | "sourcePath"
     | "groomingPath"
+    | "motionClips"
     | "spriteVersionNumber"
     | "displayName"
     | "description"

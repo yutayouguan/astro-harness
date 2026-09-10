@@ -1,4 +1,24 @@
-export const DESKTOP_PET_SCALE = { min: 0.3, max: 1.35, step: 0.05 } as const;
+export const DESKTOP_PET_SCALE = {
+  min: 0.3,
+  max: 0.6,
+  step: 0.01,
+  reference: 0.4,
+} as const;
+
+export const petScalePercent = (scale: number) =>
+  Math.round((scale / DESKTOP_PET_SCALE.reference) * 1000) / 10;
+export const petScaleFromPercent = (percent: number) =>
+  Number.isFinite(percent)
+    ? Math.max(
+        DESKTOP_PET_SCALE.min,
+        Math.min(
+          DESKTOP_PET_SCALE.max,
+          (percent * DESKTOP_PET_SCALE.reference) / 100,
+        ),
+      )
+    : DESKTOP_PET_SCALE.reference;
+
+import type { PetMotionClips } from "./petMotionClip";
 
 export type DesktopPetState = {
   revision: number;
@@ -6,6 +26,7 @@ export type DesktopPetState = {
   sourcePath: string | null;
   petPath: string | null;
   groomingPath: string | null;
+  motionClips?: PetMotionClips;
   scale: number;
   alwaysOnTop: boolean;
   updatedAt: string;
@@ -27,7 +48,8 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   sourcePath: null,
   petPath: null,
   groomingPath: null,
-  scale: 1,
+  motionClips: {},
+  scale: DESKTOP_PET_SCALE.reference,
   alwaysOnTop: true,
   updatedAt: "",
   provider: null,

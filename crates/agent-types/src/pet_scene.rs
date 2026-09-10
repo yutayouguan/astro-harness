@@ -13,6 +13,8 @@ pub struct PetIdentity {
     pub pet_path: String,
     #[serde(default)]
     pub grooming_path: Option<String>,
+    #[serde(default)]
+    pub motion_clips: crate::pet_motion::PetMotionClips,
     pub source_path: Option<String>,
     pub sprite_version_number: Option<u32>,
     pub display_name: Option<String>,
@@ -30,6 +32,7 @@ impl PetIdentity {
                 .ok_or_else(|| anyhow::anyhow!("请先生成或导入桌宠"))?,
             source_path: state.source_path.clone(),
             grooming_path: state.grooming_path.clone(),
+            motion_clips: state.motion_clips.clone(),
             sprite_version_number: state.sprite_version_number,
             display_name: state.display_name.clone(),
             description: state.description.clone(),
@@ -41,6 +44,7 @@ impl PetIdentity {
     fn apply(&self, state: &mut DesktopPetState) {
         state.pet_path = Some(self.pet_path.clone());
         state.grooming_path = self.grooming_path.clone();
+        state.motion_clips = self.motion_clips.clone();
         state.source_path = self.source_path.clone();
         state.sprite_version_number = self.sprite_version_number;
         state.display_name = self.display_name.clone();
@@ -63,6 +67,7 @@ pub struct PetScene {
 
 impl PetScene {
     pub fn validate(&self) -> anyhow::Result<()> {
+        crate::pet_motion::validate_motion_clips(&self.pet.motion_clips)?;
         anyhow::ensure!(
             !self.id.is_empty()
                 && self.id.len() <= 80
@@ -118,6 +123,9 @@ pub fn managed_file(base: &Path, path: &Path) -> anyhow::Result<PathBuf> {
 
 pub fn save_scene(base: &Path, scene: PetScene) -> anyhow::Result<DesktopPetState> {
     scene.validate()?;
+    for clip in scene.pet.motion_clips.values() {
+        managed_file(base, Path::new(&clip.path))?;
+    }
     managed_file(base, Path::new(&scene.pet.pet_path))?;
     if let Some(path) = &scene.pet.grooming_path {
         managed_file(base, Path::new(path))?;
@@ -323,6 +331,18 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
         scene.pet.grooming_path = Some(name);
     }
     if scene.pet.sprite_version_number == Some(2) {
+        for (key, clip) in &mut scene.pet.motion_clips {
+            let path = managed_file(base, Path::new(&clip.path))?;
+            let bytes = read_limited_pet_file(&path, 16 * 1024 * 1024)?;
+            let name = format!(
+                "motion-{key}.{}",
+                path.extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("webp")
+            );
+            fs::write(temporary.path().join(&name), bytes)?;
+            clip.path = name;
+        }
         let manifest = crate::DesktopPetManifest {
             id: scene.id.clone(),
             display_name: scene
@@ -339,6 +359,7 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
             sprite_version_number: 2,
             spritesheet_path: pet_name,
             grooming_spritesheet_path: scene.pet.grooming_path.clone(),
+            motion_clips: scene.pet.motion_clips.clone(),
         };
         fs::write(
             temporary.path().join("pet.json"),
@@ -413,6 +434,9 @@ pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Resul
             || mode == SceneApplyMode::Pet
             || (mode == SceneApplyMode::Linked && state.follow_wallpaper);
         if apply_pet {
+            for clip in scene.pet.motion_clips.values() {
+                managed_file(base, Path::new(&clip.path))?;
+            }
             managed_file(base, Path::new(&scene.pet.pet_path))?;
             if let Some(path) = &scene.pet.grooming_path {
                 managed_file(base, Path::new(path))?;
@@ -504,6 +528,9 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
                 if let Some(path) = &scene.pet.grooming_path {
                     managed_file(base, Path::new(path))?;
                 }
+                for clip in scene.pet.motion_clips.values() {
+                    managed_file(base, Path::new(&clip.path))?;
+                }
                 scene.pet.apply(state);
             }
         }
@@ -524,13 +551,31 @@ mod tests {
         fs::write(&path, b"validated grooming strip").unwrap();
         scene.pet.sprite_version_number = Some(2);
         scene.pet.grooming_path = Some(path.to_string_lossy().into_owned());
+        scene.pet.motion_clips.insert(
+            "grooming".into(),
+            crate::pet_motion::PetMotionClip {
+                path: path.to_string_lossy().into_owned(),
+                frame_width: 192,
+                frame_height: 208,
+                columns: 4,
+                durations_ms: vec![90; 17],
+                loop_start: 5,
+                loop_end: 13,
+                loop_repeats: 3,
+            },
+        );
         save_scene(dir.path(), scene.clone()).unwrap();
         let applied = apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
         assert_eq!(applied.grooming_path, scene.pet.grooming_path);
+        assert_eq!(applied.motion_clips, scene.pet.motion_clips);
         let output = tempfile::tempdir().unwrap();
         let package = export_scene(dir.path(), &scene.id, output.path()).unwrap();
         let manifest: crate::DesktopPetManifest =
             serde_json::from_slice(&fs::read(package.join("pet.json")).unwrap()).unwrap();
+        assert!(package
+            .join(&manifest.motion_clips["grooming"].path)
+            .is_file());
+        assert!(!Path::new(&manifest.motion_clips["grooming"].path).is_absolute());
         assert!(package
             .join(manifest.grooming_spritesheet_path.unwrap())
             .is_file());
@@ -550,6 +595,7 @@ mod tests {
             source_path: None,
             sprite_version_number: None,
             grooming_path: None,
+            motion_clips: Default::default(),
             display_name: Some("Mochi".into()),
             description: None,
             provider: None,

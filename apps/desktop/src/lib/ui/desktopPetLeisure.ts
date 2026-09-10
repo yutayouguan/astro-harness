@@ -17,6 +17,7 @@ export function canPlayPetLeisure(input: {
   enabled: boolean;
   spriteVersionNumber: number | null;
   groomingPath: string | null;
+  hasMotionClips?: boolean;
   paused: boolean;
   reducedMotion: boolean;
   activity: string;
@@ -25,7 +26,7 @@ export function canPlayPetLeisure(input: {
   return (
     input.enabled &&
     input.spriteVersionNumber === 2 &&
-    Boolean(input.groomingPath) &&
+    (Boolean(input.groomingPath) || Boolean(input.hasMotionClips)) &&
     !input.paused &&
     !input.reducedMotion &&
     input.activity === "idle" &&

@@ -6,6 +6,7 @@ pub mod auxiliary_target;
 pub mod compact_scope;
 pub mod credentials;
 pub mod desktop_pet;
+pub mod pet_motion;
 pub mod error;
 pub mod grpc_addr;
 pub mod interaction_mode;

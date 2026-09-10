@@ -195,6 +195,41 @@ fn validate_grooming_strip(bytes: &[u8]) -> Result<&'static str, String> {
     Ok(extension)
 }
 
+pub(super) fn validate_motion_image(
+    bytes: &[u8],
+    clip: &types::pet_motion::PetMotionClip,
+) -> Result<&'static str, String> {
+    clip.validate().map_err(|e| e.to_string())?;
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    let extension = match reader.format() {
+        Some(ImageFormat::Png) => "png",
+        Some(ImageFormat::WebP) => "webp",
+        _ => return Err("动作图集只支持 PNG/WebP".into()),
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let image = reader.decode().map_err(|e| e.to_string())?.to_rgba8();
+    if image.dimensions() != clip.dimensions() || !image.pixels().any(|p| p[3] == 0) {
+        return Err("动作图集尺寸与清单不匹配，或背景不透明".into());
+    }
+    let cells = image.width() / clip.frame_width * (image.height() / clip.frame_height);
+    for index in 0..cells {
+        let left = index % clip.columns * clip.frame_width;
+        let top = index / clip.columns * clip.frame_height;
+        let populated = (top..top + clip.frame_height)
+            .any(|y| (left..left + clip.frame_width).any(|x| image.get_pixel(x, y)[3] > 0));
+        if populated != (index < clip.durations_ms.len() as u32) {
+            return Err("动作图集存在缺帧或未使用格不透明".into());
+        }
+    }
+    Ok(extension)
+}
+
 fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPetStateDto, String> {
     let manifest_bytes =
         types::desktop_pet::read_limited_pet_file(manifest_path, MAX_MANIFEST_BYTES)
@@ -202,6 +237,7 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("pet.json 格式无效：{error}"))?;
     let pet_id = validate_pet_id(&manifest.id)?.to_string();
+    types::pet_motion::validate_motion_clips(&manifest.motion_clips).map_err(|e| e.to_string())?;
     validate_manifest_copy(&manifest.display_name, "displayName", 80)?;
     validate_manifest_copy(&manifest.description, "description", 500)?;
     if manifest.sprite_version_number != types::DESKTOP_PET_V2_SPRITE_VERSION {
@@ -253,6 +289,31 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
         })
         .transpose()?;
 
+    let mut motion_clips = manifest.motion_clips.clone();
+    let mut motion_assets = Vec::new();
+    for (name, clip) in &mut motion_clips {
+        let relative = Path::new(&clip.path);
+        if relative.as_os_str().is_empty()
+            || !relative
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_)))
+        {
+            return Err("动作素材必须是包内安全相对路径".into());
+        }
+        let source = manifest_parent
+            .join(relative)
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        if !source.starts_with(&manifest_parent) {
+            return Err("动作素材不能越出宠物包".into());
+        }
+        let bytes = types::desktop_pet::read_limited_pet_file(&source, 16 * 1024 * 1024)
+            .map_err(|e| e.to_string())?;
+        let extension = validate_motion_image(&bytes, clip)?;
+        clip.path = format!("motion-{name}.{extension}");
+        motion_assets.push((clip.path.clone(), bytes));
+    }
+
     let pets_root = pet_dir_at(base).join("pets");
     fs::create_dir_all(&pets_root).map_err(|error| format!("无法创建桌宠库：{error}"))?;
     let nonce = uuid::Uuid::new_v4().simple().to_string();
@@ -268,6 +329,7 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
         description: manifest.description.trim().to_string(),
         spritesheet_path: copied_sheet_name,
         grooming_spritesheet_path: grooming.as_ref().map(|(name, _)| name.clone()),
+        motion_clips,
         ..manifest
     };
     let import_result = (|| -> Result<(), String> {
@@ -275,6 +337,9 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
             .map_err(|error| format!("无法复制动画图集：{error}"))?;
         if let Some((name, bytes)) = &grooming {
             fs::write(temporary.join(name), bytes).map_err(|e| format!("无法复制舔爪动画：{e}"))?;
+        }
+        for (name, bytes) in &motion_assets {
+            fs::write(temporary.join(name), bytes).map_err(|e| e.to_string())?;
         }
         fs::write(
             temporary.join("pet.json"),
@@ -292,6 +357,10 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let pet_path = destination.join(&managed_manifest.spritesheet_path);
     let updated = types::update_desktop_pet_state(base, |state| {
         state.pet_path = Some(pet_path.to_string_lossy().into_owned());
+        state.motion_clips = managed_manifest.motion_clips.clone();
+        for clip in state.motion_clips.values_mut() {
+            clip.path = destination.join(&clip.path).to_string_lossy().into_owned();
+        }
         state.grooming_path = managed_manifest
             .grooming_spritesheet_path
             .as_ref()
@@ -457,6 +526,9 @@ pub(super) fn present_committed_state(
 }
 
 pub fn restore_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Err(error) = super::builtin_pet::upgrade_at(&home::default_memory_dir()) {
+        tracing::warn!(%error, "upgrade built-in pet motion failed; keeping existing pet");
+    }
     let state = match load_state() {
         Ok(state) => state,
         Err(error) => {
@@ -634,6 +706,7 @@ pub(super) async fn generate_pet_identity(
         model: Some(generated.model),
         sprite_version_number: None,
         grooming_path: None,
+        motion_clips: Default::default(),
         display_name: None,
         description: Some(details.to_string()),
     })
@@ -715,6 +788,14 @@ mod tests {
     fn smallest_desktop_pet_window_is_less_than_half_the_previous_minimum() {
         let size = window_size(types::desktop_pet::DESKTOP_PET_MIN_SCALE);
         assert_eq!(size, LogicalSize::new(90.0, 102.0));
+        assert_eq!(
+            window_size(types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE),
+            LogicalSize::new(120.0, 136.0)
+        );
+        assert_eq!(
+            window_size(types::desktop_pet::DESKTOP_PET_MAX_SCALE),
+            LogicalSize::new(180.0, 204.0)
+        );
         assert!(size.width <= window_size(0.65).width / 2.0);
         // Two 28px toolbar buttons + gap/padding/border + 12px right inset.
         assert!(size.width >= 28.0 * 2.0 + 6.0 + 10.0 + 2.0 + 12.0);
@@ -802,6 +883,7 @@ mod tests {
             sprite_version_number: 2,
             spritesheet_path: "atlas.png".into(),
             grooming_spritesheet_path: Some("grooming.png".into()),
+            motion_clips: Default::default(),
         };
         fs::write(
             package.join("pet.json"),
@@ -811,6 +893,54 @@ mod tests {
         let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
         assert!(Path::new(state.grooming_path.as_deref().unwrap()).is_file());
         manifest.grooming_spritesheet_path = Some("../outside.png".into());
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert!(import_animated_pet_at(&base, &package.join("pet.json")).is_err());
+        assert_eq!(load_state_at(&base).unwrap().revision, state.revision);
+    }
+
+    #[test]
+    fn imports_flexible_motion_clips_and_rejects_path_escape() {
+        let temp = tempfile::tempdir().unwrap();
+        let package = temp.path().join("package");
+        let base = temp.path().join("astro");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(package.join("atlas.png"), valid_v2_atlas(false)).unwrap();
+        fs::write(
+            package.join("motion.webp"),
+            include_bytes!("../../../../src/assets/pets/naitang/grooming-motion.webp"),
+        )
+        .unwrap();
+        let clip = types::pet_motion::PetMotionClip {
+            path: "motion.webp".into(),
+            frame_width: 192,
+            frame_height: 208,
+            columns: 4,
+            durations_ms: vec![90; 17],
+            loop_start: 5,
+            loop_end: 13,
+            loop_repeats: 3,
+        };
+        let mut manifest = types::DesktopPetManifest {
+            id: "cat".into(),
+            display_name: "Cat".into(),
+            description: "Motion test".into(),
+            sprite_version_number: 2,
+            spritesheet_path: "atlas.png".into(),
+            grooming_spritesheet_path: None,
+            motion_clips: [("grooming".into(), clip)].into(),
+        };
+        fs::write(
+            package.join("pet.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
+        assert!(Path::new(&state.motion_clips["grooming"].path).is_file());
+        manifest.motion_clips.get_mut("grooming").unwrap().path = "../motion.webp".into();
         fs::write(
             package.join("pet.json"),
             serde_json::to_vec(&manifest).unwrap(),
@@ -858,14 +988,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let state = DesktopPetStateDto {
             enabled: true,
-            scale: 1.2,
+            scale: 0.5,
             pet_path: Some("/tmp/pet.png".to_string()),
             ..DesktopPetStateDto::default()
         };
         save_state_at(temp.path(), &state).unwrap();
         let loaded = load_state_at(temp.path()).unwrap();
         assert!(loaded.enabled);
-        assert_eq!(loaded.scale, 1.2);
+        assert_eq!(loaded.scale, 0.5);
         assert_eq!(loaded.pet_path.as_deref(), Some("/tmp/pet.png"));
     }
 
@@ -905,6 +1035,7 @@ mod tests {
                 description: "A calm orange cat".into(),
                 sprite_version_number: 2,
                 grooming_spritesheet_path: None,
+                motion_clips: Default::default(),
                 spritesheet_path: "spritesheet.png".into(),
             })
             .unwrap(),
@@ -938,6 +1069,7 @@ mod tests {
                 description: "Must remain inside the package".into(),
                 sprite_version_number: 2,
                 grooming_spritesheet_path: None,
+                motion_clips: Default::default(),
                 spritesheet_path: "../outside.png".into(),
             })
             .unwrap(),

@@ -42,7 +42,7 @@ pub struct DesktopPetArgs {
     /// apply 可选：生成所依据的原始宠物照片路径，用于设置页保留来源预览。
     #[serde(default)]
     pub source_path: Option<String>,
-    /// configure/apply 可选：窗口缩放，范围 0.30..=1.35。
+    /// configure/apply 可选：窗口缩放，范围 0.30..=0.60；0.40 对应界面 100%。
     #[serde(default)]
     pub scale: Option<f64>,
     /// configure/apply 可选：是否保持置顶。
@@ -211,6 +211,7 @@ fn save_scene(
                 source_path: source_path.map(|p| p.to_string_lossy().into_owned()),
                 sprite_version_number: None,
                 grooming_path: None,
+                motion_clips: Default::default(),
                 display_name: Some(name.into()),
                 description: None,
                 provider: clean_optional(args.provider),
@@ -296,6 +297,7 @@ fn apply(ctx: &ToolContext<'_>, args: DesktopPetArgs) -> anyhow::Result<types::D
         state.follow_wallpaper = false;
         state.sprite_version_number = None;
         state.grooming_path = None;
+        state.motion_clips.clear();
         state.display_name = None;
         state.description = None;
         if let Some(source_path) = source_path_value {
@@ -546,7 +548,7 @@ mod tests {
     #[test]
     fn desktop_pet_display_options_support_smaller_sizes() {
         let mut state = types::DesktopPetState::default();
-        for (requested, expected) in [(-1.0, 0.3), (0.325, 0.325), (0.5, 0.5), (2.0, 1.35)] {
+        for (requested, expected) in [(-1.0, 0.3), (0.325, 0.325), (0.5, 0.5), (2.0, 0.6)] {
             apply_display_options(&mut state, Some(requested), None);
             assert_eq!(state.scale, expected);
         }
@@ -663,7 +665,7 @@ mod tests {
             &serde_json::json!({
                 "action": "apply",
                 "imagePath": "pet.png",
-                "scale": 1.1,
+                "scale": 0.5,
                 "alwaysOnTop": true,
                 "provider": "test",
                 "model": "test-image"
@@ -674,7 +676,7 @@ mod tests {
         assert!(output.contains("\"astro_desktop_pet\":true"));
         let state = types::read_desktop_pet_state(temp.path()).unwrap();
         assert!(state.enabled);
-        assert_eq!(state.scale, 1.1);
+        assert_eq!(state.scale, 0.5);
         assert_eq!(state.provider.as_deref(), Some("test"));
         let pet_path = Path::new(state.pet_path.as_deref().unwrap());
         assert!(pet_path.is_file());

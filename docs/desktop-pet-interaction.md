@@ -5,9 +5,12 @@ the key/main window when shown, updated, clicked or restored.
 
 ## Focus and click routing
 
-The size slider supports 30%–135% in 5% steps. Native commands, chat tools and
-shared persistence use the same bounds. The minimum window is 90×102 logical
-pixels, less than half the former 65% minimum; existing saved sizes are preserved.
+The size slider displays 75%–150%, with a 100% default equal to the former 40%
+size. Internal scale remains physical: 0.30–0.60, default0.40. Thus the default
+window is120×136 logical pixels, maximum180×204, minimum90×102. Existing0.40
+choices stay the same size; old default1.0 reads as0.40, other formerly valid
+oversized values cap at0.60. Reads do not rewrite saved files; the next settings
+transaction persists the normalized value. Native, tools and UI share bounds.
 
 - Native creation uses `focused(false)`, `focusable(false)` and first-mouse
   acceptance. Main also accepts its first click. On macOS, `show()` reaches
@@ -38,8 +41,25 @@ pixels, less than half the former 65% minimum; existing saved sizes are preserve
   sprite boundaries. Pointer jitter does not restart the animation clock.
 - Idle uses varied resting intervals before a short blink. Greeting ends after
   one complete 700ms loop. Static holds do not repaint identical canvas frames.
-- This improves playback of the existing art; it does **not** add generated
-  in-between frames or claim that crossfading is anatomical motion interpolation.
+- Crossfading is not anatomical interpolation. Independent clips additionally
+  have newly generated pose families; the short blend only smooths sampling.
+
+## Independent Astro motion clips
+
+`pet.json`, shared state and saved scene identity optionally carry `motionClips`.
+Each entry has `path`, `frameWidth`, `frameHeight`, `columns`, `durationsMs`,
+`loopStart`, `loopEnd` (exclusive) and `loopRepeats`. Entry and exit play once;
+only the loop range repeats. Each clip owns its grid and frame count. Import
+validates package-relative paths, bounded metadata, image dimensions, alpha,
+nonempty used cells and empty unused cells. Export rewrites paths relative to
+the package; applying a scene validates managed paths and carries its motions.
+
+The built-in has independently generated kneading/grooming pose families,
+assembled into 16/17 playback frames. Selected poses are reused for reverse
+entry/exit; generation QA records every source index and unique-pose count.
+The managed built-in directory is versioned. Only an untouched previous built-in
+is upgraded; visibility, scale, pause, wallpaper linkage and scenes survive.
+Imported/custom pets are never silently replaced.
 
 ## Native acceptance checklist
 

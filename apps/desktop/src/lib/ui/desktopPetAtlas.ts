@@ -13,6 +13,7 @@ export function loadPetAtlas<T extends AtlasImage>(options: {
   loaded: (image: T) => void;
   failed: () => void;
   kind?: "v2" | "grooming";
+  dimensions?: { width: number; height: number };
 }) {
   const image = options.createImage();
   // Tauri's asset protocol supplies ACAO for its window origin. Opt in before
@@ -21,8 +22,10 @@ export function loadPetAtlas<T extends AtlasImage>(options: {
   let disposed = false;
   image.onload = () => {
     if (disposed) return;
-    const width = options.kind === "grooming" ? 1152 : 1536;
-    const height = options.kind === "grooming" ? 208 : 2288;
+    const width =
+      options.dimensions?.width ?? (options.kind === "grooming" ? 1152 : 1536);
+    const height =
+      options.dimensions?.height ?? (options.kind === "grooming" ? 208 : 2288);
     if (image.naturalWidth !== width || image.naturalHeight !== height)
       options.failed();
     else options.loaded(image);

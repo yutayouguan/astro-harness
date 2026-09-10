@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
 description: 从用户照片生成 Astro 桌宠、可选配套壁纸、保存和切换宠物场景。用户说“生成桌宠”“配套宠物壁纸”“宠物场景”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 5
+astro_bundled_rev: 6
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 
@@ -32,6 +32,17 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 
 ## 应用到桌面
 
+### 动画与独立动作片段
+
+- 先区分静态形象与动画。`image_gen` 产出位图，不会自动变成可播放动画；`desktop_pet action=apply` 的 `imagePath` 仍是静态图片入口。不要把一张角色图或未经处理的联系表当动画应用。
+- Astro 内置奶糖无需图片模型即可使用。设置页“使用内置奶糖”可启用；用户的自定义宠物不能被静默替换。`status` 返回的 `motionClips` 可用于判断是否具备独立动作片段。
+- 外部 pet/hatch 技能仅作创作参考。Astro 的独立动作片段不受每行8帧或统一动作行数限制；按动作需要设计进入、循环、退出，优先保持身份、体积、落脚点和首尾姿态连续。先修播放/定位问题，再按缺失姿态补图，不用重复帧冒充新中间帧。
+- 动画包通过桌面设置中的“导入动画桌宠”选择 `pet.json`。现有 `spriteVersionNumber:2` 主图集可继续承载已验证的基础动作，新增 `motionClips` 独立覆盖 `kneading`、`grooming`，各片段有自己的素材、网格和时序；导出场景会一起打包，不丢失动作。
+- `motionClips` 是按动作名索引的对象。每项包含包内相对 `path`、`frameWidth`、`frameHeight`、`columns`、逐帧 `durationsMs`、从0开始的 `loopStart`、不含末端的 `loopEnd` 和 `loopRepeats`。入口段和退出段各播一次，只重复中间循环段。当前安全界限：每片段1–128帧、每帧20–2000ms、最多8次循环、总长不超过60秒、图集不超过4096×4096。
+- 先生成同一角色的连续姿态，保留全部原始素材，再去背景、统一比例和基准线、编排时序。姿态超出模型未严格遵循的隐形格线时，应按完整轮廓提取，不直接裁掉耳朵或尾巴。当前工作区存在 `tools/desktop-pet/assemble_motion.py` 时可复用；不要假设此脚本已随独立应用安装。
+- 在白底、深底及实际小尺寸下检查：无阴影底板、无裁边或身体透明洞；首尾回到待机；循环不跳姿势；暂停/任务事件能打断；桌宠不能抢主窗口焦点或拦截透明区域的点击。完整素材集验证后再一起应用，不能以编译成功代替原生播放验收。
+- 有图片生成授权时按已授权范围执行，不反复询问同一授权；失败时报告具体原因与保留的进度。不要修改模型配置或强行跳过用户的初始化流程来完成演示。
+
 ### 场景套装与预览
 
 - 配套壁纸是可选的额外图片请求，用户没有选择时不生成。只作用于 Astro 应用背景，不修改系统桌面壁纸。
@@ -54,7 +65,7 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 
 1. 使用 `image_gen` 原样返回的图片路径，不猜测文件名。
 2. 调用 `desktop_pet action=apply`，将路径放入 `imagePath`。如果使用了用户照片，同时把原图路径放入 `sourcePath`；`image_gen` 返回了 `provider` / `model` 时也原样传入。
-3. 默认启用桌宠并保持置顶；用户指定大小时将比例换算到 `scale` 的 `0.30..1.35` 范围。
+3. 默认启用桌宠并保持置顶。大小的界面 100% 对应内部 `scale=0.40`，界面范围为75%–150%，内部范围为 `0.30..0.60`。用户给百分比时按 `scale=百分比/100×0.40` 换算，不把界面的100%误写成 `scale=1.0`。
 4. 成功后简短报告桌宠已显示，以及实际使用的形象方向；不要重复输出内部绝对路径。
 
 用户明确说“设为桌宠”“换成这个桌宠”时可直接应用，不需要二次确认。
@@ -66,4 +77,4 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 - 隐藏：`desktop_pet action=hide`
 - 调整：`desktop_pet action=configure`，传 `scale` 和/或 `alwaysOnTop`
 
-本 Skill 面向 Astro 当前的静态透明桌宠窗口，不生成 Codex 8×11 动画图集，也不修改应用源码。
+本 Skill 面向 Astro 桌宠和场景操作。创作格式服务于实际播放效果；只在明确需要交换兼容包时遵循外部图集规范。不要把设置页能力虚构成不存在的 `desktop_pet` 工具参数，也不通过本技能改动应用源码。

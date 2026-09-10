@@ -248,7 +248,7 @@ mod tests {
         types::update_desktop_pet_state(root.path(), |state| {
             state.pet_path = Some(asset.to_string_lossy().into_owned());
             state.display_name = Some("My pet".into());
-            state.scale = 0.8;
+            state.scale = 0.5;
             Ok(())
         })
         .unwrap();
@@ -256,7 +256,7 @@ mod tests {
         let pet = types::read_desktop_pet_state(root.path()).unwrap();
         assert_eq!(pet.pet_path.as_deref(), asset.to_str());
         assert_eq!(pet.display_name.as_deref(), Some("My pet"));
-        assert_eq!(pet.scale, 0.8);
+        assert_eq!(pet.scale, 0.5);
         assert_eq!(fs::read(asset).unwrap(), b"existing user asset");
         apply_pet_choice_at(root.path(), None).unwrap();
         assert!(types::read_desktop_pet_state(root.path()).unwrap().enabled);

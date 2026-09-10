@@ -20,7 +20,10 @@ import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
-import { DESKTOP_PET_SCALE } from "../../lib/ui/desktopPetState";
+import {
+  DESKTOP_PET_SCALE,
+  petScalePercent,
+} from "../../lib/ui/desktopPetState";
 
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
@@ -48,10 +51,10 @@ const COPY = {
     empty: "上传照片后即可生成",
     provider: "生成模型",
     importAnimated: "导入动画桌宠",
-    importAnimatedHint: "选择 Codex v2 宠物包中的 pet.json",
+    importAnimatedHint: "选择 Astro 动画宠物包中的 pet.json，也支持 v2 图集",
     animatedBadge: "动画 v2",
     staticHint:
-      "当前生成单张透明图片，不包含动画帧。眨眼、转头等动作需要导入完整 v2 动画宠物包。",
+      "当前照片生成不包含动画帧。可使用内置奶糖，或导入含独立动作片段的动画宠物包。",
     staticBadge: "静态图片",
   },
   en: {
@@ -78,10 +81,11 @@ const COPY = {
     empty: "Upload a photo to start creating",
     provider: "Generated with",
     importAnimated: "Import animated pet",
-    importAnimatedHint: "Choose pet.json from a Codex v2 pet package",
+    importAnimatedHint:
+      "Choose pet.json from an Astro animation package; v2 atlases are also supported",
     animatedBadge: "Animated v2",
     staticHint:
-      "Generation currently produces one transparent image, not animation frames. Import a complete v2 pet package for blinking, turning, and other motions.",
+      "Photo generation produces a static portrait. Use built-in Naitang or import an animation package with independent motion clips.",
     staticBadge: "Static image",
   },
 } as const;
@@ -539,6 +543,11 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               <DesktopPetCanvas
                 src={petSrc}
                 groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
+                motionClips={state.motionClips}
+                motionName={
+                  state.motionClips?.[previewAction] ? previewAction : undefined
+                }
+                repeatMotion
                 state={previewAction === "kneading" ? "running" : "idle"}
                 clip={
                   previewAction === "grooming" && state.groomingPath
@@ -562,35 +571,47 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
             <div className="desktop-pet-animation-meta">
               <span>
                 {state.spriteVersionNumber === 2
-                  ? copy.animatedBadge
+                  ? Object.keys(state.motionClips ?? {}).length
+                    ? zh
+                      ? "独立动作片段"
+                      : "Motion clips"
+                    : copy.animatedBadge
                   : copy.staticBadge}
               </span>
               <strong>{state.displayName || copy.generated}</strong>
             </div>
           ) : null}
-          {state.spriteVersionNumber === 2 && state.groomingPath && (
-            <div
-              className="pet-scene-actions"
-              aria-label={zh ? "动作预览" : "Animation preview"}
-            >
-              {(["idle", "kneading", "grooming"] as const).map((action) => (
-                <button
-                  key={action}
-                  type="button"
-                  aria-pressed={previewAction === action}
-                  onClick={() => setPreviewAction(action)}
-                >
-                  {zh
-                    ? { idle: "眨眼", kneading: "踩奶", grooming: "舔脚脚" }[
-                        action
-                      ]
-                    : { idle: "Blink", kneading: "Knead", grooming: "Groom" }[
-                        action
-                      ]}
-                </button>
-              ))}
-            </div>
-          )}
+          {state.spriteVersionNumber === 2 &&
+            (state.groomingPath ||
+              state.motionClips?.grooming ||
+              state.motionClips?.kneading) && (
+              <div
+                className="pet-scene-actions"
+                aria-label={zh ? "动作预览" : "Animation preview"}
+              >
+                {(["idle", "kneading", "grooming"] as const).map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    aria-pressed={previewAction === action}
+                    disabled={
+                      action !== "idle" &&
+                      !state.motionClips?.[action] &&
+                      !state.groomingPath
+                    }
+                    onClick={() => setPreviewAction(action)}
+                  >
+                    {zh
+                      ? { idle: "眨眼", kneading: "踩奶", grooming: "舔脚脚" }[
+                          action
+                        ]
+                      : { idle: "Blink", kneading: "Knead", grooming: "Groom" }[
+                          action
+                        ]}
+                  </button>
+                ))}
+              </div>
+            )}
           {state.provider && state.model ? (
             <p className="desktop-pet-model">
               {copy.provider}: {state.provider} · {state.model}
@@ -645,6 +666,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
                 max={DESKTOP_PET_SCALE.max}
                 step={DESKTOP_PET_SCALE.step}
                 value={scaleDraft ?? state.scale}
+                aria-valuetext={`${petScalePercent(scaleDraft ?? state.scale)}%`}
                 disabled={busy != null}
                 onChange={(event) => {
                   const scale = Number(event.currentTarget.value);
@@ -660,7 +682,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
                   void updateScale(Number(event.currentTarget.value))
                 }
               />
-              <output>{Math.round((scaleDraft ?? state.scale) * 100)}%</output>
+              <output>{petScalePercent(scaleDraft ?? state.scale)}%</output>
             </label>
           </div>
         </section>
