@@ -31,7 +31,29 @@ transaction persists the normalized value. Native, tools and UI share bounds.
   from main-window Settings; the non-activating overlay does not claim a keyboard
   context-menu shortcut.
 
-## Playback
+## Placement and quiet behavior
+
+Shared state has validated `preferences`: normalized per-monitor `position`,
+`positionLocked`, `snapToEdge`, `quietMode`, `hideInFullscreen`, `presentationMode`
+and `activityIntervalSecs` (15–300). Native drag completion waits for mouse release
+on macOS/Windows; geometry uses monitor work areas and supports negative origins.
+Missing monitors fall back to the primary screen. Placement updates are idempotent
+and do not run on every animation frame. "Bring back on screen" resets the anchor.
+
+Quiet mode stops automatic large actions, not explicit manual previews. Presentation
+and fullscreen suppression do not change `enabled`; tray recovery clears presentation
+and temporarily overrides the current fullscreen interval. macOS observes only
+foreground window bounds/PID, not titles, screenshots or accessibility content.
+Other platforms support Astro fullscreen/manual presentation; physical platform
+acceptance is recorded separately in `desktop-pet-todo.md`.
+
+Scenes optionally capture `preferences` including scale and behavior. Only pet/all/
+linked-pet application restores these. Presentation remains global. Exported
+`pet.json` carries `scenePreferences`; import validates before applying. Old scenes
+without preferences preserve current choices. Wallpaper generation's concurrency
+check ignores preference-only changes but keeps the newest preference snapshot.
+
+## Playback details
 
 - Main and optional grooming atlases decode ahead of action switches. A pending
   clip holds the previous visible pose instead of clearing the canvas.
@@ -61,6 +83,10 @@ entry/exit; generation QA records every source index and unique-pose count.
 The managed built-in directory is versioned. Only an untouched previous built-in
 is upgraded; visibility, scale, pause, wallpaper linkage and scenes survive.
 Imported/custom pets are never silently replaced.
+
+`neutralBookends` is explicit per clip. Built-in clips use the exact main-atlas
+neutral frame at both ends, eliminating the generated-lookalike seam. Only unchanged
+built-in art and timings are upgraded; custom clips and their bookends are preserved.
 
 ## Native acceptance checklist
 

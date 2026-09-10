@@ -237,6 +237,9 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("pet.json 格式无效：{error}"))?;
     let pet_id = validate_pet_id(&manifest.id)?.to_string();
+    if let Some(preferences) = &manifest.scene_preferences {
+        preferences.validate().map_err(|e| e.to_string())?;
+    }
     types::pet_motion::validate_motion_clips(&manifest.motion_clips).map_err(|e| e.to_string())?;
     validate_manifest_copy(&manifest.display_name, "displayName", 80)?;
     validate_manifest_copy(&manifest.description, "description", 500)?;
@@ -374,6 +377,9 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
         state.display_name = Some(managed_manifest.display_name.clone());
         state.description = Some(managed_manifest.description.clone());
         state.updated_at = chrono::Utc::now().to_rfc3339();
+        if let Some(preferences) = &managed_manifest.scene_preferences {
+            preferences.apply(state);
+        }
         Ok(())
     });
     match updated {
@@ -412,27 +418,98 @@ fn window_size(scale: f64) -> LogicalSize<f64> {
     LogicalSize::new(BASE_WINDOW_WIDTH * scale, BASE_WINDOW_HEIGHT * scale)
 }
 
-fn place_near_bottom_right<R: Runtime>(window: &WebviewWindow<R>) {
-    let Ok(Some(monitor)) = window.current_monitor() else {
-        return;
-    };
-    let monitor_size = monitor.size();
-    let monitor_position = monitor.position();
-    let Ok(window_size) = window.outer_size() else {
-        return;
-    };
-    let x = monitor_position.x
-        + i32::try_from(monitor_size.width.saturating_sub(window_size.width + 28)).unwrap_or(0);
-    let y = monitor_position.y
-        + i32::try_from(monitor_size.height.saturating_sub(window_size.height + 72)).unwrap_or(0);
-    let _ = window.set_position(PhysicalPosition::new(x, y));
+static LAST_PLACEMENT: Mutex<Option<String>> = Mutex::new(None);
+static MANUAL_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn pet_screens<R: Runtime>(app: &AppHandle<R>) -> Vec<super::pet_placement::Screen> {
+    let primary = app.primary_monitor().ok().flatten();
+    app.available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            let area = m.work_area();
+            super::pet_placement::Screen {
+                name: m.name().cloned(),
+                x: area.position.x,
+                y: area.position.y,
+                width: area.size.width,
+                height: area.size.height,
+                scale: m.scale_factor(),
+                primary: primary
+                    .as_ref()
+                    .is_some_and(|p| p.position() == m.position()),
+            }
+        })
+        .collect()
 }
 
+fn apply_position<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    state: &DesktopPetStateDto,
+    force: bool,
+) -> Result<(), String> {
+    let screens = pet_screens(app);
+    let key = format!(
+        "{:?}:{:?}:{}",
+        screens, state.preferences.position, state.scale
+    );
+    let mut applied = LAST_PLACEMENT
+        .lock()
+        .map_err(|_| "Position lock unavailable")?;
+    if !force && applied.as_ref() == Some(&key) {
+        return Ok(());
+    }
+    let size = window_size(state.scale);
+    if let Some((x, y)) = super::pet_placement::target(
+        state.preferences.position.as_ref(),
+        &screens,
+        (size.width, size.height),
+    ) {
+        if window.outer_position().map_err(|e| e.to_string())? != PhysicalPosition::new(x, y) {
+            window
+                .set_position(PhysicalPosition::new(x, y))
+                .map_err(|e| e.to_string())?;
+            window.set_size(size).map_err(|e| e.to_string())?;
+        }
+        *applied = Some(key);
+    }
+    Ok(())
+}
+
+fn fullscreen_now<R: Runtime>(app: &AppHandle<R>) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        super::pet_platform::foreground_fullscreen()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        app.get_webview_window("main")
+            .is_some_and(|w| w.is_fullscreen().unwrap_or(false))
+    }
+}
+
+fn desired_visibility(state: &DesktopPetStateDto, fullscreen: bool, manual: bool) -> bool {
+    state.enabled
+        && !state.preferences.presentation_mode
+        && !(state.preferences.hide_in_fullscreen && fullscreen && !manual)
+}
 fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> Result<(), String> {
+    let fullscreen = state.enabled && state.preferences.hide_in_fullscreen && fullscreen_now(app);
+    if !fullscreen {
+        MANUAL_VISIBLE.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+    let visible = desired_visibility(
+        state,
+        fullscreen,
+        MANUAL_VISIBLE.load(std::sync::atomic::Ordering::Relaxed),
+    );
     if !super::onboarding::pet_visibility_allowed_at(&home::default_memory_dir()) {
         if let Some(window) = app.get_webview_window(PET_WINDOW_LABEL) {
             window.hide().map_err(|error| error.to_string())?;
         }
+        let _ = app.emit_to(PET_WINDOW_LABEL, "desktop-pet-visibility", false);
         return Ok(());
     }
     // ASTRO_MEMORY_DIR may live outside $HOME. Grant only the configured UI asset domain,
@@ -456,16 +533,20 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
                 .set_size(window_size(state.scale))
                 .map_err(|e| e.to_string())?;
         }
-        if window.is_visible().map_err(|e| e.to_string())? != state.enabled {
-            if state.enabled {
+        apply_position(app, &window, state, false)?;
+        if window.is_visible().map_err(|e| e.to_string())? != visible {
+            if visible {
                 window.show().map_err(|error| error.to_string())?;
             } else {
                 window.hide().map_err(|error| error.to_string())?;
             }
         }
+        let actual = window.is_visible().map_err(|e| e.to_string())?;
+        let _ = app.emit_to(PET_WINDOW_LABEL, "desktop-pet-visibility", actual);
+        let _ = app.emit_to("main", "desktop-pet-visibility", actual);
         return Ok(());
     }
-    if !state.enabled {
+    if !visible {
         return Ok(());
     }
 
@@ -488,10 +569,13 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
     .focused(false)
     .focusable(false)
     .accept_first_mouse(true)
-    .visible(true)
+    .visible(false)
     .build()
     .map_err(|error| format!("无法创建桌宠窗口：{error}"))?;
-    place_near_bottom_right(&window);
+    apply_position(app, &window, state, true)?;
+    window.show().map_err(|e| e.to_string())?;
+    let _ = app.emit_to(PET_WINDOW_LABEL, "desktop-pet-visibility", true);
+    let _ = app.emit_to("main", "desktop-pet-visibility", true);
     Ok(())
 }
 
@@ -569,13 +653,21 @@ pub fn install_change_bridge(app: &AppHandle) {
 
     let watcher_app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut previous = load_state().ok().map(|state| state.revision);
+        let mut previous = None;
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             let Ok(state) = load_state() else {
                 continue;
             };
-            let current = Some(state.revision);
+            let fullscreen = state.enabled
+                && state.preferences.hide_in_fullscreen
+                && fullscreen_now(&watcher_app);
+            let topology = if state.enabled {
+                format!("{:?}", pet_screens(&watcher_app))
+            } else {
+                String::new()
+            };
+            let current = Some((state.revision, fullscreen, topology));
             if current == previous {
                 continue;
             }
@@ -587,6 +679,142 @@ pub fn install_change_bridge(app: &AppHandle) {
 
 #[tauri::command]
 pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
+    load_state()
+}
+
+#[tauri::command]
+pub fn get_desktop_pet_visible(app: AppHandle) -> bool {
+    app.get_webview_window(PET_WINDOW_LABEL)
+        .is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[tauri::command]
+pub async fn configure_desktop_pet_preferences(
+    app: AppHandle,
+    patch: types::pet_preferences::PetPreferencesPatch,
+) -> Result<DesktopPetStateDto, String> {
+    let lock_position = if patch.position_locked == Some(true) {
+        app.get_webview_window(PET_WINDOW_LABEL).and_then(|window| {
+            let point = window.outer_position().ok()?;
+            let size = window.outer_size().ok()?;
+            super::pet_placement::capture(
+                (point.x, point.y),
+                (size.width, size.height),
+                &pet_screens(&app),
+                false,
+            )
+        })
+    } else {
+        None
+    };
+    let state = types::update_desktop_pet_state(&home::default_memory_dir(), |state| {
+        patch.apply(&mut state.preferences);
+        if let Some(position) = lock_position {
+            state.preferences.position = Some(position);
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
+pub async fn reset_desktop_pet_position(app: AppHandle) -> Result<DesktopPetStateDto, String> {
+    *LAST_PLACEMENT
+        .lock()
+        .map_err(|_| "Position lock unavailable")? = None;
+    let state = types::update_desktop_pet_state(&home::default_memory_dir(), |state| {
+        state.preferences.position = None;
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
+pub fn begin_desktop_pet_drag(window: WebviewWindow) -> Result<(), String> {
+    if window.label() != PET_WINDOW_LABEL {
+        return Err("Only the pet may start this drag".into());
+    }
+    if load_state()?.preferences.position_locked {
+        return Ok(());
+    }
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn settle_desktop_pet_position(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<bool, String> {
+    if window.label() != PET_WINDOW_LABEL {
+        return Err("Only the pet may save its position".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        if super::pet_platform::primary_button_down() {
+            return Ok(false);
+        }
+        let _guard = PET_WINDOW_SYNC
+            .lock()
+            .map_err(|_| "Pet window lock unavailable")?;
+        let state = load_state()?;
+        if state.preferences.position_locked {
+            apply_position(&app, &window, &state, true)?;
+            return Ok(true);
+        }
+        let p = window.outer_position().map_err(|e| e.to_string())?;
+        let size = window.outer_size().map_err(|e| e.to_string())?;
+        let Some(position) = super::pet_placement::capture(
+            (p.x, p.y),
+            (size.width, size.height),
+            &pet_screens(&app),
+            state.preferences.snap_to_edge,
+        ) else {
+            return Ok(true);
+        };
+        if state.preferences.position.as_ref() == Some(&position) {
+            return Ok(true);
+        }
+        let state = types::update_desktop_pet_state(&home::default_memory_dir(), |state| {
+            if !state.preferences.position_locked {
+                state.preferences.position = Some(position);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+        apply_position(&app, &window, &state, false)?;
+        emit_state(&app, &state);
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub fn resume_from_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let base = home::default_memory_dir();
+    types::update_desktop_pet_state(&base, |state| {
+        if let Some(path) = state.pet_path.as_deref() {
+            anyhow::ensure!(
+                Path::new(path).is_file(),
+                "原有桌宠资源不可用，请在设置中重新导入"
+            );
+        } else {
+            super::builtin_pet::install_into_state(&base, state)?;
+        }
+        state.enabled = true;
+        state.preferences.presentation_mode = false;
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+    MANUAL_VISIBLE.store(true, std::sync::atomic::Ordering::Relaxed);
+    let latest = sync_window(app)?;
+    emit_state(app, &latest);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resume_desktop_pet(app: AppHandle) -> Result<DesktopPetStateDto, String> {
+    resume_from_tray(&app)?;
     load_state()
 }
 
@@ -785,6 +1013,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn quiet_hiding_does_not_override_user_visibility_and_tray_can_restore_fullscreen() {
+        let mut state = DesktopPetStateDto::default();
+        state.enabled = true;
+        assert!(desired_visibility(&state, false, false));
+        assert!(!desired_visibility(&state, true, false));
+        assert!(desired_visibility(&state, true, true));
+        assert!(state.enabled);
+        state.preferences.presentation_mode = true;
+        assert!(!desired_visibility(&state, false, true));
+        state.preferences.presentation_mode = false;
+        state.enabled = false;
+        assert!(!desired_visibility(&state, false, true));
+    }
+
+    #[test]
     fn smallest_desktop_pet_window_is_less_than_half_the_previous_minimum() {
         let size = window_size(types::desktop_pet::DESKTOP_PET_MIN_SCALE);
         assert_eq!(size, LogicalSize::new(90.0, 102.0));
@@ -879,6 +1122,7 @@ mod tests {
             display_name: "Cat".into(),
             description: "A grooming kitten".into(),
             sprite_version_number: 2,
+            scene_preferences: None,
             spritesheet_path: "atlas.png".into(),
             grooming_spritesheet_path: Some("grooming.png".into()),
             motion_clips: Default::default(),
@@ -921,12 +1165,21 @@ mod tests {
             loop_start: 5,
             loop_end: 13,
             loop_repeats: 3,
+            neutral_bookends: false,
         };
         let mut manifest = types::DesktopPetManifest {
             id: "cat".into(),
             display_name: "Cat".into(),
             description: "Motion test".into(),
             sprite_version_number: 2,
+            scene_preferences: Some(types::pet_preferences::PetScenePreferences {
+                scale: 0.5,
+                behavior: types::pet_preferences::PetPreferences {
+                    position_locked: true,
+                    activity_interval_secs: 90,
+                    ..Default::default()
+                },
+            }),
             spritesheet_path: "atlas.png".into(),
             grooming_spritesheet_path: None,
             motion_clips: [("grooming".into(), clip)].into(),
@@ -938,6 +1191,9 @@ mod tests {
         .unwrap();
         let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
         assert!(Path::new(&state.motion_clips["grooming"].path).is_file());
+        assert_eq!(state.scale, 0.5);
+        assert!(state.preferences.position_locked);
+        assert_eq!(state.preferences.activity_interval_secs, 90);
         manifest.motion_clips.get_mut("grooming").unwrap().path = "../motion.webp".into();
         fs::write(
             package.join("pet.json"),
@@ -1032,6 +1288,7 @@ mod tests {
                 display_name: "Momo".into(),
                 description: "A calm orange cat".into(),
                 sprite_version_number: 2,
+                scene_preferences: None,
                 grooming_spritesheet_path: None,
                 motion_clips: Default::default(),
                 spritesheet_path: "spritesheet.png".into(),
@@ -1066,6 +1323,7 @@ mod tests {
                 display_name: "Escape".into(),
                 description: "Must remain inside the package".into(),
                 sprite_version_number: 2,
+                scene_preferences: None,
                 grooming_spritesheet_path: None,
                 motion_clips: Default::default(),
                 spritesheet_path: "../outside.png".into(),

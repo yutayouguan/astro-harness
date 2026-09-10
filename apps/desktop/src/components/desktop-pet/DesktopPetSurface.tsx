@@ -15,6 +15,7 @@ import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation"
 import DesktopPetCanvas from "./DesktopPetCanvas";
 import { usePetHitTesting } from "./usePetHitTesting";
 import { motionDuration } from "../../lib/ui/petMotionClip";
+import { DEFAULT_PET_PREFERENCES } from "../../lib/ui/petPreferences";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetScene } from "../../lib/ui/petScene";
 import {
@@ -38,6 +39,31 @@ type PetActivityPayload = {
 
 export default function DesktopPetSurface() {
   const { state, error, mutate } = useDesktopPetState();
+  const preferences = state.preferences ?? DEFAULT_PET_PREFERENCES;
+  const [windowVisible, setWindowVisible] = useState(true);
+  useEffect(() => {
+    let disposed = false,
+      received = false;
+    let stop: (() => void) | undefined;
+    void listen<boolean>("desktop-pet-visibility", ({ payload }) => {
+      received = true;
+      if (!disposed) setWindowVisible(payload);
+    })
+      .then(async (cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
+        stop = cleanup;
+        const visible = await invoke<boolean>("get_desktop_pet_visible");
+        if (!disposed && !received) setWindowVisible(visible);
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, []);
   const [leisure, setLeisure] = useState<PetLeisure | null>(null);
   const leisureNext = useRef<PetLeisure>("kneading");
   const menuRef = useRef<Menu | null>(null);
@@ -91,6 +117,43 @@ export default function DesktopPetSurface() {
             action: () =>
               act("edit_pet_scene", {
                 request: { action: "pause", paused: !state.animationPaused },
+              }),
+          },
+          {
+            id: "pet-lock-position",
+            text: preferences.positionLocked ? "解锁位置" : "锁定位置",
+            action: () =>
+              act("configure_desktop_pet_preferences", {
+                patch: { positionLocked: !preferences.positionLocked },
+              }),
+          },
+          {
+            id: "pet-snap",
+            text: preferences.snapToEdge ? "关闭贴边吸附" : "开启贴边吸附",
+            action: () =>
+              act("configure_desktop_pet_preferences", {
+                patch: { snapToEdge: !preferences.snapToEdge },
+              }),
+          },
+          {
+            id: "pet-reset-position",
+            text: "回到屏幕内",
+            action: () => act("reset_desktop_pet_position", {}),
+          },
+          {
+            id: "pet-quiet",
+            text: preferences.quietMode ? "退出安静模式" : "安静模式",
+            action: () =>
+              act("configure_desktop_pet_preferences", {
+                patch: { quietMode: !preferences.quietMode },
+              }),
+          },
+          {
+            id: "pet-presentation",
+            text: "演示时暂时隐藏（托盘恢复）",
+            action: () =>
+              act("configure_desktop_pet_preferences", {
+                patch: { presentationMode: true },
               }),
           },
           {
@@ -157,7 +220,7 @@ export default function DesktopPetSurface() {
     "running-left" | "running-right" | null
   >(null);
   const [lookAngle, setLookAngle] = useState<number | null>(null);
-  usePetHitTesting(state.enabled, dragState != null);
+  usePetHitTesting(state.enabled && windowVisible, dragState != null);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -283,15 +346,36 @@ export default function DesktopPetSurface() {
     let disposed = false;
     let stop: (() => void) | undefined;
     let previousX: number | null = null;
+    let movementGeneration = 0;
+    const settle = (generation: number) => {
+      void invoke<boolean>("settle_desktop_pet_position")
+        .then((done) => {
+          if (disposed || generation !== movementGeneration) return;
+          if (!done) {
+            dragTimerRef.current = window.setTimeout(
+              () => settle(generation),
+              180,
+            );
+            return;
+          }
+          dragTimerRef.current = null;
+          setDragState(null);
+        })
+        .catch(() => {
+          if (!disposed) setDragState(null);
+        });
+    };
     void getCurrentWindow()
       .onMoved(({ payload }) => {
-        if (disposed || reducedMotion) return;
+        if (disposed) return;
         const dx = previousX == null ? 0 : payload.x - previousX;
         previousX = payload.x;
-        if (dx !== 0) setDragState(dx < 0 ? "running-left" : "running-right");
+        if (dx !== 0 && !reducedMotion)
+          setDragState(dx < 0 ? "running-left" : "running-right");
         if (dragTimerRef.current != null)
           window.clearTimeout(dragTimerRef.current);
-        dragTimerRef.current = window.setTimeout(() => setDragState(null), 180);
+        const generation = ++movementGeneration;
+        dragTimerRef.current = window.setTimeout(() => settle(generation), 180);
       })
       .then((cleanup) => {
         if (disposed) cleanup();
@@ -309,7 +393,7 @@ export default function DesktopPetSurface() {
 
   const petSrc = state.petPath ? resolveMediaSrc(state.petPath) : "";
   const leisureAllowed = canPlayPetLeisure({
-    enabled: state.enabled,
+    enabled: state.enabled && windowVisible,
     spriteVersionNumber: state.spriteVersionNumber,
     groomingPath: state.groomingPath,
     hasMotionClips: Boolean(
@@ -319,6 +403,8 @@ export default function DesktopPetSurface() {
     reducedMotion,
     activity,
     dragging: dragState != null,
+    // Manual menu actions remain available in quiet mode; only auto-play stops.
+    quietMode: false,
   });
   const leisureDuration =
     leisure && state.motionClips?.[leisure]
@@ -335,7 +421,7 @@ export default function DesktopPetSurface() {
       const timer = window.setTimeout(() => setLeisure(null), leisureDuration);
       return () => window.clearTimeout(timer);
     }
-    if (lookAngle != null) return;
+    if (lookAngle != null || preferences.quietMode) return;
     const timer = window.setTimeout(() => {
       const available = (["kneading", "grooming"] as const).filter(
         (name) => state.motionClips?.[name] || state.groomingPath,
@@ -346,7 +432,7 @@ export default function DesktopPetSurface() {
       if (!next) return;
       leisureNext.current = next === "kneading" ? "grooming" : "kneading";
       setLeisure(next);
-    }, 20_000);
+    }, preferences.activityIntervalSecs * 1000);
     return () => window.clearTimeout(timer);
   }, [
     leisureAllowed,
@@ -355,17 +441,21 @@ export default function DesktopPetSurface() {
     state.petPath,
     state.groomingPath,
     leisureDuration,
+    preferences.activityIntervalSecs,
+    preferences.quietMode,
   ]);
   const playedLeisure = leisureAllowed ? leisure : null;
   const groomingSrc =
     playedLeisure === "grooming" ? resolveMediaSrc(state.groomingPath) : null;
   const renderedState: DesktopPetAnimationState =
-    playedLeisure === "kneading"
-      ? "running"
-      : reducedMotion
-        ? activity
-        : (dragState ??
-          (activity === "idle" && lookAngle != null ? "look" : activity));
+    preferences.quietMode && !playedLeisure
+      ? "idle"
+      : playedLeisure === "kneading"
+        ? "running"
+        : reducedMotion
+          ? activity
+          : (dragState ??
+            (activity === "idle" && lookAngle != null ? "look" : activity));
 
   return (
     <main className="desktop-pet-surface">
@@ -382,15 +472,17 @@ export default function DesktopPetSurface() {
       <div
         className="desktop-pet-stage"
         role="group"
+        data-position-locked={preferences.positionLocked}
         aria-label="桌面宠物，右键打开菜单；键盘操作请使用主窗口桌宠设置"
         onContextMenu={(event) => {
           event.preventDefault();
           void showMenu();
         }}
         onPointerMove={(event) => {
-          if (leisure) setLeisure(null);
+          if (leisure && !preferences.quietMode) setLeisure(null);
           if (
             reducedMotion ||
+            preferences.quietMode ||
             state.animationPaused ||
             activity !== "idle" ||
             dragState
@@ -408,10 +500,9 @@ export default function DesktopPetSurface() {
         onPointerLeave={() => setLookAngle(null)}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
+          if (preferences.positionLocked) return;
           setLeisure(null);
-          void getCurrentWindow()
-            .startDragging()
-            .catch(() => setDragState(null));
+          void invoke("begin_desktop_pet_drag").catch(() => setDragState(null));
         }}
         onDoubleClick={() => void invoke("open_desktop_pet_main")}
       >
@@ -428,7 +519,9 @@ export default function DesktopPetSurface() {
             state={groomingSrc ? "idle" : renderedState}
             clip={groomingSrc ? "grooming" : undefined}
             lookAngle={lookAngle}
-            reducedMotion={reducedMotion || state.animationPaused}
+            reducedMotion={
+              reducedMotion || state.animationPaused || !windowVisible
+            }
             className="desktop-pet-character desktop-pet-character--canvas"
             label={state.displayName || "Animated desktop pet"}
           />

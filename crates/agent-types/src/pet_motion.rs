@@ -13,6 +13,9 @@ pub struct PetMotionClip {
     pub loop_start: usize,
     pub loop_end: usize,
     pub loop_repeats: u32,
+    /// Explicit opt-in: use the main atlas's neutral pose at entry/exit.
+    #[serde(default)]
+    pub neutral_bookends: bool,
 }
 
 impl PetMotionClip {
@@ -110,6 +113,7 @@ mod tests {
             loop_start: 4,
             loop_end: 12,
             loop_repeats: 3,
+            neutral_bookends: false,
         };
         clip.validate().unwrap();
         assert_eq!(clip.dimensions(), (768, 832));
@@ -132,6 +136,7 @@ mod tests {
             loop_start: 0,
             loop_end: 1,
             loop_repeats: 1,
+            neutral_bookends: false,
         };
         clip.validate().unwrap();
         let clips = [("kneading".into(), clip.clone()), ("grooming".into(), clip)].into();

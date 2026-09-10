@@ -7,8 +7,21 @@ export type PetMotionClip = {
   loopStart: number;
   loopEnd: number;
   loopRepeats: number;
+  neutralBookends?: boolean;
 };
 export type PetMotionClips = Record<string, PetMotionClip>;
+
+export function motionUsesNeutralFrame(
+  clip: PetMotionClip,
+  row: number,
+  column: number,
+) {
+  const index = row * clip.columns + column;
+  return Boolean(
+    clip.neutralBookends &&
+      (index === 0 || index === clip.durationsMs.length - 1),
+  );
+}
 
 export function motionSequence(clip: PetMotionClip) {
   const sequence = Array.from({ length: clip.loopStart }, (_, i) => i);

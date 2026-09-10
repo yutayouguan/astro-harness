@@ -3,7 +3,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime,
+    AppHandle, Emitter, Manager, Runtime,
 };
 
 use super::menu_locale::AppLocale;
@@ -11,6 +11,8 @@ use super::menu_locale::AppLocale;
 const TRAY_ID: &str = "main-tray";
 const TRAY_SHOW_ID: &str = "tray-show";
 const TRAY_QUIT_ID: &str = "tray-quit";
+const TRAY_PET_SHOW_ID: &str = "tray-pet-show";
+const TRAY_PET_SETTINGS_ID: &str = "tray-pet-settings";
 
 /// 显示并聚焦主窗口。
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -25,7 +27,36 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri::
     let s = locale.strings();
     let show = MenuItem::with_id(app, TRAY_SHOW_ID, s.tray_show, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, s.tray_quit, true, None::<&str>)?;
-    Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])
+    let pet_show = MenuItem::with_id(
+        app,
+        TRAY_PET_SHOW_ID,
+        match locale {
+            AppLocale::Zh => "恢复桌宠显示",
+            AppLocale::En => "Show desktop pet",
+        },
+        true,
+        None::<&str>,
+    )?;
+    let pet_settings = MenuItem::with_id(
+        app,
+        TRAY_PET_SETTINGS_ID,
+        match locale {
+            AppLocale::Zh => "桌宠设置…",
+            AppLocale::En => "Desktop pet settings…",
+        },
+        true,
+        None::<&str>,
+    )?;
+    Menu::with_items(
+        app,
+        &[
+            &show,
+            &pet_show,
+            &pet_settings,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )
 }
 
 /// 安装托盘图标与菜单（按语言）。
@@ -49,6 +80,19 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>, locale: AppLocale) -> tauri:
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_SHOW_ID => show_main_window(app),
+            TRAY_PET_SHOW_ID => {
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(error) = crate::commands::desktop_pet::resume_from_tray(&app) {
+                        tracing::warn!(%error,"resume desktop pet failed");
+                        show_main_window(&app);
+                    }
+                });
+            }
+            TRAY_PET_SETTINGS_ID => {
+                show_main_window(app);
+                let _ = app.emit_to("main", "desktop-pet-open-settings", ());
+            }
             TRAY_QUIT_ID => crate::request_app_exit(app),
             _ => {}
         })

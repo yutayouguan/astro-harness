@@ -2,11 +2,11 @@
   "kneading": {
     "path": "kneading-motion.webp", "frameWidth": 192, "frameHeight": 208, "columns": 4,
     "durationsMs": [180,90,90,90,90,90,90,90,90,90,90,90,90,90,90,200],
-    "loopStart": 3, "loopEnd": 11, "loopRepeats": 3
+    "loopStart": 3, "loopEnd": 11, "loopRepeats": 3, "neutralBookends": true
   },
   "grooming": {
     "path": "grooming-motion.webp", "frameWidth": 192, "frameHeight": 208, "columns": 4,
     "durationsMs": [180,90,90,90,90,90,90,90,90,90,90,90,90,90,90,90,200],
-    "loopStart": 5, "loopEnd": 13, "loopRepeats": 3
+    "loopStart": 5, "loopEnd": 13, "loopRepeats": 3, "neutralBookends": true
   }
 }

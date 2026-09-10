@@ -19,6 +19,10 @@ export const petScaleFromPercent = (percent: number) =>
     : DESKTOP_PET_SCALE.reference;
 
 import type { PetMotionClips } from "./petMotionClip";
+import {
+  DEFAULT_PET_PREFERENCES,
+  type PetPreferences,
+} from "./petPreferences.ts";
 
 export type DesktopPetState = {
   revision: number;
@@ -28,6 +32,7 @@ export type DesktopPetState = {
   groomingPath: string | null;
   motionClips?: PetMotionClips;
   scale: number;
+  preferences?: PetPreferences;
   alwaysOnTop: boolean;
   updatedAt: string;
   provider: string | null;
@@ -50,6 +55,7 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   groomingPath: null,
   motionClips: {},
   scale: DESKTOP_PET_SCALE.reference,
+  preferences: DEFAULT_PET_PREFERENCES,
   alwaysOnTop: true,
   updatedAt: "",
   provider: null,

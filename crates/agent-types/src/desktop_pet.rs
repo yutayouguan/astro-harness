@@ -20,7 +20,7 @@ pub const DESKTOP_PET_MIN_SCALE: f64 = 0.30;
 pub const DESKTOP_PET_MAX_SCALE: f64 = 0.60;
 pub const DESKTOP_PET_DEFAULT_SCALE: f64 = 0.40;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopPetManifest {
     pub id: String,
@@ -33,6 +33,8 @@ pub struct DesktopPetManifest {
     pub grooming_spritesheet_path: Option<String>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub motion_clips: crate::pet_motion::PetMotionClips,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_preferences: Option<crate::pet_preferences::PetScenePreferences>,
 }
 
 type DesktopPetChangeHandler = Arc<dyn Fn() + Send + Sync + 'static>;
@@ -50,6 +52,7 @@ pub struct DesktopPetState {
     pub grooming_path: Option<String>,
     pub motion_clips: crate::pet_motion::PetMotionClips,
     pub scale: f64,
+    pub preferences: crate::pet_preferences::PetPreferences,
     pub always_on_top: bool,
     pub updated_at: String,
     pub provider: Option<String>,
@@ -77,6 +80,7 @@ impl Default for DesktopPetState {
             grooming_path: None,
             motion_clips: Default::default(),
             scale: DESKTOP_PET_DEFAULT_SCALE,
+            preferences: Default::default(),
             always_on_top: true,
             updated_at: String::new(),
             provider: None,
@@ -174,6 +178,7 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    state.preferences.validate()?;
     crate::pet_motion::validate_motion_clips(&state.motion_clips)?;
     anyhow::ensure!(
         state.grooming_path.is_none() || state.sprite_version_number == Some(2),

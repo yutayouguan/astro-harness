@@ -7,7 +7,11 @@ import {
 } from "react";
 import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
 import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
-import { motionFrame, type PetMotionClips } from "../../lib/ui/petMotionClip";
+import {
+  motionFrame,
+  motionUsesNeutralFrame,
+  type PetMotionClips,
+} from "../../lib/ui/petMotionClip";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import {
   advancePetGaze,
@@ -93,7 +97,7 @@ export default function DesktopPetCanvas({
       const motion = current.motionName
         ? motionRef.current?.[current.motionName]
         : undefined;
-      const image = motion
+      let image = motion
         ? images.current["motion:" + current.motionName]
         : current.clip === "grooming"
           ? images.current.grooming
@@ -121,6 +125,12 @@ export default function DesktopPetCanvas({
         frameWidth = motion.frameWidth;
         frameHeight = motion.frameHeight;
         motionDone = sampled.done;
+        if (motionUsesNeutralFrame(motion, sampled.row, sampled.column)) {
+          image = images.current.main;
+          frame = { row: 0, column: 0 };
+          frameWidth = DESKTOP_PET_CELL.width;
+          frameHeight = DESKTOP_PET_CELL.height;
+        }
       } else if (current.clip === "grooming") {
         frame = groomingFrame(
           timestamp - startedAt.current,
@@ -144,6 +154,7 @@ export default function DesktopPetCanvas({
           current.reducedMotion,
         );
       }
+      if (!image) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.round(DESKTOP_PET_CELL.width * ratio);
       const height = Math.round(DESKTOP_PET_CELL.height * ratio);

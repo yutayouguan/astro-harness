@@ -62,8 +62,12 @@ pub fn attach_wallpaper(
             .position(|s| s.id == expected.id)
             .ok_or_else(|| anyhow::anyhow!("场景已不存在"))?;
         let scene = &state.scenes[index];
+        // Display preferences are independent of the generated wallpaper.
+        // Keep their latest value while still rejecting visual/binding changes.
+        let mut visual_snapshot = scene.clone();
+        visual_snapshot.preferences = expected.preferences.clone();
         anyhow::ensure!(
-            scene == expected,
+            &visual_snapshot == expected,
             "生成期间场景已更新，未覆盖新绑定；请重试"
         );
         atomic_write(
@@ -117,6 +121,7 @@ mod tests {
             },
             style: None,
             wallpaper_source_path: None,
+            preferences: None,
         };
         types::pet_scene::save_scene(&root, scene.clone()).unwrap();
         let wallpaper = types::desktop_pet::read_limited_pet_file(
@@ -150,6 +155,7 @@ mod tests {
             },
             style: None,
             wallpaper_source_path: None,
+            preferences: None,
         };
         let saved = types::pet_scene::save_scene(dir.path(), scene.clone()).unwrap();
         assert!(attach_wallpaper(dir.path(), &scene, b"not an image", None).is_err());
@@ -161,7 +167,25 @@ mod tests {
         ));
         let mut png = Cursor::new(Vec::new());
         image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        types::update_desktop_pet_state(dir.path(), |state| {
+            state.scenes[0]
+                .preferences
+                .as_mut()
+                .unwrap()
+                .behavior
+                .position_locked = true;
+            Ok(())
+        })
+        .unwrap();
         let updated = attach_wallpaper(dir.path(), &scene, png.get_ref(), None).unwrap();
+        assert!(
+            updated.scenes[0]
+                .preferences
+                .as_ref()
+                .unwrap()
+                .behavior
+                .position_locked
+        );
         assert!(updated.scenes[0].style.is_some());
         assert!(
             updated.pet_path.is_none(),

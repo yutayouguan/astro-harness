@@ -118,7 +118,7 @@ test("static assets do not advertise working animation controls", () => {
 test("pet refresh is non-activating, idempotent and scoped hit testing cannot target main", () => {
   assert.match(backend, /\.focusable\(false\)/);
   assert.match(backend, /\.accept_first_mouse\(true\)/);
-  assert.match(backend, /is_visible\(\)[\s\S]*?!= state\.enabled/);
+  assert.match(backend, /is_visible\(\)[\s\S]*?!= visible/);
   assert.match(backend, /if size != wanted/);
   assert.match(backend, /window\.label\(\) != PET_WINDOW_LABEL/);
   assert.match(commands, /\.accept_first_mouse\(true\)/);
@@ -129,7 +129,7 @@ test("desktop pet is reachable from settings and a dedicated transparent surface
   assert.match(app, /<DesktopPetPanel active=\{nav === "settings"\}/);
   assert.match(main, /get\("surface"\) === "desktop-pet"/);
   assert.match(main, /<DesktopPetSurface \/>/);
-  assert.match(surface, /getCurrentWindow\(\)\s*\.startDragging\(\)/);
+  assert.match(surface, /invoke\("begin_desktop_pet_drag"\)/);
   assert.match(surface, /\.onMoved\(/);
   assert.match(surface, /useDesktopPetState\(\)/);
   assert.match(controller, /desktop-pet-changed/);

@@ -45,6 +45,9 @@ pub struct DesktopPetArgs {
     /// configure/apply 可选：窗口缩放，范围 0.30..=0.60；0.40 对应界面 100%。
     #[serde(default)]
     pub scale: Option<f64>,
+    /// configure 可选：位置锁定、吸附、安静、全屏隐藏、演示隐藏和动作间隔。
+    #[serde(default)]
+    pub preferences: Option<types::pet_preferences::PetPreferencesPatch>,
     /// configure/apply 可选：是否保持置顶。
     #[serde(default)]
     pub always_on_top: Option<bool>,
@@ -146,11 +149,15 @@ fn handle(
             anyhow::ensure!(
                 parsed.scale.is_some()
                     || parsed.always_on_top.is_some()
-                    || parsed.follow_wallpaper.is_some(),
-                "configure 需要 scale、alwaysOnTop 或 followWallpaper"
+                    || parsed.follow_wallpaper.is_some()
+                    || parsed.preferences.is_some(),
+                "configure 需要显示选项或 preferences"
             );
             update_state(ctx, |state| {
                 apply_display_options(state, parsed.scale, parsed.always_on_top);
+                if let Some(patch) = &parsed.preferences {
+                    patch.apply(&mut state.preferences);
+                }
                 if let Some(follow) = parsed.follow_wallpaper {
                     state.follow_wallpaper = follow;
                 }
@@ -228,6 +235,7 @@ fn save_scene(
             pet,
             style: None,
             wallpaper_source_path: None,
+            preferences: None,
         }
     };
     scene.validate()?;

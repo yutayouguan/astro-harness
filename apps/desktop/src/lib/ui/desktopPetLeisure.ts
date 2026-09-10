@@ -18,6 +18,7 @@ export function canPlayPetLeisure(input: {
   spriteVersionNumber: number | null;
   groomingPath: string | null;
   hasMotionClips?: boolean;
+  quietMode?: boolean;
   paused: boolean;
   reducedMotion: boolean;
   activity: string;
@@ -28,6 +29,7 @@ export function canPlayPetLeisure(input: {
     input.spriteVersionNumber === 2 &&
     (Boolean(input.groomingPath) || Boolean(input.hasMotionClips)) &&
     !input.paused &&
+    !input.quietMode &&
     !input.reducedMotion &&
     input.activity === "idle" &&
     !input.dragging

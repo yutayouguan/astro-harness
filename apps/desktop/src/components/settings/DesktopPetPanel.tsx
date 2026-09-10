@@ -10,6 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
 import { useReducedMotion } from "framer-motion";
@@ -20,6 +21,10 @@ import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import {
+  DEFAULT_PET_PREFERENCES,
+  type PetPreferences,
+} from "../../lib/ui/petPreferences";
 import {
   DESKTOP_PET_SCALE,
   petScalePercent,
@@ -132,6 +137,50 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
   const scaleCommit = useRef<number | null>(null);
   const busy = phase ?? (loading || pending > 0 ? "load" : null);
   const error = localError || stateError;
+  const preferences = state.preferences ?? DEFAULT_PET_PREFERENCES;
+  const [desktopVisible, setDesktopVisible] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let disposed = false,
+      received = false;
+    let stop: (() => void) | undefined;
+    void listen<boolean>("desktop-pet-visibility", ({ payload }) => {
+      received = true;
+      if (!disposed) setDesktopVisible(payload);
+    })
+      .then(async (cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
+        stop = cleanup;
+        const visible = await invoke<boolean>("get_desktop_pet_visible");
+        if (!disposed && !received) setDesktopVisible(visible);
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [active]);
+  async function updatePreferences(
+    patch: Partial<Omit<PetPreferences, "position">>,
+  ) {
+    setLocalError("");
+    try {
+      await mutate("configure_desktop_pet_preferences", { patch });
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
+    }
+  }
+  async function petAction(command: string) {
+    setLocalError("");
+    try {
+      await mutate(command, {});
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
+    }
+  }
   useEffect(() => {
     setScaleDraft(null);
     setLocalError("");
@@ -685,6 +734,121 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               />
               <output>{petScalePercent(scaleDraft ?? state.scale)}%</output>
             </label>
+            <div className="desktop-pet-preferences">
+              {desktopVisible != null && (
+                <p className="desktop-pet-model" role="status">
+                  {desktopVisible
+                    ? zh
+                      ? "桌面窗口：显示中"
+                      : "Desktop window: visible"
+                    : state.enabled
+                      ? zh
+                        ? "桌面窗口：暂时隐藏"
+                        : "Desktop window: temporarily hidden"
+                      : zh
+                        ? "桌面窗口：已关闭"
+                        : "Desktop window: disabled"}
+                </p>
+              )}
+              <h4>{zh ? "位置与安静模式" : "Position and quiet mode"}</h4>
+              {(
+                [
+                  [
+                    "positionLocked",
+                    zh ? "锁定位置" : "Lock position",
+                    zh
+                      ? "防止误拖；右键也可解锁"
+                      : "Prevent accidental dragging",
+                  ],
+                  [
+                    "snapToEdge",
+                    zh ? "贴边吸附" : "Snap to edges",
+                    zh
+                      ? "松开鼠标后轻贴屏幕工作区边缘"
+                      : "Snap near work-area edges after releasing",
+                  ],
+                  [
+                    "quietMode",
+                    zh ? "安静模式" : "Quiet mode",
+                    zh
+                      ? "只保留待机和眨眼，停止自动大动作"
+                      : "Only idle and blinking; no automatic activity",
+                  ],
+                  [
+                    "hideInFullscreen",
+                    zh ? "全屏时自动隐藏" : "Hide in fullscreen",
+                    zh
+                      ? "macOS检测前台全屏；退出后自动恢复"
+                      : "Detect foreground fullscreen on macOS; restore on exit",
+                  ],
+                  [
+                    "presentationMode",
+                    zh ? "演示时暂时隐藏" : "Presentation hide",
+                    zh
+                      ? "不改变显示开关；可从托盘恢复"
+                      : "Keep your visibility preference; restore from the tray",
+                  ],
+                ] as const
+              ).map(([key, title, hint]) => (
+                <label key={key} className="desktop-pet-preference-row">
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{hint}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={preferences[key]}
+                    disabled={busy != null}
+                    onChange={(event) =>
+                      void updatePreferences({
+                        [key]: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                </label>
+              ))}
+              <label className="desktop-pet-preference-row">
+                <span>{zh ? "自动动作频率" : "Automatic activity"}</span>
+                <select
+                  value={preferences.activityIntervalSecs}
+                  disabled={busy != null || preferences.quietMode}
+                  onChange={(event) =>
+                    void updatePreferences({
+                      activityIntervalSecs: Number(event.currentTarget.value),
+                    })
+                  }
+                >
+                  <option value={20}>
+                    {zh ? "经常 · 20秒" : "Often · 20s"}
+                  </option>
+                  <option value={45}>
+                    {zh ? "适中 · 45秒" : "Balanced · 45s"}
+                  </option>
+                  <option value={90}>
+                    {zh ? "偶尔 · 90秒" : "Occasional · 90s"}
+                  </option>
+                  {![20, 45, 90].includes(preferences.activityIntervalSecs) && (
+                    <option value={preferences.activityIntervalSecs}>
+                      {preferences.activityIntervalSecs}s
+                    </option>
+                  )}
+                </select>
+              </label>
+              <div className="pet-scene-actions">
+                <button
+                  disabled={busy != null || !state.petPath}
+                  onClick={() => void petAction("reset_desktop_pet_position")}
+                >
+                  {zh ? "回到屏幕内" : "Bring back on screen"}
+                </button>
+                <button
+                  disabled={busy != null}
+                  onClick={() => void petAction("resume_desktop_pet")}
+                >
+                  {zh ? "恢复显示" : "Show pet"}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
       </div>

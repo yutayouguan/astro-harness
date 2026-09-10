@@ -1,6 +1,7 @@
 import type { ActiveUiStyle } from "./activeUiStyle";
 import type { DesktopPetState } from "./desktopPetState";
 import type { WallpaperAsset } from "./wallpaper";
+import type { PetPreferences } from "./petPreferences";
 
 export type PetScene = {
   id: string;
@@ -20,6 +21,7 @@ export type PetScene = {
   wallpaperPath: string | null;
   inUse: boolean;
   favorite: boolean;
+  preferences?: { scale: number; behavior: PetPreferences } | null;
 };
 
 export function groupPetScenes(scenes: PetScene[]) {

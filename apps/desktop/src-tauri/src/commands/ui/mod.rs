@@ -1,6 +1,8 @@
 pub mod browser;
 mod builtin_pet;
 pub mod desktop_pet;
+mod pet_placement;
+mod pet_platform;
 pub mod desktop_preferences;
 pub mod icon;
 pub mod interface_tour;

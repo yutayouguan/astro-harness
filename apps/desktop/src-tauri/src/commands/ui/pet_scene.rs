@@ -81,6 +81,7 @@ pub async fn create_pet_scene(
         pet,
         style: None,
         wallpaper_source_path: None,
+        preferences: None,
     };
     let state = types::pet_scene::save_scene(&base, scene).map_err(|e| e.to_string())?;
     present_committed_state(&app, state)

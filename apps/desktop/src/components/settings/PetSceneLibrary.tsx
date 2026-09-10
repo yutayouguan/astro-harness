@@ -529,6 +529,25 @@ export default function PetSceneLibrary({
                   </button>
                   <button
                     type="button"
+                    disabled={disabled || state.petPath !== scene.pet.petPath}
+                    title={
+                      zh
+                        ? "保存当前大小、位置和安静偏好到此场景"
+                        : "Save current size, placement and behavior to this scene"
+                    }
+                    onClick={() =>
+                      void run(() =>
+                        edit({
+                          action: "capture_preferences",
+                          sceneId: scene.id,
+                        }),
+                      )
+                    }
+                  >
+                    {zh ? "保存当前偏好" : "Save current preferences"}
+                  </button>
+                  <button
+                    type="button"
                     disabled={disabled}
                     onClick={() => setDeleting(scene)}
                   >

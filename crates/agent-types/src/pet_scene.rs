@@ -63,10 +63,15 @@ pub struct PetScene {
     pub style: Option<UiStyleManifest>,
     /// Canonical managed wallpaper used before copying into the theme package.
     pub wallpaper_source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<crate::pet_preferences::PetScenePreferences>,
 }
 
 impl PetScene {
     pub fn validate(&self) -> anyhow::Result<()> {
+        if let Some(preferences) = &self.preferences {
+            preferences.validate()?;
+        }
         crate::pet_motion::validate_motion_clips(&self.pet.motion_clips)?;
         anyhow::ensure!(
             !self.id.is_empty()
@@ -121,7 +126,7 @@ pub fn managed_file(base: &Path, path: &Path) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
-pub fn save_scene(base: &Path, scene: PetScene) -> anyhow::Result<DesktopPetState> {
+pub fn save_scene(base: &Path, mut scene: PetScene) -> anyhow::Result<DesktopPetState> {
     scene.validate()?;
     for clip in scene.pet.motion_clips.values() {
         managed_file(base, Path::new(&clip.path))?;
@@ -134,6 +139,18 @@ pub fn save_scene(base: &Path, scene: PetScene) -> anyhow::Result<DesktopPetStat
         managed_file(base, &path)?;
     }
     crate::update_desktop_pet_state(base, |state| {
+        if scene.preferences.is_none() {
+            scene.preferences = state
+                .scenes
+                .iter()
+                .find(|existing| existing.id == scene.id)
+                .and_then(|existing| existing.preferences.clone())
+                .or_else(|| {
+                    Some(crate::pet_preferences::PetScenePreferences::from_state(
+                        state,
+                    ))
+                });
+        }
         if let Some(existing) = state.scenes.iter_mut().find(|s| s.id == scene.id) {
             *existing = scene;
         } else {
@@ -183,6 +200,9 @@ pub enum PetSceneEdit {
     Pause {
         paused: bool,
     },
+    CapturePreferences {
+        scene_id: String,
+    },
 }
 
 fn validate_name(name: &str) -> anyhow::Result<()> {
@@ -217,6 +237,7 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             | PetSceneEdit::Favorite { scene_id, .. }
             | PetSceneEdit::Delete { scene_id, .. }
             | PetSceneEdit::Duplicate { scene_id, .. } => Some(scene_id),
+            PetSceneEdit::CapturePreferences { scene_id } => Some(scene_id),
             PetSceneEdit::Pause { .. } => None,
         };
         let index = id
@@ -229,6 +250,16 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             })
             .transpose()?;
         match edit {
+            PetSceneEdit::CapturePreferences { .. } => {
+                let i = index.unwrap();
+                anyhow::ensure!(
+                    state.pet_path.as_deref() == Some(state.scenes[i].pet.pet_path.as_str()),
+                    "请先切换到这个场景的宠物，再保存当前偏好"
+                );
+                state.scenes[i].preferences = Some(
+                    crate::pet_preferences::PetScenePreferences::from_state(state),
+                );
+            }
             PetSceneEdit::Pause { paused } => state.animation_paused = paused,
             PetSceneEdit::Rename { name, .. } => {
                 validate_name(&name)?;
@@ -271,12 +302,14 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             PetSceneEdit::Duplicate { name, .. } => {
                 validate_name(&name)?;
                 let pet = state.scenes[index.unwrap()].pet.clone();
+                let preferences = state.scenes[index.unwrap()].preferences.clone();
                 state.scenes.push(PetScene {
                     id: format!("pet-{}", uuid::Uuid::new_v4().simple()),
                     name: name.trim().into(),
                     pet,
                     style: None,
                     wallpaper_source_path: None,
+                    preferences,
                 });
             }
         }
@@ -359,6 +392,7 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
             sprite_version_number: 2,
             spritesheet_path: pet_name,
             grooming_spritesheet_path: scene.pet.grooming_path.clone(),
+            scene_preferences: scene.preferences.clone(),
             motion_clips: scene.pet.motion_clips.clone(),
         };
         fs::write(
@@ -454,6 +488,9 @@ pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Resul
         }
         if apply_pet {
             scene.pet.apply(state);
+            if let Some(preferences) = &scene.preferences {
+                preferences.apply(state);
+            }
         }
         if mode == SceneApplyMode::All {
             state.follow_wallpaper = true;
@@ -532,6 +569,9 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
                     managed_file(base, Path::new(&clip.path))?;
                 }
                 scene.pet.apply(state);
+                if let Some(preferences) = &scene.preferences {
+                    preferences.apply(state);
+                }
             }
         }
         state.last_wallpaper_path = path;
@@ -562,6 +602,7 @@ mod tests {
                 loop_start: 5,
                 loop_end: 13,
                 loop_repeats: 3,
+                neutral_bookends: false,
             },
         );
         save_scene(dir.path(), scene.clone()).unwrap();
@@ -625,6 +666,7 @@ mod tests {
                 }),
             }),
             wallpaper_source_path: Some("/original/wallpaper.png".into()),
+            preferences: None,
         };
         (dir, scene)
     }
@@ -636,9 +678,13 @@ mod tests {
         assert!(!saved.enabled);
         assert!(saved.pet_path.is_none());
         assert!(!crate::active_ui_style_path(dir.path()).exists());
+        let mut expected = scene;
+        expected.preferences = Some(crate::pet_preferences::PetScenePreferences::from_state(
+            &saved,
+        ));
         assert_eq!(
             crate::read_desktop_pet_state(dir.path()).unwrap().scenes,
-            vec![scene]
+            vec![expected]
         );
     }
 
@@ -870,5 +916,48 @@ mod tests {
                 .unwrap()
                 .animation_paused
         );
+    }
+    #[test]
+    fn pet_scene_preferences_restore_only_with_the_pet_and_roundtrip_export() {
+        let (dir, scene) = fixture();
+        save_scene(dir.path(), scene.clone()).unwrap();
+        crate::update_desktop_pet_state(dir.path(), |state| {
+            state.scale = 0.6;
+            state.preferences.quiet_mode = true;
+            state.preferences.presentation_mode = true;
+            Ok(())
+        })
+        .unwrap();
+        let wallpaper = apply_scene(dir.path(), &scene.id, SceneApplyMode::Wallpaper).unwrap();
+        assert_eq!(wallpaper.scale, 0.6);
+        assert!(wallpaper.preferences.quiet_mode);
+        let both = apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
+        assert_eq!(both.scale, 0.4);
+        assert!(!both.preferences.quiet_mode);
+        assert!(both.preferences.presentation_mode);
+        crate::update_desktop_pet_state(dir.path(), |state| {
+            state.scale = 0.3;
+            state.preferences.position_locked = true;
+            state.preferences.activity_interval_secs = 90;
+            Ok(())
+        })
+        .unwrap();
+        let captured = edit_scene(
+            dir.path(),
+            PetSceneEdit::CapturePreferences {
+                scene_id: scene.id.clone(),
+            },
+        )
+        .unwrap();
+        let saved = captured.scenes[0].preferences.as_ref().unwrap();
+        assert_eq!(saved.scale, 0.3);
+        assert_eq!(saved.behavior.activity_interval_secs, 90);
+        assert!(saved.behavior.position_locked);
+        assert!(!saved.behavior.presentation_mode);
+        let out = tempfile::tempdir().unwrap();
+        let package = export_scene(dir.path(), &scene.id, out.path()).unwrap();
+        let exported: PetScene =
+            serde_json::from_slice(&fs::read(package.join("scene.json")).unwrap()).unwrap();
+        assert_eq!(exported.preferences, captured.scenes[0].preferences);
     }
 }

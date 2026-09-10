@@ -1,7 +1,7 @@
 ---
 name: desktop-pet-creator
 description: 从用户照片生成 Astro 桌宠、可选配套壁纸、保存和切换宠物场景。用户说“生成桌宠”“配套宠物壁纸”“宠物场景”“换一个桌面伙伴”“显示/隐藏桌宠”等请求时使用；普通图片创作不使用。
-astro_bundled_rev: 6
+astro_bundled_rev: 7
 astro_tools: [request_user_input_async, image_gen, desktop_pet]
 ---
 
@@ -76,5 +76,10 @@ astro_tools: [request_user_input_async, image_gen, desktop_pet]
 - 显示：`desktop_pet action=show`
 - 隐藏：`desktop_pet action=hide`
 - 调整：`desktop_pet action=configure`，传 `scale` 和/或 `alwaysOnTop`
+- 行为偏好：`configure preferences={quietMode:true, positionLocked:true}`；支持 `snapToEdge`、`hideInFullscreen`、`presentationMode` 与 `activityIntervalSecs`（15–300秒）。仅传需要修改的字段，不覆盖其它偏好。安静模式停止自动大动作；用户仍可通过右键手动播放动作。
+- 位置由原生拖动结束时保存到显示器工作区域，锁定后不可误拖。设置/右键有“回到屏幕内”；不要通过 shell 重写坐标或伪造显示器信息。
+- 全屏自动隐藏与手动演示隐藏不修改 `enabled`；macOS检测前台全屏窗口几何，不截屏、不读取窗口标题；其他平台支持 Astro 自身全屏与手动演示。可用托盘“恢复桌宠显示”退出演示，并临时覆盖当前全屏隐藏。
+- 场景首次保存时记住当前大小、位置和行为偏好。`edit_scene edit={action:"capture_preferences",sceneId:"..."}` 更新场景偏好，要求当前正在使用同一只宠物。仅壁纸应用不改变桌宠偏好；整套/仅宠物应用恢复它们，不改变全局演示意图。导出/导入会携带 `scenePreferences`；旧场景无该字段时保留当前偏好。
+- 动作片段可显式选择 `neutralBookends:true`，首尾使用主图集的同一中立帧，避免返回待机时跳形；不对第三方动作强制启用。真实多屏、全屏或播放验收未完成时必须说明，不用测试数量替代实际效果。
 
 本 Skill 面向 Astro 桌宠和场景操作。创作格式服务于实际播放效果；只在明确需要交换兼容包时遵循外部图集规范。不要把设置页能力虚构成不存在的 `desktop_pet` 工具参数，也不通过本技能改动应用源码。

@@ -67,36 +67,54 @@ pub(super) fn install_into_state(
     Ok(())
 }
 
-/// Only upgrade our untouched, versioned built-in; never user-imported art.
+fn can_upgrade(base: &Path, state: &types::DesktopPetState) -> bool {
+    let root = types::desktop_pet_root(base);
+    let v1 = root.join("builtin-naitang-v1/spritesheet.webp");
+    if state.pet_path.as_deref() == v1.to_str() {
+        return state.motion_clips.is_empty() && fs::read(&v1).ok().as_deref() == Some(SPRITESHEET);
+    }
+    let v2 = root.join("builtin-naitang-v2");
+    if state.pet_path.as_deref() != v2.join("spritesheet.webp").to_str() {
+        return false;
+    }
+    let Ok(mut legacy) = serde_json::from_str::<types::pet_motion::PetMotionClips>(MOTION_SPEC)
+    else {
+        return false;
+    };
+    for clip in legacy.values_mut() {
+        clip.path = v2.join(&clip.path).to_string_lossy().into_owned();
+        clip.neutral_bookends = false;
+    }
+    state.motion_clips == legacy
+        && fs::read(v2.join("spritesheet.webp")).ok().as_deref() == Some(SPRITESHEET)
+        && fs::read(v2.join("kneading-motion.webp")).ok().as_deref() == Some(KNEADING_MOTION)
+        && fs::read(v2.join("grooming-motion.webp")).ok().as_deref() == Some(GROOMING_MOTION)
+}
+
+/// Upgrade only untouched built-in art and timing; preserve all user preferences.
 pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
-    let old = types::desktop_pet_root(base).join("builtin-naitang-v1/spritesheet.webp");
     let current = types::read_desktop_pet_state(base)?;
-    if current.pet_path.as_deref() != old.to_str()
-        || !current.motion_clips.is_empty()
-        || fs::read(&old).ok().as_deref() != Some(SPRITESHEET)
-    {
+    if !can_upgrade(base, &current) {
         return Ok(());
     }
     types::update_desktop_pet_state(base, |state| {
-        if state.pet_path.as_deref() != old.to_str()
-            || !state.motion_clips.is_empty()
-            || fs::read(&old).ok().as_deref() != Some(SPRITESHEET)
-        {
+        if !can_upgrade(base, state) {
             return Ok(());
         }
-        let paused = state.animation_paused;
-        let follow = state.follow_wallpaper;
         let previous = state.clone();
         install_into_state(base, state)?;
-        state.animation_paused = paused;
-        state.follow_wallpaper = follow;
+        state.animation_paused = previous.animation_paused;
+        state.follow_wallpaper = previous.follow_wallpaper;
         state.display_name = previous.display_name;
         state.description = previous.description;
         state.source_path = previous.source_path;
         state.provider = previous.provider;
         state.model = previous.model;
         for scene in &mut state.scenes {
-            if scene.pet.pet_path == old.to_string_lossy() && scene.pet.motion_clips.is_empty() {
+            if Some(&scene.pet.pet_path) == previous.pet_path.as_ref()
+                && (scene.pet.motion_clips.is_empty()
+                    || scene.pet.motion_clips == previous.motion_clips)
+            {
                 scene.pet.pet_path = state.pet_path.clone().unwrap();
                 scene.pet.grooming_path = state.grooming_path.clone();
                 scene.pet.motion_clips = state.motion_clips.clone();
@@ -106,10 +124,39 @@ pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
     })?;
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builtin_v2_neutral_upgrade_preserves_preferences_and_rejects_modified_art() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = types::DesktopPetState::default();
+        install_into_state(root.path(), &mut state).unwrap();
+        state.preferences.quiet_mode = true;
+        for clip in state.motion_clips.values_mut() {
+            clip.neutral_bookends = false;
+        }
+        types::write_desktop_pet_state(root.path(), &state).unwrap();
+        upgrade_at(root.path()).unwrap();
+        let upgraded = types::read_desktop_pet_state(root.path()).unwrap();
+        assert!(upgraded
+            .motion_clips
+            .values()
+            .all(|clip| clip.neutral_bookends));
+        assert!(upgraded.preferences.quiet_mode);
+        let path = &upgraded.motion_clips["grooming"].path;
+        fs::write(path, b"user edited motion").unwrap();
+        let edited = types::update_desktop_pet_state(root.path(), |state| {
+            for clip in state.motion_clips.values_mut() {
+                clip.neutral_bookends = false;
+            }
+            Ok(())
+        })
+        .unwrap();
+        upgrade_at(root.path()).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), edited);
+    }
 
     #[test]
     fn builtin_installs_both_assets_and_repairs_missing_files() {

@@ -222,6 +222,10 @@ html[data-window-surface="desktop-pet"] #root {
   cursor: grabbing;
 }
 
+.desktop-pet-stage[data-position-locked="true"] {
+  cursor: default;
+}
+
 .desktop-pet-character {
   width: 100%;
   height: 100%;
@@ -742,6 +746,40 @@ html[data-window-surface="desktop-pet"] #root {
   text-align: right;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+.desktop-pet-preferences {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.desktop-pet-preferences h4 {
+  margin: 0;
+}
+.desktop-pet-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text);
+  font-size: 0.8rem;
+}
+.desktop-pet-preference-row strong,
+.desktop-pet-preference-row small {
+  display: block;
+}
+.desktop-pet-preference-row small {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.desktop-pet-preference-row select {
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  padding: 6px;
+  border-radius: 8px;
 }
 
 @keyframes desktop-pet-spin {
