@@ -286,6 +286,8 @@ pub fn run() {
             commands::ui_style::get_active_ui_style,
             commands::ui_style::reset_active_ui_style,
             commands::onboarding::get_onboarding_state,
+            commands::ui::interface_tour::get_interface_tour_state,
+            commands::ui::interface_tour::resolve_interface_tour,
             commands::ui::desktop_preferences::get_onboarding_pet,
             commands::ui::desktop_preferences::get_task_notifications_enabled,
             commands::ui::desktop_preferences::set_task_notifications_enabled,

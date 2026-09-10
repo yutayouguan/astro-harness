@@ -55,6 +55,7 @@ import {
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import { ONBOARDING_RESET_EVENT } from "../../lib/ui/onboarding";
+import { interfaceTourCopy, requestInterfaceTour } from "../../lib/ui/interfaceTour";
 import {
   gradientFromPreset,
   gradientSwatchBackground,
@@ -2076,6 +2077,16 @@ export default function PreferencesPanel({
                   <strong>{aboutCopy.dataDirectory}</strong>
                 </span>
                 <code>~/.astro</code>
+              </div>
+              <div className="prefs-about-setting-row">
+                <span className="prefs-about-setting-copy">
+                  <strong>{interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}</strong>
+                  <small>{interfaceTourCopy[locale === "zh" ? "zh" : "en"].replayDescription}</small>
+                </span>
+                <button type="button" onClick={requestInterfaceTour}>
+                  <RefreshCw size={13} aria-hidden />
+                  {interfaceTourCopy[locale === "zh" ? "zh" : "en"].replayAction}
+                </button>
               </div>
               <div className="prefs-about-setting-row">
                 <span className="prefs-about-setting-copy">

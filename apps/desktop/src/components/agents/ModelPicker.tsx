@@ -425,14 +425,14 @@ export default function ModelPicker({
 
   if (providers.length === 0) {
     return (
-      <div className="model-picker is-empty">
+      <div className="model-picker is-empty" data-tour="model">
         <span className="model-picker-label">{t("status.none")}</span>
       </div>
     );
   }
 
   return (
-    <div className={`model-picker ${open ? "is-open" : ""}`} ref={ref}>
+    <div className={`model-picker ${open ? "is-open" : ""}`} ref={ref} data-tour="model">
       <button
         type="button"
         className="model-picker-trigger"

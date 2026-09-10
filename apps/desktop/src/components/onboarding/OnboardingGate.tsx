@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { InterfaceTourReady } from "./InterfaceTourContext";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -1951,7 +1952,9 @@ export default function OnboardingGate({ children }: { children: ReactNode }) {
             className="onboarding-app-host"
             data-arriving={state === "entering"}
           >
-            {children}
+            <InterfaceTourReady.Provider value={state === "ready"}>
+              {children}
+            </InterfaceTourReady.Provider>
           </div>
         </div>
       )}

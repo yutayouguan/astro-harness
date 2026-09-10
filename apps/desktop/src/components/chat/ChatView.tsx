@@ -3893,6 +3893,7 @@ export default function ChatView({
           ) : null}
 
           <motion.div
+            data-tour="composer"
             className={`composer composer--stacked ${composerManuallyExpanded ? "is-input-expanded" : ""} ${composerClarify ? "has-clarify" : ""} ${fileDragOver ? "is-file-dragover" : ""}`.trim()}
             layout={!reduceComposerMotion}
             layoutDependency={composerLayoutState}

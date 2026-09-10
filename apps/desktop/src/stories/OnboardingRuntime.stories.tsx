@@ -1,4 +1,5 @@
 import App from "../App";
+import { StrictMode } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import OnboardingGate from "../components/onboarding/OnboardingGate";
 import { ThemeProvider } from "../hooks/app/useTheme";
@@ -33,3 +34,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const NativeTransport: Story = {};
+export const StrictNativeTransport: Story = {
+  render: () => (
+    <StrictMode>
+      <Runtime />
+    </StrictMode>
+  ),
+};

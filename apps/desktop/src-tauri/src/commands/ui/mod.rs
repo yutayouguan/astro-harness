@@ -3,6 +3,7 @@ mod builtin_pet;
 pub mod desktop_pet;
 pub mod desktop_preferences;
 pub mod icon;
+pub mod interface_tour;
 pub mod onboarding;
 pub mod pet_generation;
 pub mod pet_scene;

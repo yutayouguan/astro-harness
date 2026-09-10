@@ -116,6 +116,8 @@ import type { ComposerContextToken } from "./lib/chat/composerContext";
 import { takeOnboardingStarterPrompt } from "./lib/ui/onboarding";
 import { providerIsReady } from "./lib/providers/providerReadiness";
 import { ModelSetupNotice } from "./components/onboarding/ModelSetupNotice";
+import InterfaceTour from "./components/onboarding/InterfaceTour";
+import { interfaceTourCopy, requestInterfaceTour } from "./lib/ui/interfaceTour";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
@@ -144,6 +146,7 @@ import {
   History,
   MessageSquare,
   MoreHorizontal,
+  CircleHelp,
   Pin,
   SquareTerminal,
 } from "lucide-react";
@@ -193,7 +196,7 @@ export default function App() {
   const wallpaper = useWallpaper();
   const activeUiStyle = useActiveUiStyle();
   useBeautifyTips();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const confirm = useConfirm();
   const promptForTitle = usePrompt();
   const {
@@ -365,11 +368,12 @@ export default function App() {
   const [activeModelPricing, setActiveModelPricing] =
     useState<ModelPricingMeta | null>(null);
   const [sidebarRailPreview, setSidebarRailPreview] = useState(false);
+  const [interfaceTourActive, setInterfaceTourActive] = useState(false);
   // ── Extracted hooks ───────────────────────────────────────────────────────
   const sidebar = useSidebar();
   const sidebarContentExpanded =
     !sidebar.sidebarCompact &&
-    (sidebar.showSidebarLabels || sidebarRailPreview);
+    (sidebar.showSidebarLabels || sidebarRailPreview || interfaceTourActive);
   useEffect(() => {
     if (sidebar.sidebarCompact) setSidebarRailPreview(false);
   }, [sidebar.sidebarCompact]);
@@ -1332,8 +1336,13 @@ export default function App() {
       className={`app-shell ${winChrome.windowMaximized ? "is-maximized" : ""}${browserOwnsTitlebar ? " has-browser-surface" : ""}${wallpaperEnabled ? " has-wallpaper" : ""}`}
       data-tone={shellTone}
       data-color-style={colorStyle}
-      data-sidebar-state={sidebar.sidebarVisible ? "visible" : "collapsed"}
+      data-sidebar-state={sidebar.sidebarVisible || interfaceTourActive ? "visible" : "collapsed"}
     >
+      <InterfaceTour
+        available={nav === "chat" && !chat.streaming && !browserDockPresence.mounted}
+        onPrepare={() => { setNav("chat"); setBrowserDockOpen(false); }}
+        onActiveChange={setInterfaceTourActive}
+      />
       {wallpaperSrc ? (
         <div
           className="shell-wallpaper-layer"
@@ -1465,8 +1474,9 @@ export default function App() {
         }
       >
         <aside
+          data-tour="sidebar"
           ref={sidebar.sidebarRef}
-          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned ? "is-pinned" : ""} ${sidebarContentExpanded ? "is-labels" : "is-icons"} ${sidebar.sidebarCompact ? "is-compact" : ""} ${sidebarRailPreview ? "is-rail-preview" : ""} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
+          className={`sidebar ${nav === "settings" ? "is-settings" : ""} ${sidebar.sidebarOpen || sidebar.sidebarPinned || interfaceTourActive ? "is-open" : "is-collapsed"} ${sidebar.sidebarPinned || interfaceTourActive ? "is-pinned" : ""} ${sidebarContentExpanded ? "is-labels" : "is-icons"} ${sidebar.sidebarCompact ? "is-compact" : ""} ${sidebarRailPreview ? "is-rail-preview" : ""} ${sidebar.sidebarResizing ? "is-resizing" : ""}`}
           onMouseEnter={sidebar.openSidebar}
           onMouseLeave={() => {
             sidebar.scheduleHideSidebar();
@@ -1526,6 +1536,7 @@ export default function App() {
                         key={item.id}
                         type="button"
                         className={`settings-sidebar-item ${settingsTab === item.id ? "is-active" : ""}`}
+                        aria-label={item.label}
                         aria-current={
                           settingsTab === item.id ? "page" : undefined
                         }
@@ -1607,6 +1618,7 @@ export default function App() {
                     key={id}
                     type="button"
                     className={`sidebar-feature-tab ${nav === id ? "is-active" : ""}`}
+                    data-tour={id === "skills" ? "plugins" : undefined}
                     onClick={() => setNav(id)}
                     aria-current={nav === id ? "page" : undefined}
                     title={label}
@@ -1994,6 +2006,17 @@ export default function App() {
               <div className="sidebar-footer">
                 <button
                   type="button"
+                  className="sidebar-settings-btn"
+                  onClick={requestInterfaceTour}
+                  title={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
+                  aria-label={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
+                >
+                  <CircleHelp size={17} strokeWidth={1.8} aria-hidden />
+                  <span className="sidebar-item-label">{interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}</span>
+                </button>
+                <button
+                  type="button"
+                  data-tour="settings"
                   className="sidebar-settings-btn"
                   onClick={() => setNav("settings")}
                   title={t("nav.settings")}

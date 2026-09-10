@@ -1,0 +1,109 @@
+.driver-popover.astro-interface-tour {
+  --tour-surface: var(--bg1, #fafafa);
+  background: var(--tour-surface);
+  color: var(--ink, #18181b);
+  border: 1px solid var(--line, #8884);
+  border-radius: 16px;
+  box-shadow: 0 16px 56px #0003;
+  padding: 22px;
+  max-width: min(340px, calc(100vw - 32px));
+  min-width: min(280px, calc(100vw - 32px));
+  font-family: inherit;
+}
+.astro-interface-tour .driver-popover-title {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.4;
+  padding-right: 0;
+  margin-top: 28px;
+}
+.astro-interface-tour .driver-popover-description {
+  color: var(--ink-secondary, var(--ink));
+  font-size: 13px;
+  line-height: 1.75;
+  margin-top: 10px;
+}
+.astro-interface-tour .driver-popover-footer {
+  margin-top: 22px;
+}
+.astro-interface-tour .driver-popover-progress-text {
+  color: var(--muted, #777);
+  font-size: 12px;
+}
+.astro-interface-tour button {
+  font-family: inherit;
+  text-shadow: none;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  min-height: 32px;
+  border: 1px solid var(--line, #8884);
+  background: var(--tour-surface);
+  color: var(--ink, #18181b);
+}
+.astro-interface-tour .driver-popover-next-btn {
+  background: var(--ink, #18181b);
+  color: var(--bg1, #fafafa);
+  border-color: transparent;
+}
+.astro-interface-tour .driver-popover-close-btn {
+  position: absolute;
+  inset: 12px 14px auto auto;
+  width: auto;
+  height: auto;
+  padding: 4px 8px;
+  border-color: transparent;
+}
+.astro-interface-tour button:focus-visible,
+.interface-tour-notice button:focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 3px;
+}
+.astro-interface-tour button:active {
+  transform: scale(0.97);
+}
+.astro-interface-tour .driver-popover-arrow-side-left {
+  border-left-color: var(--tour-surface);
+}
+.astro-interface-tour .driver-popover-arrow-side-right {
+  border-right-color: var(--tour-surface);
+}
+.astro-interface-tour .driver-popover-arrow-side-top {
+  border-top-color: var(--tour-surface);
+}
+.astro-interface-tour .driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--tour-surface);
+}
+.interface-tour-notice {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 14px 18px;
+  background: var(--bg1, #fafafa);
+  color: var(--ink, #18181b);
+  border: 1px solid var(--line, #8884);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px #0002;
+  font-size: 13px;
+}
+.interface-tour-notice button {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .astro-interface-tour button:active {
+    transform: none;
+  }
+}
