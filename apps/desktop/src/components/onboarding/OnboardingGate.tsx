@@ -298,13 +298,23 @@ export function FirstRunOnboarding({
   };
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // Form edits are local until the explicit save/load action commits them.
+  // Other steps may checkpoint progress, but must not persist an unsaved URL.
+  const savedProviderDraft = useRef({
+    provider_id: initialDraft.provider_id,
+    endpoint: initialDraft.endpoint,
+    model: initialDraft.model,
+  });
   const saveProgress = useCallback(
     (next: OnboardingStep) => {
       if (previewProviders || !isTauri() || next === "complete")
         return Promise.resolve();
       const snapshot = {
         ...draftRef.current,
-        endpoint: persistableOnboardingEndpoint(draftRef.current.endpoint),
+        ...savedProviderDraft.current,
+        endpoint: persistableOnboardingEndpoint(
+          savedProviderDraft.current.endpoint,
+        ),
       };
       return writes.current
         .run(() =>
@@ -328,12 +338,19 @@ export function FirstRunOnboarding({
     [previewProviders],
   );
   useEffect(() => {
-    // Navigation is a checkpoint; only in-field editing is debounced.
+    // Navigation checkpoints only the last explicitly saved provider values.
     if (step === "intro" || step === "complete" || handoff) return;
     void saveProgress(step).catch(() => {});
   }, [step, saveProgress, handoff]);
   useEffect(() => {
-    if (step === "intro" || step === "complete" || finishing || handoff) return;
+    if (
+      step === "intro" ||
+      step === "provider" ||
+      step === "complete" ||
+      finishing ||
+      handoff
+    )
+      return;
     const timer = window.setTimeout(() => {
       void saveProgress(step).catch(() => {});
     }, 700);
@@ -341,9 +358,6 @@ export function FirstRunOnboarding({
   }, [
     step,
     agentName,
-    selectedProviderId,
-    model,
-    endpoint,
     workspacePath,
     permissionPreset,
     petChoice,
@@ -616,6 +630,13 @@ export function FirstRunOnboarding({
           setProvidersState(keyed);
           setApiKey("");
         }
+        savedProviderDraft.current = {
+          provider_id: selectedProvider.id,
+          endpoint: endpoint.trim(),
+          model,
+        };
+        await saveProgress("provider");
+        if (!currentRequest()) return;
         const listed = await withDeadline(
           invoke<ProviderModelsResult>("list_provider_models", {
             id: selectedProvider.id,
@@ -699,17 +720,6 @@ export function FirstRunOnboarding({
         const next = await saveProviderIfChanged(selectedProvider, testedModel);
         if (!currentRequest()) return;
         if (next) setProvidersState(next);
-        if (apiKey.trim()) {
-          const keyed = await withDeadline(
-            invoke<ProvidersStateDto>("set_provider_api_key", {
-              id,
-              apiKey: apiKey.trim(),
-            }),
-          );
-          if (!currentRequest()) return;
-          setProvidersState(keyed);
-          setApiKey("");
-        }
         const result = await withDeadline(
           invoke<ProviderTestResult & { verification_token: string | null }>(
             "verify_onboarding_provider",
@@ -740,6 +750,11 @@ export function FirstRunOnboarding({
         model: testedModel,
         endpoint: testedEndpoint,
         token: verificationToken,
+      };
+      savedProviderDraft.current = {
+        provider_id: id,
+        endpoint: testedEndpoint,
+        model: testedModel,
       };
       setProviderStatus("success");
       setProviderMessage(
@@ -1207,6 +1222,7 @@ export function FirstRunOnboarding({
                             </span>
                             <input
                               ref={endpointInputRef}
+                              data-immediate-focus
                               value={endpoint}
                               inputMode="url"
                               autoCapitalize="none"
@@ -1217,9 +1233,6 @@ export function FirstRunOnboarding({
                                 modelsStatus === "loading"
                               }
                               spellCheck={false}
-                              onBlur={() =>
-                                void saveProgress(step).catch(() => {})
-                              }
                               onChange={(event) => {
                                 invalidateModelList();
                                 setEndpoint(event.target.value);
@@ -1236,6 +1249,7 @@ export function FirstRunOnboarding({
                               </span>
                               <input
                                 ref={apiKeyRef}
+                                data-immediate-focus
                                 type="password"
                                 disabled={
                                   providerStatus === "testing" ||

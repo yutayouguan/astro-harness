@@ -25,6 +25,12 @@ html.theme-transitioning *::after {
     stroke 0.3s ease !important;
 }
 
+/* Opt-in editing surfaces must acknowledge focus immediately, even during
+   startup/theme changes. Keep this with the base-layer !important rule. */
+html.theme-transitioning input[data-immediate-focus] {
+  transition: none !important;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--ink-mute);

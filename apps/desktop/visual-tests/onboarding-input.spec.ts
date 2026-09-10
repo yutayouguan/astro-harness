@@ -1,12 +1,13 @@
 import { test, expect } from "@playwright/test";
 
-test("service address pointer focus and selection are not filtered or delayed", async ({ page }, testInfo) => {
+for (const reducedMotion of ["reduce", "no-preference"] as const) {
+test(`service address pointer focus and selection are not filtered or delayed · ${reducedMotion}`, async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("astro-locale", "zh");
     localStorage.setItem("astro-theme-mode", "dark");
   });
   await page.setViewportSize({ width: 1100, height: 900 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion });
   await page.goto("/iframe.html?id=app-first-run-onboarding--provider&viewMode=story");
   const address = page.getByLabel("服务地址", { exact: true });
   await expect(address).toBeVisible();
@@ -21,6 +22,10 @@ test("service address pointer focus and selection are not filtered or delayed", 
     return true;
   })).toBe(true);
   expect(await address.evaluate(input => getComputedStyle(input).transitionDuration)).toBe("0s");
+  await page.evaluate(() => document.documentElement.classList.add("theme-transitioning"));
+  expect(await address.evaluate(input => getComputedStyle(input).transitionDuration)).toBe("0s");
+  expect(await page.getByLabel("API Key", { exact: true }).evaluate(input => getComputedStyle(input).transitionDuration)).toBe("0s");
+  await page.evaluate(() => document.documentElement.classList.remove("theme-transitioning"));
   await page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>('input[inputmode="url"]')!;
     (window as any).__focusPaintTimes = [];
@@ -64,3 +69,4 @@ test("service address pointer focus and selection are not filtered or delayed", 
   await expect(address).toHaveValue("https://YOUR_RESOURCE.services.ai.azure.com/openai/v1");
   console.log(JSON.stringify({ engine: testInfo.project.use.browserName, measurements }));
 });
+}

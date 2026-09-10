@@ -44,7 +44,8 @@ export const COPY = {
     chooseModel: "请选择默认模型",
     searchModels: "搜索模型名称或 ID",
     noMatchingModels: "没有匹配的模型，试试其他关键词",
-    modelLoadHint: "先获取模型列表，再选择默认模型。此步骤不发起聊天生成请求。",
+    modelLoadHint:
+      "地址和密钥仅在点击上方按钮后保存，再获取模型供你选择；不会发起聊天生成请求。",
     endpoint: "服务地址",
     test: "测试",
     testing: "测试中…",
@@ -141,7 +142,7 @@ export const COPY = {
     searchModels: "Search model name or ID",
     noMatchingModels: "No matching models. Try another keyword.",
     modelLoadHint:
-      "Load the provider's model list, then choose a default. This step does not generate a chat response.",
+      "Address and key are saved only when you click the button above. Then choose a model; no chat response is generated.",
     endpoint: "Service address",
     test: "Test",
     testing: "Testing…",

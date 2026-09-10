@@ -759,15 +759,16 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-test("service address supports in-place typing without per-character saves or focus jumps", async ({ page }) => {
+test("provider edits and blur never save until the explicit save/load action", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);
   const address = page.getByLabel("服务地址", { exact: true });
   await expect(page.locator(".onboarding-provider-form")).not.toContainText("base_url");
   const template = "https://YOUR_RESOURCE.services.ai.azure.com/openai/v1";
+  const persistedBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint);
   await address.fill(template);
   await address.press("Tab");
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe(template);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe(persistedBefore);
   await address.focus();
   await address.evaluate((input: HTMLInputElement) => {
     input.dataset.qaField = "stable";
@@ -786,8 +787,55 @@ test("service address supports in-place typing without per-character saves or fo
   await address.pressSequentially("X");
   await expect(address).toHaveValue("https://my-resourXe.services.ai.azure.com/openai/v1");
   await address.press("Tab");
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("https://my-resourXe.services.ai.azure.com/openai/v1");
-  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["list_provider_models", "verify_onboarding_provider"].includes(x.cmd)))).toEqual([]);
+  await page.getByLabel("API Key", { exact: true }).fill("qa-explicit-key");
+  await page.getByLabel("API Key", { exact: true }).press("Tab");
+  // Wait past the previous autosave debounce, including after focus leaves both fields.
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe(persistedBefore);
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "save_onboarding_progress").length)).toBe(savesBefore);
+  expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => ["save_provider", "set_provider_api_key", "list_provider_models", "verify_onboarding_provider"].includes(x.cmd)))).toEqual([]);
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "默认模型", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("https://my-resourXe.services.ai.azure.com/openai/v1");
+  const submitted = await page.evaluate(() => ({
+    calls: (window as any).__onboardingCalls.filter((x: any) => ["save_provider", "set_provider_api_key", "save_onboarding_progress", "list_provider_models"].includes(x.cmd)).slice(-4).map((x: any) => x.cmd),
+    draft: localStorage.getItem("qa.state"),
+  }));
+  expect(submitted.calls).toEqual(["save_provider", "set_provider_api_key", "save_onboarding_progress", "list_provider_models"]);
+  expect(submitted.draft).not.toContain("qa-explicit-key");
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+});
+
+test("navigation cannot persist an edited but unsubmitted provider address", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint);
+  await page.getByLabel("服务地址", { exact: true }).fill("https://not-submitted.example/v1");
+  await page.getByRole("button", { name: "返回", exact: true }).click();
+  await page.getByLabel("Agent 名称（可选）").fill("New name");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.agent_name)).toBe("New name");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe(saved);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "先让这里更像你的工作空间" })).toBeVisible();
+  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(page.getByLabel("服务地址", { exact: true })).toHaveValue(saved);
+});
+
+test("explicitly saved credentials remain saved when model discovery fails", async ({ page }) => {
+  await installTransport(page);
+  await page.route("**/__onboarding_mock/models", route => route.fulfill({ json: { error: "network unavailable" } }));
+  await startProvider(page);
+  await page.getByLabel("服务地址", { exact: true }).fill("https://saved.example/v1");
+  await page.getByLabel("API Key", { exact: true }).fill("qa-discovery-key");
+  await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
+  await expect(page.getByRole("alert", { name: "暂时无法连接服务" })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).draft.endpoint)).toBe("https://saved.example/v1");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(page.getByLabel("服务地址", { exact: true })).toHaveValue("https://saved.example/v1");
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("");
 });
 
 test("credential URL is not saved and cannot be tested", async ({ page }) => {
