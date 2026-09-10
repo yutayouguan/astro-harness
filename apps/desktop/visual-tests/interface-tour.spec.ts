@@ -4,7 +4,7 @@ const URL = "/iframe.html?id=app-onboarding-runtime--strict-native-transport&vie
 const tour = (page: Page) => page.locator(".astro-interface-tour");
 test.setTimeout(60000);
 
-async function boot(page: Page, options: { resolved?: boolean; readError?: boolean; saveError?: boolean; collapsed?: boolean; locale?: string } = {}) {
+async function boot(page: Page, options: { resolved?: boolean; readError?: boolean; saveError?: boolean; collapsed?: boolean; locale?: string; petVisible?: boolean; labels?: boolean; petReadError?: boolean } = {}) {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/*", route => {
     const hostname = new globalThis.URL(route.request().url()).hostname;
@@ -15,10 +15,24 @@ async function boot(page: Page, options: { resolved?: boolean; readError?: boole
     w.isTauri = true;
     localStorage.setItem("astro-locale", options.locale ?? "zh");
     if (options.collapsed) localStorage.setItem("astro.sidebarPinned", "0");
+    if (options.labels) localStorage.setItem("astro.sidebarLabels", "1");
     const provider = { id: "qa", kind: "openai", display_name: "QA", model: "qa-small",
       enabled: true, has_api_key: true, key_source: "keyring", supports_responses_api: true };
     let serial = 0;
     const callbacks = new Map();
+    const listeners = new Map<number, { event: string; handler: number }>();
+    let petRevision = 1;
+    w.__petVisible = options.petVisible ?? false;
+    w.__petReadError = options.petReadError ?? false;
+    w.__petFailMutation = false;
+    w.__petMutationDelay = 0;
+    const petState = () => ({ revision: petRevision, enabled: true, petPath: "/tmp/qa-pet.png" });
+    w.__emitPetChanged = () => {
+      petRevision++;
+      for (const [id, listener] of listeners) if (listener.event === "desktop-pet-changed") {
+        callbacks.get(listener.handler)?.({ id, event: listener.event, payload: petState() });
+      }
+    };
     w.__tourCalls = [];
     w.__saveError = options.saveError;
     w.__TAURI_INTERNALS__ = {
@@ -29,6 +43,23 @@ async function boot(page: Page, options: { resolved?: boolean; readError?: boole
       invoke: async (cmd: string, args: any = {}) => {
         w.__tourCalls.push({ cmd, args });
         switch (cmd) {
+          case "plugin:event|listen": {
+            const id = ++serial;
+            listeners.set(id, { event: args.event, handler: args.handler });
+            return id;
+          }
+          case "plugin:event|unlisten": listeners.delete(args.eventId); return null;
+          case "get_desktop_pet_state": return petState();
+          case "get_desktop_pet_visible":
+            if (w.__petReadError) throw Error("visibility unavailable");
+            return w.__petVisible;
+          case "resume_desktop_pet":
+          case "set_desktop_pet_enabled":
+            if (w.__petFailMutation) throw Error("pet window failed");
+            if (w.__petMutationDelay) await new Promise(resolve => setTimeout(resolve, w.__petMutationDelay));
+            w.__petVisible = cmd === "resume_desktop_pet";
+            w.__emitPetChanged();
+            return petState();
           case "get_onboarding_state": return { version: 1, completed: true, should_show: false, step: "complete" };
           case "get_interface_tour_state":
             if (options.readError) throw Error("unavailable");
@@ -181,4 +212,72 @@ test("closing the page mid-tour never records a user skip", async ({ page }) => 
   expect(await page.evaluate(() => localStorage.getItem("qa.tour.version"))).toBeNull();
   await page.keyboard.press("Escape");
   await expectOutcome(page, "skipped");
+});
+
+test("footer places icon-only tour and pet after preferences", async ({ page }, testInfo) => {
+  await boot(page, { resolved: true, labels: true });
+  const footer = page.locator(".sidebar-footer-actions");
+  const buttons = footer.getByRole("button");
+  await expect(buttons).toHaveCount(3);
+  await expect(buttons.nth(0)).toHaveAttribute("data-tour", "settings");
+  await expect(buttons.nth(1)).toHaveAttribute("data-sidebar-action", "tour");
+  await expect(buttons.nth(2)).toHaveAttribute("data-sidebar-action", "pet");
+  await expect(buttons.nth(1)).toHaveText("");
+  await expect(buttons.nth(2)).toHaveText("");
+  const bounds = await Promise.all([0, 1, 2].map(i => buttons.nth(i).boundingBox()));
+  expect(Math.abs(bounds[0]!.y - bounds[1]!.y)).toBeLessThan(2);
+  expect(bounds[1]!.x).toBeGreaterThan(bounds[0]!.x);
+  expect(bounds[2]!.x).toBeGreaterThan(bounds[1]!.x);
+  await footer.screenshot({ path: testInfo.outputPath("footer-actions.png") });
+  await page.getByRole("button", { name: "界面导览", exact: true }).click();
+  await expect(tour(page)).toBeVisible();
+});
+
+test("pet icon toggles actual visibility and follows external changes", async ({ page }) => {
+  // Persisted enabled=true but the actual native window is hidden (e.g. presentation mode).
+  await boot(page, { resolved: true });
+  const button = page.locator('[data-sidebar-action="pet"]');
+  await expect(button).toHaveAccessibleName("显示桌宠");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await button.click();
+  await expect(button).toHaveAccessibleName("隐藏桌宠");
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await button.click();
+  await expect(button).toHaveAccessibleName("显示桌宠");
+  expect(await page.evaluate(() => (window as any).__tourCalls.filter((c: any) =>
+    ["resume_desktop_pet", "set_desktop_pet_enabled"].includes(c.cmd)))).toEqual([
+      { cmd: "resume_desktop_pet", args: {} },
+      { cmd: "set_desktop_pet_enabled", args: { enabled: false } },
+    ]);
+  await page.evaluate(() => { (window as any).__petVisible = true; (window as any).__emitPetChanged(); });
+  await expect(button).toHaveAccessibleName("隐藏桌宠");
+});
+
+test("pet toggle blocks duplicate clicks and reports native failure", async ({ page }) => {
+  await boot(page, { resolved: true, petVisible: true });
+  const button = page.locator('[data-sidebar-action="pet"]');
+  await expect(button).toHaveAccessibleName("隐藏桌宠");
+  await page.evaluate(() => { (window as any).__petMutationDelay = 300; });
+  await button.evaluate(node => { (node as HTMLButtonElement).click(); (node as HTMLButtonElement).click(); });
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAccessibleName("显示桌宠");
+  await expect(button).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).__tourCalls.filter((c: any) => c.cmd === "set_desktop_pet_enabled").length)).toBe(1);
+  await page.evaluate(() => { (window as any).__petFailMutation = true; });
+  await button.click();
+  await expect(page.getByText("桌宠显隐切换未完成，请重试或前往偏好设置检查桌宠。", { exact: true })).toBeVisible();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(button).toBeEnabled();
+});
+
+test("unknown pet visibility retries without guessing or mutating", async ({ page }) => {
+  await boot(page, { resolved: true, petReadError: true });
+  const button = page.locator('[data-sidebar-action="pet"]');
+  await expect(button).toHaveAccessibleName("重新读取桌宠状态");
+  await expect(button).toBeEnabled();
+  await page.evaluate(() => { (window as any).__petReadError = false; });
+  await button.click();
+  await expect(button).toHaveAccessibleName("显示桌宠");
+  expect(await page.evaluate(() => (window as any).__tourCalls.filter((c: any) =>
+    ["resume_desktop_pet", "set_desktop_pet_enabled"].includes(c.cmd)))).toEqual([]);
 });

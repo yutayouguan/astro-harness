@@ -1,0 +1,45 @@
+.sidebar-footer.sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sidebar-footer-actions > .sidebar-settings-btn:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar .sidebar-footer-actions > .sidebar-settings-btn.sidebar-footer-icon {
+  width: 32px;
+  min-width: 32px;
+  min-height: 36px;
+  flex: 0 0 32px;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar-footer-actions .sidebar-footer-icon[aria-pressed="true"] {
+  color: var(--accent, var(--ink));
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.sidebar-footer-actions .sidebar-footer-icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sidebar-footer-actions .sidebar-settings-btn:focus-visible {
+  outline: 2px solid var(--accent, var(--ink));
+  outline-offset: -2px;
+}
+
+.sidebar:not(.is-labels) .sidebar-footer-actions {
+  flex-direction: column;
+}
+
+.sidebar:not(.is-labels)
+  .sidebar-footer-actions
+  > .sidebar-settings-btn:first-child {
+  width: 100%;
+  flex: 0 0 auto;
+}

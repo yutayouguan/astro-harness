@@ -117,6 +117,8 @@ import { takeOnboardingStarterPrompt } from "./lib/ui/onboarding";
 import { providerIsReady } from "./lib/providers/providerReadiness";
 import { ModelSetupNotice } from "./components/onboarding/ModelSetupNotice";
 import InterfaceTour from "./components/onboarding/InterfaceTour";
+import DesktopPetVisibilityButton from "./components/desktop-pet/DesktopPetVisibilityButton";
+import "./styles/features/shell/layout/sidebar-footer-actions.css";
 import { interfaceTourCopy, requestInterfaceTour } from "./lib/ui/interfaceTour";
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
@@ -2003,17 +2005,7 @@ export default function App() {
                   </>
                 )}
               </div>
-              <div className="sidebar-footer">
-                <button
-                  type="button"
-                  className="sidebar-settings-btn"
-                  onClick={requestInterfaceTour}
-                  title={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
-                  aria-label={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
-                >
-                  <CircleHelp size={17} strokeWidth={1.8} aria-hidden />
-                  <span className="sidebar-item-label">{interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}</span>
-                </button>
+              <div className="sidebar-footer sidebar-footer-actions">
                 <button
                   type="button"
                   data-tour="settings"
@@ -2033,6 +2025,17 @@ export default function App() {
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  className="sidebar-settings-btn sidebar-footer-icon"
+                  data-sidebar-action="tour"
+                  onClick={requestInterfaceTour}
+                  title={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
+                  aria-label={interfaceTourCopy[locale === "zh" ? "zh" : "en"].replay}
+                >
+                  <CircleHelp size={17} strokeWidth={1.8} aria-hidden />
+                </button>
+                <DesktopPetVisibilityButton onError={(message) => showTransientToast(message, { tone: "error" })} />
               </div>
             </>
           )}
