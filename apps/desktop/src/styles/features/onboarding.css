@@ -656,8 +656,41 @@
 }
 
 .onboarding-test-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.72;
+}
+
+.onboarding-test-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.onboarding-action-label {
+  display: grid;
+}
+
+.onboarding-action-label > span {
+  grid-area: 1 / 1;
+}
+
+.onboarding-action-label-reserve {
+  visibility: hidden;
+}
+
+.onboarding-operation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.onboarding-operation-status > svg {
+  flex: 0 0 auto;
 }
 
 .onboarding-status,
@@ -1230,16 +1263,6 @@
   transform: translateX(-50%);
   color: var(--ink-secondary);
   font-size: 10px;
-}
-.onboarding-cancel-test {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--tone, #6366f1);
-  border: 0;
-  background: transparent;
-  padding: 10px 6px;
-  cursor: pointer;
 }
 .onboarding-model-hint,
 .onboarding-test-cost,

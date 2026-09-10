@@ -48,6 +48,7 @@ export const COPY = {
       "地址和密钥仅在点击上方按钮后保存，再获取模型供你选择；不会发起聊天生成请求。",
     endpoint: "服务地址",
     test: "测试",
+    retest: "重新测试",
     testing: "测试中…",
     testSuccess: "连接成功",
     noProviders: "没有可用的 Responses API 模型服务。请检查安装配置。",
@@ -145,6 +146,7 @@ export const COPY = {
       "Address and key are saved only when you click the button above. Then choose a model; no chat response is generated.",
     endpoint: "Service address",
     test: "Test",
+    retest: "Test again",
     testing: "Testing…",
     testSuccess: "Connection successful",
     noProviders:

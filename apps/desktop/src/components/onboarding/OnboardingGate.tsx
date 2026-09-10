@@ -36,7 +36,7 @@ import {
   ShieldQuestion,
   Sparkles,
   Sun,
-  X,
+  Square,
   Zap,
 } from "lucide-react";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
@@ -1274,24 +1274,44 @@ export function FirstRunOnboarding({
                           <Button
                             className="onboarding-load-models"
                             variant="secondary"
-                            busy={modelsStatus === "loading"}
-                            busyLabel={copy.loadingModels}
                             disabled={
                               providerStatus === "testing" ||
-                              (!apiKey.trim() &&
+                              (modelsStatus !== "loading" &&
+                                !apiKey.trim() &&
                                 selectedProvider != null &&
                                 providerRequiresApiKey(selectedProvider) &&
                                 !selectedProvider.has_api_key)
                             }
-                            onClick={() => void loadModels()}
+                            onClick={() =>
+                              modelsStatus === "loading"
+                                ? cancelProviderTest()
+                                : void loadModels()
+                            }
                           >
-                            {modelsStatus !== "loading" && (
+                            {modelsStatus === "loading" ? (
+                              <Square size={15} aria-hidden />
+                            ) : (
                               <ListRestart size={15} aria-hidden />
                             )}
                             {modelsStatus === "loading"
-                              ? copy.loadingModels
+                              ? copy.cancelTest
                               : copy.loadModels}
                           </Button>
+                          <span
+                            className="onboarding-operation-status"
+                            role="status"
+                          >
+                            {modelsStatus === "loading" && (
+                              <>
+                                <LoaderCircle
+                                  className="is-spinning"
+                                  size={14}
+                                  aria-hidden
+                                />
+                                {copy.loadingModels}
+                              </>
+                            )}
+                          </span>
                           <p className="onboarding-model-hint">
                             {copy.modelLoadHint}
                           </p>
@@ -1334,46 +1354,66 @@ export function FirstRunOnboarding({
                           <p className="onboarding-test-cost">
                             {copy.testCost}
                           </p>
-                          <button
-                            type="button"
-                            ref={testButtonRef}
-                            className={`onboarding-test-button ${model && modelsStatus === "ready" && providerStatus !== "success" ? "is-next-action" : ""}`}
-                            data-status={providerStatus}
-                            disabled={
-                              providerStatus === "testing" ||
-                              modelsStatus !== "ready" ||
-                              !model
-                            }
-                            onClick={() => void testProvider()}
-                          >
-                            {providerStatus === "testing" ? (
-                              <LoaderCircle
-                                className="is-spinning"
-                                size={17}
-                                aria-hidden
-                              />
-                            ) : providerStatus === "success" ? (
-                              <Check size={17} aria-hidden />
-                            ) : (
-                              <Zap size={17} aria-hidden />
-                            )}
-                            <span>
-                              {providerStatus === "testing"
-                                ? copy.testing
-                                : copy.test}
-                            </span>
-                          </button>
-                          {(providerStatus === "testing" ||
-                            modelsStatus === "loading") && (
+                          <div className="onboarding-test-action">
                             <button
                               type="button"
-                              className="onboarding-cancel-test"
-                              onClick={cancelProviderTest}
+                              ref={testButtonRef}
+                              className={`onboarding-test-button ${model && modelsStatus === "ready" && providerStatus !== "success" ? "is-next-action" : ""}`}
+                              data-status={providerStatus}
+                              disabled={
+                                providerStatus !== "testing" &&
+                                (modelsStatus !== "ready" || !model)
+                              }
+                              onClick={() =>
+                                providerStatus === "testing"
+                                  ? cancelProviderTest()
+                                  : void testProvider()
+                              }
                             >
-                              <X size={14} aria-hidden />
-                              {copy.cancelTest}
+                              {providerStatus === "testing" ? (
+                                <Square size={17} aria-hidden />
+                              ) : (
+                                <Zap size={17} aria-hidden />
+                              )}
+                              <span className="onboarding-action-label">
+                                <span
+                                  className="onboarding-action-label-reserve"
+                                  aria-hidden
+                                >
+                                  {copy.cancelTest}
+                                </span>
+                                <span>
+                                  {providerStatus === "testing"
+                                    ? copy.cancelTest
+                                    : providerStatus === "success"
+                                      ? copy.retest
+                                      : providerStatus === "error"
+                                        ? copy.retry
+                                        : copy.test}
+                                </span>
+                              </span>
                             </button>
-                          )}
+                            <span
+                              className="onboarding-operation-status"
+                              role="status"
+                            >
+                              {providerStatus === "testing" ? (
+                                <>
+                                  <LoaderCircle
+                                    className="is-spinning"
+                                    size={14}
+                                    aria-hidden
+                                  />
+                                  {copy.testing}
+                                </>
+                              ) : providerStatus === "success" ? (
+                                <>
+                                  <Check size={15} aria-hidden />
+                                  {providerMessage}
+                                </>
+                              ) : null}
+                            </span>
+                          </div>
                           {connectionIssue && (
                             <ConnectionIssue
                               kind={connectionIssue}
@@ -1419,7 +1459,7 @@ export function FirstRunOnboarding({
                               }}
                             />
                           )}
-                          {providerMessage ? (
+                          {providerMessage && providerStatus !== "success" ? (
                             <p
                               className="onboarding-status"
                               data-status={providerStatus}

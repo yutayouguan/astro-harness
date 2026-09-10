@@ -414,8 +414,9 @@ for (const variant of [
   });
 }
 
-test("cancelled test ignores late success and cannot activate a model", async ({ page }) => {
+test("cancelled test ignores late success and cannot activate a model", async ({ page }, testInfo) => {
   await installTransport(page);
+  await page.addInitScript(() => localStorage.setItem("astro-theme-mode", "dark"));
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
   await page.route("**/__onboarding_mock/responses", async route => {
@@ -425,9 +426,25 @@ test("cancelled test ignores late success and cannot activate a model", async ({
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   await loadModels(page);
   const request = page.waitForRequest("**/__onboarding_mock/responses");
+  const testButton = page.locator(".onboarding-test-button");
+  const testNode = await testButton.elementHandle();
+  const before = (await testButton.boundingBox())!;
   await page.getByRole("button", { name: "测试", exact: true }).click();
   await request;
-  await page.getByRole("button", { name: "取消等待", exact: true }).click();
+  await expect(testButton).toHaveAccessibleName("取消等待");
+  await expect(testButton).toBeEnabled();
+  await expect(testButton.locator("svg.lucide-square")).toHaveCount(1);
+  await expect(page.locator(".onboarding-load-models")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "取消等待", exact: true })).toHaveCount(1);
+  await expect(page.locator(".onboarding-cancel-test")).toHaveCount(0);
+  await expect(page.locator(".onboarding-test-action").getByRole("status")).toContainText("测试中");
+  const during = (await testButton.boundingBox())!;
+  for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(during[key] - before[key])).toBeLessThan(1);
+  expect(await testNode!.evaluate(el => el.isConnected)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("test-inline-cancel.png") });
+  await testButton.click();
+  await expect(testButton).toHaveAccessibleName("测试");
+  await expect(testButton).toBeFocused();
   const response = page.waitForResponse("**/__onboarding_mock/responses");
   release(); await response;
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
@@ -530,7 +547,7 @@ test("workspace is rechecked at completion and quota errors offer the official c
   await page.getByRole("button", { name: "返回", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "默认模型", exact: true })).toHaveCount(0);
   await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message: "insufficient_quota" } }));
-  await page.getByRole("button", { name: "测试", exact: true }).click();
+  await page.getByRole("button", { name: "重新测试", exact: true }).click();
   await expect(page.getByRole("button", { name: "官方控制台", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "官方控制台", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
@@ -948,7 +965,7 @@ for (const result of [
   });
 }
 
-test("cancelled model loading ignores late results", async ({ page }) => {
+test("cancelled model loading ignores late results", async ({ page }, testInfo) => {
   await installTransport(page);
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
@@ -959,14 +976,46 @@ test("cancelled model loading ignores late results", async ({ page }) => {
   await startProvider(page);
   await page.getByLabel("API Key", { exact: true }).fill("qa-placeholder-key");
   const request = page.waitForRequest("**/__onboarding_mock/models");
+  const loadButton = page.locator(".onboarding-load-models");
+  const before = (await loadButton.boundingBox())!;
   await page.getByRole("button", { name: "保存密钥并获取模型", exact: true }).click();
   await request;
-  await page.getByRole("button", { name: "取消等待", exact: true }).click();
+  await expect(loadButton).toHaveAccessibleName("取消等待");
+  await expect(loadButton).toBeEnabled();
+  await expect(loadButton.locator("svg.lucide-square")).toHaveCount(1);
+  await expect(page.locator(".onboarding-test-button")).toHaveAccessibleName("测试");
+  await expect(page.locator(".onboarding-test-button")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "取消等待", exact: true })).toHaveCount(1);
+  const during = (await loadButton.boundingBox())!;
+  for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(during[key] - before[key])).toBeLessThan(1);
+  await page.screenshot({ path: testInfo.outputPath("models-inline-cancel.png") });
+  await loadButton.focus();
+  await loadButton.press("Enter");
+  await expect(loadButton).toHaveAccessibleName("保存密钥并获取模型");
+  await expect(loadButton).toBeFocused();
   await page.getByLabel("API Key", { exact: true }).fill("qa-replacement-key");
   const response = page.waitForResponse("**/__onboarding_mock/models");
   release(); await response;
   await expect(page.getByRole("button", { name: "默认模型", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+});
+
+test("the test action becomes retest on success and retry on failure", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  const button = page.locator(".onboarding-test-button");
+  await expect(button).toHaveAccessibleName("重新测试");
+  await expect(button.locator("svg.lucide-zap")).toHaveCount(1);
+  await expect(page.locator(".onboarding-test-action").getByRole("status")).toContainText("连接成功");
+  await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: false, message: "invalid api key" } }));
+  await button.click();
+  await expect(button).toHaveAccessibleName("重试");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
+  await page.route("**/__onboarding_mock/responses", route => route.fulfill({ json: { ok: true, model: "qa-small", latency_ms: 1 } }));
+  await button.click();
+  await expect(button).toHaveAccessibleName("重新测试");
+  await expect(page.getByRole("button", { name: "继续", exact: true })).toBeEnabled();
 });
 
 test("settings show only added providers and can remove the last account", async ({ page }) => {
