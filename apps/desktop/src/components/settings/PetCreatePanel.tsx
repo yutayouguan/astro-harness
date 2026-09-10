@@ -232,190 +232,199 @@ export default function PetCreatePanel({
         <h3>{zh ? "让熟悉的它，成为你的桌面伙伴" : "Create your companion"}</h3>
         <p>{copy.subtitle}</p>
       </header>
-      <section className="prefs-card desktop-pet-card">
-        <header className="desktop-pet-card-head">
-          <span className="desktop-pet-icon" aria-hidden>
-            <ImagePlus size={19} />
-          </span>
-          <div>
-            <h3>{copy.source}</h3>
-            <p>{copy.sourceHint}</p>
-          </div>
-        </header>
-        <button
-          type="button"
-          className="desktop-pet-photo-picker"
-          onClick={() => void choosePhoto()}
-          disabled={busy != null}
-        >
-          {sourceSrc ? (
-            <img src={sourceSrc} alt={copy.source} />
-          ) : (
-            <PawPrint size={42} />
-          )}
-          <span>
-            <Upload size={15} />
-            {sourceSrc ? copy.replace : copy.upload}
-          </span>
-        </button>
-        <label className="desktop-pet-field">
-          <span>{copy.style}</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.currentTarget.value)}
-            placeholder={copy.stylePlaceholder}
-            maxLength={2000}
+      <section className="prefs-card desktop-pet-card pet-create-card">
+        <div className="pet-create-source">
+          <header className="desktop-pet-card-head">
+            <span className="desktop-pet-icon" aria-hidden>
+              <ImagePlus size={19} />
+            </span>
+            <div>
+              <h3>{copy.source}</h3>
+              <p>{copy.sourceHint}</p>
+            </div>
+          </header>
+          <button
+            type="button"
+            className="desktop-pet-photo-picker"
+            onClick={() => void choosePhoto()}
             disabled={busy != null}
-          />
-        </label>
-        <label className="desktop-pet-field">
-          <span>{zh ? "宠物名字" : "Pet name"}</span>
-          <input
-            value={petName}
-            maxLength={80}
-            disabled={busy != null}
-            placeholder={zh ? "例如：奶糖" : "For example: Mochi"}
-            onChange={(e) => setPetName(e.currentTarget.value)}
-          />
-        </label>
-        <label className="desktop-pet-field">
-          <span>{zh ? "场景名称" : "Scene name"}</span>
-          <input
-            value={sceneName}
-            maxLength={80}
-            disabled={busy != null}
-            placeholder={
-              zh ? "例如：奶糖的森林小屋" : "For example: Mochi's woodland home"
-            }
-            onChange={(e) => setSceneName(e.currentTarget.value)}
-          />
-        </label>
-        <label className="desktop-pet-toggle-row">
-          <span>
-            <strong>
-              {zh ? "同时生成配套壁纸" : "Generate a matching wallpaper"}
-            </strong>
-            <small>
-              {zh
-                ? "会额外调用一次图片模型；只用于 Astro 应用背景。"
-                : "One additional image request. Astro background only."}
-            </small>
-          </span>
-          <input
-            type="checkbox"
-            checked={withWallpaper}
-            disabled={busy != null}
-            onChange={(e) => setWithWallpaper(e.currentTarget.checked)}
-          />
-        </label>
-        <details
-          className="pet-scene-options"
-          open={withWallpaper || undefined}
-        >
-          <summary>
+          >
+            {sourceSrc ? (
+              <img src={sourceSrc} alt={copy.source} />
+            ) : (
+              <PawPrint size={42} />
+            )}
+            <span>
+              <Upload size={15} />
+              {sourceSrc ? copy.replace : copy.upload}
+            </span>
+          </button>
+          <p className="pet-create-photo-hint">
             {zh
-              ? "配套壁纸选项（也用于下方重试）"
-              : "Wallpaper options (also used for retries)"}
-          </summary>
+              ? "保留它的毛色、五官与独特印记。照片只会在点击生成后发送到所选图片模型。"
+              : "Keep its coat, face and unique markings. The photo is sent to your image provider only when you generate."}
+          </p>
+        </div>
+        <div className="pet-create-fields">
           <label className="desktop-pet-field">
-            <span>{zh ? "场景描述" : "Scene description"}</span>
+            <span>{copy.style}</span>
             <textarea
-              value={sceneDescription}
+              value={description}
+              onChange={(event) => setDescription(event.currentTarget.value)}
+              placeholder={copy.stylePlaceholder}
               maxLength={2000}
+              disabled={busy != null}
+            />
+          </label>
+          <label className="desktop-pet-field">
+            <span>{zh ? "宠物名字" : "Pet name"}</span>
+            <input
+              value={petName}
+              maxLength={80}
+              disabled={busy != null}
+              placeholder={zh ? "例如：奶糖" : "For example: Mochi"}
+              onChange={(e) => setPetName(e.currentTarget.value)}
+            />
+          </label>
+          <label className="desktop-pet-field">
+            <span>{zh ? "场景名称" : "Scene name"}</span>
+            <input
+              value={sceneName}
+              maxLength={80}
               disabled={busy != null}
               placeholder={
                 zh
-                  ? "森林小屋、海边日落、星空花园…"
-                  : "Woodland home, sunset beach, starry garden…"
+                  ? "例如：奶糖的森林小屋"
+                  : "For example: Mochi's woodland home"
               }
-              onChange={(e) => setSceneDescription(e.currentTarget.value)}
+              onChange={(e) => setSceneName(e.currentTarget.value)}
             />
           </label>
           <label className="desktop-pet-toggle-row">
             <span>
               <strong>
-                {zh ? "壁纸中包含宠物肖像" : "Include a pet portrait"}
+                {zh ? "同时生成配套壁纸" : "Generate a matching wallpaper"}
               </strong>
               <small>
                 {zh
-                  ? "默认只生成环境，避免与悬浮桌宠重复。"
-                  : "Environment-only by default, to avoid duplicating the floating pet."}
+                  ? "会额外调用一次图片模型；只用于 Astro 应用背景。"
+                  : "One additional image request. Astro background only."}
               </small>
             </span>
             <input
               type="checkbox"
-              checked={includePet}
+              checked={withWallpaper}
               disabled={busy != null}
-              onChange={(e) => setIncludePet(e.currentTarget.checked)}
+              onChange={(e) => setWithWallpaper(e.currentTarget.checked)}
             />
           </label>
-        </details>
-        <div className="desktop-pet-action-row">
-          <button
-            type="button"
-            className="desktop-pet-generate"
-            onClick={() => void generate()}
-            disabled={!state.sourcePath || busy != null}
+          <details
+            className="pet-scene-options"
+            open={withWallpaper || undefined}
           >
-            {phase === "generate" || phase === "wallpaper" ? (
-              <Loader2 className="desktop-pet-spinner" size={17} />
-            ) : (
-              <Sparkles size={17} />
-            )}
-            {phase === "wallpaper"
-              ? zh
-                ? "正在生成配套壁纸…"
-                : "Creating matching wallpaper…"
-              : phase === "generate"
-                ? copy.creating
-                : copy.create}
-          </button>
-          <button
-            type="button"
-            className="desktop-pet-import-package"
-            title={copy.importAnimatedHint}
-            onClick={() => void importAnimatedPackage()}
-            disabled={busy != null}
-          >
-            <FolderInput size={17} />
-            {copy.importAnimated}
-          </button>
+            <summary>{zh ? "配套壁纸选项" : "Wallpaper options"}</summary>
+            <label className="desktop-pet-field">
+              <span>{zh ? "场景描述" : "Scene description"}</span>
+              <textarea
+                value={sceneDescription}
+                maxLength={2000}
+                disabled={busy != null}
+                placeholder={
+                  zh
+                    ? "森林小屋、海边日落、星空花园…"
+                    : "Woodland home, sunset beach, starry garden…"
+                }
+                onChange={(e) => setSceneDescription(e.currentTarget.value)}
+              />
+            </label>
+            <label className="desktop-pet-toggle-row">
+              <span>
+                <strong>
+                  {zh ? "壁纸中包含宠物肖像" : "Include a pet portrait"}
+                </strong>
+                <small>
+                  {zh
+                    ? "默认只生成环境，避免与悬浮桌宠重复。"
+                    : "Environment-only by default, to avoid duplicating the floating pet."}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={includePet}
+                disabled={busy != null}
+                onChange={(e) => setIncludePet(e.currentTarget.checked)}
+              />
+            </label>
+          </details>
         </div>
-        <p className="desktop-pet-model">{copy.staticHint}</p>
-        {error ? (
-          <p className="desktop-pet-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {notice && <p role="status">{notice}</p>}
-        {(phase === "generate" || phase === "wallpaper") && (
-          <div className="pet-generation-progress" role="status">
-            <ol>
-              <li aria-current={phase === "generate" ? "step" : undefined}>
-                {phase === "wallpaper" ? "✓ " : "1. "}
-                {zh ? "生成桌宠" : "Create pet"}
-              </li>
-              {withWallpaper && (
-                <li aria-current={phase === "wallpaper" ? "step" : undefined}>
-                  2. {zh ? "生成配套壁纸" : "Create wallpaper"}
-                </li>
-              )}
-            </ol>
+        <div className="pet-create-footer">
+          <div className="desktop-pet-action-row">
             <button
               type="button"
-              disabled={cancelling}
-              onClick={() => void cancelGeneration()}
+              className="desktop-pet-generate"
+              onClick={() => void generate()}
+              disabled={!state.sourcePath || busy != null}
             >
-              {cancelling
+              {phase === "generate" || phase === "wallpaper" ? (
+                <Loader2 className="desktop-pet-spinner" size={17} />
+              ) : (
+                <Sparkles size={17} />
+              )}
+              {phase === "wallpaper"
                 ? zh
-                  ? "取消中…"
-                  : "Cancelling…"
-                : zh
-                  ? "取消生成"
-                  : "Cancel generation"}
+                  ? "正在生成配套壁纸…"
+                  : "Creating matching wallpaper…"
+                : phase === "generate"
+                  ? copy.creating
+                  : copy.create}
+            </button>
+            <button
+              type="button"
+              className="desktop-pet-import-package"
+              title={copy.importAnimatedHint}
+              onClick={() => void importAnimatedPackage()}
+              disabled={busy != null}
+            >
+              <FolderInput size={17} />
+              {copy.importAnimated}
             </button>
           </div>
-        )}
+          <p className="desktop-pet-model">{copy.staticHint}</p>
+          {error ? (
+            <p className="desktop-pet-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notice && <p role="status">{notice}</p>}
+          {(phase === "generate" || phase === "wallpaper") && (
+            <div className="pet-generation-progress" role="status">
+              <ol>
+                <li aria-current={phase === "generate" ? "step" : undefined}>
+                  {phase === "wallpaper" ? "✓ " : "1. "}
+                  {zh ? "生成桌宠" : "Create pet"}
+                </li>
+                {withWallpaper && (
+                  <li aria-current={phase === "wallpaper" ? "step" : undefined}>
+                    2. {zh ? "生成配套壁纸" : "Create wallpaper"}
+                  </li>
+                )}
+              </ol>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => void cancelGeneration()}
+              >
+                {cancelling
+                  ? zh
+                    ? "取消中…"
+                    : "Cancelling…"
+                  : zh
+                    ? "取消生成"
+                    : "Cancel generation"}
+              </button>
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );

@@ -23,7 +23,17 @@ test("offline built-in pet has a Settings action, embedded assets and native rou
 
 test("pet settings use defined theme-aware surfaces instead of white fallbacks", () => {
   const css = read("../../styles/features/desktop-pet.css");
-  assert.doesNotMatch(css, /--settings-panel-|--ink-muted/);
+  assert.doesNotMatch(css, /--ink-muted/);
+  const material = read("../../styles/features/settings-material-unified.css");
+  for (const token of [
+    "settings-panel-border",
+    "settings-panel-background",
+    "settings-panel-shadow",
+    "settings-inset-background",
+  ]) {
+    assert.ok(css.includes(`var(--${token}`));
+    assert.ok(material.includes(`--${token}:`));
+  }
   for (const name of [
     "color-bg-subtle",
     "color-text",

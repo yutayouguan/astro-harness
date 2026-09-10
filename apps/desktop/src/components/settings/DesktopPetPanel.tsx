@@ -6,6 +6,7 @@ import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
 import { useI18n } from "../../i18n/LocaleContext";
 import { DEFAULT_PET_PREFERENCES } from "../../lib/ui/petPreferences";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
+import conceptImage from "../../assets/generated/desktop-pet-concept.png";
 import PetCreatePanel from "./PetCreatePanel";
 import PetLibraryPanel from "./PetLibraryPanel";
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
@@ -71,61 +72,80 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           : "Syncing";
   return (
     <section className="desktop-pet-settings pet-manager" aria-busy={busy}>
-      <div className="pet-manager-current">
-        <span className="desktop-pet-icon">
-          <PawPrint size={20} />
-        </span>
-        <div>
-          <strong>
-            {zh ? "当前桌面" : "On your desktop"} ·{" "}
-            {state.displayName || (zh ? "尚未选择宠物" : "No pet selected")}
-          </strong>
-          <small>
-            {sceneName ||
-              (zh
-                ? "默认陪伴 · 不更换壁纸"
-                : "Default companion · wallpaper unchanged")}{" "}
-            · {status}
-          </small>
+      <header className="desktop-pet-hero">
+        <div className="desktop-pet-hero-copy">
+          <span className="desktop-pet-eyebrow">ASTRO DESKTOP COMPANION</span>
+          <h2>
+            {zh
+              ? "把熟悉的它，带到桌面上"
+              : "Bring a familiar friend to your desktop"}
+          </h2>
+          <p>
+            {zh
+              ? "收藏你的桌面伙伴，为它准备不同的场景。从一张照片开始，让每一次陪伴都有自己的模样。"
+              : "Collect your companions and give each one a home. Start with a photo and make every moment together your own."}
+          </p>
         </div>
-        <button
-          type="button"
-          className="desktop-pet-import-package"
-          disabled={busy || !state.petPath}
-          onClick={() =>
-            void run("set_desktop_pet_enabled", { enabled: !state.enabled })
-          }
-        >
-          {state.enabled ? <EyeOff size={16} /> : <Eye size={16} />}
-          {state.enabled ? (zh ? "隐藏" : "Hide") : zh ? "显示" : "Show"}
-        </button>
+        <img src={conceptImage} alt="" aria-hidden />
+      </header>
+      <div className="pet-manager-commandbar">
+        <SegmentedTabs
+          className="pet-manager-tabs"
+          aria-label={zh ? "桌宠管理" : "Pet manager"}
+          value={tab}
+          onValueChange={setTab}
+          items={[
+            {
+              value: "library",
+              label: zh ? "宠物库" : "Library",
+              icon: <PawPrint size={16} />,
+              count: state.pets?.length ?? 0,
+              panelId: "pet-library-panel",
+            },
+            {
+              value: "create",
+              label: zh ? "创建宠物" : "Create",
+              icon: <Plus size={16} />,
+              panelId: "pet-create-panel",
+            },
+            {
+              value: "general",
+              label: zh ? "通用设置" : "General",
+              icon: <Settings2 size={16} />,
+              panelId: "pet-general-panel",
+            },
+          ]}
+        />
+        <div className="pet-manager-current">
+          <span className="desktop-pet-icon">
+            <PawPrint size={20} />
+          </span>
+          <div>
+            <strong>
+              {zh ? "当前桌面" : "On your desktop"} ·{" "}
+              {state.displayName || (zh ? "尚未选择宠物" : "No pet selected")}
+            </strong>
+            <small>
+              {sceneName ||
+                (zh
+                  ? "默认陪伴 · 不更换壁纸"
+                  : "Default companion · wallpaper unchanged")}{" "}
+              · {status}
+            </small>
+          </div>
+          <button
+            type="button"
+            className="desktop-pet-import-package"
+            disabled={busy || !state.petPath}
+            onClick={() =>
+              void run("set_desktop_pet_enabled", { enabled: !state.enabled })
+            }
+          >
+            {state.enabled ? <EyeOff size={16} /> : <Eye size={16} />}
+            {state.enabled ? (zh ? "隐藏" : "Hide") : zh ? "显示" : "Show"}
+          </button>
+        </div>
       </div>
-      <SegmentedTabs
-        aria-label={zh ? "桌宠管理" : "Pet manager"}
-        value={tab}
-        onValueChange={setTab}
-        items={[
-          {
-            value: "library",
-            label: zh ? "宠物库" : "Library",
-            icon: <PawPrint size={16} />,
-            count: state.pets?.length ?? 0,
-            panelId: "pet-library-panel",
-          },
-          {
-            value: "create",
-            label: zh ? "创建宠物" : "Create",
-            icon: <Plus size={16} />,
-            panelId: "pet-create-panel",
-          },
-          {
-            value: "general",
-            label: zh ? "通用设置" : "General",
-            icon: <Settings2 size={16} />,
-            panelId: "pet-general-panel",
-          },
-        ]}
-      />
       {(error || localError) && (
         <p className="desktop-pet-error" role="alert">
           {localError || error}
@@ -178,48 +198,54 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
               </p>
             </div>
           </header>
-          {(
-            [
+          <div className="pet-general-options">
+            {(
               [
-                "alwaysOnTop",
-                zh ? "始终置顶" : "Always on top",
-                state.alwaysOnTop,
-                "set_desktop_pet_always_on_top",
-                { alwaysOnTop: !state.alwaysOnTop },
-              ],
-              [
-                "followWallpaper",
-                zh ? "随配套壁纸切换宠物" : "Follow paired wallpapers",
-                state.followWallpaper,
-                "set_pet_scene_follow_wallpaper",
-                { enabled: !state.followWallpaper },
-              ],
-              [
-                "hideInFullscreen",
-                zh ? "全屏时自动隐藏" : "Hide in fullscreen",
-                preferences.hideInFullscreen,
-                "configure_desktop_pet_preferences",
-                { patch: { hideInFullscreen: !preferences.hideInFullscreen } },
-              ],
-              [
-                "presentationMode",
-                zh ? "演示时暂时隐藏" : "Presentation hide",
-                preferences.presentationMode,
-                "configure_desktop_pet_preferences",
-                { patch: { presentationMode: !preferences.presentationMode } },
-              ],
-            ] as const
-          ).map(([key, label, checked, command, args]) => (
-            <label key={key} className="desktop-pet-preference-row">
-              <span>{label}</span>
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={busy}
-                onChange={() => void run(command, args)}
-              />
-            </label>
-          ))}
+                [
+                  "alwaysOnTop",
+                  zh ? "始终置顶" : "Always on top",
+                  state.alwaysOnTop,
+                  "set_desktop_pet_always_on_top",
+                  { alwaysOnTop: !state.alwaysOnTop },
+                ],
+                [
+                  "followWallpaper",
+                  zh ? "随配套壁纸切换宠物" : "Follow paired wallpapers",
+                  state.followWallpaper,
+                  "set_pet_scene_follow_wallpaper",
+                  { enabled: !state.followWallpaper },
+                ],
+                [
+                  "hideInFullscreen",
+                  zh ? "全屏时自动隐藏" : "Hide in fullscreen",
+                  preferences.hideInFullscreen,
+                  "configure_desktop_pet_preferences",
+                  {
+                    patch: { hideInFullscreen: !preferences.hideInFullscreen },
+                  },
+                ],
+                [
+                  "presentationMode",
+                  zh ? "演示时暂时隐藏" : "Presentation hide",
+                  preferences.presentationMode,
+                  "configure_desktop_pet_preferences",
+                  {
+                    patch: { presentationMode: !preferences.presentationMode },
+                  },
+                ],
+              ] as const
+            ).map(([key, label, checked, command, args]) => (
+              <label key={key} className="desktop-pet-preference-row">
+                <span>{label}</span>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={busy}
+                  onChange={() => void run(command, args)}
+                />
+              </label>
+            ))}
+          </div>
           <p className="desktop-pet-model">
             {zh
               ? "未关联的壁纸保留当前宠物；仅应用宠物会关闭壁纸联动。全屏检测在 macOS 支持前台应用。"

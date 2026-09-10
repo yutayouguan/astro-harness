@@ -8,7 +8,11 @@ test("pet manager separates library creation and global settings using keyboard 
   for (const tab of ["library", "create", "general"])
     assert.ok(panel.includes(`pet-${tab}-panel`));
   assert.match(panel, /<SegmentedTabs/);
-  assert.doesNotMatch(panel, /desktop-pet-hero|conceptImage|desktop-pet-grid/);
+  assert.match(panel, /className="desktop-pet-hero"/);
+  assert.match(panel, /src=\{conceptImage\}/);
+  assert.match(panel, /把熟悉的它，带到桌面上/);
+  assert.match(panel, /pet-manager-commandbar/);
+  assert.doesNotMatch(panel, /desktop-pet-grid/);
   const library = read("../../components/settings/PetLibraryPanel.tsx");
   assert.match(library, /onClick=\{\(\) => setSelected\(item.id\)\}/);
   assert.match(library, /apply_library_pet/);

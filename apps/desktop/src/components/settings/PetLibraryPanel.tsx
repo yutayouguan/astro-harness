@@ -116,6 +116,15 @@ export default function PetLibraryPanel({
       {!pet ? (
         <>
           <header className="pet-library-toolbar">
+            <div className="pet-library-heading">
+              <h3>
+                {zh ? "我的伙伴" : "My companions"}
+                <span>{pets.length}</span>
+              </h3>
+              <p>
+                {zh ? "一只宠物，多个专属场景" : "One companion, many homes"}
+              </p>
+            </div>
             <label className="pet-library-search">
               <Search size={16} aria-hidden />
               <input
@@ -151,7 +160,11 @@ export default function PetLibraryPanel({
           </p>
           <div className="pet-library-grid">
             {filterPets(pets, query, source).map((item) => (
-              <article key={item.id} className="pet-library-card">
+              <article
+                key={item.id}
+                className="pet-library-card"
+                data-current={state.activePetId === item.id}
+              >
                 <button
                   type="button"
                   className="pet-library-open"
@@ -159,28 +172,36 @@ export default function PetLibraryPanel({
                   aria-label={`${zh ? "管理" : "Manage"} ${item.identity.displayName}`}
                 >
                   <PetPortrait pet={item} active={false} />
-                  <strong>
-                    {item.identity.displayName ||
-                      (zh ? "未命名宠物" : "Unnamed pet")}
-                  </strong>
-                  <span>
-                    {item.builtin
-                      ? zh
-                        ? "内置"
-                        : "Built-in"
-                      : zh
-                        ? "自定义"
-                        : "Custom"}{" "}
-                    ·{" "}
-                    {item.identity.spriteVersionNumber === 2
-                      ? zh
-                        ? "动画"
-                        : "Animated"
-                      : zh
-                        ? "静态"
-                        : "Static"}{" "}
-                    · {count(item.id)} {zh ? "个场景" : "scenes"}
-                  </span>
+                  <div className="pet-library-card-copy">
+                    <strong>
+                      {item.identity.displayName ||
+                        (zh ? "未命名宠物" : "Unnamed pet")}
+                    </strong>
+                    <span>
+                      {item.builtin
+                        ? zh
+                          ? "内置"
+                          : "Built-in"
+                        : zh
+                          ? "自定义"
+                          : "Custom"}{" "}
+                      ·{" "}
+                      {item.identity.spriteVersionNumber === 2
+                        ? zh
+                          ? "动画"
+                          : "Animated"
+                        : zh
+                          ? "静态"
+                          : "Static"}{" "}
+                      · {count(item.id)} {zh ? "个场景" : "scenes"}
+                    </span>
+                    <p>
+                      {item.identity.description ||
+                        (zh
+                          ? "为它创建场景，留下你的专属陪伴。"
+                          : "Create a home for your companion.")}
+                    </p>
+                  </div>
                 </button>
                 <div className="pet-library-card-footer">
                   <small>
@@ -202,6 +223,25 @@ export default function PetLibraryPanel({
                 </div>
               </article>
             ))}
+            {!query.trim() && source === "all" && (
+              <button
+                type="button"
+                className="pet-library-add"
+                onClick={onCreate}
+              >
+                <span className="desktop-pet-icon">
+                  <Plus size={22} />
+                </span>
+                <strong>
+                  {zh ? "迎接一位新伙伴" : "Meet your next companion"}
+                </strong>
+                <span>
+                  {zh
+                    ? "从宠物照片生成，或导入动画宠物包"
+                    : "Create from a photo or import an animated pet"}
+                </span>
+              </button>
+            )}
           </div>
           {!filterPets(pets, query, source).length && (
             <p className="pet-library-empty">
@@ -224,7 +264,7 @@ export default function PetLibraryPanel({
           <header className="pet-detail-header">
             <PetPortrait
               pet={pet}
-              active={active && detailTab === "actions"}
+              active={false}
               action={action}
               className="pet-detail-portrait"
             />
@@ -388,51 +428,75 @@ export default function PetLibraryPanel({
             role="tabpanel"
             aria-label={zh ? "动作与偏好" : "Motion & defaults"}
             id="pet-detail-actions"
-            className="prefs-card desktop-pet-card"
+            className="prefs-card desktop-pet-card pet-motion-settings"
           >
-            <div className="pet-scene-actions">
-              {(pet.identity.spriteVersionNumber === 2
-                ? [
-                    "idle",
-                    ...Object.keys(pet.identity.motionClips ?? {}),
-                    ...(pet.identity.groomingPath &&
-                    !pet.identity.motionClips?.grooming
-                      ? ["grooming"]
-                      : []),
-                  ]
-                : []
-              ).map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  aria-pressed={action === name}
-                  onClick={() => setAction(name)}
-                >
-                  {(
-                    {
-                      idle: zh ? "待机 / 眨眼" : "Idle / blink",
-                      kneading: zh ? "踩奶" : "Knead",
-                      grooming: zh ? "舔脚脚" : "Groom",
-                    } as Record<string, string>
-                  )[name] || name}
-                </button>
-              ))}
+            <div className="pet-motion-preview">
+              <PetPortrait
+                pet={pet}
+                active={active && detailTab === "actions"}
+                action={action}
+                className="pet-motion-portrait"
+              />
+              <div className="pet-scene-actions">
+                {(pet.identity.spriteVersionNumber === 2
+                  ? [
+                      "idle",
+                      ...Object.keys(pet.identity.motionClips ?? {}),
+                      ...(pet.identity.groomingPath &&
+                      !pet.identity.motionClips?.grooming
+                        ? ["grooming"]
+                        : []),
+                    ]
+                  : []
+                ).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={action === name}
+                    onClick={() => setAction(name)}
+                  >
+                    {(
+                      {
+                        idle: zh ? "待机 / 眨眼" : "Idle / blink",
+                        kneading: zh ? "踩奶" : "Knead",
+                        grooming: zh ? "舔脚脚" : "Groom",
+                      } as Record<string, string>
+                    )[name] || name}
+                  </button>
+                ))}
+              </div>
             </div>
-            <p className="desktop-pet-model">
-              {zh
-                ? "保存只更新宠物默认配置，不立即改变桌面；未单独配置的场景会继承它。"
-                : "Saving changes defaults only, not the live desktop. Scenes without overrides inherit these values."}
-            </p>
-            <PetPreferencesEditor
-              value={pet.defaults}
-              zh={zh}
-              disabled={disabled}
-              onSave={(defaults) =>
-                run("edit_pet_library", {
-                  request: { action: "set_defaults", petId: pet.id, defaults },
-                })
-              }
-            />
+            <div className="pet-motion-preferences">
+              <header className="desktop-pet-card-head">
+                <div>
+                  <h3>{zh ? "默认陪伴方式" : "Companion defaults"}</h3>
+                  <p>
+                    {zh
+                      ? "大小、位置与日常习惯"
+                      : "Size, placement and daily habits"}
+                  </p>
+                </div>
+              </header>
+              <p className="desktop-pet-model">
+                {zh
+                  ? "保存只更新宠物默认配置，不立即改变桌面；未单独配置的场景会继承它。"
+                  : "Saving changes defaults only, not the live desktop. Scenes without overrides inherit these values."}
+              </p>
+              <PetPreferencesEditor
+                value={pet.defaults}
+                zh={zh}
+                disabled={disabled}
+                onSave={(defaults) =>
+                  run("edit_pet_library", {
+                    request: {
+                      action: "set_defaults",
+                      petId: pet.id,
+                      defaults,
+                    },
+                  })
+                }
+              />
+            </div>
           </div>
         </>
       )}

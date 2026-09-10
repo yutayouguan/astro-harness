@@ -127,8 +127,9 @@ const meta = {
     (Story) => (
       <LocaleProvider>
         <main
+          className="settings-content-inline"
           style={{
-            maxWidth: 1060,
+            maxWidth: 1500,
             height: "100vh",
             boxSizing: "border-box",
             overflow: "auto",
