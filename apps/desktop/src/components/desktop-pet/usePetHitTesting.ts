@@ -38,12 +38,6 @@ export function usePetHitTesting(enabled: boolean, dragging: boolean) {
       },
       hit: (x, y) => {
         if (draggingRef.current || Date.now() < pressedUntil) return true;
-        for (const button of document.querySelectorAll<HTMLElement>(
-          ".desktop-pet-actions button",
-        )) {
-          if (petPixelAt(x, y, button.getBoundingClientRect(), 1, 1))
-            return true;
-        }
         const canvas = document.querySelector<HTMLCanvasElement>(
           ".desktop-pet-character--canvas",
         );

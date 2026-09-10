@@ -87,11 +87,24 @@ test("transparent pet surfaces do not add clipped CSS shadows or backdrop blur",
     assert.match(rule, /filter:\s*none/);
     assert.doesNotMatch(rule, /drop-shadow/);
   }
-  const actions = css.match(/\.desktop-pet-actions\s*\{([^}]+)\}/)?.[1];
-  assert.ok(actions);
-  assert.match(actions, /box-shadow:\s*none/);
-  assert.match(actions, /backdrop-filter:\s*none/);
+  assert.doesNotMatch(css, /\.desktop-pet-actions/);
   assert.match(backend, /\.shadow\(false\)/);
+});
+
+test("pet controls live in the context menu, without an overlay or invisible button targets", async () => {
+  const hitTest = await readFile(
+    new URL(
+      "../../components/desktop-pet/usePetHitTesting.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(surface, /desktop-pet-actions|<button|ExternalLink/);
+  assert.doesNotMatch(hitTest, /desktop-pet-actions|querySelectorAll.*button/);
+  for (const id of ["pet-open-main", "pet-settings", "pet-hide"])
+    assert.ok(surface.includes(`id: "${id}"`));
+  assert.match(surface, /onContextMenu/);
+  assert.match(surface, /onDoubleClick/);
 });
 
 test("static assets do not advertise working animation controls", () => {

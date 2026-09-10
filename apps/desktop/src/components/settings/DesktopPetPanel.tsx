@@ -47,7 +47,7 @@ const COPY = {
     pinHint: "让桌宠保持在其他窗口上方",
     size: "桌宠大小",
     generated: "当前桌宠",
-    generatedHint: "可直接拖动桌宠改变它在屏幕上的位置",
+    generatedHint: "拖动可移动；右键可打开主窗口、进入设置或隐藏桌宠",
     empty: "上传照片后即可生成",
     provider: "生成模型",
     importAnimated: "导入动画桌宠",
@@ -77,7 +77,8 @@ const COPY = {
     pinHint: "Keep the companion above other windows",
     size: "Pet size",
     generated: "Current companion",
-    generatedHint: "Drag the pet directly to move it around your screen",
+    generatedHint:
+      "Drag to move; right-click to open Astro, settings, or hide the pet",
     empty: "Upload a photo to start creating",
     provider: "Generated with",
     importAnimated: "Import animated pet",

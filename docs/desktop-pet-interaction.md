@@ -18,8 +18,9 @@ transaction persists the normalized value. Native, tools and UI share bounds.
 - State refresh compares visibility, physical size and always-on-top before
   changing them. Animation frames never call window `show()` or `set_focus()`.
 - Alpha hit testing uses the rendered canvas (or a bounded static-image buffer).
-  Transparent pixels pass mouse events through; visible pixels and toolbar buttons
-  remain interactive. A serialized 40ms pointer probe can re-enable mouse events
+  Transparent pixels pass mouse events through; only visible pet pixels
+  remain interactive. No overlay toolbar is drawn over the character; open,
+  settings and hide actions live in the right-click menu. A serialized 40ms pointer probe can re-enable mouse events
   after entering an ignored window; pointer-enter events alone cannot do this.
 - Native pointer/hit-test commands reject callers other than `desktop-pet`.
   Cleanup cancels probes and restores input; failed probes fail open. Native input

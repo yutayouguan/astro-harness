@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ExternalLink, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
@@ -62,6 +61,15 @@ export default function DesktopPetSurface() {
       await menuRef.current?.close();
       menuRef.current = await Menu.new({
         items: [
+          {
+            id: "pet-open-main",
+            text: "打开主窗口",
+            action: () => {
+              void invoke("open_desktop_pet_main").catch((e) =>
+                setMenuError(String(e)),
+              );
+            },
+          },
           {
             id: "pet-settings",
             text: "桌宠设置…",
@@ -437,30 +445,6 @@ export default function DesktopPetSurface() {
             <span>🐾</span>
           </div>
         )}
-        <div className="desktop-pet-actions" data-tauri-drag-region="false">
-          <button
-            type="button"
-            aria-label="Open Astro"
-            title="Open Astro"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => void invoke("open_desktop_pet_main")}
-          >
-            <ExternalLink size={14} />
-          </button>
-          <button
-            type="button"
-            aria-label="Hide desktop pet"
-            title="Hide desktop pet"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() =>
-              void mutate("set_desktop_pet_enabled", { enabled: false }).catch(
-                () => {},
-              )
-            }
-          >
-            <X size={14} />
-          </button>
-        </div>
       </div>
     </main>
   );

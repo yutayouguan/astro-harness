@@ -797,8 +797,6 @@ mod tests {
             LogicalSize::new(180.0, 204.0)
         );
         assert!(size.width <= window_size(0.65).width / 2.0);
-        // Two 28px toolbar buttons + gap/padding/border + 12px right inset.
-        assert!(size.width >= 28.0 * 2.0 + 6.0 + 10.0 + 2.0 + 12.0);
     }
 
     #[test]

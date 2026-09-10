@@ -275,54 +275,6 @@ html[data-window-surface="desktop-pet"] #root {
   transform: rotate(-8deg);
 }
 
-.desktop-pet-actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  gap: 6px;
-  padding: 5px;
-  border: 1px solid rgb(255 255 255 / 52%);
-  border-radius: 999px;
-  background: rgb(32 29 43 / 58%);
-  box-shadow: none;
-  backdrop-filter: none;
-  opacity: 0;
-  transform: translateY(-3px) scale(0.96);
-  transition:
-    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.desktop-pet-stage:hover .desktop-pet-actions,
-.desktop-pet-actions:focus-within {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.desktop-pet-actions button {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  color: white;
-  background: rgb(255 255 255 / 12%);
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.desktop-pet-actions button:hover {
-  background: rgb(255 255 255 / 23%);
-}
-
-.desktop-pet-actions button:active {
-  transform: scale(0.94);
-}
-
 .desktop-pet-settings {
   color: var(--color-text);
   display: grid;
@@ -818,7 +770,6 @@ html[data-window-surface="desktop-pet"] #root {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .desktop-pet-actions,
   .desktop-pet-photo-picker,
   .desktop-pet-generate {
     transition-duration: 0.01ms;
@@ -826,7 +777,6 @@ html[data-window-surface="desktop-pet"] #root {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .desktop-pet-actions,
   .desktop-pet-hero,
   .desktop-pet-card {
     backdrop-filter: none;
