@@ -94,7 +94,7 @@ impl PetPreferencesPatch {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PetScenePreferences {
     pub scale: f64,
@@ -112,9 +112,11 @@ impl PetScenePreferences {
     }
     pub fn apply(&self, state: &mut crate::DesktopPetState) {
         let presentation = state.preferences.presentation_mode;
+        let fullscreen = state.preferences.hide_in_fullscreen;
         state.scale = self.scale;
         state.preferences = self.behavior.clone();
         state.preferences.presentation_mode = presentation;
+        state.preferences.hide_in_fullscreen = fullscreen;
     }
     pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(

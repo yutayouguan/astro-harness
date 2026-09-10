@@ -62,8 +62,47 @@ pub(super) fn install_into_state(
     state.source_path = None;
     state.provider = None;
     state.model = None;
+    let previous_builtin_path =
+        types::desktop_pet_root(base).join("builtin-naitang-v1/spritesheet.webp");
+    let existing_id = state
+        .pets
+        .iter()
+        .find(|p| {
+            Some(&p.identity.pet_path) == state.pet_path.as_ref()
+                || Some(p.identity.pet_path.as_str()) == previous_builtin_path.to_str()
+        })
+        .map(|p| p.id.clone())
+        .unwrap_or_else(|| "builtin-naitang".into());
+    state.active_pet_id = Some(existing_id.clone());
+    state.active_scene_id = None;
+    let mut identity = types::pet_scene::PetIdentity::from_state(state)?;
+    types::pet_library::register_identity(state, &mut identity)?;
+    if let Some(record) = state.pets.iter_mut().find(|p| p.id == existing_id) {
+        record.identity = identity;
+        record.builtin = true;
+    }
     state.follow_wallpaper = false;
     state.animation_paused = false;
+    Ok(())
+}
+
+pub(super) fn ensure_library(base: &Path) -> anyhow::Result<()> {
+    if types::read_desktop_pet_state(base)?
+        .pets
+        .iter()
+        .any(|p| p.builtin)
+    {
+        return Ok(());
+    }
+    types::update_desktop_pet_state(base, |state| {
+        if state.pets.iter().any(|p| p.builtin) {
+            return Ok(());
+        }
+        let mut staging = state.clone();
+        install_into_state(base, &mut staging)?;
+        state.pets = staging.pets;
+        Ok(())
+    })?;
     Ok(())
 }
 
@@ -110,6 +149,10 @@ pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
         state.source_path = previous.source_path;
         state.provider = previous.provider;
         state.model = previous.model;
+        let identity = types::pet_scene::PetIdentity::from_state(state)?;
+        if let Some(record) = state.pets.iter_mut().find(|p| p.id == identity.pet_id) {
+            record.identity = identity;
+        }
         for scene in &mut state.scenes {
             if Some(&scene.pet.pet_path) == previous.pet_path.as_ref()
                 && (scene.pet.motion_clips.is_empty()
@@ -127,6 +170,19 @@ pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builtin_library_is_available_without_applying_and_seeds_once() {
+        let root = tempfile::tempdir().unwrap();
+        ensure_library(root.path()).unwrap();
+        let state = types::read_desktop_pet_state(root.path()).unwrap();
+        assert!(!state.enabled && state.pet_path.is_none());
+        assert_eq!(state.pets.len(), 1);
+        assert!(state.pets[0].builtin);
+        assert!(Path::new(&state.pets[0].identity.pet_path).is_file());
+        ensure_library(root.path()).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), state);
+    }
 
     #[test]
     fn builtin_v2_neutral_upgrade_preserves_preferences_and_rejects_modified_art() {

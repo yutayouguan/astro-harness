@@ -12,6 +12,7 @@ const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 test("pet groups retain identity across homes and sort favorites without mutating input", () => {
   const pet = {
+    petId: "pet-one",
     groomingPath: null,
     petPath: "/managed/pet.png",
     sourcePath: null,
@@ -30,8 +31,18 @@ test("pet groups retain identity across homes and sort favorites without mutatin
     inUse: false,
     favorite: false,
   };
-  const b = { ...a, id: "b", name: "Beach", favorite: true };
-  const c = { ...a, id: "c", pet: { ...pet, petPath: "/managed/other.png" } };
+  const b = {
+    ...a,
+    id: "b",
+    name: "Beach",
+    favorite: true,
+    pet: { ...pet, petPath: "/managed/upgraded.png" },
+  };
+  const c = {
+    ...a,
+    id: "c",
+    pet: { ...pet, petId: "pet-two", petPath: "/managed/other.png" },
+  };
   const scenes = [a, b, c];
   const groups = groupPetScenes(scenes);
   assert.equal(groups.length, 2);

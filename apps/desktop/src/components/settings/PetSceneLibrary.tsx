@@ -1,32 +1,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
-import {
-  Download,
-  Images,
-  PawPrint,
-  RefreshCw,
-  Star,
-  Upload,
-} from "lucide-react";
-import { useReducedMotion } from "framer-motion";
-import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
+import { Star } from "lucide-react";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
-import { groupPetScenes, type PetScene } from "../../lib/ui/petScene";
-import type { DesktopPetState } from "../../lib/ui/desktopPetState";
+import { scenesForPet, type PetRecord } from "../../lib/ui/petLibrary";
+import type { PetScene } from "../../lib/ui/petScene";
+import {
+  petScalePercent,
+  type DesktopPetState,
+} from "../../lib/ui/desktopPetState";
 import {
   normalizeWallpaperPrefs,
   WALLPAPER_STORAGE_KEY,
   type WallpaperAsset,
 } from "../../lib/ui/wallpaper";
+import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
+import PetPreferencesEditor from "./PetPreferencesEditor";
+import PetMoreMenu from "./PetMoreMenu";
 
 export default function PetSceneLibrary({
   state,
   mutate,
   busy,
   zh,
-  name,
-  description,
-  includePet,
+  pet,
+  active,
 }: {
   state: DesktopPetState;
   mutate: (
@@ -35,44 +32,39 @@ export default function PetSceneLibrary({
   ) => Promise<DesktopPetState>;
   busy: boolean;
   zh: boolean;
-  name: string;
-  description: string;
-  includePet: boolean;
+  pet: PetRecord;
+  active: boolean;
 }) {
   const [scenes, setScenes] = useState<PetScene[]>([]);
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [recent, setRecent] = useState<WallpaperAsset[]>([]);
-  const [editor, setEditor] = useState<{
-    action: "rename" | "rename_pet" | "duplicate";
-    sceneId: string;
-    name: string;
-  } | null>(null);
+  const [working, setWorking] = useState(false),
+    lock = useRef(false);
+  const [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [name, setName] = useState(""),
+    [description, setDescription] = useState("");
+  const [includePet, setIncludePet] = useState(false);
   const [deleting, setDeleting] = useState<PetScene | null>(null);
   const [generation, setGeneration] = useState<string | null>(null);
-  const workingRef = useRef(false);
-  const reduced = useReducedMotion();
+  const [recent, setRecent] = useState<WallpaperAsset[]>([]);
   const disabled = busy || working;
-  const groups = groupPetScenes(scenes);
   useEffect(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    let cancelled = false;
+    if (!active || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
     void invoke<PetScene[]>("get_pet_scenes")
       .then((next) => {
-        if (!cancelled) setScenes(next);
+        if (!disposed) setScenes(next);
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e));
+        if (!disposed) setError(String(e));
       });
     return () => {
-      cancelled = true;
+      disposed = true;
     };
-  }, [state.revision]);
-
+  }, [state.revision, active]);
   async function run(operation: () => Promise<unknown>) {
-    if (busy || workingRef.current) return;
-    workingRef.current = true;
+    if (busy || lock.current) return;
+    lock.current = true;
     setWorking(true);
     setError("");
     setNotice("");
@@ -81,16 +73,15 @@ export default function PetSceneLibrary({
     } catch (e) {
       setError(String(e));
     } finally {
-      workingRef.current = false;
+      lock.current = false;
       setWorking(false);
     }
   }
-  function edit(request: Record<string, unknown>) {
-    return mutate("edit_pet_scene", { request });
-  }
+  const edit = (request: Record<string, unknown>) =>
+    mutate("edit_pet_scene", { request });
   async function bind(sceneId: string) {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const path = await open({
+    const sourcePath = await open({
       multiple: false,
       directory: false,
       filters: [
@@ -100,15 +91,15 @@ export default function PetSceneLibrary({
         },
       ],
     });
-    if (typeof path === "string")
-      await mutate("bind_pet_scene_wallpaper", { sceneId, sourcePath: path });
+    if (typeof sourcePath === "string")
+      await mutate("bind_pet_scene_wallpaper", { sceneId, sourcePath });
   }
   async function exportScene(sceneId: string) {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const destination = await open({
       directory: true,
       multiple: false,
-      title: zh ? "选择导出文件夹" : "Choose export folder",
+      title: zh ? "选择导出文件夹" : "Export folder",
     });
     if (typeof destination === "string") {
       const path = await invoke<string>("export_pet_scene", {
@@ -116,10 +107,23 @@ export default function PetSceneLibrary({
         destination,
       });
       setNotice(
-        (zh
-          ? "已导出（不含原始照片）："
-          : "Exported without the source photo: ") + path,
+        (zh ? "已导出，不含原始照片：" : "Exported without source photo: ") +
+          path,
       );
+    }
+  }
+  async function generate(sceneId: string) {
+    const requestId = crypto.randomUUID();
+    setGeneration(requestId);
+    try {
+      await mutate("generate_pet_scene_wallpaper", {
+        sceneId,
+        requestId,
+        description: description.trim(),
+        includePet,
+      });
+    } finally {
+      setGeneration(null);
     }
   }
   function loadRecent() {
@@ -133,85 +137,24 @@ export default function PetSceneLibrary({
       setRecent([]);
     }
   }
-  async function generateWallpaper(sceneId: string) {
-    const requestId = crypto.randomUUID();
-    setGeneration(requestId);
-    try {
-      await mutate("generate_pet_scene_wallpaper", {
-        sceneId,
-        requestId,
-        description:
-          description.trim() ||
-          (zh ? "温暖安静的森林小屋" : "A warm peaceful woodland home"),
-        includePet,
-      });
-    } finally {
-      setGeneration(null);
-    }
-  }
-
+  const selected = scenes.find((s) => s.id === editing);
   return (
-    <section className="prefs-card pet-scene-library" aria-busy={disabled}>
-      <header className="desktop-pet-card-head">
-        <Images size={20} aria-hidden />
-        <div>
-          <h3>{zh ? "我的宠物 · 它的场景" : "My pets · their scenes"}</h3>
-          <p>
-            {zh
-              ? "给同一只宠物换一个家。新增场景复用形象，切换不消耗生成额度。"
-              : "Give your pet another home. New scenes reuse its identity; switching is free."}
-          </p>
-        </div>
-      </header>
-      <label className="desktop-pet-toggle-row">
-        <span>
-          <strong>{zh ? "随壁纸切换桌宠" : "Follow wallpaper"}</strong>
-          <small>
-            {zh
-              ? "未绑定的壁纸保留当前桌宠；仅桌宠操作会关闭联动。"
-              : "Unpaired wallpapers keep your pet. Pet-only applies disable linking."}
-          </small>
-        </span>
-        <input
-          type="checkbox"
-          checked={state.followWallpaper}
-          disabled={disabled}
-          onChange={(e) => {
-            const enabled = e.currentTarget.checked;
-            void run(() =>
-              mutate("set_pet_scene_follow_wallpaper", { enabled }),
-            );
-          }}
-        />
-      </label>
-      <button
-        type="button"
-        className="desktop-pet-import-package"
-        disabled={disabled || !state.petPath}
-        onClick={() =>
-          void run(() =>
-            mutate("create_pet_scene", {
-              name: name.trim() || (zh ? "我的宠物场景" : "My companion scene"),
-              description: null,
-              useCurrent: true,
-              requestId: crypto.randomUUID(),
-              petName: null,
-            }),
-          )
-        }
-      >
-        <PawPrint size={16} />
-        {zh ? "收藏当前桌宠" : "Save current pet"}
-      </button>
+    <section className="pet-scenes" aria-busy={working}>
+      {error && (
+        <p role="alert" className="desktop-pet-error">
+          {error}
+        </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
       {working && (
         <p role="status">
           {generation
             ? zh
-              ? "正在生成配套壁纸…"
+              ? "正在生成壁纸…"
               : "Generating wallpaper…"
             : zh
-              ? "正在处理场景…"
-              : "Updating scene…"}
+              ? "正在保存…"
+              : "Saving…"}
         </p>
       )}
       {generation && (
@@ -222,8 +165,8 @@ export default function PetSceneLibrary({
               .then(() =>
                 setNotice(
                   zh
-                    ? "已请求取消，远端请求可能仍计费。"
-                    : "Cancellation requested; submitted requests may still be billed.",
+                    ? "已请求取消，已发送请求仍可能计费。"
+                    : "Cancellation requested; submitted work may still be billed.",
                 ),
               )
               .catch((e) => setError(String(e)))
@@ -232,72 +175,12 @@ export default function PetSceneLibrary({
           {zh ? "取消生成" : "Cancel generation"}
         </button>
       )}
-      {error && (
-        <p className="desktop-pet-error" role="alert">
-          {error}
-        </p>
-      )}
-      {notice && <p role="status">{notice}</p>}
-      {editor && (
-        <form
-          className="pet-scene-editor"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const request = editor;
-            void run(async () => {
-              await edit(request);
-              setEditor(null);
-            });
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setEditor(null);
-          }}
-        >
-          <label>
-            {editor.action === "rename_pet"
-              ? zh
-                ? "宠物名字（所有场景同步）"
-                : "Pet name (all scenes)"
-              : editor.action === "duplicate"
-                ? zh
-                  ? "新场景名称（复用这只宠物）"
-                  : "New scene (same pet)"
-                : zh
-                  ? "场景名称"
-                  : "Scene name"}
-            <input
-              autoFocus
-              value={editor.name}
-              maxLength={80}
-              disabled={disabled}
-              onChange={(e) =>
-                setEditor({ ...editor, name: e.currentTarget.value })
-              }
-            />
-          </label>
-          <button type="submit" disabled={disabled || !editor.name.trim()}>
-            {zh ? "保存" : "Save"}
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setEditor(null)}
-          >
-            {zh ? "取消" : "Cancel"}
-          </button>
-        </form>
-      )}
       {deleting && (
         <div className="pet-scene-editor" role="alert">
           <p>
-            {deleting.inUse
-              ? zh
-                ? "这个场景的桌宠或壁纸正在使用。移出收藏后，当前画面和素材文件仍会保留。"
-                : "This pet or wallpaper is in use. Removing the scene keeps the current visuals and asset files."
-              : zh
-                ? "将这个场景移出收藏？素材文件会保留。"
-                : "Remove this scene from the library? Asset files are kept."}{" "}
-            — {deleting.name}
+            {zh
+              ? `移除「${deleting.name}」？只移除此场景，宠物、当前画面和素材文件保留。`
+              : "Remove only this scene? The pet, active visuals and files are retained."}
           </p>
           <button
             type="button"
@@ -315,255 +198,358 @@ export default function PetSceneLibrary({
           >
             {zh ? "确认移除" : "Remove scene"}
           </button>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setDeleting(null)}
-          >
+          <button type="button" onClick={() => setDeleting(null)}>
             {zh ? "取消" : "Cancel"}
           </button>
         </div>
       )}
-      {groups.map((group) => (
-        <section className="pet-identity-group" key={group.petPath}>
-          <header className="pet-identity-header">
+      {selected && (
+        <section className="prefs-card desktop-pet-card pet-scene-detail">
+          <header className="pet-library-toolbar">
             <h4>
-              {group.name || (zh ? "未命名宠物" : "Unnamed pet")}{" "}
-              <small>
-                {group.scenes.length} {zh ? "个场景" : "scenes"}
-              </small>
+              {zh ? "编辑场景" : "Edit scene"} · {selected.name}
             </h4>
             <button
               type="button"
-              disabled={disabled}
-              onClick={() =>
-                setEditor({
-                  action: "rename_pet",
-                  sceneId: group.scenes[0].id,
-                  name: group.name || "",
-                })
-              }
+              disabled={working}
+              onClick={() => setEditing(null)}
             >
-              {zh ? "给宠物改名" : "Rename pet"}
+              {zh ? "收起" : "Close"}
             </button>
+          </header>
+          <form
+            className="pet-scene-editor"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(() =>
+                edit({ action: "rename", sceneId: selected.id, name }),
+              );
+            }}
+          >
+            <label>
+              {zh ? "场景名称" : "Scene name"}
+              <input
+                value={name}
+                maxLength={80}
+                disabled={disabled}
+                onChange={(e) => setName(e.currentTarget.value)}
+              />
+            </label>
+            <button type="submit" disabled={disabled || !name.trim()}>
+              {zh ? "保存名称" : "Save name"}
+            </button>
+          </form>
+          <div className="pet-scene-actions">
             <button
               type="button"
               disabled={disabled}
+              onClick={() => void run(() => bind(selected.id))}
+            >
+              {zh ? "从文件关联壁纸" : "Attach wallpaper file"}
+            </button>
+            <select
+              aria-label={zh ? "最近使用的壁纸" : "Recent wallpapers"}
+              value=""
+              disabled={disabled}
+              onFocus={loadRecent}
+              onChange={(e) => {
+                const sourcePath = e.currentTarget.value;
+                if (sourcePath)
+                  void run(() =>
+                    mutate("bind_pet_scene_wallpaper", {
+                      sceneId: selected.id,
+                      sourcePath,
+                    }),
+                  );
+              }}
+            >
+              <option value="">
+                {zh ? "最近使用的壁纸…" : "Recent wallpapers…"}
+              </option>
+              {recent.map((asset) => (
+                <option key={asset.id} value={asset.path}>
+                  {asset.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="desktop-pet-field">
+            <span>{zh ? "AI 壁纸描述" : "AI wallpaper description"}</span>
+            <textarea
+              value={description}
+              maxLength={2000}
+              disabled={disabled}
+              placeholder={
+                zh ? "例如：温暖安静的森林小屋" : "A peaceful woodland home"
+              }
+              onChange={(e) => setDescription(e.currentTarget.value)}
+            />
+          </label>
+          <label className="desktop-pet-preference-row">
+            <span>
+              {zh
+                ? "壁纸中也画出宠物（默认只生成环境）"
+                : "Include pet portrait (environment only by default)"}
+            </span>
+            <input
+              type="checkbox"
+              checked={includePet}
+              disabled={disabled}
+              onChange={(e) => setIncludePet(e.currentTarget.checked)}
+            />
+          </label>
+          <div className="pet-scene-actions">
+            <button
+              type="button"
+              disabled={disabled || !description.trim()}
+              onClick={() => void run(() => generate(selected.id))}
+            >
+              {zh ? "生成 / 重试壁纸" : "Generate / retry wallpaper"}
+            </button>
+          </div>
+          <p className="desktop-pet-model">
+            {zh
+              ? "调用一次图片模型；只用于 Astro 背景，不更改系统壁纸。"
+              : "One image request. Astro background only, not system wallpaper."}
+          </p>
+          <label className="desktop-pet-preference-row">
+            <span>
+              {zh ? "本场景自定义配置" : "Override pet defaults for this scene"}
+            </span>
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={!!selected.preferences}
+              onChange={(e) => {
+                const preferences = e.currentTarget.checked
+                  ? pet.defaults
+                  : null;
+                void run(() =>
+                  edit({
+                    action: "set_preferences",
+                    sceneId: selected.id,
+                    preferences,
+                  }),
+                );
+              }}
+            />
+          </label>
+          {selected.preferences ? (
+            <PetPreferencesEditor
+              value={selected.preferences}
+              zh={zh}
+              disabled={disabled}
+              onSave={(preferences) =>
+                run(() =>
+                  edit({
+                    action: "set_preferences",
+                    sceneId: selected.id,
+                    preferences,
+                  }),
+                )
+              }
+            />
+          ) : (
+            <p className="desktop-pet-model">
+              {zh
+                ? "继承宠物默认配置。修改宠物默认值后，本场景会同步使用新值。"
+                : "Inherits the pet defaults, including future changes."}
+            </p>
+          )}
+          <div className="pet-scene-actions">
+            <button
+              type="button"
+              disabled={disabled || state.activePetId !== pet.id}
               onClick={() =>
-                setEditor({
-                  action: "duplicate",
-                  sceneId: group.scenes[0].id,
-                  name: "",
-                })
+                void run(() =>
+                  edit({ action: "capture_preferences", sceneId: selected.id }),
+                )
               }
             >
-              {zh ? "＋ 新增它的场景" : "+ Add a home"}
+              {zh
+                ? "将桌面当前大小与位置保存到此场景"
+                : "Capture live size and placement"}
             </button>
-          </header>
-          <div className="pet-scene-list">
-            {group.scenes.map((scene) => (
-              <article key={scene.id} className="pet-scene-card">
-                <div className="pet-scene-preview">
-                  {scene.wallpaperPath && (
-                    <img
-                      className="pet-scene-wallpaper"
-                      src={resolveMediaSrc(scene.wallpaperPath) || undefined}
-                      alt=""
-                    />
-                  )}
-                  {scene.pet.spriteVersionNumber === 2 ? (
-                    <DesktopPetCanvas
-                      src={resolveMediaSrc(scene.pet.petPath) || ""}
-                      state="idle"
-                      className="pet-scene-pet"
-                      label={scene.name}
-                      reducedMotion={Boolean(reduced)}
-                    />
-                  ) : (
-                    <img
-                      className="pet-scene-pet"
-                      src={resolveMediaSrc(scene.pet.petPath) || undefined}
-                      alt={scene.name}
-                    />
-                  )}
-                </div>
-                <h4>
-                  {scene.name}{" "}
-                  {scene.inUse && (
-                    <span className="pet-scene-active">
-                      {zh ? "使用中" : "In use"}
-                    </span>
-                  )}
-                </h4>
-                <p>
-                  {scene.wallpaperPath
-                    ? zh
-                      ? "桌宠 + 配套壁纸"
-                      : "Pet + wallpaper"
-                    : zh
-                      ? "桌宠已保存，可补生成或关联壁纸"
-                      : "Pet saved. Generate or attach a wallpaper."}
-                </p>
-                {scene.pet.provider && (
-                  <p>
-                    {scene.pet.provider} · {scene.pet.model}
-                  </p>
-                )}
-                <div className="pet-scene-actions">
-                  {(["all", "pet", "wallpaper"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      disabled={
-                        disabled || (mode !== "pet" && !scene.wallpaperPath)
-                      }
-                      onClick={() =>
-                        void run(() =>
-                          mutate("apply_pet_scene", {
-                            sceneId: scene.id,
-                            mode,
-                          }),
-                        )
-                      }
-                    >
-                      {zh
-                        ? {
-                            all: "应用整套",
-                            pet: "仅桌宠",
-                            wallpaper: "仅壁纸",
-                          }[mode]
-                        : {
-                            all: "Apply both",
-                            pet: "Pet only",
-                            wallpaper: "Wallpaper only",
-                          }[mode]}
-                    </button>
-                  ))}
-                </div>
-                <div className="pet-scene-actions">
-                  <select
-                    aria-label={
-                      zh ? "选择最近使用的壁纸" : "Choose recent wallpaper"
-                    }
-                    value=""
-                    disabled={disabled}
-                    onFocus={loadRecent}
-                    onChange={(e) => {
-                      const sourcePath = e.currentTarget.value;
-                      if (sourcePath)
-                        void run(() =>
-                          mutate("bind_pet_scene_wallpaper", {
-                            sceneId: scene.id,
-                            sourcePath,
-                          }),
-                        );
-                    }}
-                  >
-                    <option value="">
-                      {zh ? "最近使用的壁纸…" : "Recent wallpapers…"}
-                    </option>
-                    {recent.map((asset) => (
-                      <option key={asset.id} value={asset.path}>
-                        {asset.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => void run(() => bind(scene.id))}
-                  >
-                    <Upload size={14} />
-                    {zh ? "关联壁纸" : "Attach wallpaper"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => void run(() => generateWallpaper(scene.id))}
-                  >
-                    <RefreshCw size={14} />
-                    {zh ? "生成 / 重试壁纸" : "Generate / retry wallpaper"}
-                  </button>
-                </div>
-                <div className="pet-scene-actions">
-                  <button
-                    type="button"
-                    aria-pressed={scene.favorite}
-                    disabled={disabled}
-                    onClick={() =>
-                      void run(() =>
-                        edit({
-                          action: "favorite",
-                          sceneId: scene.id,
-                          favorite: !scene.favorite,
-                        }),
-                      )
-                    }
-                  >
-                    <Star
-                      size={14}
-                      fill={scene.favorite ? "currentColor" : "none"}
-                    />
-                    {zh ? "收藏" : "Favorite"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() =>
-                      setEditor({
-                        action: "rename",
-                        sceneId: scene.id,
-                        name: scene.name,
-                      })
-                    }
-                  >
-                    {zh ? "改名" : "Rename"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => void run(() => exportScene(scene.id))}
-                  >
-                    <Download size={14} />
-                    {zh ? "导出" : "Export"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled || state.petPath !== scene.pet.petPath}
-                    title={
-                      zh
-                        ? "保存当前大小、位置和安静偏好到此场景"
-                        : "Save current size, placement and behavior to this scene"
-                    }
-                    onClick={() =>
-                      void run(() =>
-                        edit({
-                          action: "capture_preferences",
-                          sceneId: scene.id,
-                        }),
-                      )
-                    }
-                  >
-                    {zh ? "保存当前偏好" : "Save current preferences"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => setDeleting(scene)}
-                  >
-                    {zh ? "移除" : "Remove"}
-                  </button>
-                </div>
-              </article>
-            ))}
           </div>
         </section>
-      ))}
-      {!scenes.length && (
-        <p>
+      )}
+      <div className="pet-scene-list">
+        {scenesForPet(scenes, pet.id).map((scene) => (
+          <article key={scene.id} className="pet-scene-card">
+            <div className="pet-scene-preview">
+              {scene.wallpaperPath && (
+                <img
+                  className="pet-scene-wallpaper"
+                  src={resolveMediaSrc(scene.wallpaperPath) || undefined}
+                  alt=""
+                />
+              )}
+              {scene.pet.spriteVersionNumber === 2 ? (
+                <DesktopPetCanvas
+                  src={resolveMediaSrc(scene.pet.petPath) || ""}
+                  state="idle"
+                  reducedMotion
+                  className="pet-scene-pet"
+                  label={scene.name}
+                />
+              ) : (
+                <img
+                  className="pet-scene-pet"
+                  src={resolveMediaSrc(scene.pet.petPath) || undefined}
+                  alt={scene.name}
+                />
+              )}
+            </div>
+            <h4>
+              {scene.name}{" "}
+              {state.activeSceneId === scene.id && (
+                <span className="pet-scene-active">
+                  {zh ? "当前配置" : "Applied configuration"}
+                </span>
+              )}
+            </h4>
+            <p>
+              {scene.wallpaperPath
+                ? zh
+                  ? "桌宠 + 配套壁纸"
+                  : "Pet + wallpaper"
+                : zh
+                  ? "不更换壁纸"
+                  : "Wallpaper unchanged"}{" "}
+              ·{" "}
+              {scene.preferences
+                ? zh
+                  ? "场景自定义"
+                  : "Scene overrides"
+                : zh
+                  ? "继承默认"
+                  : "Inherits defaults"}
+            </p>
+            <p>
+              {petScalePercent((scene.preferences ?? pet.defaults).scale)}% ·{" "}
+              {(scene.preferences ?? pet.defaults).behavior.quietMode
+                ? zh
+                  ? "安静模式"
+                  : "Quiet"
+                : zh
+                  ? "自动活动"
+                  : "Active"}
+            </p>
+            <div className="pet-scene-card-footer">
+              <button
+                type="button"
+                className="desktop-pet-import-package"
+                disabled={disabled}
+                onClick={() =>
+                  void run(() =>
+                    mutate("apply_pet_scene", {
+                      sceneId: scene.id,
+                      mode: scene.wallpaperPath ? "all" : "pet",
+                    }),
+                  )
+                }
+              >
+                {zh ? "应用整套" : "Apply scene"}
+              </button>
+              <button
+                type="button"
+                aria-label={zh ? "收藏场景" : "Favorite scene"}
+                aria-pressed={scene.favorite}
+                disabled={disabled}
+                onClick={() =>
+                  void run(() =>
+                    edit({
+                      action: "favorite",
+                      sceneId: scene.id,
+                      favorite: !scene.favorite,
+                    }),
+                  )
+                }
+              >
+                <Star
+                  size={16}
+                  fill={scene.favorite ? "currentColor" : "none"}
+                />
+              </button>
+              <PetMoreMenu label={zh ? "场景更多操作" : "More scene actions"}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    setEditing(scene.id);
+                    setName(scene.name);
+                  }}
+                >
+                  {zh ? "编辑场景" : "Edit scene"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() =>
+                    void run(() =>
+                      mutate("apply_pet_scene", {
+                        sceneId: scene.id,
+                        mode: "pet",
+                      }),
+                    )
+                  }
+                >
+                  {zh ? "仅换宠物" : "Pet only"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || !scene.wallpaperPath}
+                  onClick={() =>
+                    void run(() =>
+                      mutate("apply_pet_scene", {
+                        sceneId: scene.id,
+                        mode: "wallpaper",
+                      }),
+                    )
+                  }
+                >
+                  {zh ? "仅换壁纸" : "Wallpaper only"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() =>
+                    void run(() =>
+                      edit({
+                        action: "duplicate",
+                        sceneId: scene.id,
+                        name:
+                          scene.name.slice(0, 65) + (zh ? " 副本" : " copy"),
+                      }),
+                    )
+                  }
+                >
+                  {zh ? "复制场景" : "Duplicate scene"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => void run(() => exportScene(scene.id))}
+                >
+                  {zh ? "导出场景包" : "Export scene"}
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setDeleting(scene)}
+                >
+                  {zh ? "移除场景…" : "Remove scene…"}
+                </button>
+              </PetMoreMenu>
+            </div>
+          </article>
+        ))}
+      </div>
+      {!scenesForPet(scenes, pet.id).length && (
+        <p className="pet-library-empty">
           {zh
-            ? "生成新桌宠或收藏当前桌宠后，它和它的场景会出现在这里。"
-            : "Generate or save a pet to start its scene collection."}
+            ? "这只宠物还没有场景。可直接应用宠物默认配置，或点击「新增场景」为它准备一个家。"
+            : "No scenes yet. Apply the pet defaults or add its first home."}
         </p>
       )}
     </section>

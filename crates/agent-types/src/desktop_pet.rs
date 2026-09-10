@@ -49,6 +49,11 @@ pub struct DesktopPetState {
     pub enabled: bool,
     pub source_path: Option<String>,
     pub pet_path: Option<String>,
+    pub active_pet_id: Option<String>,
+    pub active_scene_id: Option<String>,
+    pub pets: Vec<crate::pet_library::PetRecord>,
+    #[serde(default)]
+    pub library_version: u32,
     pub grooming_path: Option<String>,
     pub motion_clips: crate::pet_motion::PetMotionClips,
     pub scale: f64,
@@ -77,6 +82,10 @@ impl Default for DesktopPetState {
             enabled: false,
             source_path: None,
             pet_path: None,
+            active_pet_id: None,
+            active_scene_id: None,
+            pets: Vec::new(),
+            library_version: 1,
             grooming_path: None,
             motion_clips: Default::default(),
             scale: DESKTOP_PET_DEFAULT_SCALE,
@@ -147,6 +156,7 @@ pub fn update_desktop_pet_state(
             .checked_add(1)
             .ok_or_else(|| anyhow::anyhow!("桌宠状态版本已耗尽"))?;
         update(&mut state)?;
+        crate::pet_library::reconcile(&mut state)?;
         state.revision = revision;
         validate_state(&state)?;
         write_desktop_pet_state_unlocked(base, &state)?;
@@ -168,6 +178,20 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
     } else if state.scale > DESKTOP_PET_MAX_SCALE && state.scale <= 1.35 {
         state.scale = DESKTOP_PET_MAX_SCALE;
     }
+    if state.library_version == 0 {
+        crate::pet_library::reconcile(&mut state)?;
+        validate_state(&state)?;
+        let backup = desktop_pet_root(base).join("state.before-pet-library.json");
+        if !backup.try_exists()? {
+            crate::pet_scene::atomic_write(&backup, &bytes)?;
+        }
+        state.library_version = 1;
+        state.revision = state
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("桌宠状态版本已耗尽"))?;
+        write_desktop_pet_state_unlocked(base, &state)?;
+    }
     validate_state(&state)?;
     if let Some(style) = state.pending_scene_style.as_ref() {
         crate::pet_scene::publish_style(base, style)?;
@@ -178,6 +202,7 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    crate::pet_library::validate(state)?;
     state.preferences.validate()?;
     crate::pet_motion::validate_motion_clips(&state.motion_clips)?;
     anyhow::ensure!(
@@ -261,7 +286,7 @@ mod tests {
     #[test]
     fn state_round_trips_with_camel_case_contract() {
         let temp = tempfile::tempdir().unwrap();
-        let state = DesktopPetState {
+        let mut state = DesktopPetState {
             enabled: true,
             pet_path: Some("/tmp/pet.png".into()),
             scale: 0.5,
@@ -269,6 +294,7 @@ mod tests {
             updated_at: "now".into(),
             ..DesktopPetState::default()
         };
+        crate::pet_library::reconcile(&mut state).unwrap();
         write_desktop_pet_state(temp.path(), &state).unwrap();
         let loaded = read_desktop_pet_state(temp.path()).unwrap();
         assert_eq!(loaded.revision, 1);
@@ -352,13 +378,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_state_loads_at_revision_zero_and_corruption_is_not_overwritten() {
+    fn legacy_state_migrates_once_and_corruption_is_not_overwritten() {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir_all(desktop_pet_root(temp.path())).unwrap();
         let path = desktop_pet_state_path(temp.path());
         fs::write(&path, br#"{"scale":1.0}"#).unwrap();
         assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.4);
-        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 0);
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 1);
         fs::write(&path, br#"{"scale":0.65}"#).unwrap();
         assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.6);
         fs::write(&path, br#"{"scale":0.4}"#).unwrap();

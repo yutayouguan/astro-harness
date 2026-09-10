@@ -1,144 +1,24 @@
-import {
-  Eye,
-  EyeOff,
-  FolderInput,
-  ImagePlus,
-  Loader2,
-  PawPrint,
-  Pin,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { Eye, EyeOff, PawPrint, Plus, Settings2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDesktopPetState } from "../../hooks/app/useDesktopPetState";
-import { useReducedMotion } from "framer-motion";
-
-import conceptImage from "../../assets/generated/desktop-pet-concept.png";
-import builtinPetAtlas from "../../assets/pets/naitang/spritesheet.webp";
-import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
-import PetSceneLibrary from "./PetSceneLibrary";
 import { useI18n } from "../../i18n/LocaleContext";
-import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
-import {
-  DEFAULT_PET_PREFERENCES,
-  type PetPreferences,
-} from "../../lib/ui/petPreferences";
-import {
-  DESKTOP_PET_SCALE,
-  petScalePercent,
-} from "../../lib/ui/desktopPetState";
-
+import { DEFAULT_PET_PREFERENCES } from "../../lib/ui/petPreferences";
+import { SegmentedTabs } from "../ui/SegmentedTabs";
+import PetCreatePanel from "./PetCreatePanel";
+import PetLibraryPanel from "./PetLibraryPanel";
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
-const COPY = {
-  zh: {
-    eyebrow: "ASTRO DESKTOP COMPANION",
-    title: "把熟悉的它，带到桌面上",
-    subtitle:
-      "上传一张清晰的宠物照片，使用当前图片模型生成保留外貌特征的专属桌宠。点击生成时，照片会发送给你选择的图片 Provider；本地副本与结果保存在本机。",
-    source: "宠物照片",
-    sourceHint: "建议使用正面、光线均匀、主体完整的照片",
-    upload: "选择照片",
-    replace: "更换照片",
-    create: "生成静态形象",
-    creating: "正在生成桌宠…",
-    style: "希望它呈现什么感觉？",
-    stylePlaceholder: "例如：圆润 Q 版、温柔安静、保留蓝色项圈",
-    show: "显示桌宠",
-    showHint: "在桌面上打开独立透明悬浮窗口",
-    pin: "始终置顶",
-    pinHint: "让桌宠保持在其他窗口上方",
-    size: "桌宠大小",
-    generated: "当前桌宠",
-    generatedHint: "拖动可移动；右键可打开主窗口、进入设置或隐藏桌宠",
-    empty: "上传照片后即可生成",
-    provider: "生成模型",
-    importAnimated: "导入动画桌宠",
-    importAnimatedHint: "选择 Astro 动画宠物包中的 pet.json，也支持 v2 图集",
-    animatedBadge: "动画 v2",
-    staticHint:
-      "当前照片生成不包含动画帧。可使用内置奶糖，或导入含独立动作片段的动画宠物包。",
-    staticBadge: "静态图片",
-  },
-  en: {
-    eyebrow: "ASTRO DESKTOP COMPANION",
-    title: "Bring a familiar friend to your desktop",
-    subtitle:
-      "Upload a clear pet photo and use your active image model to create a personal desktop companion. When you generate, the photo is sent to your selected image provider; the local copy and result stay on this device.",
-    source: "Pet photo",
-    sourceHint: "Use a well-lit photo with the full subject clearly visible",
-    upload: "Choose photo",
-    replace: "Replace photo",
-    create: "Create static portrait",
-    creating: "Creating your pet…",
-    style: "How should your companion feel?",
-    stylePlaceholder:
-      "For example: soft chibi style, calm expression, keep the blue collar",
-    show: "Show desktop pet",
-    showHint: "Open it in a separate transparent floating window",
-    pin: "Always on top",
-    pinHint: "Keep the companion above other windows",
-    size: "Pet size",
-    generated: "Current companion",
-    generatedHint:
-      "Drag to move; right-click to open Astro, settings, or hide the pet",
-    empty: "Upload a photo to start creating",
-    provider: "Generated with",
-    importAnimated: "Import animated pet",
-    importAnimatedHint:
-      "Choose pet.json from an Astro animation package; v2 atlases are also supported",
-    animatedBadge: "Animated v2",
-    staticHint:
-      "Photo generation produces a static portrait. Use built-in Naitang or import an animation package with independent motion clips.",
-    staticBadge: "Static image",
-  },
-} as const;
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export default function DesktopPetPanel({ active }: { active: boolean }) {
-  const { locale } = useI18n();
-  const copy = COPY[locale];
-  const reducedMotion = useReducedMotion();
-  const {
-    state,
-    loading,
-    pending,
-    error: stateError,
-    mutate,
-    clearError,
-  } = useDesktopPetState(active);
-  const [description, setDescription] = useState("");
-  const [sceneName, setSceneName] = useState("");
-  const [petName, setPetName] = useState("");
-  const generationId = useRef<string | null>(null);
-  const generationCancelled = useRef(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [withWallpaper, setWithWallpaper] = useState(false);
-  const [sceneDescription, setSceneDescription] = useState("");
-  const [includePet, setIncludePet] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [previewAction, setPreviewAction] = useState<
-    "idle" | "kneading" | "grooming"
-  >("idle");
-  useEffect(() => {
-    setPreviewAction("idle");
-  }, [state.petPath, state.groomingPath]);
-  const zh = locale === "zh";
-  const [phase, setPhase] = useState<
-    "upload" | "generate" | "wallpaper" | null
-  >(null);
+  const { locale } = useI18n(),
+    zh = locale === "zh";
+  const { state, loading, pending, error, mutate } = useDesktopPetState(active);
+  const [tab, setTab] = useState("library");
+  const [visible, setVisible] = useState<boolean | null>(null);
   const [localError, setLocalError] = useState("");
-  const [scaleDraft, setScaleDraft] = useState<number | null>(null);
-  const scaleCommit = useRef<number | null>(null);
-  const busy = phase ?? (loading || pending > 0 ? "load" : null);
-  const error = localError || stateError;
+  const busy = loading || pending > 0;
   const preferences = state.preferences ?? DEFAULT_PET_PREFERENCES;
-  const [desktopVisible, setDesktopVisible] = useState<boolean | null>(null);
   useEffect(() => {
     if (!active) return;
     let disposed = false,
@@ -146,7 +26,7 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
     let stop: (() => void) | undefined;
     void listen<boolean>("desktop-pet-visibility", ({ payload }) => {
       received = true;
-      if (!disposed) setDesktopVisible(payload);
+      if (!disposed) setVisible(payload);
     })
       .then(async (cleanup) => {
         if (disposed) {
@@ -154,8 +34,8 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           return;
         }
         stop = cleanup;
-        const visible = await invoke<boolean>("get_desktop_pet_visible");
-        if (!disposed && !received) setDesktopVisible(visible);
+        const value = await invoke<boolean>("get_desktop_pet_visible");
+        if (!disposed && !received) setVisible(value);
       })
       .catch(() => {});
     return () => {
@@ -163,704 +43,206 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
       stop?.();
     };
   }, [active]);
-  async function updatePreferences(
-    patch: Partial<Omit<PetPreferences, "position">>,
-  ) {
+  async function run(command: string, args: Record<string, unknown> = {}) {
     setLocalError("");
     try {
-      await mutate("configure_desktop_pet_preferences", { patch });
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
+      await mutate(command, args);
+    } catch (e) {
+      setLocalError(String(e));
     }
   }
-  async function petAction(command: string) {
-    setLocalError("");
-    try {
-      await mutate(command, {});
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-    }
-  }
-  useEffect(() => {
-    setScaleDraft(null);
-    setLocalError("");
-  }, [state.revision]);
-
-  async function choosePhoto() {
-    if (busy) return;
-    setPhase("upload");
-    setLocalError("");
-    clearError();
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title: copy.upload,
-        filters: [
-          { name: copy.source, extensions: ["png", "jpg", "jpeg", "webp"] },
-        ],
-      });
-      if (typeof selected === "string") {
-        await mutate("import_desktop_pet_photo", { sourcePath: selected });
-      }
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-    } finally {
-      setPhase(null);
-    }
-  }
-
-  async function generate() {
-    if (!state.sourcePath || busy) return;
-    setPhase("generate");
-    setLocalError("");
-    setNotice("");
-    generationCancelled.current = false;
-    generationId.current = crypto.randomUUID();
-    try {
-      const saved = await mutate("create_pet_scene", {
-        requestId: generationId.current,
-        petName: petName.trim() || (zh ? "我的宠物" : "My pet"),
-        name: sceneName.trim() || (zh ? "我的宠物场景" : "My companion scene"),
-        description: description.trim() || null,
-        useCurrent: false,
-      });
-      setNotice(
-        zh
-          ? "桌宠已保存到下方场景收藏，请预览后应用。"
-          : "Pet saved below. Preview your scene before applying.",
-      );
-      if (withWallpaper) {
-        if (generationCancelled.current) return;
-        generationId.current = crypto.randomUUID();
-        setPhase("wallpaper");
-        const sceneId = saved.scenes[saved.scenes.length - 1]?.id;
-        if (!sceneId) throw new Error("Missing saved scene");
-        await mutate("generate_pet_scene_wallpaper", {
-          requestId: generationId.current,
-          sceneId,
-          description:
-            sceneDescription.trim() ||
-            (zh ? "温暖安静的森林小屋" : "A warm peaceful woodland home"),
-          includePet,
-        });
-      }
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-    } finally {
-      generationId.current = null;
-      setCancelling(false);
-      setPhase(null);
-    }
-  }
-
-  async function cancelGeneration() {
-    generationCancelled.current = true;
-    setCancelling(true);
-    try {
-      if (generationId.current)
-        await invoke("cancel_pet_generation", {
-          requestId: generationId.current,
-        });
-      setNotice(
-        zh
-          ? "已请求取消。已保存的桌宠保留，远端请求可能仍计费。"
-          : "Cancellation requested. Saved pets are kept; submitted requests may still be billed.",
-      );
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-      setCancelling(false);
-    }
-  }
-
-  async function importAnimatedPackage() {
-    if (busy) return;
-    setPhase("upload");
-    setLocalError("");
-    clearError();
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title: copy.importAnimated,
-        filters: [{ name: "pet.json", extensions: ["json"] }],
-      });
-      if (typeof selected === "string") {
-        await mutate("import_desktop_pet_package", { manifestPath: selected });
-      }
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-    } finally {
-      setPhase(null);
-    }
-  }
-
-  async function useBuiltinPet() {
-    if (busy) return;
-    setLocalError("");
-    clearError();
-    try {
-      await mutate("use_builtin_desktop_pet", {});
-      setNotice(zh ? "内置奶糖已应用到桌面" : "Naitang is now on your desktop");
-    } catch (cause) {
-      setLocalError(errorMessage(cause));
-    }
-  }
-
-  async function updateToggle(
-    command: "set_desktop_pet_enabled" | "set_desktop_pet_always_on_top",
-    value: boolean,
-  ) {
-    setLocalError("");
-    try {
-      await mutate(
-        command,
-        command === "set_desktop_pet_enabled"
-          ? { enabled: value }
-          : { alwaysOnTop: value },
-      );
-    } catch {
-      // Preserve the newest authoritative state, including concurrent Tool changes.
-    }
-  }
-
-  async function updateScale(scale: number) {
-    if (
-      scaleCommit.current === scale ||
-      (scale === state.scale && pending === 0)
-    ) {
-      setScaleDraft(null);
-      return;
-    }
-    scaleCommit.current = scale;
-    setLocalError("");
-    try {
-      await mutate("set_desktop_pet_scale", { scale });
-    } catch {
-      // The shared controller exposes the error without rolling back another update.
-    } finally {
-      if (scaleCommit.current === scale) {
-        scaleCommit.current = null;
-        setScaleDraft(null);
-      }
-    }
-  }
-
-  const sourceSrc = state.sourcePath ? resolveMediaSrc(state.sourcePath) : "";
-  const petSrc = state.petPath ? resolveMediaSrc(state.petPath) : "";
-
+  const sceneName = state.scenes.find(
+    (s) => s.id === state.activeSceneId,
+  )?.name;
+  const status = !state.enabled
+    ? zh
+      ? "已关闭"
+      : "Disabled"
+    : visible === false
+      ? zh
+        ? "暂时隐藏"
+        : "Temporarily hidden"
+      : visible === true
+        ? zh
+          ? "显示中"
+          : "Visible"
+        : zh
+          ? "状态同步中"
+          : "Syncing";
   return (
-    <section className="desktop-pet-settings" aria-busy={busy != null}>
-      <div className="desktop-pet-hero">
-        <div className="desktop-pet-hero-copy">
-          <span className="desktop-pet-eyebrow">{copy.eyebrow}</span>
-          <h2>{copy.title}</h2>
-          <p>{copy.subtitle}</p>
-        </div>
-        <img src={conceptImage} alt="" aria-hidden />
-      </div>
-
-      <section className="prefs-card desktop-pet-builtin">
-        <DesktopPetCanvas
-          src={builtinPetAtlas}
-          state="idle"
-          className="desktop-pet-builtin-canvas"
-          label={zh ? "内置奶糖动画预览" : "Built-in Naitang preview"}
-          reducedMotion={!!reducedMotion || !active}
-        />
+    <section className="desktop-pet-settings pet-manager" aria-busy={busy}>
+      <div className="pet-manager-current">
+        <span className="desktop-pet-icon">
+          <PawPrint size={20} />
+        </span>
         <div>
-          <h3>{zh ? "内置奶糖" : "Built-in Naitang"}</h3>
-          <p>
-            {zh
-              ? "眨眼、踩奶、舔脚脚和转头都已准备好，无需上传照片或配置模型。"
-              : "Blinking, kneading, paw grooming and looking around — no photo or model setup needed."}
-          </p>
+          <strong>
+            {zh ? "当前桌面" : "On your desktop"} ·{" "}
+            {state.displayName || (zh ? "尚未选择宠物" : "No pet selected")}
+          </strong>
+          <small>
+            {sceneName ||
+              (zh
+                ? "默认陪伴 · 不更换壁纸"
+                : "Default companion · wallpaper unchanged")}{" "}
+            · {status}
+          </small>
         </div>
         <button
           type="button"
           className="desktop-pet-import-package"
-          disabled={busy != null}
-          onClick={() => void useBuiltinPet()}
+          disabled={busy || !state.petPath}
+          onClick={() =>
+            void run("set_desktop_pet_enabled", { enabled: !state.enabled })
+          }
         >
-          <PawPrint size={17} />
-          {zh ? "使用内置奶糖" : "Use built-in Naitang"}
+          {state.enabled ? <EyeOff size={16} /> : <Eye size={16} />}
+          {state.enabled ? (zh ? "隐藏" : "Hide") : zh ? "显示" : "Show"}
         </button>
-      </section>
-
-      <div className="desktop-pet-grid">
-        <section className="prefs-card desktop-pet-card">
+      </div>
+      <SegmentedTabs
+        aria-label={zh ? "桌宠管理" : "Pet manager"}
+        value={tab}
+        onValueChange={setTab}
+        items={[
+          {
+            value: "library",
+            label: zh ? "宠物库" : "Library",
+            icon: <PawPrint size={16} />,
+            count: state.pets?.length ?? 0,
+            panelId: "pet-library-panel",
+          },
+          {
+            value: "create",
+            label: zh ? "创建宠物" : "Create",
+            icon: <Plus size={16} />,
+            panelId: "pet-create-panel",
+          },
+          {
+            value: "general",
+            label: zh ? "通用设置" : "General",
+            icon: <Settings2 size={16} />,
+            panelId: "pet-general-panel",
+          },
+        ]}
+      />
+      {(error || localError) && (
+        <p className="desktop-pet-error" role="alert">
+          {localError || error}
+        </p>
+      )}
+      <div
+        role="tabpanel"
+        aria-label={zh ? "宠物库" : "Library"}
+        id="pet-library-panel"
+        hidden={tab !== "library"}
+      >
+        <PetLibraryPanel
+          state={state}
+          mutate={mutate}
+          busy={busy}
+          zh={zh}
+          active={active && tab === "library"}
+          onCreate={() => setTab("create")}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        aria-label={zh ? "创建宠物" : "Create"}
+        id="pet-create-panel"
+        hidden={tab !== "create"}
+      >
+        <PetCreatePanel
+          state={state}
+          mutate={mutate}
+          pending={busy}
+          locale={locale}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        aria-label={zh ? "通用设置" : "General"}
+        id="pet-general-panel"
+        hidden={tab !== "general"}
+      >
+        <section className="prefs-card desktop-pet-card pet-general-card">
           <header className="desktop-pet-card-head">
-            <span className="desktop-pet-icon" aria-hidden>
-              <ImagePlus size={19} />
-            </span>
             <div>
-              <h3>{copy.source}</h3>
-              <p>{copy.sourceHint}</p>
-            </div>
-          </header>
-          <button
-            type="button"
-            className="desktop-pet-photo-picker"
-            onClick={() => void choosePhoto()}
-            disabled={busy != null}
-          >
-            {sourceSrc ? (
-              <img src={sourceSrc} alt={copy.source} />
-            ) : (
-              <PawPrint size={42} />
-            )}
-            <span>
-              <Upload size={15} />
-              {sourceSrc ? copy.replace : copy.upload}
-            </span>
-          </button>
-          <label className="desktop-pet-field">
-            <span>{copy.style}</span>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-              placeholder={copy.stylePlaceholder}
-              maxLength={2000}
-              disabled={busy != null}
-            />
-          </label>
-          <label className="desktop-pet-field">
-            <span>{zh ? "宠物名字" : "Pet name"}</span>
-            <input
-              value={petName}
-              maxLength={80}
-              disabled={busy != null}
-              placeholder={zh ? "例如：奶糖" : "For example: Mochi"}
-              onChange={(e) => setPetName(e.currentTarget.value)}
-            />
-          </label>
-          <label className="desktop-pet-field">
-            <span>{zh ? "场景名称" : "Scene name"}</span>
-            <input
-              value={sceneName}
-              maxLength={80}
-              disabled={busy != null}
-              placeholder={
-                zh
-                  ? "例如：奶糖的森林小屋"
-                  : "For example: Mochi's woodland home"
-              }
-              onChange={(e) => setSceneName(e.currentTarget.value)}
-            />
-          </label>
-          <label className="desktop-pet-toggle-row">
-            <span>
-              <strong>
-                {zh ? "同时生成配套壁纸" : "Generate a matching wallpaper"}
-              </strong>
-              <small>
+              <h3>
+                {zh ? "所有宠物共用的桌面策略" : "Desktop-wide preferences"}
+              </h3>
+              <p>
                 {zh
-                  ? "会额外调用一次图片模型；只用于 Astro 应用背景。"
-                  : "One additional image request. Astro background only."}
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={withWallpaper}
-              disabled={busy != null}
-              onChange={(e) => setWithWallpaper(e.currentTarget.checked)}
-            />
-          </label>
-          <details
-            className="pet-scene-options"
-            open={withWallpaper || undefined}
-          >
-            <summary>
-              {zh
-                ? "配套壁纸选项（也用于下方重试）"
-                : "Wallpaper options (also used for retries)"}
-            </summary>
-            <label className="desktop-pet-field">
-              <span>{zh ? "场景描述" : "Scene description"}</span>
-              <textarea
-                value={sceneDescription}
-                maxLength={2000}
-                disabled={busy != null}
-                placeholder={
-                  zh
-                    ? "森林小屋、海边日落、星空花园…"
-                    : "Woodland home, sunset beach, starry garden…"
-                }
-                onChange={(e) => setSceneDescription(e.currentTarget.value)}
-              />
-            </label>
-            <label className="desktop-pet-toggle-row">
-              <span>
-                <strong>
-                  {zh ? "壁纸中包含宠物肖像" : "Include a pet portrait"}
-                </strong>
-                <small>
-                  {zh
-                    ? "默认只生成环境，避免与悬浮桌宠重复。"
-                    : "Environment-only by default, to avoid duplicating the floating pet."}
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={includePet}
-                disabled={busy != null}
-                onChange={(e) => setIncludePet(e.currentTarget.checked)}
-              />
-            </label>
-          </details>
-          <div className="desktop-pet-action-row">
-            <button
-              type="button"
-              className="desktop-pet-generate"
-              onClick={() => void generate()}
-              disabled={!state.sourcePath || busy != null}
-            >
-              {phase === "generate" || phase === "wallpaper" ? (
-                <Loader2 className="desktop-pet-spinner" size={17} />
-              ) : (
-                <Sparkles size={17} />
-              )}
-              {phase === "wallpaper"
-                ? zh
-                  ? "正在生成配套壁纸…"
-                  : "Creating matching wallpaper…"
-                : phase === "generate"
-                  ? copy.creating
-                  : copy.create}
-            </button>
-            <button
-              type="button"
-              className="desktop-pet-import-package"
-              title={copy.importAnimatedHint}
-              onClick={() => void importAnimatedPackage()}
-              disabled={busy != null}
-            >
-              <FolderInput size={17} />
-              {copy.importAnimated}
-            </button>
-          </div>
-          <p className="desktop-pet-model">{copy.staticHint}</p>
-          {error ? (
-            <p className="desktop-pet-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {notice && <p role="status">{notice}</p>}
-          {(phase === "generate" || phase === "wallpaper") && (
-            <div className="pet-generation-progress" role="status">
-              <ol>
-                <li aria-current={phase === "generate" ? "step" : undefined}>
-                  {phase === "wallpaper" ? "✓ " : "1. "}
-                  {zh ? "生成桌宠" : "Create pet"}
-                </li>
-                {withWallpaper && (
-                  <li aria-current={phase === "wallpaper" ? "step" : undefined}>
-                    2. {zh ? "生成配套壁纸" : "Create wallpaper"}
-                  </li>
-                )}
-              </ol>
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={() => void cancelGeneration()}
-              >
-                {cancelling
-                  ? zh
-                    ? "取消中…"
-                    : "Cancelling…"
-                  : zh
-                    ? "取消生成"
-                    : "Cancel generation"}
-              </button>
-            </div>
-          )}
-        </section>
-
-        <section className="prefs-card desktop-pet-card">
-          <header className="desktop-pet-card-head">
-            <span className="desktop-pet-icon" aria-hidden>
-              <PawPrint size={19} />
-            </span>
-            <div>
-              <h3>{copy.generated}</h3>
-              <p>{copy.generatedHint}</p>
+                  ? "切换宠物或场景不会覆盖以下显示策略。"
+                  : "Switching companions never overrides these visibility policies."}
+              </p>
             </div>
           </header>
-          <div className="desktop-pet-preview" data-empty={!petSrc}>
-            {petSrc && state.spriteVersionNumber === 2 ? (
-              <DesktopPetCanvas
-                src={petSrc}
-                groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
-                motionClips={state.motionClips}
-                motionName={
-                  state.motionClips?.[previewAction] ? previewAction : undefined
-                }
-                repeatMotion
-                state={previewAction === "kneading" ? "running" : "idle"}
-                clip={
-                  previewAction === "grooming" && state.groomingPath
-                    ? "grooming"
-                    : undefined
-                }
-                className="desktop-pet-preview-canvas"
-                label={state.displayName || copy.generated}
-                reducedMotion={Boolean(reducedMotion)}
-              />
-            ) : petSrc ? (
-              <img src={petSrc} alt={copy.generated} />
-            ) : (
-              <div>
-                <PawPrint size={34} />
-                <span>{copy.empty}</span>
-              </div>
-            )}
-          </div>
-          {state.petPath ? (
-            <div className="desktop-pet-animation-meta">
-              <span>
-                {state.spriteVersionNumber === 2
-                  ? Object.keys(state.motionClips ?? {}).length
-                    ? zh
-                      ? "独立动作片段"
-                      : "Motion clips"
-                    : copy.animatedBadge
-                  : copy.staticBadge}
-              </span>
-              <strong>{state.displayName || copy.generated}</strong>
-            </div>
-          ) : null}
-          {state.spriteVersionNumber === 2 &&
-            (state.groomingPath ||
-              state.motionClips?.grooming ||
-              state.motionClips?.kneading) && (
-              <div
-                className="pet-scene-actions"
-                aria-label={zh ? "动作预览" : "Animation preview"}
-              >
-                {(["idle", "kneading", "grooming"] as const).map((action) => (
-                  <button
-                    key={action}
-                    type="button"
-                    aria-pressed={previewAction === action}
-                    disabled={
-                      action !== "idle" &&
-                      !state.motionClips?.[action] &&
-                      !state.groomingPath
-                    }
-                    onClick={() => setPreviewAction(action)}
-                  >
-                    {zh
-                      ? { idle: "眨眼", kneading: "踩奶", grooming: "舔脚脚" }[
-                          action
-                        ]
-                      : { idle: "Blink", kneading: "Knead", grooming: "Groom" }[
-                          action
-                        ]}
-                  </button>
-                ))}
-              </div>
-            )}
-          {state.provider && state.model ? (
-            <p className="desktop-pet-model">
-              {copy.provider}: {state.provider} · {state.model}
-            </p>
-          ) : null}
-          <div className="desktop-pet-control-list">
-            <label className="desktop-pet-toggle-row">
-              <span className="desktop-pet-control-icon" aria-hidden>
-                {state.enabled ? <Eye size={17} /> : <EyeOff size={17} />}
-              </span>
-              <span>
-                <strong>{copy.show}</strong>
-                <small>{copy.showHint}</small>
-              </span>
+          {(
+            [
+              [
+                "alwaysOnTop",
+                zh ? "始终置顶" : "Always on top",
+                state.alwaysOnTop,
+                "set_desktop_pet_always_on_top",
+                { alwaysOnTop: !state.alwaysOnTop },
+              ],
+              [
+                "followWallpaper",
+                zh ? "随配套壁纸切换宠物" : "Follow paired wallpapers",
+                state.followWallpaper,
+                "set_pet_scene_follow_wallpaper",
+                { enabled: !state.followWallpaper },
+              ],
+              [
+                "hideInFullscreen",
+                zh ? "全屏时自动隐藏" : "Hide in fullscreen",
+                preferences.hideInFullscreen,
+                "configure_desktop_pet_preferences",
+                { patch: { hideInFullscreen: !preferences.hideInFullscreen } },
+              ],
+              [
+                "presentationMode",
+                zh ? "演示时暂时隐藏" : "Presentation hide",
+                preferences.presentationMode,
+                "configure_desktop_pet_preferences",
+                { patch: { presentationMode: !preferences.presentationMode } },
+              ],
+            ] as const
+          ).map(([key, label, checked, command, args]) => (
+            <label key={key} className="desktop-pet-preference-row">
+              <span>{label}</span>
               <input
                 type="checkbox"
-                checked={state.enabled}
-                disabled={!state.petPath || busy != null}
-                onChange={(event) =>
-                  void updateToggle(
-                    "set_desktop_pet_enabled",
-                    event.currentTarget.checked,
-                  )
-                }
+                checked={checked}
+                disabled={busy}
+                onChange={() => void run(command, args)}
               />
             </label>
-            <label className="desktop-pet-toggle-row">
-              <span className="desktop-pet-control-icon" aria-hidden>
-                <Pin size={17} />
-              </span>
-              <span>
-                <strong>{copy.pin}</strong>
-                <small>{copy.pinHint}</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={state.alwaysOnTop}
-                disabled={busy != null}
-                onChange={(event) =>
-                  void updateToggle(
-                    "set_desktop_pet_always_on_top",
-                    event.currentTarget.checked,
-                  )
-                }
-              />
-            </label>
-            <label className="desktop-pet-size-row">
-              <span>{copy.size}</span>
-              <input
-                type="range"
-                min={DESKTOP_PET_SCALE.min}
-                max={DESKTOP_PET_SCALE.max}
-                step={DESKTOP_PET_SCALE.step}
-                value={scaleDraft ?? state.scale}
-                aria-valuetext={`${petScalePercent(scaleDraft ?? state.scale)}%`}
-                disabled={busy != null}
-                onChange={(event) => {
-                  const scale = Number(event.currentTarget.value);
-                  setScaleDraft(scale);
-                }}
-                onPointerUp={(event) =>
-                  void updateScale(Number(event.currentTarget.value))
-                }
-                onKeyUp={(event) =>
-                  void updateScale(Number(event.currentTarget.value))
-                }
-                onBlur={(event) =>
-                  void updateScale(Number(event.currentTarget.value))
-                }
-              />
-              <output>{petScalePercent(scaleDraft ?? state.scale)}%</output>
-            </label>
-            <div className="desktop-pet-preferences">
-              {desktopVisible != null && (
-                <p className="desktop-pet-model" role="status">
-                  {desktopVisible
-                    ? zh
-                      ? "桌面窗口：显示中"
-                      : "Desktop window: visible"
-                    : state.enabled
-                      ? zh
-                        ? "桌面窗口：暂时隐藏"
-                        : "Desktop window: temporarily hidden"
-                      : zh
-                        ? "桌面窗口：已关闭"
-                        : "Desktop window: disabled"}
-                </p>
-              )}
-              <h4>{zh ? "位置与安静模式" : "Position and quiet mode"}</h4>
-              {(
-                [
-                  [
-                    "positionLocked",
-                    zh ? "锁定位置" : "Lock position",
-                    zh
-                      ? "防止误拖；右键也可解锁"
-                      : "Prevent accidental dragging",
-                  ],
-                  [
-                    "snapToEdge",
-                    zh ? "贴边吸附" : "Snap to edges",
-                    zh
-                      ? "松开鼠标后轻贴屏幕工作区边缘"
-                      : "Snap near work-area edges after releasing",
-                  ],
-                  [
-                    "quietMode",
-                    zh ? "安静模式" : "Quiet mode",
-                    zh
-                      ? "只保留待机和眨眼，停止自动大动作"
-                      : "Only idle and blinking; no automatic activity",
-                  ],
-                  [
-                    "hideInFullscreen",
-                    zh ? "全屏时自动隐藏" : "Hide in fullscreen",
-                    zh
-                      ? "macOS检测前台全屏；退出后自动恢复"
-                      : "Detect foreground fullscreen on macOS; restore on exit",
-                  ],
-                  [
-                    "presentationMode",
-                    zh ? "演示时暂时隐藏" : "Presentation hide",
-                    zh
-                      ? "不改变显示开关；可从托盘恢复"
-                      : "Keep your visibility preference; restore from the tray",
-                  ],
-                ] as const
-              ).map(([key, title, hint]) => (
-                <label key={key} className="desktop-pet-preference-row">
-                  <span>
-                    <strong>{title}</strong>
-                    <small>{hint}</small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={preferences[key]}
-                    disabled={busy != null}
-                    onChange={(event) =>
-                      void updatePreferences({
-                        [key]: event.currentTarget.checked,
-                      })
-                    }
-                  />
-                </label>
-              ))}
-              <label className="desktop-pet-preference-row">
-                <span>{zh ? "自动动作频率" : "Automatic activity"}</span>
-                <select
-                  value={preferences.activityIntervalSecs}
-                  disabled={busy != null || preferences.quietMode}
-                  onChange={(event) =>
-                    void updatePreferences({
-                      activityIntervalSecs: Number(event.currentTarget.value),
-                    })
-                  }
-                >
-                  <option value={20}>
-                    {zh ? "经常 · 20秒" : "Often · 20s"}
-                  </option>
-                  <option value={45}>
-                    {zh ? "适中 · 45秒" : "Balanced · 45s"}
-                  </option>
-                  <option value={90}>
-                    {zh ? "偶尔 · 90秒" : "Occasional · 90s"}
-                  </option>
-                  {![20, 45, 90].includes(preferences.activityIntervalSecs) && (
-                    <option value={preferences.activityIntervalSecs}>
-                      {preferences.activityIntervalSecs}s
-                    </option>
-                  )}
-                </select>
-              </label>
-              <div className="pet-scene-actions">
-                <button
-                  disabled={busy != null || !state.petPath}
-                  onClick={() => void petAction("reset_desktop_pet_position")}
-                >
-                  {zh ? "回到屏幕内" : "Bring back on screen"}
-                </button>
-                <button
-                  disabled={busy != null}
-                  onClick={() => void petAction("resume_desktop_pet")}
-                >
-                  {zh ? "恢复显示" : "Show pet"}
-                </button>
-              </div>
-            </div>
+          ))}
+          <p className="desktop-pet-model">
+            {zh
+              ? "未关联的壁纸保留当前宠物；仅应用宠物会关闭壁纸联动。全屏检测在 macOS 支持前台应用。"
+              : "Unpaired wallpapers keep your pet. Pet-only applies disable linking. Foreground fullscreen detection is available on macOS."}
+          </p>
+          <div className="pet-scene-actions">
+            <button
+              type="button"
+              disabled={busy || !state.petPath}
+              onClick={() => void run("reset_desktop_pet_position")}
+            >
+              {zh ? "回到屏幕内" : "Bring back on screen"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run("resume_desktop_pet")}
+            >
+              {zh ? "恢复显示" : "Restore visibility"}
+            </button>
           </div>
         </section>
       </div>
-      <PetSceneLibrary
-        state={state}
-        mutate={mutate}
-        busy={busy != null}
-        zh={zh}
-        name={sceneName}
-        description={sceneDescription}
-        includePet={includePet}
-      />
     </section>
   );
 }

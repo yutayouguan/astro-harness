@@ -10,6 +10,8 @@ use std::{
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PetIdentity {
+    #[serde(default)]
+    pub pet_id: String,
     pub pet_path: String,
     #[serde(default)]
     pub grooming_path: Option<String>,
@@ -26,6 +28,7 @@ pub struct PetIdentity {
 impl PetIdentity {
     pub fn from_state(state: &DesktopPetState) -> anyhow::Result<Self> {
         Ok(Self {
+            pet_id: state.active_pet_id.clone().unwrap_or_default(),
             pet_path: state
                 .pet_path
                 .clone()
@@ -41,7 +44,8 @@ impl PetIdentity {
         })
     }
 
-    fn apply(&self, state: &mut DesktopPetState) {
+    pub(crate) fn apply(&self, state: &mut DesktopPetState) {
+        state.active_pet_id = Some(self.pet_id.clone());
         state.pet_path = Some(self.pet_path.clone());
         state.grooming_path = self.grooming_path.clone();
         state.motion_clips = self.motion_clips.clone();
@@ -139,17 +143,13 @@ pub fn save_scene(base: &Path, mut scene: PetScene) -> anyhow::Result<DesktopPet
         managed_file(base, &path)?;
     }
     crate::update_desktop_pet_state(base, |state| {
+        crate::pet_library::register_identity(state, &mut scene.pet)?;
         if scene.preferences.is_none() {
             scene.preferences = state
                 .scenes
                 .iter()
                 .find(|existing| existing.id == scene.id)
-                .and_then(|existing| existing.preferences.clone())
-                .or_else(|| {
-                    Some(crate::pet_preferences::PetScenePreferences::from_state(
-                        state,
-                    ))
-                });
+                .and_then(|existing| existing.preferences.clone());
         }
         if let Some(existing) = state.scenes.iter_mut().find(|s| s.id == scene.id) {
             *existing = scene;
@@ -203,6 +203,10 @@ pub enum PetSceneEdit {
     CapturePreferences {
         scene_id: String,
     },
+    SetPreferences {
+        scene_id: String,
+        preferences: Option<crate::pet_preferences::PetScenePreferences>,
+    },
 }
 
 fn validate_name(name: &str) -> anyhow::Result<()> {
@@ -237,7 +241,8 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             | PetSceneEdit::Favorite { scene_id, .. }
             | PetSceneEdit::Delete { scene_id, .. }
             | PetSceneEdit::Duplicate { scene_id, .. } => Some(scene_id),
-            PetSceneEdit::CapturePreferences { scene_id } => Some(scene_id),
+            PetSceneEdit::CapturePreferences { scene_id }
+            | PetSceneEdit::SetPreferences { scene_id, .. } => Some(scene_id),
             PetSceneEdit::Pause { .. } => None,
         };
         let index = id
@@ -250,6 +255,12 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             })
             .transpose()?;
         match edit {
+            PetSceneEdit::SetPreferences { preferences, .. } => {
+                if let Some(value) = &preferences {
+                    value.validate()?;
+                }
+                state.scenes[index.unwrap()].preferences = preferences;
+            }
             PetSceneEdit::CapturePreferences { .. } => {
                 let i = index.unwrap();
                 anyhow::ensure!(
@@ -271,13 +282,16 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
             }
             PetSceneEdit::RenamePet { name, .. } => {
                 validate_name(&name)?;
-                let path = state.scenes[index.unwrap()].pet.pet_path.clone();
+                let pet_id = state.scenes[index.unwrap()].pet.pet_id.clone();
                 for scene in &mut state.scenes {
-                    if scene.pet.pet_path == path {
+                    if scene.pet.pet_id == pet_id {
                         scene.pet.display_name = Some(name.trim().into());
                     }
                 }
-                if state.pet_path.as_ref() == Some(&path) {
+                if let Some(pet) = state.pets.iter_mut().find(|p| p.id == pet_id) {
+                    pet.identity.display_name = Some(name.trim().into());
+                }
+                if state.active_pet_id.as_ref() == Some(&pet_id) {
                     state.display_name = Some(name.trim().into());
                 }
             }
@@ -297,20 +311,22 @@ pub fn edit_scene(base: &Path, edit: PetSceneEdit) -> anyhow::Result<DesktopPetS
                     "此场景的宠物或壁纸正在使用，请确认移出收藏；当前显示和素材文件会保留"
                 );
                 state.scenes.remove(index);
+                if state.active_scene_id.as_ref() == Some(&scene_id) {
+                    state.active_scene_id = None;
+                }
                 state.favorite_scene_ids.retain(|id| id != &scene_id);
             }
             PetSceneEdit::Duplicate { name, .. } => {
                 validate_name(&name)?;
-                let pet = state.scenes[index.unwrap()].pet.clone();
-                let preferences = state.scenes[index.unwrap()].preferences.clone();
-                state.scenes.push(PetScene {
-                    id: format!("pet-{}", uuid::Uuid::new_v4().simple()),
-                    name: name.trim().into(),
-                    pet,
-                    style: None,
-                    wallpaper_source_path: None,
-                    preferences,
-                });
+                let mut copy = state.scenes[index.unwrap()].clone();
+                copy.id = format!("pet-{}", uuid::Uuid::new_v4().simple());
+                copy.name = name.trim().into();
+                if let Some(style) = &mut copy.style {
+                    style.id = copy.id.clone();
+                    style.name = copy.name.clone();
+                    style.revision = uuid::Uuid::new_v4().to_string();
+                }
+                state.scenes.push(copy);
             }
         }
         Ok(())
@@ -485,10 +501,25 @@ pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Resul
             style.revision = uuid::Uuid::new_v4().to_string();
             state.pending_scene_style = Some(style);
             state.last_wallpaper_path = Some(path.to_string_lossy().into_owned());
+            if !apply_pet {
+                state.active_scene_id = None;
+            }
         }
         if apply_pet {
             scene.pet.apply(state);
-            if let Some(preferences) = &scene.preferences {
+            state.active_scene_id = Some(scene.id.clone());
+            if let Some(preferences) = scene
+                .preferences
+                .as_ref()
+                .or_else(|| {
+                    state
+                        .pets
+                        .iter()
+                        .find(|p| p.id == scene.pet.pet_id)
+                        .map(|p| &p.defaults)
+                })
+                .cloned()
+            {
                 preferences.apply(state);
             }
         }
@@ -542,6 +573,9 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
         if state.last_wallpaper_path == path {
             return Ok(());
         }
+        // A background changed independently; do not keep claiming the old pair
+        // is applied. A matching linked scene below may establish a new pair.
+        state.active_scene_id = None;
         if state.follow_wallpaper {
             if let Some(scene) = state
                 .scenes
@@ -569,7 +603,19 @@ pub fn sync_wallpaper(base: &Path, path: Option<&str>) -> anyhow::Result<Desktop
                     managed_file(base, Path::new(&clip.path))?;
                 }
                 scene.pet.apply(state);
-                if let Some(preferences) = &scene.preferences {
+                state.active_scene_id = Some(scene.id.clone());
+                if let Some(preferences) = scene
+                    .preferences
+                    .as_ref()
+                    .or_else(|| {
+                        state
+                            .pets
+                            .iter()
+                            .find(|p| p.id == scene.pet.pet_id)
+                            .map(|p| &p.defaults)
+                    })
+                    .cloned()
+                {
                     preferences.apply(state);
                 }
             }
@@ -632,6 +678,7 @@ mod tests {
         )
         .unwrap();
         let pet = PetIdentity {
+            pet_id: "companion-test".into(),
             pet_path: root.join("pet.png").to_string_lossy().into_owned(),
             source_path: None,
             sprite_version_number: None,
@@ -678,10 +725,8 @@ mod tests {
         assert!(!saved.enabled);
         assert!(saved.pet_path.is_none());
         assert!(!crate::active_ui_style_path(dir.path()).exists());
-        let mut expected = scene;
-        expected.preferences = Some(crate::pet_preferences::PetScenePreferences::from_state(
-            &saved,
-        ));
+        let expected = scene;
+        assert!(saved.scenes[0].preferences.is_none()); // inherits pet defaults
         assert_eq!(
             crate::read_desktop_pet_state(dir.path()).unwrap().scenes,
             vec![expected]
@@ -714,6 +759,7 @@ mod tests {
         .unwrap();
         let state = apply_scene(dir.path(), &scene.id, SceneApplyMode::Wallpaper).unwrap();
         assert_eq!(state.pet_path.as_deref(), Some("old-pet"));
+        assert!(state.active_scene_id.is_none());
         let state = sync_wallpaper(dir.path(), state.last_wallpaper_path.as_deref()).unwrap();
         assert_eq!(state.pet_path.as_deref(), Some("old-pet"));
     }
@@ -745,8 +791,12 @@ mod tests {
         let state = sync_wallpaper(dir.path(), Some("unbound")).unwrap();
         assert_eq!(state.pet_path.as_deref(), Some("old"));
         let state = sync_wallpaper(dir.path(), scene.wallpaper_source_path.as_deref()).unwrap();
+        assert_eq!(state.active_scene_id.as_deref(), Some(scene.id.as_str()));
         assert_eq!(state.pet_path, Some(scene.pet.pet_path));
         assert!(!state.enabled);
+        let next = sync_wallpaper(dir.path(), Some("another-unbound")).unwrap();
+        assert!(next.active_scene_id.is_none());
+        assert_eq!(next.active_pet_id, state.active_pet_id);
     }
 
     #[test]
@@ -824,7 +874,14 @@ mod tests {
         .unwrap();
         assert_eq!(duplicate.scenes.len(), 2);
         assert_eq!(duplicate.scenes[1].pet, scene.pet);
-        assert!(duplicate.scenes[1].style.is_none());
+        assert_eq!(
+            duplicate.scenes[1].wallpaper_source_path,
+            scene.wallpaper_source_path
+        );
+        assert_eq!(
+            duplicate.scenes[1].style.as_ref().unwrap().id,
+            duplicate.scenes[1].id
+        );
         let renamed = edit_scene(
             dir.path(),
             PetSceneEdit::RenamePet {

@@ -29,6 +29,9 @@ export type DesktopPetState = {
   enabled: boolean;
   sourcePath: string | null;
   petPath: string | null;
+  activePetId?: string | null;
+  activeSceneId?: string | null;
+  pets?: import("./petLibrary").PetRecord[];
   groomingPath: string | null;
   motionClips?: PetMotionClips;
   scale: number;
@@ -42,7 +45,7 @@ export type DesktopPetState = {
   description: string | null;
   followWallpaper: boolean;
   lastWallpaperPath: string | null;
-  scenes: Array<{ id: string; name: string }>;
+  scenes: Array<{ id: string; name: string; pet?: { petId: string } }>;
   favoriteSceneIds: string[];
   animationPaused: boolean;
 };
@@ -52,6 +55,9 @@ export const EMPTY_DESKTOP_PET_STATE: DesktopPetState = {
   enabled: false,
   sourcePath: null,
   petPath: null,
+  activePetId: null,
+  activeSceneId: null,
+  pets: [],
   groomingPath: null,
   motionClips: {},
   scale: DESKTOP_PET_SCALE.reference,

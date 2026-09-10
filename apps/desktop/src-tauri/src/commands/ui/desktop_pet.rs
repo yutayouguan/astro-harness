@@ -359,26 +359,35 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
 
     let pet_path = destination.join(&managed_manifest.spritesheet_path);
     let updated = types::update_desktop_pet_state(base, |state| {
-        state.pet_path = Some(pet_path.to_string_lossy().into_owned());
-        state.motion_clips = managed_manifest.motion_clips.clone();
-        for clip in state.motion_clips.values_mut() {
+        let mut motion_clips = managed_manifest.motion_clips.clone();
+        for clip in motion_clips.values_mut() {
             clip.path = destination.join(&clip.path).to_string_lossy().into_owned();
         }
-        state.grooming_path = managed_manifest
+        let grooming_path = managed_manifest
             .grooming_spritesheet_path
             .as_ref()
             .map(|name| destination.join(name).to_string_lossy().into_owned());
-        state.source_path = None;
-        state.follow_wallpaper = false;
-        state.enabled = true;
-        state.provider = None;
-        state.model = None;
-        state.sprite_version_number = Some(types::DESKTOP_PET_V2_SPRITE_VERSION);
-        state.display_name = Some(managed_manifest.display_name.clone());
-        state.description = Some(managed_manifest.description.clone());
+        let mut identity = types::pet_scene::PetIdentity {
+            pet_id: format!("companion-{}", uuid::Uuid::new_v4().simple()),
+            pet_path: pet_path.to_string_lossy().into_owned(),
+            grooming_path,
+            motion_clips,
+            source_path: None,
+            provider: None,
+            model: None,
+            sprite_version_number: Some(types::DESKTOP_PET_V2_SPRITE_VERSION),
+            display_name: Some(managed_manifest.display_name.clone()),
+            description: Some(managed_manifest.description.clone()),
+        };
+        types::pet_library::register_identity(state, &mut identity)?;
         state.updated_at = chrono::Utc::now().to_rfc3339();
         if let Some(preferences) = &managed_manifest.scene_preferences {
-            preferences.apply(state);
+            state
+                .pets
+                .iter_mut()
+                .find(|p| p.id == identity.pet_id)
+                .unwrap()
+                .defaults = preferences.clone();
         }
         Ok(())
     });
@@ -679,6 +688,7 @@ pub fn install_change_bridge(app: &AppHandle) {
 
 #[tauri::command]
 pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
+    super::builtin_pet::ensure_library(&home::default_memory_dir()).map_err(|e| e.to_string())?;
     load_state()
 }
 
@@ -928,6 +938,7 @@ pub(super) async fn generate_pet_identity(
     let transparent = remove_uniform_edge_background(&generated_image.bytes)?;
     let pet_path = store_asset(base, "pet", &transparent, "png")?;
     Ok(types::pet_scene::PetIdentity {
+        pet_id: format!("companion-{}", uuid::Uuid::new_v4().simple()),
         pet_path: pet_path.to_string_lossy().into_owned(),
         source_path: Some(source_path.to_string()),
         provider: Some(generated.provider),
@@ -1133,7 +1144,7 @@ mod tests {
         )
         .unwrap();
         let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
-        assert!(Path::new(state.grooming_path.as_deref().unwrap()).is_file());
+        assert!(Path::new(state.pets[0].identity.grooming_path.as_deref().unwrap()).is_file());
         manifest.grooming_spritesheet_path = Some("../outside.png".into());
         fs::write(
             package.join("pet.json"),
@@ -1190,10 +1201,12 @@ mod tests {
         )
         .unwrap();
         let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
-        assert!(Path::new(&state.motion_clips["grooming"].path).is_file());
-        assert_eq!(state.scale, 0.5);
-        assert!(state.preferences.position_locked);
-        assert_eq!(state.preferences.activity_interval_secs, 90);
+        assert!(Path::new(&state.pets[0].identity.motion_clips["grooming"].path).is_file());
+        assert_eq!(state.pets[0].defaults.scale, 0.5);
+        assert!(state.pets[0].defaults.behavior.position_locked);
+        assert_eq!(state.pets[0].defaults.behavior.activity_interval_secs, 90);
+        assert_eq!(state.scale, 0.4);
+        assert!(!state.enabled && state.pet_path.is_none());
         manifest.motion_clips.get_mut("grooming").unwrap().path = "../motion.webp".into();
         fs::write(
             package.join("pet.json"),
@@ -1298,10 +1311,11 @@ mod tests {
         .unwrap();
 
         let state = import_animated_pet_at(&astro, &package.join("pet.json")).unwrap();
-        assert!(state.enabled);
-        assert_eq!(state.sprite_version_number, Some(2));
-        assert_eq!(state.display_name.as_deref(), Some("Momo"));
-        assert!(Path::new(state.pet_path.as_deref().unwrap()).is_file());
+        assert!(!state.enabled);
+        assert!(state.pet_path.is_none());
+        assert_eq!(state.pets[0].identity.sprite_version_number, Some(2));
+        assert_eq!(state.pets[0].identity.display_name.as_deref(), Some("Momo"));
+        assert!(Path::new(&state.pets[0].identity.pet_path).is_file());
     }
 
     #[test]

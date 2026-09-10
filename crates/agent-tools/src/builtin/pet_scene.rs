@@ -109,6 +109,7 @@ mod tests {
             id: "pet-acceptance".into(),
             name: "森林小屋 · 实测".into(),
             pet: types::pet_scene::PetIdentity {
+                pet_id: "companion-acceptance".into(),
                 pet_path: path.to_string_lossy().into_owned(),
                 source_path: None,
                 sprite_version_number: None,
@@ -143,6 +144,7 @@ mod tests {
             id: "pet-test".into(),
             name: "Forest".into(),
             pet: types::pet_scene::PetIdentity {
+                pet_id: "companion-test".into(),
                 pet_path: pet_path.to_string_lossy().into_owned(),
                 source_path: None,
                 sprite_version_number: None,
@@ -168,6 +170,9 @@ mod tests {
         let mut png = Cursor::new(Vec::new());
         image.write_to(&mut png, image::ImageFormat::Png).unwrap();
         types::update_desktop_pet_state(dir.path(), |state| {
+            state.scenes[0].preferences = Some(
+                types::pet_preferences::PetScenePreferences::from_state(state),
+            );
             state.scenes[0]
                 .preferences
                 .as_mut()

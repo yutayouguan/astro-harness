@@ -16,6 +16,26 @@ pub struct PetScenePreview {
 }
 
 #[tauri::command]
+pub async fn apply_library_pet(
+    app: AppHandle,
+    pet_id: String,
+) -> Result<DesktopPetStateDto, String> {
+    let state = types::pet_library::apply_pet(&home::default_memory_dir(), &pet_id)
+        .map_err(|e| e.to_string())?;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
+pub async fn edit_pet_library(
+    app: AppHandle,
+    request: types::pet_library::PetLibraryEdit,
+) -> Result<DesktopPetStateDto, String> {
+    let state = types::pet_library::edit_library(&home::default_memory_dir(), request)
+        .map_err(|e| e.to_string())?;
+    present_committed_state(&app, state)
+}
+
+#[tauri::command]
 pub fn get_pet_scenes() -> Result<Vec<PetScenePreview>, String> {
     let base = home::default_memory_dir();
     let state = types::read_desktop_pet_state(&base).map_err(|e| e.to_string())?;
@@ -25,7 +45,7 @@ pub fn get_pet_scenes() -> Result<Vec<PetScenePreview>, String> {
         .cloned()
         .rev()
         .map(|scene| PetScenePreview {
-            in_use: types::pet_scene::scene_is_in_use(&base, &state, &scene),
+            in_use: state.active_scene_id.as_ref() == Some(&scene.id),
             favorite: state.favorite_scene_ids.contains(&scene.id),
             wallpaper_path: scene
                 .wallpaper_path(&base)

@@ -214,6 +214,7 @@ fn save_scene(
                 .map(|image| store_asset(&ctx.memory_dir, "source", &image.bytes, image.extension))
                 .transpose()?;
             types::pet_scene::PetIdentity {
+                pet_id: format!("companion-{}", uuid::Uuid::new_v4().simple()),
                 pet_path: path.to_string_lossy().into_owned(),
                 source_path: source_path.map(|p| p.to_string_lossy().into_owned()),
                 sprite_version_number: None,

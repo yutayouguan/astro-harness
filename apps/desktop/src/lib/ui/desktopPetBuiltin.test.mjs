@@ -5,15 +5,15 @@ import test from "node:test";
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("offline built-in pet has a Settings action, embedded assets and native route", () => {
-  const panel = read("../../components/settings/DesktopPetPanel.tsx");
+  const panel = read("../../components/settings/PetLibraryPanel.tsx");
   const commands = read("../../../src-tauri/src/lib.rs");
   const builtin = read("../../../src-tauri/src/commands/ui/builtin_pet.rs");
   const onboarding = read(
     "../../../src-tauri/src/commands/ui/desktop_preferences.rs",
   );
-  assert.match(panel, /mutate\("use_builtin_desktop_pet", \{\}\)/);
-  assert.match(panel, /src=\{builtinPetAtlas\}/);
-  assert.match(panel, /使用内置奶糖/);
+  assert.match(panel, /apply_library_pet/);
+  assert.match(panel, /item\.builtin/);
+  assert.match(builtin, /ensure_library/);
   assert.match(commands, /commands::desktop_pet::use_builtin_desktop_pet/);
   assert.match(builtin, /include_bytes!\([^;]*spritesheet\.webp/s);
   assert.match(builtin, /include_bytes!\([^;]*grooming\.webp/s);

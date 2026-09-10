@@ -16,7 +16,7 @@ export type PetScene = {
     | "description"
     | "provider"
     | "model"
-  > & { petPath: string };
+  > & { petPath: string; petId: string };
   style: ActiveUiStyle | null;
   wallpaperPath: string | null;
   inUse: boolean;
@@ -30,13 +30,13 @@ export function groupPetScenes(scenes: PetScene[]) {
     { petPath: string; name: string | null; scenes: PetScene[] }
   >();
   for (const scene of scenes) {
-    const group = groups.get(scene.pet.petPath) ?? {
+    const group = groups.get(scene.pet.petId) ?? {
       petPath: scene.pet.petPath,
       name: scene.pet.displayName,
       scenes: [],
     };
     group.scenes.push(scene);
-    groups.set(group.petPath, group);
+    groups.set(scene.pet.petId, group);
   }
   for (const group of groups.values())
     group.scenes.sort((a, b) => Number(b.favorite) - Number(a.favorite));

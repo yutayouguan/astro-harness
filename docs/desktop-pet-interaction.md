@@ -9,8 +9,9 @@ The size slider displays 75%–150%, with a 100% default equal to the former 40%
 size. Internal scale remains physical: 0.30–0.60, default0.40. Thus the default
 window is120×136 logical pixels, maximum180×204, minimum90×102. Existing0.40
 choices stay the same size; old default1.0 reads as0.40, other formerly valid
-oversized values cap at0.60. Reads do not rewrite saved files; the next settings
-transaction persists the normalized value. Native, tools and UI share bounds.
+oversized values cap at0.60. Size normalization alone does not rewrite saved files;
+the pet-library migration below persists it with the backed-up state transition.
+Native, tools and UI share bounds.
 
 - Native creation uses `focused(false)`, `focusable(false)` and first-mouse
   acceptance. Main also accepts its first click. On macOS, `show()` reaches
@@ -48,10 +49,35 @@ Other platforms support Astro fullscreen/manual presentation; physical platform
 acceptance is recorded separately in `desktop-pet-todo.md`.
 
 Scenes optionally capture `preferences` including scale and behavior. Only pet/all/
-linked-pet application restores these. Presentation remains global. Exported
-`pet.json` carries `scenePreferences`; import validates before applying. Old scenes
-without preferences preserve current choices. Wallpaper generation's concurrency
+linked-pet application restores these. Presentation and fullscreen hiding remain global. Exported
+`pet.json` carries `scenePreferences`; import validates and saves to the library without applying.
+Scenes without preferences inherit their pet's defaults. Wallpaper generation's concurrency
 check ignores preference-only changes but keeps the newest preference snapshot.
+
+## Pet management center
+
+Settings opens on Library, with Create and General as separate keyboard-accessible
+tabs. Selecting a card opens that pet's Scenes / Motion & defaults details without
+changing the desktop. Only explicit apply actions change the active pet or scene.
+The current-desktop strip remains independent from the selected management card.
+
+`pets: PetRecord[]` owns a stable id, identity and defaults; `scene.pet.petId` is the
+association. Shared transactions synchronize scene identity snapshots from that
+record, while scene preferences are either an override or null (inherit). Global
+visibility, topmost, fullscreen hiding and presentation intent are not overridden by
+scene preferences. `activePetId` and `activeSceneId` track the applied selection.
+
+Legacy state with no `libraryVersion` is upgraded under `state.lock` with an exact
+`state.before-pet-library.json` backup before replacing state. Scene ids, names,
+configuration and asset files remain intact. New static generation and package
+import register independent library entries. Built-in Naitang is seeded without
+enabling or switching the active pet. Deleting a scene does not remove its pet;
+deleting a custom pet confirms the current number of associated scenes, hides it
+if active, removes those library records, and intentionally retains all asset files.
+
+See `desktop-pet-library-todo.md` for verified checks and outstanding native/image
+generation acceptance. The requested second built-in Pudding is not installed until
+its actual image and animation assets pass validation.
 
 ## Playback details
 

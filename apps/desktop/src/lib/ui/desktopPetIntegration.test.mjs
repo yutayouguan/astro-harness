@@ -8,6 +8,10 @@ const panel = await readFile(
   new URL("../../components/settings/DesktopPetPanel.tsx", import.meta.url),
   "utf8",
 );
+const creation = await readFile(
+  new URL("../../components/settings/PetCreatePanel.tsx", import.meta.url),
+  "utf8",
+);
 const surface = await readFile(
   new URL(
     "../../components/desktop-pet/DesktopPetSurface.tsx",
@@ -111,8 +115,8 @@ test("static assets do not advertise working animation controls", () => {
   const pause = surface.split('id: "pet-pause"')[1].split('id: "pet-hide"')[0];
   assert.match(pause, /enabled: state\.spriteVersionNumber === 2/);
   assert.match(pause, /静态形象/);
-  assert.match(panel, /生成静态形象/);
-  assert.match(panel, /不包含动画帧/);
+  assert.match(creation, /生成静态形象/);
+  assert.match(creation, /不包含动画帧/);
 });
 
 test("pet refresh is non-activating, idempotent and scoped hit testing cannot target main", () => {
@@ -141,15 +145,14 @@ test("desktop pet commands cover import, generation, persistence and window stat
     "import_desktop_pet_photo",
     "import_desktop_pet_package",
     "set_desktop_pet_enabled",
-    "set_desktop_pet_scale",
     "set_desktop_pet_always_on_top",
   ]) {
     assert.match(commands, new RegExp(`commands::desktop_pet::${command}`));
-    assert.match(panel + controller, new RegExp(command));
+    assert.match(panel + creation + controller, new RegExp(command));
   }
   for (const command of ["create_pet_scene", "generate_pet_scene_wallpaper"]) {
     assert.match(commands, new RegExp(`commands::pet_scene::${command}`));
-    assert.match(panel, new RegExp(command));
+    assert.match(creation, new RegExp(command));
   }
   assert.match(backend, /types::desktop_pet_root\(base\)/);
   assert.match(backend, /DESKTOP_PET_V2_USED_COLUMNS/);
@@ -183,6 +186,6 @@ test("personalization sends the uploaded photo through the shared image edit pip
   assert.match(provider, /if edit_mode \{ "edits" \} else \{ "generations" \}/);
   assert.match(provider, /form\.part\("image\[\]", part\)/);
   assert.match(provider, /MAX_INPUT_IMAGE_BYTES/);
-  assert.match(panel, /import_desktop_pet_package/);
+  assert.match(creation, /import_desktop_pet_package/);
   assert.match(surface, /<DesktopPetCanvas/);
 });

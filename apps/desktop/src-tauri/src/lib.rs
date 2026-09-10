@@ -274,6 +274,8 @@ pub fn run() {
             commands::desktop_pet::set_desktop_pet_hit_test,
             commands::desktop_pet::use_builtin_desktop_pet,
             commands::pet_scene::get_pet_scenes,
+            commands::pet_scene::apply_library_pet,
+            commands::pet_scene::edit_pet_library,
             commands::pet_scene::edit_pet_scene,
             commands::pet_scene::export_pet_scene,
             commands::pet_generation::cancel_pet_generation,
