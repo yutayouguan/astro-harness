@@ -1,4 +1,6 @@
 /** 应用入口：主题预热、错误边界、Theme / Locale Provider 与 App 挂载。 */
+// Establish the CSS layer order before components can import their own styles.
+import "./styles/index.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -25,7 +27,6 @@ import {
   DEFAULT_INTERFACE_SCALE,
   readStoredInterfaceScale,
 } from "./lib/ui/interfaceScale";
-import "./styles/index.css";
 import "./styles/features/settings-material-unified.css";
 import "./styles/features/pet-tasks.css";
 

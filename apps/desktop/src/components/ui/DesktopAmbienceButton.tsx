@@ -22,7 +22,6 @@ import {
 import { groupPetScenes } from "../../lib/ui/petScene";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { useI18n } from "../../i18n/LocaleContext";
-import "../../styles/features/desktop-ambience.css";
 
 export default function DesktopAmbienceButton(props: AmbienceProps) {
   const [open, setOpen] = useState(false);
