@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, PawPrint, Plus, Search } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
+import {
+  availablePetActions,
+  petActionLabel,
+} from "../../lib/ui/petActionCatalog";
 import type { DesktopPetState } from "../../lib/ui/desktopPetState";
 import { filterPets, type PetRecord } from "../../lib/ui/petLibrary";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
@@ -24,15 +28,21 @@ export function PetPortrait({
   const reduced = useReducedMotion();
   const identity = pet.identity,
     src = resolveMediaSrc(identity.petPath) || "";
+  const selectedAction =
+    active && availablePetActions(identity).includes(action) ? action : "idle";
   return identity.spriteVersionNumber === 2 ? (
     <DesktopPetCanvas
       src={src}
-      state={action === "kneading" ? "running" : "idle"}
-      motionClips={identity.motionClips}
-      motionName={identity.motionClips?.[action] ? action : undefined}
-      groomingSrc={resolveMediaSrc(identity.groomingPath) || undefined}
+      state={selectedAction === "kneading" ? "running" : "idle"}
+      motionClips={active ? identity.motionClips : undefined}
+      motionName={
+        identity.motionClips?.[selectedAction] ? selectedAction : undefined
+      }
+      groomingSrc={
+        active ? resolveMediaSrc(identity.groomingPath) || undefined : undefined
+      }
       clip={
-        action === "grooming" &&
+        selectedAction === "grooming" &&
         !identity.motionClips?.grooming &&
         identity.groomingPath
           ? "grooming"
@@ -439,14 +449,7 @@ export default function PetLibraryPanel({
               />
               <div className="pet-scene-actions">
                 {(pet.identity.spriteVersionNumber === 2
-                  ? [
-                      "idle",
-                      ...Object.keys(pet.identity.motionClips ?? {}),
-                      ...(pet.identity.groomingPath &&
-                      !pet.identity.motionClips?.grooming
-                        ? ["grooming"]
-                        : []),
-                    ]
+                  ? ["idle", ...availablePetActions(pet.identity)]
                   : []
                 ).map((name) => (
                   <button
@@ -455,13 +458,7 @@ export default function PetLibraryPanel({
                     aria-pressed={action === name}
                     onClick={() => setAction(name)}
                   >
-                    {(
-                      {
-                        idle: zh ? "待机 / 眨眼" : "Idle / blink",
-                        kneading: zh ? "踩奶" : "Knead",
-                        grooming: zh ? "舔脚脚" : "Groom",
-                      } as Record<string, string>
-                    )[name] || name}
+                    {petActionLabel(name, zh ? "zh" : "en")}
                   </button>
                 ))}
               </div>

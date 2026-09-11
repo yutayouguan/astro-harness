@@ -63,3 +63,40 @@ test("wide pet content uses available width with side-by-side creation and prefe
   expect(second!.x).toBeGreaterThan(first!.x + first!.width);
   expect(Math.abs(second!.y - first!.y)).toBeLessThan(2);
 });
+
+test("Pudding has canine previews and its own scenes without replacing Naitang on browse", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto(story);
+  await expect(page.getByRole("button", { name: "管理 布丁", exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/pudding-library.png" });
+  await page.getByRole("button", { name: "管理 布丁", exact: true }).click();
+  await expect(page.locator(".pet-manager-current")).toContainText("奶糖");
+  await expect(page.getByRole("heading", { name: "森林小屋", exact: false })).toHaveCount(0);
+  await page.getByRole("tab", { name: "动作与偏好" }).click();
+  for (const name of ["摇尾巴", "歪头", "伸懒腰", "趴下打盹"]) {
+    const button = page.getByRole("button", { name, exact:true });
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".desktop-pet-image-error")).toHaveCount(0);
+  }
+  await expect(page.getByRole("button", { name: "踩奶", exact:true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "舔脚脚", exact:true })).toHaveCount(0);
+  // Verify actual pixels advance to the lying pose, not just a pressed button
+  // while the canvas is still holding the neutral first frame during decode.
+  await expect.poll(() => page.locator("canvas.pet-motion-portrait").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const pixels = canvas.getContext("2d")!.getImageData(0,0,canvas.width,canvas.height).data;
+    for (let y=0;y<canvas.height;y++) for (let x=0;x<canvas.width;x++) {
+      if (pixels[(y*canvas.width+x)*4+3]>32) return y/canvas.height;
+    }
+    return 0;
+  })).toBeGreaterThan(0.2);
+  await page.screenshot({ path: "test-results/pudding-motions.png" });
+  await page.getByRole("tab", { name: "场景", exact:true }).click();
+  await page.getByRole("button", { name: "新增场景" }).click();
+  await page.getByRole("textbox", { name: "新场景名称" }).fill("布丁的草地");
+  await page.getByRole("button", { name: "保存", exact:true }).click();
+  await expect(page.getByRole("heading", { name: "布丁的草地" })).toBeVisible();
+  await page.getByRole("button", { name: "应用宠物默认配置" }).click();
+  await expect(page.locator(".pet-manager-current")).toContainText("布丁");
+});

@@ -11,28 +11,106 @@ const GROOMING_MOTION: &[u8] =
     include_bytes!("../../../../src/assets/pets/naitang/grooming-motion.webp");
 const MOTION_SPEC: &str = include_str!("../../../../src/assets/pets/naitang/motion-clips.json");
 
-/// Caller holds the shared pet-state transaction. Publish state only after both
-/// assets are durable; a failed write never switches the active companion.
-pub(super) fn install_into_state(
-    base: &Path,
-    state: &mut types::DesktopPetState,
-) -> anyhow::Result<()> {
-    let mut motion_clips: types::pet_motion::PetMotionClips = serde_json::from_str(MOTION_SPEC)?;
-    types::pet_motion::validate_motion_clips(&motion_clips)?;
-    for (name, bytes) in [("kneading", KNEADING_MOTION), ("grooming", GROOMING_MOTION)] {
-        super::desktop_pet::validate_motion_image(bytes, &motion_clips[name])
-            .map_err(anyhow::Error::msg)?;
-    }
-    let directory = types::desktop_pet_root(base).join("builtin-naitang-v2");
-    fs::create_dir_all(&directory)?;
-    for (name, bytes) in [
+/// A catalog entry describes only shipped, validated assets, never placeholders.
+struct BuiltinPetSpec {
+    id: &'static str,
+    directory: &'static str,
+    legacy_directory: Option<&'static str>,
+    name: &'static str,
+    description: &'static str,
+    atlas: &'static [u8],
+    grooming: Option<&'static [u8]>,
+    motion_spec: &'static str,
+    assets: &'static [(&'static str, &'static [u8])],
+}
+
+const NAITANG: BuiltinPetSpec = BuiltinPetSpec {
+    id: "builtin-naitang",
+    directory: "builtin-naitang-v2",
+    legacy_directory: Some("builtin-naitang-v1"),
+    name: "奶糖",
+    description: "内置橘白猫：眨眼、踩奶、舔脚脚与16个注视方向，无需模型生成",
+    atlas: SPRITESHEET,
+    grooming: Some(GROOMING),
+    motion_spec: MOTION_SPEC,
+    assets: &[
         ("spritesheet.webp", SPRITESHEET),
         ("grooming.webp", GROOMING),
         ("kneading-motion.webp", KNEADING_MOTION),
         ("grooming-motion.webp", GROOMING_MOTION),
-    ] {
+    ],
+};
+const PUDDING_ATLAS: &[u8] = include_bytes!("../../../../src/assets/pets/pudding/spritesheet.webp");
+const PUDDING_TAIL: &[u8] = include_bytes!("../../../../src/assets/pets/pudding/tail-wag.webp");
+const PUDDING_HEAD: &[u8] = include_bytes!("../../../../src/assets/pets/pudding/head-tilt.webp");
+const PUDDING_STRETCH: &[u8] = include_bytes!("../../../../src/assets/pets/pudding/stretch.webp");
+const PUDDING_NAP: &[u8] = include_bytes!("../../../../src/assets/pets/pudding/nap.webp");
+const PUDDING: BuiltinPetSpec = BuiltinPetSpec {
+    id: "builtin-pudding",
+    directory: "builtin-pudding-v1",
+    legacy_directory: None,
+    name: "布丁",
+    description: "奶油色垂耳小狗：摇尾巴、歪头、伸懒腰与趴下打盹，温顺安静，无需模型生成",
+    atlas: PUDDING_ATLAS,
+    grooming: None,
+    motion_spec: include_str!("../../../../src/assets/pets/pudding/motion-clips.json"),
+    assets: &[
+        ("spritesheet.webp", PUDDING_ATLAS),
+        ("tail-wag.webp", PUDDING_TAIL),
+        ("head-tilt.webp", PUDDING_HEAD),
+        ("stretch.webp", PUDDING_STRETCH),
+        ("nap.webp", PUDDING_NAP),
+    ],
+};
+const BUILTIN_PETS: &[BuiltinPetSpec] = &[NAITANG, PUDDING];
+
+fn existing_builtin<'a>(
+    base: &Path,
+    state: &'a types::DesktopPetState,
+    spec: &BuiltinPetSpec,
+) -> Option<&'a types::pet_library::PetRecord> {
+    let root = types::desktop_pet_root(base);
+    let current = root.join(spec.directory).join("spritesheet.webp");
+    let legacy = spec
+        .legacy_directory
+        .map(|name| root.join(name).join("spritesheet.webp"));
+    state.pets.iter().find(|p| {
+        p.id == spec.id
+            || Some(p.identity.pet_path.as_str()) == current.to_str()
+            || legacy
+                .as_ref()
+                .is_some_and(|old| Some(p.identity.pet_path.as_str()) == old.to_str())
+    })
+}
+
+/// Caller holds the shared pet transaction. Validate the complete package before
+/// publishing any library entry. File failure cannot switch the active companion.
+fn install_record(
+    base: &Path,
+    spec: &BuiltinPetSpec,
+    id: String,
+) -> anyhow::Result<types::pet_library::PetRecord> {
+    super::desktop_pet::validate_v2_atlas(spec.atlas).map_err(anyhow::Error::msg)?;
+    if let Some(grooming) = spec.grooming {
+        super::desktop_pet::validate_grooming_strip(grooming).map_err(anyhow::Error::msg)?;
+    }
+    let mut motion_clips: types::pet_motion::PetMotionClips =
+        serde_json::from_str(spec.motion_spec)?;
+    types::pet_motion::validate_motion_clips(&motion_clips)?;
+    for clip in motion_clips.values() {
+        let bytes = spec
+            .assets
+            .iter()
+            .find(|(name, _)| *name == clip.path)
+            .map(|(_, bytes)| *bytes)
+            .ok_or_else(|| anyhow::anyhow!("内置动作缺少素材：{}", clip.path))?;
+        super::desktop_pet::validate_motion_image(bytes, clip).map_err(anyhow::Error::msg)?;
+    }
+    let directory = types::desktop_pet_root(base).join(spec.directory);
+    fs::create_dir_all(&directory)?;
+    for (name, bytes) in spec.assets {
         let path = directory.join(name);
-        if fs::read(&path).is_ok_and(|existing| existing == bytes) {
+        if fs::read(&path).is_ok_and(|existing| existing == *bytes) {
             continue;
         }
         let mut file = tempfile::NamedTempFile::new_in(&directory)?;
@@ -40,70 +118,100 @@ pub(super) fn install_into_state(
         file.as_file().sync_all()?;
         file.persist(&path)?;
     }
-    state.pet_path = Some(
-        directory
-            .join("spritesheet.webp")
-            .to_string_lossy()
-            .into_owned(),
-    );
-    state.grooming_path = Some(
-        directory
-            .join("grooming.webp")
-            .to_string_lossy()
-            .into_owned(),
-    );
-    state.sprite_version_number = Some(types::DESKTOP_PET_V2_SPRITE_VERSION);
     for clip in motion_clips.values_mut() {
         clip.path = directory.join(&clip.path).to_string_lossy().into_owned();
     }
-    state.motion_clips = motion_clips;
-    state.display_name = Some("奶糖".into());
-    state.description = Some("内置橘白猫：眨眼、踩奶、舔脚脚与16个注视方向，无需模型生成".into());
+    Ok(types::pet_library::PetRecord {
+        id: id.clone(),
+        builtin: true,
+        defaults: types::pet_preferences::PetScenePreferences::from_state(
+            &types::DesktopPetState::default(),
+        ),
+        identity: types::pet_scene::PetIdentity {
+            pet_id: id,
+            pet_path: directory
+                .join("spritesheet.webp")
+                .to_string_lossy()
+                .into_owned(),
+            grooming_path: spec.grooming.map(|_| {
+                directory
+                    .join("grooming.webp")
+                    .to_string_lossy()
+                    .into_owned()
+            }),
+            motion_clips,
+            sprite_version_number: Some(types::DESKTOP_PET_V2_SPRITE_VERSION),
+            display_name: Some(spec.name.into()),
+            description: Some(spec.description.into()),
+            source_path: None,
+            provider: None,
+            model: None,
+        },
+    })
+}
+
+/// Existing onboarding/default command still explicitly chooses Naitang.
+pub(super) fn install_into_state(
+    base: &Path,
+    state: &mut types::DesktopPetState,
+) -> anyhow::Result<()> {
+    let previous = existing_builtin(base, state, &NAITANG).cloned();
+    let id = previous
+        .as_ref()
+        .map(|p| p.id.clone())
+        .unwrap_or_else(|| NAITANG.id.into());
+    let mut record = install_record(base, &NAITANG, id.clone())?;
+    if let Some(previous) = previous {
+        record.defaults = previous.defaults;
+    }
+    let identity = &record.identity;
+    state.active_pet_id = Some(id.clone());
+    state.active_scene_id = None;
+    state.pet_path = Some(identity.pet_path.clone());
+    state.grooming_path = identity.grooming_path.clone();
+    state.motion_clips = identity.motion_clips.clone();
+    state.sprite_version_number = identity.sprite_version_number;
+    state.display_name = identity.display_name.clone();
+    state.description = identity.description.clone();
     state.source_path = None;
     state.provider = None;
     state.model = None;
-    let previous_builtin_path =
-        types::desktop_pet_root(base).join("builtin-naitang-v1/spritesheet.webp");
-    let existing_id = state
-        .pets
-        .iter()
-        .find(|p| {
-            Some(&p.identity.pet_path) == state.pet_path.as_ref()
-                || Some(p.identity.pet_path.as_str()) == previous_builtin_path.to_str()
-        })
-        .map(|p| p.id.clone())
-        .unwrap_or_else(|| "builtin-naitang".into());
-    state.active_pet_id = Some(existing_id.clone());
-    state.active_scene_id = None;
-    let mut identity = types::pet_scene::PetIdentity::from_state(state)?;
-    types::pet_library::register_identity(state, &mut identity)?;
-    if let Some(record) = state.pets.iter_mut().find(|p| p.id == existing_id) {
-        record.identity = identity;
-        record.builtin = true;
+    if let Some(existing) = state.pets.iter_mut().find(|p| p.id == id) {
+        *existing = record;
+    } else {
+        state.pets.push(record);
     }
     state.follow_wallpaper = false;
     state.animation_paused = false;
     Ok(())
 }
 
-pub(super) fn ensure_library(base: &Path) -> anyhow::Result<()> {
-    if types::read_desktop_pet_state(base)?
-        .pets
-        .iter()
-        .any(|p| p.builtin)
-    {
+fn ensure_catalog(base: &Path, catalog: &[BuiltinPetSpec]) -> anyhow::Result<()> {
+    let needs_update = |state: &types::DesktopPetState| {
+        catalog
+            .iter()
+            .any(|spec| existing_builtin(base, state, spec).is_none_or(|p| !p.builtin))
+    };
+    if !needs_update(&types::read_desktop_pet_state(base)?) {
         return Ok(());
     }
     types::update_desktop_pet_state(base, |state| {
-        if state.pets.iter().any(|p| p.builtin) {
-            return Ok(());
+        // Check each identity again inside the transaction, never "any builtin".
+        for spec in catalog {
+            if let Some(existing) = existing_builtin(base, state, spec) {
+                let id = existing.id.clone();
+                state.pets.iter_mut().find(|p| p.id == id).unwrap().builtin = true;
+            } else {
+                state.pets.push(install_record(base, spec, spec.id.into())?);
+            }
         }
-        let mut staging = state.clone();
-        install_into_state(base, &mut staging)?;
-        state.pets = staging.pets;
         Ok(())
     })?;
     Ok(())
+}
+
+pub(super) fn ensure_library(base: &Path) -> anyhow::Result<()> {
+    ensure_catalog(base, BUILTIN_PETS)
 }
 
 fn can_upgrade(base: &Path, state: &types::DesktopPetState) -> bool {
@@ -172,12 +280,132 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pudding_and_naitang_keep_independent_scenes_and_global_visibility_policy() {
+        let root = tempfile::tempdir().unwrap();
+        ensure_library(root.path()).unwrap();
+        let before = types::read_desktop_pet_state(root.path()).unwrap();
+        let dog = before
+            .pets
+            .iter()
+            .find(|p| p.id == "builtin-pudding")
+            .unwrap();
+        assert_eq!(dog.identity.display_name.as_deref(), Some("布丁"));
+        assert!(dog.identity.grooming_path.is_none());
+        assert_eq!(
+            dog.identity
+                .motion_clips
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["head-tilt", "nap", "stretch", "tail-wag"]
+        );
+        assert_ne!(PUDDING_ATLAS, SPRITESHEET);
+        for (id, name) in [
+            ("builtin-naitang", "Cat home"),
+            ("builtin-pudding", "Dog home"),
+        ] {
+            types::pet_library::edit_library(
+                root.path(),
+                types::pet_library::PetLibraryEdit::AddScene {
+                    pet_id: id.into(),
+                    name: name.into(),
+                },
+            )
+            .unwrap();
+        }
+        let state = types::update_desktop_pet_state(root.path(), |state| {
+            state.preferences.presentation_mode = true;
+            Ok(())
+        })
+        .unwrap();
+        let dog_scene = state
+            .scenes
+            .iter()
+            .find(|s| s.pet.pet_id == "builtin-pudding")
+            .unwrap();
+        let selected = types::pet_scene::apply_scene(
+            root.path(),
+            &dog_scene.id,
+            types::pet_scene::SceneApplyMode::Pet,
+        )
+        .unwrap();
+        assert_eq!(selected.active_pet_id.as_deref(), Some("builtin-pudding"));
+        assert_eq!(selected.scale, 0.4);
+        assert!(selected.preferences.presentation_mode);
+        assert_eq!(selected.motion_clips.len(), 4);
+        let cat = types::pet_library::apply_pet(root.path(), "builtin-naitang").unwrap();
+        assert_eq!(cat.motion_clips.len(), 2);
+        assert!(cat.motion_clips.contains_key("kneading"));
+        assert!(cat
+            .scenes
+            .iter()
+            .find(|s| s.id == dog_scene.id)
+            .unwrap()
+            .pet
+            .motion_clips
+            .contains_key("tail-wag"));
+    }
+
+    #[test]
+    fn catalog_registers_each_missing_identity_without_switching_the_desktop() {
+        let root = tempfile::tempdir().unwrap();
+        ensure_library(root.path()).unwrap();
+        let before = types::update_desktop_pet_state(root.path(), |state| {
+            state.scale = 0.3;
+            state.preferences.presentation_mode = true;
+            Ok(())
+        })
+        .unwrap();
+        // Test-only catalog entry reuses validated bytes; it is not Pudding art.
+        let second = BuiltinPetSpec {
+            id: "builtin-test-companion",
+            directory: "test-companion-v1",
+            legacy_directory: None,
+            name: "Catalog fixture",
+            ..NAITANG
+        };
+        let catalog = [NAITANG, second];
+        ensure_catalog(root.path(), &catalog).unwrap();
+        let state = types::read_desktop_pet_state(root.path()).unwrap();
+        assert_eq!(state.pets.len(), 3);
+        assert_eq!(state.pet_path, before.pet_path);
+        assert_eq!(state.enabled, before.enabled);
+        assert_eq!(state.scale, 0.3);
+        assert!(state.preferences.presentation_mode);
+        let added = state
+            .pets
+            .iter()
+            .find(|p| p.id == "builtin-test-companion")
+            .unwrap();
+        assert_eq!(added.defaults.scale, 0.4);
+        assert_eq!(added.defaults.behavior.activity_interval_secs, 45);
+        ensure_catalog(root.path(), &catalog).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), state);
+    }
+
+    #[test]
+    fn incomplete_catalog_assets_never_publish_a_partial_pet() {
+        let root = tempfile::tempdir().unwrap();
+        ensure_library(root.path()).unwrap();
+        let before = types::read_desktop_pet_state(root.path()).unwrap();
+        let broken = BuiltinPetSpec {
+            id: "builtin-broken",
+            directory: "broken-v1",
+            legacy_directory: None,
+            assets: &[("spritesheet.webp", SPRITESHEET)],
+            ..NAITANG
+        };
+        assert!(ensure_catalog(root.path(), &[NAITANG, broken]).is_err());
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), before);
+    }
+
+    #[test]
     fn builtin_library_is_available_without_applying_and_seeds_once() {
         let root = tempfile::tempdir().unwrap();
         ensure_library(root.path()).unwrap();
         let state = types::read_desktop_pet_state(root.path()).unwrap();
         assert!(!state.enabled && state.pet_path.is_none());
-        assert_eq!(state.pets.len(), 1);
+        assert_eq!(state.pets.len(), 2);
         assert!(state.pets[0].builtin);
         assert!(Path::new(&state.pets[0].identity.pet_path).is_file());
         ensure_library(root.path()).unwrap();

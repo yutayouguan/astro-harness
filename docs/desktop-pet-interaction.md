@@ -75,9 +75,14 @@ enabling or switching the active pet. Deleting a scene does not remove its pet;
 deleting a custom pet confirms the current number of associated scenes, hides it
 if active, removes those library records, and intentionally retains all asset files.
 
-See `desktop-pet-library-todo.md` for verified checks and outstanding native/image
-generation acceptance. The requested second built-in Pudding is not installed until
-its actual image and animation assets pass validation.
+See `desktop-pet-library-todo.md` and `desktop-pet-pudding-todo.md` for verified
+checks and outstanding native acceptance. Pudding is now a second offline built-in
+with validated real image/animation assets; seeding checks each catalog identity
+without changing the active pet. Both Settings and the native context menu derive
+their action list from the current pet's supported clips. Pudding has tail-wag,
+head-tilt, stretch and nap; it does not inherit cat kneading/grooming actions.
+Scene export snapshots inherited effective preferences for portable packages,
+without changing the saved scene's inheritance or applying it to the desktop.
 
 ## Playback details
 

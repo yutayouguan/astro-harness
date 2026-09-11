@@ -1,6 +1,14 @@
-export type PetLeisure = "kneading" | "grooming";
+export type PetLeisure = string;
 export const GROOMING_DURATIONS = [260, 160, 160, 160, 160, 300] as const;
 export const LEISURE_DURATION = { kneading: 1640, grooming: 2400 } as const;
+
+export function legacyPetLeisureDuration(name: string): number {
+  return name === "kneading"
+    ? LEISURE_DURATION.kneading
+    : name === "grooming"
+      ? LEISURE_DURATION.grooming
+      : 0;
+}
 
 export function groomingFrame(elapsed: number, reducedMotion = false) {
   if (reducedMotion || !Number.isFinite(elapsed)) return { row: 0, column: 0 };

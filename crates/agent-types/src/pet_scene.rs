@@ -341,9 +341,19 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
     let state = crate::read_desktop_pet_state(base)?;
     let mut scene = state
         .scenes
-        .into_iter()
+        .iter()
         .find(|s| s.id == id)
+        .cloned()
         .ok_or_else(|| anyhow::anyhow!("场景不存在"))?;
+    // An exported package cannot refer back to this installation's defaults.
+    // Snapshot effective preferences without changing the saved scene's inheritance.
+    if scene.preferences.is_none() {
+        scene.preferences = state
+            .pets
+            .iter()
+            .find(|p| p.id == scene.pet.pet_id)
+            .map(|p| p.defaults.clone());
+    }
     let pet_path = managed_file(base, Path::new(&scene.pet.pet_path))?;
     let pet = read_limited_pet_file(&pet_path, 50 * 1024 * 1024)?;
     let wallpaper = scene

@@ -15,12 +15,18 @@ import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation"
 import DesktopPetCanvas from "./DesktopPetCanvas";
 import { usePetHitTesting } from "./usePetHitTesting";
 import { motionDuration } from "../../lib/ui/petMotionClip";
+import {
+  availablePetActions,
+  availablePetActionSignature,
+  nextPetAction,
+  petActionLabel,
+} from "../../lib/ui/petActionCatalog";
 import { DEFAULT_PET_PREFERENCES } from "../../lib/ui/petPreferences";
 import { Menu } from "@tauri-apps/api/menu";
 import type { PetScene } from "../../lib/ui/petScene";
 import {
   canPlayPetLeisure,
-  LEISURE_DURATION,
+  legacyPetLeisureDuration,
   type PetLeisure,
 } from "../../lib/ui/desktopPetLeisure";
 
@@ -65,7 +71,16 @@ export default function DesktopPetSurface() {
     };
   }, []);
   const [leisure, setLeisure] = useState<PetLeisure | null>(null);
-  const leisureNext = useRef<PetLeisure>("kneading");
+  const leisurePrevious = useRef<string | null>(null);
+  const availableActions = availablePetActions(state);
+  const actionSignature = availablePetActionSignature(state);
+  useEffect(() => {
+    setLeisure(null);
+    leisurePrevious.current = null;
+    const oldMenu = menuRef.current;
+    menuRef.current = null;
+    void oldMenu?.close().catch(() => {});
+  }, [state.petPath, actionSignature]);
   const menuRef = useRef<Menu | null>(null);
   const menuOpening = useRef(false);
   const [menuError, setMenuError] = useState("");
@@ -161,34 +176,16 @@ export default function DesktopPetSurface() {
             text: "暂时隐藏",
             action: () => act("set_desktop_pet_enabled", { enabled: false }),
           },
-          ...(state.groomingPath ||
-          state.motionClips?.grooming ||
-          state.motionClips?.kneading
-            ? [
-                {
-                  id: "pet-knead",
-                  text: "踩奶",
-                  enabled:
-                    leisureAllowed &&
-                    Boolean(state.motionClips?.kneading || state.groomingPath),
-                  action: () => {
-                    setLookAngle(null);
-                    setLeisure("kneading");
-                  },
-                },
-                {
-                  id: "pet-groom",
-                  text: "舔脚脚",
-                  enabled:
-                    leisureAllowed &&
-                    Boolean(state.motionClips?.grooming || state.groomingPath),
-                  action: () => {
-                    setLookAngle(null);
-                    setLeisure("grooming");
-                  },
-                },
-              ]
-            : []),
+          ...availableActions.map((name) => ({
+            id: `pet-action-${name}`,
+            text: petActionLabel(name, "zh"),
+            enabled: leisureAllowed,
+            action: () => {
+              setLookAngle(null);
+              leisurePrevious.current = name;
+              setLeisure(name);
+            },
+          })),
           {
             id: "pet-scenes",
             text: "切换场景",
@@ -198,7 +195,10 @@ export default function DesktopPetSurface() {
               .slice(0, 20)
               .map((scene) => ({
                 id: scene.id,
-                text: (scene.favorite ? "★ " : "") + scene.name,
+                text:
+                  (scene.favorite ? "★ " : "") +
+                  (scene.pet.displayName ? `${scene.pet.displayName} · ` : "") +
+                  scene.name,
                 action: () =>
                   act("apply_pet_scene", {
                     sceneId: scene.id,
@@ -396,9 +396,7 @@ export default function DesktopPetSurface() {
     enabled: state.enabled && windowVisible,
     spriteVersionNumber: state.spriteVersionNumber,
     groomingPath: state.groomingPath,
-    hasMotionClips: Boolean(
-      state.motionClips?.grooming || state.motionClips?.kneading,
-    ),
+    hasMotionClips: availableActions.length > 0,
     paused: state.animationPaused,
     reducedMotion,
     activity,
@@ -410,10 +408,10 @@ export default function DesktopPetSurface() {
     leisure && state.motionClips?.[leisure]
       ? motionDuration(state.motionClips[leisure])
       : leisure
-        ? LEISURE_DURATION[leisure]
+        ? legacyPetLeisureDuration(leisure)
         : 0;
   useEffect(() => {
-    if (!leisureAllowed) {
+    if (!leisureAllowed || (leisure && !availableActions.includes(leisure))) {
       setLeisure(null);
       return;
     }
@@ -423,14 +421,9 @@ export default function DesktopPetSurface() {
     }
     if (lookAngle != null || preferences.quietMode) return;
     const timer = window.setTimeout(() => {
-      const available = (["kneading", "grooming"] as const).filter(
-        (name) => state.motionClips?.[name] || state.groomingPath,
-      );
-      const next = available.includes(leisureNext.current)
-        ? leisureNext.current
-        : available[0];
+      const next = nextPetAction(availableActions, leisurePrevious.current);
       if (!next) return;
-      leisureNext.current = next === "kneading" ? "grooming" : "kneading";
+      leisurePrevious.current = next;
       setLeisure(next);
     }, preferences.activityIntervalSecs * 1000);
     return () => window.clearTimeout(timer);
@@ -440,11 +433,15 @@ export default function DesktopPetSurface() {
     lookAngle,
     state.petPath,
     state.groomingPath,
+    actionSignature,
     leisureDuration,
     preferences.activityIntervalSecs,
     preferences.quietMode,
   ]);
-  const playedLeisure = leisureAllowed ? leisure : null;
+  const playedLeisure =
+    leisureAllowed && leisure && availableActions.includes(leisure)
+      ? leisure
+      : null;
   const groomingSrc =
     playedLeisure === "grooming" ? resolveMediaSrc(state.groomingPath) : null;
   const renderedState: DesktopPetAnimationState =

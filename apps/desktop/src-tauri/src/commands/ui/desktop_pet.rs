@@ -113,7 +113,7 @@ fn validate_manifest_copy(value: &str, field: &str, max_chars: usize) -> Result<
     Ok(())
 }
 
-fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
+pub(super) fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
     if bytes.is_empty() || bytes.len() as u64 > MAX_ATLAS_BYTES {
         return Err("动画图集为空或超过 50 MB".to_string());
     }
@@ -164,7 +164,7 @@ fn validate_v2_atlas(bytes: &[u8]) -> Result<&'static str, String> {
     Ok(extension)
 }
 
-fn validate_grooming_strip(bytes: &[u8]) -> Result<&'static str, String> {
+pub(super) fn validate_grooming_strip(bytes: &[u8]) -> Result<&'static str, String> {
     let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
@@ -1022,6 +1022,59 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pudding_export_import_preserves_four_clips_and_effective_defaults_without_applying() {
+        let home = tempfile::tempdir().unwrap();
+        super::super::builtin_pet::ensure_library(home.path()).unwrap();
+        let state = types::read_desktop_pet_state(home.path()).unwrap();
+        let mut defaults = state
+            .pets
+            .iter()
+            .find(|p| p.id == "builtin-pudding")
+            .unwrap()
+            .defaults
+            .clone();
+        defaults.scale = 0.5;
+        defaults.behavior.quiet_mode = true;
+        types::pet_library::edit_library(
+            home.path(),
+            types::pet_library::PetLibraryEdit::SetDefaults {
+                pet_id: "builtin-pudding".into(),
+                defaults: defaults.clone(),
+            },
+        )
+        .unwrap();
+        let saved = types::pet_library::edit_library(
+            home.path(),
+            types::pet_library::PetLibraryEdit::AddScene {
+                pet_id: "builtin-pudding".into(),
+                name: "Pudding portable".into(),
+            },
+        )
+        .unwrap();
+        let scene = saved.scenes.last().unwrap();
+        assert!(scene.preferences.is_none());
+        let out = tempfile::tempdir().unwrap();
+        let package = types::pet_scene::export_scene(home.path(), &scene.id, out.path()).unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let imported = import_animated_pet_at(target.path(), &package.join("pet.json")).unwrap();
+        assert!(!imported.enabled && imported.active_pet_id.is_none());
+        let pet = &imported.pets[0];
+        assert_eq!(pet.identity.motion_clips.len(), 4);
+        assert_eq!(pet.defaults, defaults);
+        assert!(pet.identity.source_path.is_none());
+        for clip in pet.identity.motion_clips.values() {
+            assert!(Path::new(&clip.path).is_file());
+        }
+        assert!(types::read_desktop_pet_state(home.path())
+            .unwrap()
+            .scenes
+            .last()
+            .unwrap()
+            .preferences
+            .is_none());
+    }
 
     #[test]
     fn quiet_hiding_does_not_override_user_visibility_and_tray_can_restore_fullscreen() {

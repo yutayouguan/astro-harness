@@ -10,6 +10,12 @@ import { DEFAULT_PET_PREFERENCES } from "../lib/ui/petPreferences";
 import type { PetScene } from "../lib/ui/petScene";
 import type { PetDefaults } from "../lib/ui/petLibrary";
 import atlas from "../assets/pets/naitang/spritesheet.webp";
+import puddingAtlas from "../assets/pets/pudding/spritesheet.webp";
+import puddingTail from "../assets/pets/pudding/tail-wag.webp";
+import puddingHead from "../assets/pets/pudding/head-tilt.webp";
+import puddingStretch from "../assets/pets/pudding/stretch.webp";
+import puddingNap from "../assets/pets/pudding/nap.webp";
+import puddingSpecs from "../assets/pets/pudding/motion-clips.json";
 import concept from "../assets/generated/desktop-pet-concept.png";
 
 const meta = {
@@ -29,6 +35,28 @@ const meta = {
       model: null,
     };
     const defaults = { scale: 0.4, behavior: { ...DEFAULT_PET_PREFERENCES } };
+    const puddingFiles: Record<string, string> = {
+      "tail-wag": puddingTail,
+      "head-tilt": puddingHead,
+      stretch: puddingStretch,
+      nap: puddingNap,
+    };
+    const pudding = {
+      ...identity,
+      petId: "builtin-pudding",
+      displayName: "布丁",
+      petPath: new URL(puddingAtlas, window.location.href).href,
+      description: "奶油色垂耳小狗，摇尾巴、歪头、伸懒腰与打盹。",
+      motionClips: Object.fromEntries(
+        Object.entries(puddingSpecs).map(([name, spec]) => [
+          name,
+          {
+            ...spec,
+            path: new URL(puddingFiles[name], window.location.href).href,
+          },
+        ]),
+      ),
+    };
     let scenes: PetScene[] = [
       {
         id: "pet-forest",
@@ -61,7 +89,15 @@ const meta = {
       spriteVersionNumber: 2,
       activePetId: identity.petId,
       activeSceneId: "pet-forest",
-      pets: [{ id: identity.petId, builtin: true, identity, defaults }],
+      pets: [
+        { id: identity.petId, builtin: true, identity, defaults },
+        {
+          id: pudding.petId,
+          builtin: true,
+          identity: pudding,
+          defaults: structuredClone(defaults),
+        },
+      ],
       scenes,
     };
     mockIPC((command, payload) => {
@@ -80,22 +116,23 @@ const meta = {
       if (command === "edit_pet_library") {
         const edit = args.request as {
           action: string;
+          petId: string;
           name: string;
           defaults: PetDefaults;
         };
+        const target = state.pets!.find((p) => p.id === edit.petId)!;
         if (edit.action === "add_scene")
           scenes.push({
             ...scenes[0],
+            pet: target.identity,
             id: "pet-" + state.revision,
             name: edit.name,
             wallpaperPath: null,
             preferences: null,
             favorite: false,
           });
-        if (edit.action === "rename")
-          state.pets![0].identity.displayName = edit.name;
-        if (edit.action === "set_defaults")
-          state.pets![0].defaults = edit.defaults;
+        if (edit.action === "rename") target.identity.displayName = edit.name;
+        if (edit.action === "set_defaults") target.defaults = edit.defaults;
       }
       if (command === "edit_pet_scene") {
         const edit = args.request as {
@@ -113,7 +150,18 @@ const meta = {
         if (edit.action === "delete")
           scenes = scenes.filter((s) => s.id !== edit.sceneId);
       }
-      if (command === "apply_library_pet") state.activeSceneId = null;
+      if (command === "apply_library_pet") {
+        const target = state.pets!.find((p) => p.id === args.petId)!;
+        state = {
+          ...state,
+          ...target.identity,
+          activePetId: target.id,
+          activeSceneId: null,
+          enabled: true,
+          scale: target.defaults.scale,
+          preferences: target.defaults.behavior,
+        };
+      }
       if (command === "apply_pet_scene") {
         state.activeSceneId = String(args.sceneId);
         state.enabled = true;
