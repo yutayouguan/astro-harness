@@ -24,6 +24,7 @@ export default function PetSceneLibrary({
   zh,
   pet,
   active,
+  creating = false,
 }: {
   state: DesktopPetState;
   mutate: (
@@ -34,8 +35,11 @@ export default function PetSceneLibrary({
   zh: boolean;
   pet: PetRecord;
   active: boolean;
+  creating?: boolean;
 }) {
   const [scenes, setScenes] = useState<PetScene[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [working, setWorking] = useState(false),
     lock = useRef(false);
   const [error, setError] = useState(""),
@@ -51,12 +55,17 @@ export default function PetSceneLibrary({
   useEffect(() => {
     if (!active || !("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
+    setLoading(true);
+    setLoadError("");
     void invoke<PetScene[]>("get_pet_scenes")
       .then((next) => {
         if (!disposed) setScenes(next);
       })
       .catch((e) => {
-        if (!disposed) setError(String(e));
+        if (!disposed) setLoadError(String(e));
+      })
+      .finally(() => {
+        if (!disposed) setLoading(false);
       });
     return () => {
       disposed = true;
@@ -140,9 +149,9 @@ export default function PetSceneLibrary({
   const selected = scenes.find((s) => s.id === editing);
   return (
     <section className="pet-scenes" aria-busy={working}>
-      {error && (
+      {(error || loadError) && (
         <p role="alert" className="desktop-pet-error">
-          {error}
+          {error || loadError}
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
@@ -545,13 +554,25 @@ export default function PetSceneLibrary({
           </article>
         ))}
       </div>
-      {!scenesForPet(scenes, pet.id).length && (
-        <p className="pet-library-empty">
-          {zh
-            ? "这只宠物还没有场景。可直接应用宠物默认配置，或点击「新增场景」为它准备一个家。"
-            : "No scenes yet. Apply the pet defaults or add its first home."}
+      {loading && (
+        <p className="pet-detail-loading" role="status">
+          {zh ? "正在读取场景…" : "Loading scenes…"}
         </p>
       )}
+      {!loading &&
+        !error &&
+        !loadError &&
+        !creating &&
+        !scenesForPet(scenes, pet.id).length && (
+          <div className="pet-library-empty pet-detail-empty">
+            <strong>{zh ? "还没有专属场景" : "No saved scenes yet"}</strong>
+            <p>
+              {zh
+                ? "点击「新增场景」为它保存一个家。没有场景也可以直接使用宠物。"
+                : "Add a scene to save a home. You can use the pet without creating a scene."}
+            </p>
+          </div>
+        )}
     </section>
   );
 }

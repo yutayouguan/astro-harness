@@ -14,6 +14,7 @@ import { SelectMenu } from "../ui/SelectMenu";
 import PetPreferencesEditor from "./PetPreferencesEditor";
 import PetMoreMenu from "./PetMoreMenu";
 import PetSceneLibrary from "./PetSceneLibrary";
+import "../../styles/features/pet-detail.css";
 
 export function PetPortrait({
   pet,
@@ -85,6 +86,7 @@ export default function PetLibraryPanel({
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const lock = useRef(false);
+  const sceneCreateButton = useRef<HTMLButtonElement>(null);
   const [editor, setEditor] = useState<{
     action: "rename" | "add_scene";
     name: string;
@@ -95,6 +97,12 @@ export default function PetLibraryPanel({
   const count = (id: string) =>
     state.scenes.filter((s) => s.pet?.petId === id).length;
   const disabled = busy || working;
+  function cancelEditor() {
+    const restoreSceneFocus = editor?.action === "add_scene";
+    setEditor(null);
+    if (restoreSceneFocus)
+      requestAnimationFrame(() => sceneCreateButton.current?.focus());
+  }
   useEffect(() => {
     setAction("idle");
     setDetailTab("scenes");
@@ -108,8 +116,20 @@ export default function PetLibraryPanel({
     setError("");
     try {
       await mutate(command, args);
-      setEditor(null);
-      setDeleting(null);
+      const requestAction = (args.request as { action?: string } | undefined)
+        ?.action;
+      if (
+        command === "edit_pet_library" &&
+        (requestAction === "rename" || requestAction === "add_scene")
+      ) {
+        setEditor(null);
+        if (requestAction === "add_scene") {
+          requestAnimationFrame(() => sceneCreateButton.current?.focus());
+        }
+      }
+      if (command === "edit_pet_library" && requestAction === "delete") {
+        setDeleting(null);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -117,8 +137,60 @@ export default function PetLibraryPanel({
       setWorking(false);
     }
   }
+  const editorForm = editor && pet && (
+    <form
+      className="pet-scene-editor pet-detail-name-editor"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.nativeEvent.isComposing && !disabled) {
+          e.preventDefault();
+          cancelEditor();
+        }
+      }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void run("edit_pet_library", {
+          request: { ...editor, petId: pet.id },
+        });
+      }}
+    >
+      <label>
+        {editor.action === "rename"
+          ? zh
+            ? "宠物名字"
+            : "Pet name"
+          : zh
+            ? "新场景名称"
+            : "Scene name"}
+        <input
+          autoFocus
+          maxLength={80}
+          disabled={disabled}
+          placeholder={
+            editor.action === "add_scene"
+              ? zh
+                ? "例如：窗边午睡"
+                : "For example: Window nook"
+              : undefined
+          }
+          value={editor.name}
+          onChange={(e) =>
+            setEditor({ ...editor, name: e.currentTarget.value })
+          }
+        />
+      </label>
+      <button type="submit" disabled={disabled || !editor.name.trim()}>
+        {zh ? "保存" : "Save"}
+      </button>
+      <button type="button" disabled={disabled} onClick={cancelEditor}>
+        {zh ? "取消" : "Cancel"}
+      </button>
+    </form>
+  );
   return (
-    <div className="pet-library" aria-busy={working}>
+    <div
+      className={`pet-library${pet ? " pet-detail-view" : ""}`}
+      aria-busy={working}
+    >
       {error && (
         <p role="alert" className="desktop-pet-error">
           {error}
@@ -312,82 +384,85 @@ export default function PetLibraryPanel({
             />
             <div>
               <h3>{pet.identity.displayName}</h3>
-              <p>{pet.identity.description}</p>
+              <p title={pet.identity.description || undefined}>
+                {pet.builtin
+                  ? zh
+                    ? "内置伙伴"
+                    : "Built-in companion"
+                  : zh
+                    ? "自定义伙伴"
+                    : "Custom companion"}
+                {" · "}
+                {pet.identity.spriteVersionNumber === 2
+                  ? zh
+                    ? "动画"
+                    : "Animated"
+                  : zh
+                    ? "静态"
+                    : "Static"}
+                {" · "}
+                {count(pet.id)
+                  ? `${count(pet.id)} ${zh ? "个场景" : "scenes"}`
+                  : zh
+                    ? "尚未创建场景"
+                    : "No scenes yet"}
+              </p>
               <small>
-                {count(pet.id)}{" "}
+                {state.activePetId === pet.id
+                  ? zh
+                    ? "当前桌宠"
+                    : "Current pet"
+                  : zh
+                    ? "正在浏览"
+                    : "Previewing"}
+                {" · "}
                 {zh
-                  ? "个场景 · 当前仅为管理预览"
-                  : "scenes · management preview"}
+                  ? "浏览不会改变桌面"
+                  : "Browsing does not change your desktop"}
               </small>
             </div>
-            <button
-              type="button"
-              className="desktop-pet-import-package"
-              disabled={disabled}
-              onClick={() => void run("apply_library_pet", { petId: pet.id })}
-            >
-              <PawPrint size={16} />
-              {zh ? "应用宠物默认配置" : "Apply pet defaults"}
-            </button>
-            <PetMoreMenu label={zh ? "宠物更多操作" : "More pet actions"}>
+            <div className="pet-detail-actions">
               <button
                 type="button"
+                className="desktop-pet-import-package"
                 disabled={disabled}
-                onClick={() =>
-                  setEditor({
-                    action: "rename",
-                    name: pet.identity.displayName || "",
-                  })
+                onClick={() => void run("apply_library_pet", { petId: pet.id })}
+                aria-label={zh ? "应用宠物默认配置" : "Apply pet defaults"}
+                title={
+                  zh
+                    ? "应用已保存的大小、位置和行为，不更换壁纸"
+                    : "Apply saved size, placement and behavior without changing wallpaper"
                 }
               >
-                {zh ? "重命名" : "Rename"}
+                <PawPrint size={16} />
+                {zh ? "应用默认配置" : "Apply defaults"}
               </button>
-              {!pet.builtin && (
+              <PetMoreMenu label={zh ? "宠物更多操作" : "More pet actions"}>
                 <button
                   type="button"
                   disabled={disabled}
-                  onClick={() => setDeleting(count(pet.id))}
-                >
-                  {zh ? "移除宠物…" : "Remove pet…"}
-                </button>
-              )}
-            </PetMoreMenu>
-          </header>
-          {editor && (
-            <form
-              className="pet-scene-editor"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run("edit_pet_library", {
-                  request: { ...editor, petId: pet.id },
-                });
-              }}
-            >
-              <label>
-                {editor.action === "rename"
-                  ? zh
-                    ? "宠物名字"
-                    : "Pet name"
-                  : zh
-                    ? "新场景名称"
-                    : "Scene name"}
-                <input
-                  autoFocus
-                  maxLength={80}
-                  value={editor.name}
-                  onChange={(e) =>
-                    setEditor({ ...editor, name: e.currentTarget.value })
+                  onClick={() =>
+                    setEditor({
+                      action: "rename",
+                      name: pet.identity.displayName || "",
+                    })
                   }
-                />
-              </label>
-              <button type="submit" disabled={disabled || !editor.name.trim()}>
-                {zh ? "保存" : "Save"}
-              </button>
-              <button type="button" onClick={() => setEditor(null)}>
-                {zh ? "取消" : "Cancel"}
-              </button>
-            </form>
-          )}
+                >
+                  {zh ? "重命名" : "Rename"}
+                </button>
+                {!pet.builtin && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setDeleting(count(pet.id))}
+                  >
+                    {zh ? "移除宠物…" : "Remove pet…"}
+                  </button>
+                )}
+              </PetMoreMenu>
+            </div>
+          </header>
+          {editor?.action === "rename" && editorForm}
           {deleting !== null && (
             <div className="pet-scene-editor" role="alert">
               <p>
@@ -417,6 +492,7 @@ export default function PetLibraryPanel({
             </div>
           )}
           <SegmentedTabs
+            className="pet-detail-tabs"
             aria-label={zh ? "宠物详情" : "Pet details"}
             value={detailTab}
             onValueChange={setDetailTab}
@@ -440,22 +516,29 @@ export default function PetLibraryPanel({
             aria-label={zh ? "场景" : "Scenes"}
             id="pet-detail-scenes"
           >
-            <div className="pet-library-toolbar">
-              <p>
-                {zh
-                  ? "同一只宠物，不同的家。新场景继承宠物默认配置。"
-                  : "Different homes, one companion. New scenes inherit pet defaults."}
-              </p>
+            <div className="pet-library-toolbar pet-detail-scene-toolbar">
+              <div>
+                <h4>{zh ? "专属场景" : "Saved scenes"}</h4>
+                <p>
+                  {zh
+                    ? "保存壁纸、大小与位置；新场景继承宠物默认配置。"
+                    : "Save wallpaper, size and placement. New scenes inherit pet defaults."}
+                </p>
+              </div>
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || editor?.action === "add_scene"}
+                ref={sceneCreateButton}
                 onClick={() => setEditor({ action: "add_scene", name: "" })}
+                aria-expanded={editor?.action === "add_scene"}
               >
                 <Plus size={16} />
                 {zh ? "新增场景" : "Add scene"}
               </button>
             </div>
+            {editor?.action === "add_scene" && editorForm}
             <PetSceneLibrary
+              creating={editor?.action === "add_scene"}
               key={pet.id}
               state={state}
               mutate={mutate}
@@ -473,6 +556,14 @@ export default function PetLibraryPanel({
             className="prefs-card desktop-pet-card pet-motion-settings"
           >
             <div className="pet-motion-preview">
+              <header>
+                <h4>{zh ? "动作预览" : "Motion preview"}</h4>
+                <p>
+                  {zh
+                    ? "仅在此处播放，不影响桌面"
+                    : "Preview here without changing your desktop"}
+                </p>
+              </header>
               <PetPortrait
                 pet={pet}
                 active={active && detailTab === "actions"}

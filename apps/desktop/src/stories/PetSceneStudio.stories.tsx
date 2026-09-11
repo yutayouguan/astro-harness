@@ -18,12 +18,14 @@ import puddingStretch from "../assets/pets/pudding/stretch.webp";
 import puddingNap from "../assets/pets/pudding/nap.webp";
 import puddingSpecs from "../assets/pets/pudding/motion-clips.json";
 import concept from "../assets/generated/desktop-pet-concept.png";
+import roomWallpaper from "./assets/pet-room.jpeg";
 
 const meta = {
   title: "Settings/PetSceneStudio",
   component: DesktopPetPanel,
   beforeEach: (context) => {
     const photo = new URL(concept, window.location.href).href;
+    const sceneWallpaper = new URL(roomWallpaper, window.location.href).href;
     const identity = {
       petId: "fixture-naitang",
       petPath: new URL(atlas, window.location.href).href,
@@ -64,7 +66,7 @@ const meta = {
         name: "森林小屋",
         pet: identity,
         style: null,
-        wallpaperPath: photo,
+        wallpaperPath: sceneWallpaper,
         favorite: true,
         inUse: true,
         preferences: null,
