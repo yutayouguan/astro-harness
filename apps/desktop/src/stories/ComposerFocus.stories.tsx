@@ -1,12 +1,19 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useTheme } from "../hooks/app/useTheme";
 import softMeta from "./SoftMaterial.stories";
+import { SelectMenu } from "../components/ui/SelectMenu";
+import { useState, type CSSProperties } from "react";
 
 /** Uses the production editor structure/classes, without sending real messages. */
 function ComposerFocusSample() {
   const { setMode, material, setMaterial } = useTheme();
+  const [accent, setAccent] = useState("#155eef");
   return (
-    <div>
+    <div
+      style={
+        { height: "100%", overflow: "auto", "--tone": accent } as CSSProperties
+      }
+    >
       <div style={{ display: "flex", gap: 12 }}>
         <button type="button" onClick={() => setMode("light")}>
           亮色
@@ -19,6 +26,15 @@ function ComposerFocusSample() {
           onClick={() => setMaterial(material === "soft" ? "glass" : "soft")}
         >
           材质：{material}
+        </button>
+        <button type="button" onClick={() => setAccent("#155eef")}>
+          蓝色强调
+        </button>
+        <button type="button" onClick={() => setAccent("#16a34a")}>
+          绿色强调
+        </button>
+        <button type="button" onClick={() => setAccent("#f97316")}>
+          橙色强调
         </button>
       </div>
       {(["expanded", "capsule"] as const).map((layout) => (
@@ -61,10 +77,79 @@ function ComposerFocusSample() {
           </form>
         </section>
       ))}
-      <label>
-        独立文本框（保留自身焦点框）
-        <textarea aria-label="独立文本框" />
-      </label>
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 20,
+          padding: 12,
+        }}
+      >
+        <label className="providers-field">
+          普通输入
+          <input aria-label="普通输入" />
+        </label>
+        <label className="providers-field">
+          密码
+          <input type="password" aria-label="密码" />
+        </label>
+        <label className="sidebar-settings-search">
+          <span style={{ whiteSpace: "nowrap" }}>搜索</span>
+          <input type="search" aria-label="搜索" />
+        </label>
+        <div className="cron-sched-stepper">
+          <input
+            className="cron-sched-input cron-sched-input--bare"
+            type="number"
+            aria-label="数字"
+            defaultValue={3}
+          />
+        </div>
+        <label>
+          独立文本框
+          <textarea
+            className="user-message-editor-input"
+            aria-label="独立文本框"
+          />
+        </label>
+        <label>
+          原生选择
+          <select className="prefs-select" aria-label="原生选择">
+            <option>默认</option>
+            <option>备用</option>
+          </select>
+        </label>
+        <SelectMenu
+          aria-label="自定义选择"
+          value="default"
+          options={[
+            { value: "default", label: "默认" },
+            { value: "other", label: "备用" },
+          ]}
+          onChange={() => {}}
+          search={{ placeholder: "筛选选项", emptyLabel: "没有结果" }}
+        />
+        <label className="providers-field">
+          错误输入
+          <input
+            aria-label="错误输入"
+            aria-invalid="true"
+            defaultValue="无效值"
+          />
+        </label>
+        <label className="providers-field">
+          禁用输入
+          <input aria-label="禁用输入" disabled />
+        </label>
+        <div className="prefs-page is-embedded">
+          <input
+            className="aux-number-input"
+            type="number"
+            aria-label="设置数字"
+            defaultValue={1}
+          />
+        </div>
+      </section>
     </div>
   );
 }

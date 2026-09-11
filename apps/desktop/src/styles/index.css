@@ -126,3 +126,4 @@
 @import "./components/tabs.css" layer(overrides);
 @import "./features/material-picker.css" layer(features);
 @import "./materials/soft.css" layer(overrides);
+@import "./materials/soft-focus.css" layer(overrides);

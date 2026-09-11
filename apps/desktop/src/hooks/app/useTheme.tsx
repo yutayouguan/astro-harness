@@ -40,6 +40,7 @@ import {
   readStoredInterfaceMaterial,
   type InterfaceMaterial,
 } from "../../lib/ui/interfaceMaterial";
+import { installInputFocus } from "../../lib/ui/inputFocus";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type { GlassIntensity } from "../../lib/ui/glassIntensity";
@@ -122,6 +123,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  useEffect(() => installInputFocus(document), []);
   const [material, setMaterialState] = useState(readStoredInterfaceMaterial);
   const [mode, setModeState] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "auto" : readStoredMode(),

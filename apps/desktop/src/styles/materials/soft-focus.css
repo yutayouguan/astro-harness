@@ -1,0 +1,68 @@
+/* One input, one focus edge. Inset outlines replace the existing border visually
+ * without changing dimensions, covering the border rather than adding to it. */
+html[data-material="soft"][data-theme="light"] {
+  --input-focus-fallback: #6d83ad;
+  --input-focus-lightness: 0.59;
+}
+
+html[data-material="soft"][data-theme="dark"] {
+  --input-focus-fallback: #8194b8;
+  --input-focus-lightness: 0.7;
+}
+
+html[data-material="soft"] {
+  --input-focus-width: 1px;
+}
+
+html[data-material="soft"][data-focus-modality="keyboard"] {
+  --input-focus-width: 2px;
+}
+
+html[data-material="soft"][data-theme] [data-input-focus] {
+  --input-focus-color: var(--input-focus-fallback);
+
+  border-color: transparent;
+  outline: var(--input-focus-width) solid var(--input-focus-color);
+  outline-offset: calc(-1 * var(--input-focus-width));
+  box-shadow: none;
+  /* Old field-specific focus glow transitions must not produce a second ring. */
+  transition-property: background-color, color;
+}
+
+@supports (color: oklch(from red 0.59 0.065 h)) {
+  html[data-material="soft"][data-theme] [data-input-focus] {
+    /* Resolve the hue at the focused surface, not the root: page-specific and
+     * custom accent changes remain live. Chroma/lightness stay independently bounded. */
+    --input-focus-color: oklch(
+      from var(--tone, var(--accent)) var(--input-focus-lightness) 0.065 h
+    );
+  }
+}
+
+html[data-material="soft"][data-theme]
+  [data-input-focus]:is(
+    [aria-invalid="true"],
+    :user-invalid,
+    :has([aria-invalid="true"], :user-invalid)
+  ) {
+  --input-focus-color: var(--danger);
+}
+
+/* Only the focused control inside a composite loses its own decoration.
+ * Sibling buttons keep their keyboard rings; unrelated form fields are untouched. */
+html[data-material="soft"][data-theme]
+[data-input-focus-control]:not([data-input-focus]) {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+@media (prefers-contrast: more) {
+  html[data-material="soft"][data-theme] {
+    --input-focus-width: 2px;
+  }
+
+  html[data-material="soft"][data-theme] [data-input-focus] {
+    --input-focus-color: var(--soft-ink);
+  }
+}

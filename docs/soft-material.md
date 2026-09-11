@@ -21,9 +21,19 @@
 
 `main.tsx` 首帧预热，`ThemeProvider` 负责切换和重新断言，根节点用 `data-material` 与 `data-theme` 独立组合。CSS 在 `materials/soft.css` 的 overrides 层重映射现有 `--immersive-reference-*` 表面契约；不要向每个功能页追加独立的新拟态配方。
 
+## 输入焦点
+
+`ThemeProvider` 安装 `inputFocus.ts` 的捕获阶段监听器：指针操作采用 1px 细边，Tab/Shift+Tab 导航采用 2px 边；普通打字、光标移动、快捷键和 IME 不改变该模式。卸载时清理标记与监听器。
+
+独立输入框自己承载焦点，聊天框、组合搜索框和数字步进控件由实际外壳承载。新的组合输入框可以用 `data-input-surface` 标明外壳。只有正在聚焦的输入框及其外壳获得标记；按钮、复选框、滑块等保留自身的键盘提示。
+
+`materials/soft-focus.css` 仅作用于柔塑材质。内描边覆盖原边缘，不改变边框宽度或布局，不叠加外光晕。焦点色使用当前局部强调色的色相、固定低色度与亮暗明度；不支持相对 OKLCH 的环境使用灰蓝回退色。高对比模式使用 2px 高对比线，错误字段保留错误色。
+
 ## 验证
 
 自动回归：`interfaceMaterial.test.ts` 与 `softMaterialContract.test.mjs`，覆盖持久化、默认值、失败存储、偏好隔离、亮暗正文/次要文字色板对比度、首帧入口和无障碍规则。
+
+`inputFocus.test.ts` 覆盖输入方式识别、组合控件归属、焦点转移、清理与重挂载。`Design / Composer Focus / Regression` 提供展开/胶囊聊天框、搜索、密码、数字、下拉和错误状态的交互验收样板。
 
 交互样板：在 `apps/desktop` 执行 `npm run storybook`，打开 `Design / Soft Material / Playground`。样板右侧使用真实外观设置组件，左侧为静态聊天材质展示，不发送消息或调用模型。
 

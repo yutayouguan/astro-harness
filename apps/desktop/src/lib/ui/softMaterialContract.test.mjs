@@ -94,13 +94,15 @@ test("material preserves approval composition, focus, reduced motion and contras
 
 test("composer focus belongs to its rounded shell, not the inner textarea", async () => {
   const editorStyles = await read("../../styles/features/chat/markdown.css");
+  const focusStyles = await read("../../styles/materials/soft-focus.css");
+  const focusRuntime = await read("./inputFocus.ts");
   assert.match(
-    css,
-    /:is\(button, input, select, textarea:not\(\.composer-input\), a\):focus-visible/,
+    focusRuntime,
+    /control\.closest<HTMLElement>\("\.composer:not\(\.has-clarify\)"\)/,
   );
   assert.match(
-    css,
-    /\.composer:not\(\.has-clarify\):has\(\.composer-input:focus-visible\)\s*\{\s*outline: 2px solid var\(--tone, var\(--accent\)\);/,
+    focusStyles,
+    /\[data-input-focus-control\]:not\(\[data-input-focus\]\)\s*\{[^}]*outline: none;/,
   );
   assert.match(editorStyles, /\.composer-input\s*\{[^}]*outline: none;/);
   assert.doesNotMatch(
