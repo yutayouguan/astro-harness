@@ -39,6 +39,7 @@ export default function PetSceneLibrary({
 }) {
   const [scenes, setScenes] = useState<PetScene[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadedOnce = useRef(false);
   const [loadError, setLoadError] = useState("");
   const [working, setWorking] = useState(false),
     lock = useRef(false);
@@ -55,11 +56,16 @@ export default function PetSceneLibrary({
   useEffect(() => {
     if (!active || !("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
-    setLoading(true);
+    // Revision updates refresh the data in place; only the initial read needs
+    // a loading row. Inserting it again changes the list's scroll geometry.
+    setLoading(!loadedOnce.current);
     setLoadError("");
     void invoke<PetScene[]>("get_pet_scenes")
       .then((next) => {
-        if (!disposed) setScenes(next);
+        if (!disposed) {
+          loadedOnce.current = true;
+          setScenes(next);
+        }
       })
       .catch((e) => {
         if (!disposed) setLoadError(String(e));
@@ -156,7 +162,7 @@ export default function PetSceneLibrary({
       )}
       {notice && <p role="status">{notice}</p>}
       {working && (
-        <p role="status">
+        <p role="status" className={generation ? undefined : "sr-only"}>
           {generation
             ? zh
               ? "正在生成壁纸…"

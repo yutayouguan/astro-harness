@@ -16,7 +16,9 @@ test("pet detail creation belongs to the scenes panel instead of shifting the ta
 
 test("empty state waits for the scene read and disappears while creating", () => {
   const scenes = read("../../components/settings/PetSceneLibrary.tsx");
-  assert.match(scenes, /setLoading\(true\)/);
+  assert.match(scenes, /\[loading, setLoading\] = useState\(true\)/);
+  assert.match(scenes, /setLoading\(!loadedOnce\.current\)/);
+  assert.match(scenes, /loadedOnce\.current = true/);
   assert.match(scenes, /setLoadError\(""\)/);
   assert.match(scenes, /setLoadError\(String\(e\)\)/);
   assert.match(scenes, /finally\(/);
