@@ -599,13 +599,29 @@ export default function PetLibraryPanel({
               </header>
               <p className="desktop-pet-model">
                 {zh
-                  ? "保存只更新宠物默认配置，不立即改变桌面；未单独配置的场景会继承它。"
-                  : "Saving changes defaults only, not the live desktop. Scenes without overrides inherit these values."}
+                  ? state.activePetId === pet.id
+                    ? "保存更新宠物默认配置；未单独配置的场景会继承它。"
+                    : "保存只更新宠物默认配置，不立即改变桌面；未单独配置的场景会继承它。"
+                  : state.activePetId === pet.id
+                    ? "Saving updates pet defaults inherited by scenes without overrides."
+                    : "Saving changes defaults only, not the live desktop. Scenes without overrides inherit these values."}
               </p>
               <PetPreferencesEditor
                 value={pet.defaults}
                 zh={zh}
                 disabled={disabled}
+                liveScale={
+                  state.activePetId === pet.id ? state.scale : undefined
+                }
+                onApplyScale={
+                  state.activePetId === pet.id
+                    ? (scale) =>
+                        mutate("set_desktop_pet_scale", {
+                          scale,
+                          petId: pet.id,
+                        })
+                    : undefined
+                }
                 onSave={(defaults) =>
                   run("edit_pet_library", {
                     request: {

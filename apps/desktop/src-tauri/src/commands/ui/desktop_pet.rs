@@ -975,20 +975,32 @@ pub async fn set_desktop_pet_enabled(
     present_committed_state(&app, state)
 }
 
+fn apply_pet_scale(
+    state: &mut types::DesktopPetState,
+    pet_id: &str,
+    scale: f64,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(scale.is_finite(), "桌宠大小必须为有限数值");
+    anyhow::ensure!(
+        !pet_id.is_empty() && state.active_pet_id.as_deref() == Some(pet_id),
+        "当前桌宠已切换，请重新选择后调整大小"
+    );
+    state.scale = scale.clamp(
+        types::desktop_pet::DESKTOP_PET_MIN_SCALE,
+        types::desktop_pet::DESKTOP_PET_MAX_SCALE,
+    );
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_desktop_pet_scale(
     app: AppHandle,
     scale: f64,
+    pet_id: String,
 ) -> Result<DesktopPetStateDto, String> {
-    if !scale.is_finite() {
-        return Err("桌宠大小必须为有限数值".into());
-    }
     let base = home::default_memory_dir();
     let state = types::update_desktop_pet_state(&base, |state| {
-        state.scale = scale.clamp(
-            types::desktop_pet::DESKTOP_PET_MIN_SCALE,
-            types::desktop_pet::DESKTOP_PET_MAX_SCALE,
-        );
+        apply_pet_scale(state, &pet_id, scale)?;
         state.updated_at = chrono::Utc::now().to_rfc3339();
         Ok(())
     })
@@ -1022,6 +1034,26 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_pet_scale_changes_only_size_and_rejects_stale_pet() {
+        let mut state = types::DesktopPetState::default();
+        state.active_pet_id = Some("naitang".into());
+        state.active_scene_id = Some("forest".into());
+        state.follow_wallpaper = true;
+        let mut expected = serde_json::to_value(&state).unwrap();
+        apply_pet_scale(&mut state, "naitang", 0.55).unwrap();
+        expected["scale"] = serde_json::json!(0.55);
+        assert_eq!(serde_json::to_value(&state).unwrap(), expected);
+        assert!(apply_pet_scale(&mut state, "pudding", 0.3).is_err());
+        assert!(apply_pet_scale(&mut state, "naitang", f64::NAN).is_err());
+        assert!(apply_pet_scale(&mut state, "", 0.3).is_err());
+        assert_eq!(serde_json::to_value(&state).unwrap(), expected);
+        apply_pet_scale(&mut state, "naitang", 2.0).unwrap();
+        assert_eq!(state.scale, types::desktop_pet::DESKTOP_PET_MAX_SCALE);
+        apply_pet_scale(&mut state, "naitang", 0.0).unwrap();
+        assert_eq!(state.scale, types::desktop_pet::DESKTOP_PET_MIN_SCALE);
+    }
 
     #[test]
     fn pudding_export_import_preserves_four_clips_and_effective_defaults_without_applying() {

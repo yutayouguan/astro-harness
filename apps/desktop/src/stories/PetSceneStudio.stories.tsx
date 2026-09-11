@@ -114,6 +114,11 @@ const meta = {
         throw new Error("验收样例：壁纸请求失败，已保留桌宠，可单独重试。");
       if (command === "cancel_pet_generation") return true;
       if (command === "set_desktop_pet_enabled") state.enabled = !!args.enabled;
+      if (command === "set_desktop_pet_scale") {
+        if (args.petId !== state.activePetId)
+          throw new Error("Current pet changed");
+        state.scale = Number(args.scale);
+      }
       if (command === "set_desktop_pet_always_on_top")
         state.alwaysOnTop = !!args.alwaysOnTop;
       if (command === "configure_desktop_pet_preferences")

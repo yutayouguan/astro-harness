@@ -10,19 +10,25 @@ export default function PetPreferencesEditor({
   zh,
   disabled,
   onSave,
+  liveScale,
+  onApplyScale,
 }: {
   value: PetDefaults;
   zh: boolean;
   disabled: boolean;
   onSave: (value: PetDefaults) => Promise<unknown>;
+  liveScale?: number;
+  onApplyScale?: (scale: number) => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState(value);
   const fieldId = useId();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [scaling, setScaling] = useState(false);
+  const [scaleStatus, setScaleStatus] = useState("");
   const signature = JSON.stringify(value);
   const dirty = JSON.stringify(draft) !== signature;
-  const unavailable = disabled || saving;
+  const unavailable = disabled || saving || scaling;
   useEffect(() => {
     setDraft(JSON.parse(signature) as PetDefaults);
     setSaveError("");
@@ -40,6 +46,24 @@ export default function PetPreferencesEditor({
       setSaveError(String(error));
     } finally {
       setSaving(false);
+    }
+  }
+  async function applyScale(scale: number) {
+    if (!onApplyScale || unavailable || scale === liveScale) return;
+    setScaling(true);
+    setScaleStatus("");
+    setSaveError("");
+    try {
+      await onApplyScale(scale);
+      setScaleStatus(
+        zh
+          ? "桌面大小已更新；保存配置可设为默认。"
+          : "Desktop size updated. Save preferences to make it the default.",
+      );
+    } catch (error) {
+      setSaveError(String(error));
+    } finally {
+      setScaling(false);
     }
   }
   return (
@@ -60,12 +84,46 @@ export default function PetPreferencesEditor({
           value={draft.scale}
           disabled={unavailable}
           aria-valuetext={`${petScalePercent(draft.scale)}%`}
+          aria-describedby={`${fieldId}-scale-hint`}
+          onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+          onPointerUp={(e) => void applyScale(Number(e.currentTarget.value))}
+          onKeyUp={(e) => {
+            if (
+              [
+                "ArrowLeft",
+                "ArrowRight",
+                "ArrowUp",
+                "ArrowDown",
+                "Home",
+                "End",
+                "PageUp",
+                "PageDown",
+              ].includes(e.key)
+            )
+              void applyScale(Number(e.currentTarget.value));
+          }}
           onChange={(e) =>
             change({ ...draft, scale: Number(e.currentTarget.value) })
           }
         />
         <output>{petScalePercent(draft.scale)}%</output>
       </label>
+      <p className="pet-size-hint" id={`${fieldId}-scale-hint`}>
+        {onApplyScale
+          ? zh
+            ? "松手或方向键调整当前桌宠；保存可设为默认大小。"
+            : "Release or use arrow keys to resize the current pet; save to set the default."
+          : zh
+            ? "调整保存的大小；保存后在下次应用时使用。"
+            : "Edit the saved size; save and apply to use it."}
+      </p>
+      <span className="sr-only" role="status">
+        {scaling
+          ? zh
+            ? "正在调整桌面大小…"
+            : "Updating desktop size…"
+          : scaleStatus}
+      </span>
       {(
         [
           [
