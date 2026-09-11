@@ -18,6 +18,12 @@ for (const theme of ["light", "dark"]) {
       expect(local!.y - (globalHeader!.y + globalHeader!.height)).toBeGreaterThanOrEqual(4);
       expect(local!.y - (globalHeader!.y + globalHeader!.height)).toBeLessThanOrEqual(5);
       expect(Math.abs(panel!.y - layout!.y)).toBeLessThanOrEqual(1);
+      if (story === "runtime-panel") {
+        await expect(header).toHaveCSS("padding-top", "6px");
+        const close = await header.locator(".chat-right-close").boundingBox();
+        expect(close!.y - local!.y).toBeCloseTo(6, 0);
+        expect(close!.y).toBeGreaterThan(globalHeader!.y + globalHeader!.height);
+      }
       // Actual hit testing protects close/refresh actions from the global drag layer.
       for (const button of await header.locator("button").all()) {
         await button.click({ trial: true });
