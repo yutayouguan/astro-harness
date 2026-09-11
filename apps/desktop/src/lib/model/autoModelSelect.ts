@@ -56,7 +56,7 @@ const TIER_PREFERENCE: Record<TaskKind, ModelTier[]> = {
 /** 排除非对话模型 */
 export function isChatModelId(modelId: string): boolean {
   const m = modelId.toLowerCase();
-  return !/embed|tts|whisper|dall-e|dalle|moderation|realtime|transcribe|speech|imagen|image-gen|coding-agent/.test(
+  return !/embed|tts|whisper|dall-e|dalle|moderation|realtime|transcribe|speech|imagen|image-gen|gpt-image|coding-agent/.test(
     m,
   );
 }

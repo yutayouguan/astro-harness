@@ -14,6 +14,26 @@ import {
   listActiveModelCaps,
 } from "./modelCaps.ts";
 
+test("GPT Image 2.5 aliases and snapshots are image-only, not chat vision", () => {
+  for (const id of [
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare-2026-09-08",
+    "openai/gpt-image-2.5-sunburst-2026-09-08",
+    "gpt-image-2",
+  ]) {
+    const caps = inferModelCapabilities(id, "azure");
+    assert.equal(caps.image_gen, true, id);
+    assert.equal(caps.tools, false);
+    assert.equal(caps.vision, false);
+    assert.equal(caps.reasoning, false);
+  }
+  assert.equal(
+    inferModelCapabilities("gpt-image-2.5-unknown").image_gen,
+    false,
+  );
+});
+
 test("listActiveModelCaps returns empty for none/undefined", () => {
   assert.deepEqual(listActiveModelCaps(undefined), []);
   assert.deepEqual(listActiveModelCaps(EMPTY_MODEL_CAPABILITIES), []);

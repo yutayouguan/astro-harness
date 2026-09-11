@@ -1,5 +1,7 @@
 # Azure AI Foundry `gpt-image-2` 使用说明
 
+新增模型接入与实测记录：[GPT Image 2.5 Flare / Sunburst](./gpt-image-25-production.md)。
+
 > 状态：已实现
 >
 > 更新：2026-09-01

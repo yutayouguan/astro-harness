@@ -34,4 +34,7 @@ cargo run -p tools --example import_pet_scenes -- /absolute/astro-home /absolute
 
 测试：`cargo test -p tools --example import_pet_scenes`。覆盖默认预览、原子追加、两只宠物各3场景、幂等、路径逃逸、缺图/缺宠物、并发场景变化和部分重导入。
 
-2026-09-11生成任务记录在`output/imagegen/pet-scenes-20260911/PROGRESS.md`：目前1/6实际完成并入库，其余5张因TLS连接中断待续。不要把提示词清单当成已生成的场景。
+2026-09-11生成任务已完成：奶糖（午后窗台、月光书房、森林小屋）与布丁（晴日草地、海边日落、雨天小窝）各3个真实场景已入库。
+其中4张由用户指定的新模型Flare/Sunburst制作，原有2张保留。来源、提示词、哈希与验收记录位于
+`output/imagegen/pet-scenes-20260911/PROGRESS.md`和`source-and-validation.json`。
+追加场景不改变用户已选的奶糖/午后窗台；原生UI界面验收仍独立待确认。

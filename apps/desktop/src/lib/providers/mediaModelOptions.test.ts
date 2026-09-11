@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModelInfo } from "../../types.ts";
+import { inferModelCapabilities } from "../model/modelCaps.ts";
 import {
   buildMediaModelOptions,
   evaluateMediaModelsResult,
@@ -36,6 +37,20 @@ const models = [
   model("music-a", { music_gen: true }),
   model("unknown-a", {}),
 ];
+
+test("both GPT Image 2.5 models remain selectable as media models", () => {
+  const ids = ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"];
+  const options = buildMediaModelOptions(
+    ids.map((id) => ({
+      id,
+      capabilities: inferModelCapabilities(id, "azure"),
+    })),
+    "image_gen",
+    "gpt-image-2",
+  );
+  for (const id of ids) assert.equal(sanitizeMediaModelValue(id, options), id);
+  assert.equal(options[0]?.modelId, "gpt-image-2");
+});
 
 test("filters strictly by requested capability", () => {
   assert.deepEqual(

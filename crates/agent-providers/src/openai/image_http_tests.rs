@@ -2,6 +2,35 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn gpt_image_25_preserves_explicit_model_and_production_options() {
+    for model in ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"] {
+        for flavor in [
+            ImageApiFlavor::AzureFoundryV1,
+            ImageApiFlavor::OpenAiCompatible,
+        ] {
+            let config = ImageGenConfig {
+                model: model.into(),
+                width: Some(1536),
+                height: Some(1024),
+                quality: Some("medium".into()),
+                output_format: Some("jpeg".into()),
+                output_compression: Some(100),
+                additional_params: json!({"model": "must-not-override"}),
+                ..ImageGenConfig::default()
+            };
+            let body = image_generation_request_body(model, "A quiet pet scene", &config, flavor)
+                .expect("new model uses the existing Images protocol");
+            assert_eq!(body["model"], model);
+            assert_eq!(body["size"], "1536x1024");
+            assert_eq!(body["quality"], "medium");
+            assert_eq!(body["output_format"], "jpeg");
+            assert_eq!(body["output_compression"], 100);
+            assert!(body.get("input_fidelity").is_none());
+        }
+    }
+}
+
+#[test]
 fn azure_foundry_v1_request_matches_official_contract() {
     let config = ProviderConfig {
         api_key: "azure-secret".to_string(),

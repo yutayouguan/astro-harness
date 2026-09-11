@@ -81,6 +81,26 @@ test("isChatModelId excludes tts/embed", () => {
   assert.equal(isChatModelId("text-embedding-3"), false);
 });
 
+test("GPT Image models never enter automatic chat routing", () => {
+  for (const modelId of [
+    "gpt-image-2",
+    "gpt-image-2.5-flare",
+    "openai/gpt-image-2.5-sunburst-2026-09-08",
+  ]) {
+    assert.equal(isChatModelId(modelId), false);
+    assert.equal(
+      selectAutoModel({
+        text: "hello",
+        hasImages: false,
+        chatMode: "agent",
+        maxMode: false,
+        candidates: [{ ...candidates[0]!, modelId }],
+      }),
+      null,
+    );
+  }
+});
+
 test("classifyModelTier maps flash/pro/lite", () => {
   assert.equal(classifyModelTier("gemini-2.5-flash"), "flash");
   assert.equal(classifyModelTier("gemini-2.5-pro"), "pro");

@@ -463,6 +463,28 @@ fn apply_deepseek_official_profile(kind: &str, id_lower: &str, info: &mut ModelI
 fn apply_known_capability_overrides(kind: &str, id_lower: &str, info: &mut ModelInfo) -> bool {
     let mut changed = false;
 
+    // Azure /models can list these before OpenRouter publishes modality metadata.
+    // Reference-image editing is not chat vision/tool support. Do not infer pricing.
+    let image_id = id_lower.strip_prefix("openai/").unwrap_or(id_lower);
+    if matches!(kind, "azure" | "openai" | "openrouter")
+        && matches!(
+            image_id,
+            "gpt-image-2"
+                | "gpt-image-2-2026-04-21"
+                | "gpt-image-2.5-flare"
+                | "gpt-image-2.5-flare-2026-09-08"
+                | "gpt-image-2.5-sunburst"
+                | "gpt-image-2.5-sunburst-2026-09-08"
+        )
+    {
+        info.capabilities = ModelCapabilities {
+            image_gen: true,
+            ..ModelCapabilities::default()
+        };
+        info.reasoning = None;
+        return true;
+    }
+
     let is_deepseek_family = kind == "deepseek" || id_lower.contains("deepseek");
     if is_deepseek_family
         && !info.capabilities.image_gen
@@ -787,6 +809,34 @@ mod tests {
             assert!(!info.capabilities.vision);
             assert!(!info.capabilities.tools);
             assert!(info.meta_source.is_empty());
+        });
+    }
+
+    #[test]
+    fn gpt_image_25_is_selectable_without_openrouter_metadata() {
+        openrouter_meta::with_fixture(r#"{"data":[]}"#, || {
+            for kind in ["azure", "openai", "openrouter"] {
+                for id in [
+                    "gpt-image-2.5-flare",
+                    "gpt-image-2.5-sunburst",
+                    "gpt-image-2.5-flare-2026-09-08",
+                    "openai/gpt-image-2.5-sunburst-2026-09-08",
+                    "gpt-image-2",
+                ] {
+                    let mut info = enrich_from_id(id, kind, None);
+                    assert!(info.capabilities.image_gen, "{kind}/{id}");
+                    assert!(!info.capabilities.tools);
+                    assert!(!info.capabilities.vision);
+                    assert!(!info.capabilities.reasoning);
+                    assert_eq!(info.pricing, None);
+                    assert_eq!(info.meta_source, "known");
+                    enrich_model_info(&mut info, kind, None);
+                    assert!(info.capabilities.image_gen, "cache refresh: {id}");
+                }
+            }
+            for id in ["gpt-image-2.5-unknown", "not-gpt-image-2.5-flare"] {
+                assert!(!enrich_from_id(id, "azure", None).capabilities.image_gen);
+            }
         });
     }
 

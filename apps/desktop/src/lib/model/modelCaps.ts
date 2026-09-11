@@ -278,7 +278,10 @@ export function inferModelCapabilities(
     tools,
     file: false,
     audio_in: false,
-    image_gen: false,
+    image_gen:
+      /^(?:openai\/)?gpt-image-(?:2(?:-2026-04-21)?|2\.5-(?:flare|sunburst)(?:-2026-09-08)?)$/.test(
+        m,
+      ),
     video_gen: false,
     audio_gen: false,
     music_gen: false,
