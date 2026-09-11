@@ -1,6 +1,44 @@
 import { expect, test } from "@playwright/test";
 
 const story = "/iframe.html?id=settings-petscenestudio--preview-and-failure&viewMode=story";
+test("library distinguishes scene management from switching the active pet", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 860 });
+  await page.goto(story);
+  const cat = page.getByRole("article", { name: "奶糖", exact: true });
+  const dog = page.getByRole("article", { name: "布丁", exact: true });
+  await expect(cat.getByText("当前桌宠", { exact: true })).toBeVisible();
+  await expect(cat.getByRole("button", { name: "切换到桌面" })).toHaveCount(0);
+  await expect(dog.getByText("尚未创建场景", { exact: true })).toBeVisible();
+  await expect(page.locator(".pet-library-add")).toHaveCount(0);
+  await expect(dog.locator(".pet-library-action-tags")).toContainText("摇尾巴");
+  await dog.getByRole("button", { name: "切换到桌面", exact: true }).click();
+  await expect(page.locator(".pet-manager-current")).toContainText("布丁");
+  await expect(dog.getByText("当前桌宠", { exact: true })).toBeVisible();
+  await expect(dog.getByRole("button", { name: "切换到桌面" })).toHaveCount(0);
+  await cat.getByRole("button", { name: "管理奶糖的场景", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "森林小屋", exact: false })).toBeVisible();
+  await expect(page.locator(".pet-manager-current")).toContainText("布丁");
+});
+
+test("library controls align and filter without a stretched tab background", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(story);
+  const search = await page.locator(".pet-library-search").boundingBox();
+  const filter = page.getByRole("button", { name: "宠物来源" });
+  const filterBox = await filter.boundingBox();
+  const add = await page.getByRole("button", { name: "添加宠物", exact: true }).boundingBox();
+  expect(Math.abs(search!.height - filterBox!.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(search!.height - add!.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(search!.y - filterBox!.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(search!.y - add!.y)).toBeLessThanOrEqual(2);
+  const tabs = await page.locator(".pet-manager-tabs").boundingBox();
+  const bar = await page.locator(".pet-manager-commandbar").boundingBox();
+  expect(tabs!.width).toBeLessThan(bar!.width * 0.65);
+  await filter.click();
+  await page.getByRole("option", { name: "自定义宠物", exact: true }).click();
+  await expect(page.locator(".pet-library-card")).toHaveCount(0);
+  await expect(page.locator(".pet-library-empty")).toBeVisible();
+});
 for (const theme of ["light", "dark"]) {
   test(`pet manager ${theme}: browse without applying and organize scenes`, async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 860 });

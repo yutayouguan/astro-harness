@@ -2,6 +2,7 @@ import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import DesktopPetPanel from "../components/settings/DesktopPetPanel";
 import { LocaleProvider } from "../i18n/LocaleContext";
+import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import {
   EMPTY_DESKTOP_PET_STATE,
   type DesktopPetState,
@@ -174,22 +175,24 @@ const meta = {
   decorators: [
     (Story) => (
       <LocaleProvider>
-        <main
-          className="settings-content-inline"
-          style={{
-            maxWidth: 1500,
-            height: "100vh",
-            boxSizing: "border-box",
-            overflow: "auto",
-            margin: "auto",
-            padding: 24,
-            color: "var(--ink)",
-            background: "var(--shell-bg)",
-          }}
-        >
-          <p role="note">隔离验收样例：不调用模型、不修改真实宠物。</p>
-          <Story />
-        </main>
+        <MorphiconProvider>
+          <main
+            className="settings-content-inline"
+            style={{
+              maxWidth: 1500,
+              height: "100vh",
+              boxSizing: "border-box",
+              overflow: "auto",
+              margin: "auto",
+              padding: 24,
+              color: "var(--ink)",
+              background: "var(--shell-bg)",
+            }}
+          >
+            <p role="note">隔离验收样例：不调用模型、不修改真实宠物。</p>
+            <Story />
+          </main>
+        </MorphiconProvider>
       </LocaleProvider>
     ),
   ],

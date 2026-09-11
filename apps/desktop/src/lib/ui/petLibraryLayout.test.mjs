@@ -19,6 +19,12 @@ test("pet manager separates library creation and global settings using keyboard 
   assert.match(library, /pet-detail-actions/);
   assert.match(library, /confirmSceneCount: deleting/);
   assert.match(library, /active=\{false\}/);
+  assert.match(library, /管理场景/);
+  assert.match(library, /pet-library-current-badge/);
+  assert.match(library, /尚未创建场景/);
+  assert.match(library, /availablePetActions\(item.identity\)/);
+  assert.match(library, /<SelectMenu/);
+  assert.doesNotMatch(library, /pet-library-add|迎接一位新伙伴/);
 });
 test("scene editor scopes drafts locally and exposes inheritance and explicit apply", () => {
   const source = read("../../components/settings/PetSceneLibrary.tsx");

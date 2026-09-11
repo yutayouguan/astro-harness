@@ -128,8 +128,8 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
             <small>
               {sceneName ||
                 (zh
-                  ? "默认陪伴 · 不更换壁纸"
-                  : "Default companion · wallpaper unchanged")}{" "}
+                  ? "未应用场景 · 保留当前壁纸"
+                  : "No scene applied · wallpaper unchanged")}{" "}
               · {status}
             </small>
           </div>

@@ -841,12 +841,16 @@ html[data-window-surface="desktop-pet"] #root {
   background: var(--settings-panel-background, var(--glass-fill));
 }
 .pet-manager-commandbar .pet-manager-tabs {
-  flex: 1 0 290px;
+  flex: 0 1 auto;
   width: auto;
   border: 0;
   padding: 0;
   background: transparent;
   box-shadow: none;
+  --seg-shell-blur: none;
+  --seg-shell-bg: transparent;
+  --seg-shell-border: transparent;
+  --seg-shell-shadow: none;
 }
 .pet-manager-commandbar .pet-manager-current {
   flex: 0 1 auto;
@@ -900,14 +904,6 @@ html[data-window-surface="desktop-pet"] #root {
   font-size: 16px;
   letter-spacing: -0.02em;
 }
-.pet-library-heading h3 span {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--settings-inset-background, var(--color-bg-subtle));
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-}
 .pet-library-heading p {
   margin: 5px 0 0;
   font-size: 12px;
@@ -917,13 +913,18 @@ html[data-window-surface="desktop-pet"] #root {
   margin: 0;
 }
 .pet-library-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  position: relative;
   flex: 0 1 240px;
   min-width: 160px;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
 }
-.pet-library input:not([type="checkbox"]):not([type="range"]),
+.pet-library
+  input:not([type="checkbox"]):not([type="range"]):not([type="search"]),
 .pet-library select {
   min-width: 0;
   color: var(--color-text);
@@ -935,6 +936,44 @@ html[data-window-surface="desktop-pet"] #root {
 }
 .pet-library-search input {
   width: 100%;
+  height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 10px 0 34px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.pet-library-search > svg {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  pointer-events: none;
+}
+.pet-library-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pet-manager .pet-library-search input:focus-visible {
+  outline: none;
+}
+.pet-library-toolbar .pet-library-filter .select-menu-trigger,
+.pet-library-toolbar > .desktop-pet-import-package {
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.pet-library-toolbar .pet-library-filter {
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 0;
 }
 .pet-library-grid {
   display: grid;
@@ -947,19 +986,19 @@ html[data-window-surface="desktop-pet"] #root {
   border: 1px solid var(--settings-inset-border, var(--color-border));
   border-radius: 14px;
   overflow: hidden;
-  background: var(--settings-inset-background, var(--color-bg-subtle));
+  background: var(--color-bg-subtle);
 }
 .pet-library-card[data-current="true"] {
-  border-color: var(--settings-selected-border, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--color-border));
 }
 .pet-library-open {
   position: relative;
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 82px minmax(0, 1fr);
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   width: 100%;
-  padding: 20px;
+  padding: 14px 16px 10px;
   border: 0;
   background: transparent;
   color: var(--color-text);
@@ -971,58 +1010,58 @@ html[data-window-surface="desktop-pet"] #root {
 }
 .pet-library-card-copy {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   text-align: left;
 }
-.pet-library-card-copy > span,
-.pet-library-card-copy p {
+.pet-library-card-copy > span {
   color: var(--color-text-secondary);
   font-size: 12px;
 }
-.pet-library-card-copy p {
-  margin: 0;
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.pet-library-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  line-height: 1.5;
+}
+.pet-library-action-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 23px;
+}
+.pet-library-action-tags > span {
+  max-width: 140px;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--settings-inset-border, var(--color-border));
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--color-text-secondary);
 }
 .pet-library-portrait {
-  width: 104px;
-  height: 113px;
+  width: 82px;
+  height: 89px;
   object-fit: contain;
 }
 .pet-library-card-footer {
-  border-top: 1px solid var(--color-border);
-  padding: 10px 16px;
+  padding: 0 16px 12px;
   justify-content: space-between;
 }
-.pet-library-add {
-  display: flex;
-  min-height: 210px;
-  flex-direction: column;
+.pet-library-current-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 20px;
-  border: 1px dashed var(--settings-inset-border, var(--color-border));
-  border-radius: 14px;
-  background: transparent;
+  gap: 5px;
+  min-height: 32px;
   color: var(--color-text);
-  cursor: pointer;
-}
-.pet-library-add strong {
-  font-size: 14px;
-}
-.pet-library-add > span:last-child {
-  color: var(--color-text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+  font-weight: 600;
 }
-.pet-library-card-footer small {
+.pet-library-current-badge svg {
   color: var(--accent);
-  font-size: 12px;
 }
 .pet-library-back {
   display: inline-flex;
@@ -1079,6 +1118,19 @@ html[data-window-surface="desktop-pet"] #root {
   cursor: pointer;
   font: inherit;
   font-size: 13px;
+}
+.pet-library-card-footer button {
+  min-height: 32px;
+  padding: 6px 12px;
+}
+.pet-library-card-footer .pet-library-manage {
+  font-weight: 650;
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--color-border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--color-bg-subtle));
+}
+.pet-library-card-footer .pet-library-switch {
+  background: transparent;
+  color: var(--color-text-secondary);
 }
 .pet-manager button:disabled {
   opacity: 0.5;
