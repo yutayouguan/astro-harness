@@ -1,0 +1,136 @@
+/* One glass outer shell, quiet opaque insets. Reuse the shell's environment
+ * hue and light/dark neutral; never sample/blur the wallpaper per card. */
+.pet-manager {
+  --pet-material-tint: var(--wallpaper-tone, var(--unified-tone, var(--tone)));
+  --pet-material-surface: color-mix(
+    in srgb,
+    var(--pet-material-tint) 14%,
+    rgb(var(--immersive-neutral-rgb, 246, 249, 250))
+  );
+  --pet-material-control: color-mix(
+    in srgb, var(--pet-material-surface) 95%, var(--ink)
+  );
+  --pet-material-selected: color-mix(
+    in srgb, var(--pet-material-surface) 87%, var(--pet-material-tint)
+  );
+  --pet-material-border: var(
+    --settings-inset-border, color-mix(in srgb, var(--ink) 14%, transparent)
+  );
+  --pet-material-selected-border: color-mix(
+    in srgb, var(--pet-material-tint) 48%, var(--pet-material-border)
+  );
+  --pet-preview-center: color-mix(in srgb, var(--pet-material-surface) 88%, #fff);
+  --pet-preview-edge: color-mix(
+    in srgb, var(--pet-material-surface) 92%, var(--pet-material-tint)
+  );
+}
+
+html[data-theme="dark"] .pet-manager {
+  --pet-preview-center: color-mix(in srgb, var(--pet-material-surface) 94%, #fff);
+}
+
+.pet-manager .pet-library-card,
+.pet-manager .pet-library .pet-detail-name-editor,
+.pet-manager .pet-library .pet-detail-empty {
+  background: var(--pet-material-surface);
+  border-color: var(--pet-material-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.pet-manager .pet-library-card[data-current="true"] {
+  border-color: var(--pet-material-selected-border);
+}
+
+.pet-manager .pet-library.pet-detail-view .pet-motion-preview {
+  background: radial-gradient(
+    ellipse at 50% 38%, var(--pet-preview-center), var(--pet-preview-edge)
+  );
+  background-color: var(--pet-material-surface);
+  border-color: var(--pet-material-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Explicit controls only: keep portrait hit targets, back links, switches,
+ * destructive actions and the native range thumb's existing semantics. */
+.pet-manager :is(
+  .pet-library-search,
+  .pet-library-filter .select-menu-trigger,
+  .pet-library-toolbar > button,
+  .pet-library-card-footer button,
+  .desktop-pet-import-package,
+  .pet-more > button,
+  .pet-scene-card-footer > button,
+  .pet-scene-actions button
+),
+.pet-manager .pet-library :is(
+  input:not([type="search"]):not([type="range"]):not([type="checkbox"]),
+  textarea,
+  select,
+  .pet-detail-save-row button,
+  .pet-detail-name-editor button
+) {
+  background: var(--pet-material-control);
+  border-color: var(--pet-material-border);
+  color: var(--ink);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.pet-manager .pet-library :is(
+  .pet-library-manage,
+  .pet-motion-preview button[aria-pressed="true"],
+  .pet-detail-save-row button:not(:disabled)
+),
+.pet-manager .ui-segmented-tabs__tab.is-active {
+  background: var(--pet-material-selected);
+  border-color: var(--pet-material-selected-border);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.pet-manager :is(
+  .pet-library-toolbar > button,
+  .pet-library-card-footer button,
+  .desktop-pet-import-package,
+  .pet-more > button,
+  .pet-scene-card-footer > button,
+  .pet-scene-actions button
+):not(:disabled):hover,
+.pet-manager .pet-library-filter .select-menu-trigger:not(:disabled):hover {
+  background: var(--pet-material-selected);
+  border-color: var(--pet-material-selected-border);
+}
+
+.pet-manager .pet-library-action-tags > span {
+  background: var(--pet-material-control);
+  border-color: var(--pet-material-border);
+}
+
+.pet-manager .pet-more-content {
+  background: var(--pet-material-surface);
+  border-color: var(--pet-material-border);
+}
+
+.pet-manager .pet-more-content button {
+  background: transparent;
+}
+
+.pet-manager .pet-more-content button:not(:disabled):hover {
+  background: var(--pet-material-selected);
+}
+
+@media (prefers-contrast: more) {
+  .pet-manager {
+    --pet-material-border: color-mix(in srgb, var(--ink) 55%, transparent);
+    --pet-material-selected-border: var(--ink);
+  }
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .pet-manager .pet-library.pet-detail-view .pet-motion-preview {
+    background-image: none;
+  }
+}
