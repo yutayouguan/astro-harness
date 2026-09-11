@@ -1,6 +1,62 @@
 import { expect, test } from "@playwright/test";
 
 for (const theme of ["light", "dark"]) {
+  test(`all pet settings tabs share inset and control materials (${theme})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 1050 });
+    await page.goto(`/iframe.html?id=settings-petscenestudio--empty-photo&viewMode=story&globals=theme:${theme}`);
+    await expect(page.locator(".pet-library-card").first()).toBeVisible();
+    await page.evaluate(({ theme }) => {
+      const root = document.documentElement;
+      root.dataset.theme = theme;
+      root.dataset.wallpaper = "true";
+      root.dataset.wallpaperPalette = "true";
+      root.dataset.glassIntensity = "64";
+      root.style.setProperty("--wallpaper-tone", "#b77c1c");
+      root.style.setProperty("--wallpaper-accent-2", "#bc9161");
+      document.querySelector<HTMLElement>(".settings-content-inline")!.style.background =
+        'url("/src/stories/assets/pet-room.jpeg") center / cover fixed';
+    }, { theme });
+    const surface = await page.locator(".pet-library-card").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const control = await page.locator(".pet-library-search").evaluate((el) => getComputedStyle(el).backgroundColor);
+    const selectedTab = await page.getByRole("tab", { name: /宠物库/ }).evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((animation) => animation.finished));
+      return getComputedStyle(el).backgroundColor;
+    });
+    await page.getByRole("tab", { name: "创建宠物", exact: true }).click();
+    const name = page.getByRole("textbox", { name: "宠物名字 可选", exact: true });
+    await expect(name).toHaveCSS("background-color", control);
+    await name.fill("奶糖的草稿");
+    await page.getByRole("switch", { name: "同时生成配套壁纸", exact: true }).click();
+    await expect(page.locator(".pet-wallpaper-options")).toBeVisible();
+    for (const field of await page.locator(".pet-create-fields input, .pet-create-fields textarea").all()) {
+      await expect(field).toHaveCSS("background-color", control);
+      await expect(field).toHaveCSS("backdrop-filter", "none");
+    }
+    await expect(page.locator(".pet-wallpaper-options")).toHaveCSS("background-color", surface);
+    await expect(page.locator(".desktop-pet-photo-picker")).toHaveCSS("background-color", surface);
+    await expect(page.getByRole("tab", { name: "创建宠物", exact: true })).toHaveCSS("background-color", selectedTab);
+    await page.locator(".pet-create-card").screenshot({ path: testInfo.outputPath("create.png") });
+    await page.getByRole("tab", { name: "通用设置", exact: true }).click();
+    for (const group of await page.locator(".pet-general-group").all()) {
+      await expect(group).toHaveCSS("background-color", surface);
+      await expect(group).toHaveCSS("backdrop-filter", "none");
+    }
+    await expect(page.getByRole("button", { name: "恢复显示", exact: true })).toHaveCSS("background-color", control);
+    const toggle = page.getByRole("switch", { name: "演示时暂时隐藏", exact: true });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await page.locator(".pet-general-card").screenshot({ path: testInfo.outputPath("general.png") });
+    await page.getByRole("tab", { name: "创建宠物", exact: true }).click();
+    await expect(name).toHaveValue("奶糖的草稿");
+    await page.setViewportSize({ width: 650, height: 1000 });
+    const panel = page.locator(".pet-create-card");
+    expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await page.locator(".desktop-pet-photo-picker").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("create-narrow.png") });
+    await page.locator(".pet-create-submit").scrollIntoViewIfNeeded();
+    await expect(page.getByRole("button", { name: "生成静态形象", exact: true })).toBeInViewport();
+  });
+
   test(`pet materials follow wallpaper hues without losing contrast (${theme})`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 1050 });
     await page.goto(`/iframe.html?id=settings-petscenestudio--preview-and-failure&viewMode=story&globals=theme:${theme}`);
