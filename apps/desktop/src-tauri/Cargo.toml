@@ -70,8 +70,7 @@ tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
-# Share Tauri's window-vibrancy release; Astro only uses its macOS effects.
-window-vibrancy = "0.6"
+window-vibrancy = "0.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
