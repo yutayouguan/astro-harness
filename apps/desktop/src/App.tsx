@@ -166,7 +166,6 @@ import { resolveWallpaperPresentation } from "./lib/ui/activeUiStyle";
 import {
   applyShellGradientVars,
   clearShellGradientVars,
-  flushGlassBackdrop,
 } from "./lib/ui/shellGradient";
 import type {
   ModelCapabilities,
@@ -944,7 +943,8 @@ export default function App() {
   } | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
 
-  // layout：在绘制前写 CSS 变量，并刷新玻璃层（避免 backdrop-filter 缓存旧色）
+  // 在绘制前同步配色，保持玻璃层连续；不能跨帧关闭 backdrop-filter，
+  // 否则灵动配色每次切换导航时都会让整个侧栏短暂变透明。
   useLayoutEffect(() => {
     const root = document.documentElement;
     const colorfulToneChanged =
@@ -978,14 +978,12 @@ export default function App() {
         wallpaperThemeColor,
         wallpaperHighlightColor,
       );
-      flushGlassBackdrop(root);
     } else {
       root.removeAttribute("data-wallpaper-palette");
       clearWallpaperPaletteVars(root);
     }
     if (activeShellGradient) {
       applyShellGradientVars(root, activeShellGradient, resolved);
-      flushGlassBackdrop(root);
     } else {
       clearShellGradientVars(root);
     }

@@ -554,27 +554,6 @@ export function applyShellGradientVars(
   );
 }
 
-let glassFlushRaf = 0;
-
-/**
- * WebKit/Tauri 下 backdrop-filter 会缓存模糊采样；
- * 壳层背景已变时，侧栏/卡片玻璃可能仍显示旧色约数百毫秒～1s。
- * 关一帧再开，强制重建玻璃层。
- */
-export function flushGlassBackdrop(
-  root: HTMLElement = document.documentElement,
-): void {
-  if (typeof window === "undefined") return;
-  root.setAttribute("data-glass-flush", "1");
-  if (glassFlushRaf) cancelAnimationFrame(glassFlushRaf);
-  glassFlushRaf = requestAnimationFrame(() => {
-    glassFlushRaf = requestAnimationFrame(() => {
-      root.removeAttribute("data-glass-flush");
-      glassFlushRaf = 0;
-    });
-  });
-}
-
 export function clearShellGradientVars(el: HTMLElement): void {
   el.removeAttribute("data-unified-surface");
   for (const key of [

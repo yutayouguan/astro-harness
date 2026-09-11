@@ -192,18 +192,6 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"])
   --tone-twilight-glow: var(--unified-tone-glow, var(--tone-blue-glow));
 }
 
-html[data-glass-flush] .sidebar,
-html[data-glass-flush] .sidebar-nav-indicator,
-html[data-glass-flush] .prefs-card,
-html[data-glass-flush] .prefs-section,
-html[data-glass-flush] .prefs-category-nav,
-html[data-glass-flush] .theme-option,
-html[data-glass-flush] .prefs-icon-badge,
-html[data-glass-flush] .content-pane {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .prefs-card,
 html:is([data-color-style="unified"], [data-color-style="dynamic"])
   .prefs-section {
