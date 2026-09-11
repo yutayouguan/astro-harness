@@ -74,6 +74,7 @@ export function useDesktopPetState(active = true) {
     [accept, report],
   );
   return {
+    accept,
     state,
     loading,
     pending,

@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod desktop_ambience;
 mod builtin_pet;
 pub mod desktop_pet;
 mod pet_placement;

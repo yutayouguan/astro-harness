@@ -73,6 +73,9 @@ pub struct DesktopPetState {
     /// Durable outbox: recovered before reads, so a crash cannot lose a scene wallpaper apply.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_scene_style: Option<crate::UiStyleManifest>,
+    /// Durable counterpart of pending_scene_style when returning to a local wallpaper.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending_style_reset: bool,
 }
 
 impl Default for DesktopPetState {
@@ -103,6 +106,7 @@ impl Default for DesktopPetState {
             favorite_scene_ids: Vec::new(),
             animation_paused: false,
             pending_scene_style: None,
+            pending_style_reset: false,
         }
     }
 }
@@ -193,6 +197,11 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
         write_desktop_pet_state_unlocked(base, &state)?;
     }
     validate_state(&state)?;
+    if state.pending_style_reset {
+        crate::desktop_ambience::publish_style_reset(base)?;
+        state.pending_style_reset = false;
+        write_desktop_pet_state_unlocked(base, &state)?;
+    }
     if let Some(style) = state.pending_scene_style.as_ref() {
         crate::pet_scene::publish_style(base, style)?;
         state.pending_scene_style = None;
@@ -202,6 +211,10 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
 }
 
 fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !state.pending_style_reset || state.pending_scene_style.is_none(),
+        "冲突的外观事务"
+    );
     crate::pet_library::validate(state)?;
     state.preferences.validate()?;
     crate::pet_motion::validate_motion_clips(&state.motion_clips)?;

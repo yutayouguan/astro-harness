@@ -1,40 +1,57 @@
-import { useId, useRef } from "react";
+import { useId, useRef, type RefObject } from "react";
 
 type Props = {
   label: string;
   onReshuffle: () => void;
+  buttonRef?: RefObject<HTMLButtonElement>;
+  expanded?: boolean;
+  controls?: string;
+  animate?: boolean;
 };
 
 /** 灵动色彩模式在主聊天页的轻量重配色入口。 */
-export default function DynamicPaletteButton({ label, onReshuffle }: Props) {
+export default function DynamicPaletteButton({
+  label,
+  onReshuffle,
+  buttonRef,
+  expanded,
+  controls,
+  animate = true,
+}: Props) {
   const rotorRef = useRef<SVGGElement | null>(null);
   const gradientPrefix = `dynamic-pinwheel-${useId().replace(/:/g, "")}`;
   const gradientId = (name: string) => `${gradientPrefix}-${name}`;
 
   const reshuffle = () => {
     const rotor = rotorRef.current;
-    if (rotor) {
+    if (rotor && animate) {
       const reduceMotion =
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       rotor.getAnimations().forEach((animation) => animation.cancel());
-      rotor.animate(
-        [
-          { transform: "rotate(0deg)" },
-          { transform: `rotate(${reduceMotion ? 360 : 720}deg)` },
-        ],
-        {
-          duration: reduceMotion ? 1320 : 1680,
-          easing: "linear",
-        },
-      );
+      if (!reduceMotion) {
+        rotor.animate(
+          [
+            { transform: "rotate(0deg)" },
+            { transform: `rotate(${reduceMotion ? 360 : 720}deg)` },
+          ],
+          {
+            duration: reduceMotion ? 1320 : 1680,
+            easing: "linear",
+          },
+        );
+      }
     }
     onReshuffle();
   };
 
   return (
     <button
+      ref={buttonRef}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      aria-haspopup={controls ? "dialog" : undefined}
       type="button"
       className="shell-dynamic-palette-button"
       onClick={reshuffle}

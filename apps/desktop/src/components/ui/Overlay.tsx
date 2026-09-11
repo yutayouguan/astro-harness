@@ -156,6 +156,9 @@ export type PopoverSurfaceProps = OverlayCommonProps & {
   align?: "start" | "end";
   minWidth?: number;
   maxWidth?: number;
+  maxHeightCap?: number;
+  maxHeightRatio?: number;
+  sizeKey?: unknown;
 };
 
 export function PopoverSurface({
@@ -164,6 +167,9 @@ export function PopoverSurface({
   align = "start",
   minWidth = 180,
   maxWidth = 320,
+  maxHeightCap,
+  maxHeightRatio = 0.65,
+  sizeKey,
   className = "",
   open,
   trapFocus = false,
@@ -178,7 +184,9 @@ export function PopoverSurface({
     maxWidth,
     preferAlign: align,
     placement,
-    maxHeightRatio: 0.65,
+    maxHeightCap,
+    maxHeightRatio,
+    sizeKey,
   });
 
   return (

@@ -107,6 +107,34 @@ test("disposing scene sync prevents queued writes", async () => {
   assert.deepEqual(seen, ["a"]);
 });
 
+test("appearance transactions drain in-flight sync and discard older queued backgrounds", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const seen: Array<string | null> = [];
+  const sync = createWallpaperSync(async (path) => {
+    seen.push(path);
+    await pending;
+  }, assert.fail);
+  sync.request("old");
+  sync.request("stale");
+  let drained = false;
+  const pause = sync.pause().then(() => {
+    drained = true;
+  });
+  sync.request("ignore-while-paused");
+  assert.equal(drained, false);
+  release();
+  await pause;
+  assert.deepEqual(seen, ["old"]);
+  sync.resume();
+  sync.request("new");
+  await turn();
+  assert.deepEqual(seen, ["old", "new"]);
+  sync.dispose();
+});
+
 test("only pet scene styles enter the wallpaper recent library", () => {
   const style: ActiveUiStyle = {
     schemaVersion: 1,

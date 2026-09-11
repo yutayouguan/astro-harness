@@ -15,7 +15,8 @@ import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence } from "framer-motion";
 
 import AboutDialog from "./components/ui/AboutDialog";
-import DynamicPaletteButton from "./components/ui/DynamicPaletteButton";
+import DesktopAmbienceButton from "./components/ui/DesktopAmbienceButton";
+import { explicitStylePalette } from "./lib/ui/desktopAmbience";
 import ChatRightPanel, {
   type ChatRightTab,
 } from "./components/chat/ChatRightPanel";
@@ -189,6 +190,7 @@ export default function App() {
     setColorStyle,
     setGradient,
     reshuffleDynamic,
+    restoreColorPrefs,
     beginGradientEdit,
     previewGradient,
     commitGradientEdit,
@@ -900,8 +902,13 @@ export default function App() {
   const wallpaperPalette = wallpaperPresentation.generated
     ? wallpaperAdaptiveColor
       ? resolveExtractedWallpaperPalette(effectiveWallpaper, resolved)
-      : null
-    : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper, resolved);
+      : explicitStylePalette(activeUiStyle.style, resolved)
+    : colorStyle === "dynamic" && !wallpaperAdaptiveColor && activeShellGradient
+      ? resolveExtractedWallpaperPalette(
+          { accentColor: activeShellGradient.primary.color, secondaryColor: activeShellGradient.secondary.color },
+          resolved,
+        )
+      : resolveWallpaperPalette(wallpaper.prefs, effectiveWallpaper, resolved);
   const wallpaperThemeColor = wallpaperPalette?.themeColor ?? null;
   const wallpaperHighlightColor = wallpaperPalette?.highlightColor ?? null;
   useEffect(() => {
@@ -2636,26 +2643,16 @@ export default function App() {
                         />
                       </Suspense>
                     ) : null}
-                    {colorStyle === "dynamic" || wallpaperEnabled ? (
-                      <DynamicPaletteButton
-                        label={
-                          wallpaperEnabled
-                            ? t("prefs.wallpaper.cycle")
-                            : t("prefs.colorStyle.reshuffle")
-                        }
-                        onReshuffle={
-                          wallpaperEnabled
-                            ? () => {
-                                if (wallpaper.prefs.recent.length > 1) {
-                                  wallpaper.cycleRecent();
-                                } else {
-                                  openSettingsTab("preferences:appearance");
-                                }
-                              }
-                            : reshuffleDynamic
-                        }
-                      />
-                    ) : null}
+                    <DesktopAmbienceButton
+                      wallpaper={wallpaper}
+                      colors={{ style: colorStyle, gradient, dynamicSeed }}
+                      restoreColors={restoreColorPrefs}
+                      activeStyle={activeUiStyle}
+                      theme={resolved}
+                      onManage={(target) => openSettingsTab(
+                        target === "scenes" ? "desktop-pet" : "preferences:appearance",
+                      )}
+                    />
                   </div>
                   <ProjectFilesPanel
                     open={activeChatRightDock === "project-files"}

@@ -1,0 +1,237 @@
+@layer features {
+  .desktop-ambience {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--ink);
+    overflow: hidden;
+    animation: none;
+  }
+  .ui-overlay:has(.desktop-ambience) {
+    animation: none;
+  }
+  .desktop-ambience > :not(.ambience-content) {
+    flex-shrink: 0;
+  }
+  .ambience-header,
+  .ambience-footer,
+  .ambience-actions,
+  .ambience-custom,
+  .ambience-save-form {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .ambience-header strong {
+    font-size: 16px;
+  }
+  .ambience-header p,
+  .ambience-help {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--ink-mute);
+    line-height: 1.6;
+  }
+  .ambience-current {
+    display: grid;
+    gap: 5px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--tone) 9%, transparent);
+    font-size: 12px;
+  }
+  .ambience-current small,
+  .ambience-tile small,
+  .ambience-palette-options small {
+    color: var(--ink-mute);
+    font-size: 11px;
+  }
+  .ambience-content {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .ambience-content h4 {
+    margin: 15px 0 8px;
+    font-size: 12px;
+  }
+  .ambience-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .desktop-ambience button {
+    color: inherit;
+    cursor: pointer;
+  }
+  .desktop-ambience button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .desktop-ambience button:focus-visible,
+  .desktop-ambience input:focus-visible {
+    outline: 2px solid var(--tone);
+    outline-offset: 2px;
+  }
+  .ambience-tile {
+    min-width: 0;
+    padding: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    text-align: left;
+  }
+  .ambience-tile[aria-pressed="true"] {
+    border-color: var(--tone);
+    background: color-mix(in srgb, var(--tone) 9%, transparent);
+  }
+  .ambience-tile img,
+  .ambience-no-image {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+    border-radius: 7px;
+    display: block;
+  }
+  .ambience-no-image {
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+  .ambience-tile span {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 5px;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .ambience-tile small {
+    display: block;
+    margin-top: 2px;
+  }
+  .ambience-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-top: 10px;
+  }
+  .ambience-check input {
+    accent-color: var(--tone);
+  }
+  .ambience-actions {
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .ambience-actions button,
+  .ambience-custom button,
+  .ambience-save,
+  .ambience-save-form button {
+    padding: 7px 9px;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: 8px;
+    background: transparent;
+    font-size: 12px;
+  }
+  .ambience-palette-options {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .ambience-palette-options button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px;
+    text-align: left;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: 10px;
+    background: transparent;
+    font-size: 13px;
+  }
+  .ambience-palette-options button[aria-pressed="true"] {
+    border-color: var(--tone);
+    background: color-mix(in srgb, var(--tone) 7%, transparent);
+  }
+  .ambience-palette-options small {
+    display: block;
+    margin-top: 3px;
+  }
+  .ambience-custom {
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+  .ambience-custom label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .ambience-custom input {
+    width: 30px;
+    height: 30px;
+    padding: 2px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+  }
+  .ambience-save {
+    margin-top: 12px;
+    width: 100%;
+  }
+  .ambience-save-form {
+    margin-top: 10px;
+  }
+  .ambience-save-form input {
+    min-width: 0;
+    flex: 1;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink);
+  }
+  .ambience-footer {
+    border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+    padding-top: 12px;
+  }
+  .ambience-footer button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    font-size: 11px;
+  }
+  .ambience-icon {
+    display: grid;
+    place-items: center;
+    padding: 5px;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+  }
+  .ambience-empty {
+    padding: 24px 8px;
+    color: var(--ink-mute);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.8;
+  }
+  .ambience-error {
+    color: var(--danger, #c74949);
+    font-size: 12px;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  @media (hover: hover) {
+    .desktop-ambience button:not(:disabled):hover {
+      background-color: color-mix(in srgb, var(--tone) 10%, transparent);
+    }
+  }
+}

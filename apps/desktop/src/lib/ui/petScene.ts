@@ -69,8 +69,10 @@ export function createWallpaperSync(
   let running = false;
   let pending: { path: string | null } | null = null;
   let disposed = false;
+  let paused = false;
+  let drained: (() => void)[] = [];
   const flush = async () => {
-    if (running) return;
+    if (running || paused) return;
     running = true;
     try {
       while (pending && !disposed) {
@@ -84,14 +86,25 @@ export function createWallpaperSync(
       }
     } finally {
       running = false;
+      drained.splice(0).forEach((resolve) => resolve());
     }
   };
   return {
     request(path: string | null) {
-      if (!disposed) {
+      if (!disposed && !paused) {
         pending = { path };
         void flush();
       }
+    },
+    pause(): Promise<void> {
+      paused = true;
+      pending = null;
+      return running
+        ? new Promise((resolve) => drained.push(resolve))
+        : Promise.resolve();
+    },
+    resume() {
+      paused = false;
     },
     dispose() {
       disposed = true;

@@ -482,67 +482,75 @@ pub enum SceneApplyMode {
     Linked,
 }
 
-pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Result<DesktopPetState> {
-    let state = crate::update_desktop_pet_state(base, |state| {
-        let scene = state
-            .scenes
-            .iter()
-            .find(|s| s.id == id)
+pub(crate) fn prepare_scene(
+    base: &Path,
+    state: &mut DesktopPetState,
+    id: &str,
+    mode: SceneApplyMode,
+) -> anyhow::Result<()> {
+    let scene = state
+        .scenes
+        .iter()
+        .find(|s| s.id == id)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("场景不存在"))?;
+    let apply_pet = mode == SceneApplyMode::All
+        || mode == SceneApplyMode::Pet
+        || (mode == SceneApplyMode::Linked && state.follow_wallpaper);
+    if apply_pet {
+        for clip in scene.pet.motion_clips.values() {
+            managed_file(base, Path::new(&clip.path))?;
+        }
+        managed_file(base, Path::new(&scene.pet.pet_path))?;
+        if let Some(path) = &scene.pet.grooming_path {
+            managed_file(base, Path::new(path))?;
+        }
+    }
+    if mode != SceneApplyMode::Pet {
+        let mut style = scene
+            .style
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("此场景尚无壁纸"))?;
+        let path = managed_file(base, &scene.wallpaper_path(base).unwrap())?;
+        style.revision = uuid::Uuid::new_v4().to_string();
+        state.pending_scene_style = Some(style);
+        state.last_wallpaper_path = Some(path.to_string_lossy().into_owned());
+        if !apply_pet {
+            state.active_scene_id = None;
+        }
+    }
+    if apply_pet {
+        scene.pet.apply(state);
+        state.active_scene_id = Some(scene.id.clone());
+        if let Some(preferences) = scene
+            .preferences
+            .as_ref()
+            .or_else(|| {
+                state
+                    .pets
+                    .iter()
+                    .find(|p| p.id == scene.pet.pet_id)
+                    .map(|p| &p.defaults)
+            })
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("场景不存在"))?;
-        let apply_pet = mode == SceneApplyMode::All
-            || mode == SceneApplyMode::Pet
-            || (mode == SceneApplyMode::Linked && state.follow_wallpaper);
-        if apply_pet {
-            for clip in scene.pet.motion_clips.values() {
-                managed_file(base, Path::new(&clip.path))?;
-            }
-            managed_file(base, Path::new(&scene.pet.pet_path))?;
-            if let Some(path) = &scene.pet.grooming_path {
-                managed_file(base, Path::new(path))?;
-            }
+        {
+            preferences.apply(state);
         }
-        if mode != SceneApplyMode::Pet {
-            let mut style = scene
-                .style
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("此场景尚无壁纸"))?;
-            let path = managed_file(base, &scene.wallpaper_path(base).unwrap())?;
-            style.revision = uuid::Uuid::new_v4().to_string();
-            state.pending_scene_style = Some(style);
-            state.last_wallpaper_path = Some(path.to_string_lossy().into_owned());
-            if !apply_pet {
-                state.active_scene_id = None;
-            }
-        }
-        if apply_pet {
-            scene.pet.apply(state);
-            state.active_scene_id = Some(scene.id.clone());
-            if let Some(preferences) = scene
-                .preferences
-                .as_ref()
-                .or_else(|| {
-                    state
-                        .pets
-                        .iter()
-                        .find(|p| p.id == scene.pet.pet_id)
-                        .map(|p| &p.defaults)
-                })
-                .cloned()
-            {
-                preferences.apply(state);
-            }
-        }
-        if mode == SceneApplyMode::All {
-            state.follow_wallpaper = true;
-            state.enabled = true;
-        }
-        if mode == SceneApplyMode::Pet {
-            state.follow_wallpaper = false;
-            state.enabled = true;
-        }
-        Ok(())
-    })?;
+    }
+    if mode == SceneApplyMode::All {
+        state.follow_wallpaper = true;
+        state.enabled = true;
+    }
+    if mode == SceneApplyMode::Pet {
+        state.follow_wallpaper = false;
+        state.enabled = true;
+    }
+    Ok(())
+}
+
+pub fn apply_scene(base: &Path, id: &str, mode: SceneApplyMode) -> anyhow::Result<DesktopPetState> {
+    let state =
+        crate::update_desktop_pet_state(base, |state| prepare_scene(base, state, id, mode))?;
     // The durable outbox is replayed on startup/read if publication is interrupted.
     let recovered = crate::read_desktop_pet_state(base)
         .map_err(|error| anyhow::anyhow!("场景选择已保存，壁纸应用待恢复：{error}"))?;

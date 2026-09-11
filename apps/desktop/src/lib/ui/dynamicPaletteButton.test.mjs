@@ -12,15 +12,14 @@ const styles = await readFile(
   "utf8",
 );
 
-test("dynamic palette button is limited to the main chat surface", () => {
+test("pinwheel is a stable ambience entry on the main chat surface", () => {
   assert.match(
     app,
     /className=\{`chat-main\$\{colorStyle === "dynamic" \|\| wallpaperEnabled/,
   );
-  assert.match(app, /\{colorStyle === "dynamic" \|\| wallpaperEnabled \? \(/);
-  assert.match(app, /wallpaper\.cycleRecent\(\)/);
-  assert.match(app, /openSettingsTab\("preferences:appearance"\)/);
-  assert.match(app, /t\("prefs\.wallpaper\.cycle"\)/);
+  assert.match(app, /<DesktopAmbienceButton/);
+  assert.doesNotMatch(app, /wallpaper\.cycleRecent\(\)/);
+  assert.match(app, /restoreColors=\{restoreColorPrefs\}/);
 });
 
 test("dynamic seed changes crossfade from the current shell palette", () => {

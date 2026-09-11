@@ -60,6 +60,8 @@ function deactivateGeneratedStyle() {
 }
 
 export type WallpaperController = {
+  replacePrefs: (prefs: WallpaperPrefs) => void;
+  withSuspendedSync: <T>(operation: () => Promise<T>) => Promise<T>;
   prefs: WallpaperPrefs;
   busy: "upload" | "generate" | null;
   error: string | null;
@@ -100,6 +102,8 @@ export function useWallpaper(): WallpaperController {
   const cancelledGenerationRequests = useRef(new Set<string>());
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
+  const syncSuspended = useRef(false);
+  const syncEpoch = useRef(0);
   const sceneSync = useRef<ReturnType<typeof createWallpaperSync> | null>(null);
 
   const update = useCallback(
@@ -137,6 +141,7 @@ export function useWallpaper(): WallpaperController {
     );
     sceneSync.current = sync;
     const syncCurrent = () =>
+      !syncSuspended.current &&
       sync.request(
         prefsRef.current.mode === "wallpaper"
           ? (prefsRef.current.current?.path ?? null)
@@ -144,9 +149,17 @@ export function useWallpaper(): WallpaperController {
       );
     const refresh = async () => {
       const version = ++requestVersion;
+      const epoch = syncEpoch.current;
+      if (syncSuspended.current) return;
       try {
         const style = await invoke<ActiveUiStyle | null>("get_active_ui_style");
-        if (disposed || version !== requestVersion) return;
+        if (
+          disposed ||
+          version !== requestVersion ||
+          syncSuspended.current ||
+          epoch !== syncEpoch.current
+        )
+          return;
         const asset = style && sceneWallpaperAsset(style);
         if (asset)
           update((current) =>
@@ -192,6 +205,7 @@ export function useWallpaper(): WallpaperController {
   }, [update]);
 
   useEffect(() => {
+    if (syncSuspended.current) return;
     sceneSync.current?.request(
       prefs.mode === "wallpaper" ? (prefs.current?.path ?? null) : null,
     );
@@ -372,13 +386,17 @@ export function useWallpaper(): WallpaperController {
   }, [update]);
 
   const syncSystemWallpaper = useCallback(async () => {
-    if (systemSyncInFlight.current) return;
+    if (systemSyncInFlight.current || syncSuspended.current) return;
     systemSyncInFlight.current = true;
+    const epoch = syncEpoch.current;
     try {
       const asset = await invoke<WallpaperAsset>("get_system_wallpaper");
       setError(null);
       update((current) =>
-        current.followSystemWallpaper && current.current?.id !== asset.id
+        !syncSuspended.current &&
+        epoch === syncEpoch.current &&
+        current.followSystemWallpaper &&
+        current.current?.id !== asset.id
           ? applySystemWallpaper(current, asset)
           : current,
       );
@@ -456,7 +474,35 @@ export function useWallpaper(): WallpaperController {
     update,
   ]);
 
+  const replacePrefs = useCallback((next: WallpaperPrefs) => {
+    const normalized = normalizeWallpaperPrefs(next);
+    prefsRef.current = normalized;
+    persist(normalized);
+    setPrefs(normalized);
+  }, []);
+  const withSuspendedSync = useCallback(
+    async <T>(operation: () => Promise<T>): Promise<T> => {
+      if (syncSuspended.current) throw new Error("外观切换正在进行");
+      syncSuspended.current = true;
+      syncEpoch.current++;
+      await sceneSync.current?.pause();
+      try {
+        return await operation();
+      } finally {
+        syncSuspended.current = false;
+        sceneSync.current?.resume();
+        sceneSync.current?.request(
+          prefsRef.current.mode === "wallpaper"
+            ? (prefsRef.current.current?.path ?? null)
+            : null,
+        );
+      }
+    },
+    [],
+  );
   return {
+    replacePrefs,
+    withSuspendedSync,
     prefs,
     busy,
     error,

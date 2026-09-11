@@ -22,6 +22,7 @@ pub mod pet_library;
 pub mod pet_motion;
 pub mod pet_preferences;
 pub mod pet_scene;
+pub mod desktop_ambience;
 pub mod sqlite;
 pub mod text;
 pub mod thread_memory_mode;

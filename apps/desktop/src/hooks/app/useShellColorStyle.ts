@@ -87,6 +87,15 @@ export function useShellColorStyle() {
   );
   const snapshotRef = useRef<ShellColorPrefs | null>(null);
   const [editing, setEditing] = useState(false);
+  const restoreColorPrefs = useCallback((next: ShellColorPrefs) => {
+    const normalized = {
+      style: parseStyle(next.style),
+      gradient: normalizeGradient(next.gradient),
+      dynamicSeed: next.dynamicSeed,
+    };
+    setPrefsState(normalized);
+    persistPrefs(normalized);
+  }, []);
 
   const setColorStyle = useCallback((style: ShellColorStyle) => {
     setPrefsState((prev) => {
@@ -184,6 +193,7 @@ export function useShellColorStyle() {
   }, []);
 
   return {
+    restoreColorPrefs,
     colorStyle: prefs.style,
     gradient: prefs.gradient,
     dynamicSeed: prefs.dynamicSeed,

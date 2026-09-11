@@ -56,6 +56,8 @@ const meta = {
     onCancelCustomGradient: () => {},
     onReshuffleDynamic: () => {},
     wallpaper: {
+      replacePrefs: () => {},
+      withSuspendedSync: async (operation) => operation(),
       prefs: DEFAULT_WALLPAPER_PREFS,
       busy: null,
       error: null,
