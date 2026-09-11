@@ -481,10 +481,10 @@ html[data-window-surface="desktop-pet"] #root {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
-.desktop-pet-photo-picker > span {
+.desktop-pet-photo-picker > .pet-photo-replace {
   position: absolute;
   right: 10px;
   bottom: 10px;
@@ -1207,7 +1207,7 @@ html[data-window-surface="desktop-pet"] #root {
 .pet-general-card {
   width: 100%;
   box-sizing: border-box;
-  gap: 22px;
+  gap: 18px;
 }
 .pet-defaults-editor {
   width: 100%;
@@ -1216,11 +1216,12 @@ html[data-window-surface="desktop-pet"] #root {
   grid-template-columns: auto minmax(80px, 1fr) 50px;
 }
 .pet-manager .desktop-pet-photo-picker {
-  min-height: 250px;
-  height: 100%;
-  max-height: 380px;
+  min-height: 0;
+  height: 210px;
+  background: var(--color-bg-subtle);
 }
-.pet-manager :is(.pet-library, .pet-create-card, .pet-general-card) {
+.pet-manager
+  :is(.pet-library, .pet-create-card, .pet-general-card, .pet-import-card) {
   padding: 22px;
   box-sizing: border-box;
   border: var(--settings-panel-border-width, 0.5px) solid
@@ -1232,15 +1233,14 @@ html[data-window-surface="desktop-pet"] #root {
 }
 .pet-create-card {
   display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
-  gap: 22px 28px;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 18px 28px;
   align-items: start;
 }
 .pet-create-source {
   display: grid;
-  grid-template-rows: auto minmax(250px, 1fr) auto;
-  gap: 16px;
-  align-self: stretch;
+  gap: 12px;
+  align-self: start;
 }
 .pet-create-photo-hint {
   margin: 0;
@@ -1253,12 +1253,9 @@ html[data-window-surface="desktop-pet"] #root {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
-.pet-create-fields > :is(:first-child, .desktop-pet-toggle-row, details) {
+.pet-create-fields
+  > :is(.pet-create-fields-head, .pet-create-style, .pet-wallpaper-block) {
   grid-column: 1 / -1;
-}
-.pet-create-fields details[open] {
-  display: grid;
-  gap: 12px;
 }
 .pet-create-footer {
   display: grid;
@@ -1267,21 +1264,222 @@ html[data-window-surface="desktop-pet"] #root {
   padding-top: 18px;
   border-top: 1px solid var(--settings-divider, var(--color-border));
 }
-.pet-create-footer .desktop-pet-action-row {
-  grid-template-columns: auto auto;
-  justify-content: end;
-}
 .pet-create-footer .desktop-pet-generate {
   padding-inline: 26px;
 }
 .pet-general-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 28px;
+  gap: 18px;
 }
-.pet-general-options > label {
-  padding-block: 18px;
-  border-bottom: 1px solid var(--settings-divider, var(--color-border));
+.pet-general-group {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--settings-inset-border, var(--color-border));
+  border-radius: 13px;
+  background: var(--color-bg-subtle);
+}
+.pet-general-group h4,
+.pet-general-recovery h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.pet-general-group h4 > svg {
+  color: var(--accent);
+}
+.pet-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding-block: 16px;
+}
+.pet-setting-row + .pet-setting-row {
+  border-top: 1px solid var(--settings-divider, var(--color-border));
+}
+.pet-setting-copy {
+  display: grid;
+  gap: 5px;
+  cursor: pointer;
+  min-width: 0;
+}
+.pet-setting-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.pet-setting-copy small {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.pet-manager .pet-setting-switch:active {
+  transform: none;
+}
+.pet-setting-switch:focus-visible .prefs-switch-thumb {
+  transition: none;
+}
+.pet-general-group .pet-setting-row:last-child {
+  padding-bottom: 0;
+}
+.pet-general-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--settings-divider, var(--color-border));
+}
+.pet-general-recovery > div:first-child {
+  flex: 1 1 250px;
+}
+.pet-general-recovery p {
+  margin: 5px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pet-general-recovery .pet-scene-actions {
+  margin: 0;
+  gap: 8px;
+}
+.pet-general-recovery button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+.pet-photo-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 16px;
+}
+.pet-photo-empty strong {
+  font-size: 14px;
+  color: var(--color-text);
+}
+.pet-photo-empty small {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+.pet-photo-empty > svg {
+  color: var(--accent);
+}
+.pet-create-fields-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.pet-create-fields-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.pet-static-badge {
+  border: 1px solid var(--settings-inset-border, var(--color-border));
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+.pet-create-fields .desktop-pet-field > span > small {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.pet-create-fields .desktop-pet-field :is(input, textarea) {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  border-radius: 9px;
+  font-size: 13px;
+}
+.pet-create-fields .desktop-pet-field input {
+  min-height: 38px;
+}
+.pet-create-fields .desktop-pet-field textarea {
+  min-height: 70px;
+}
+.pet-wallpaper-block {
+  border-top: 1px solid var(--settings-divider, var(--color-border));
+}
+.pet-wallpaper-options {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--settings-inset-border, var(--color-border));
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--settings-inset-background, var(--color-bg-subtle));
+}
+.pet-wallpaper-options .pet-setting-row {
+  padding-bottom: 0;
+}
+.pet-create-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+.pet-create-submit > div {
+  flex: 1 1 250px;
+}
+.pet-create-submit strong {
+  font-size: 13px;
+}
+.pet-create-submit p,
+.pet-create-privacy {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.pet-create-submit .desktop-pet-generate {
+  min-height: 40px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 13px;
+  box-shadow: none;
+}
+.pet-create-privacy {
+  margin: 0;
+  font-size: 11px;
+}
+.pet-import-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.pet-import-card > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.pet-import-card h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.pet-import-card p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.pet-import-card .desktop-pet-import-package {
+  min-height: 36px;
+  font-size: 13px;
+  border-radius: 9px;
+}
+.pet-create-notice {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text);
 }
 .pet-motion-settings {
   display: grid;
@@ -1365,18 +1563,18 @@ html[data-window-surface="desktop-pet"] #root {
   .pet-library-heading {
     flex-basis: 100%;
   }
-  .pet-manager :is(.pet-library, .pet-create-card, .pet-general-card) {
+  .pet-manager
+    :is(.pet-library, .pet-create-card, .pet-general-card, .pet-import-card) {
     padding: 16px;
-  }
-  .pet-manager .pet-create-source {
-    grid-template-rows: auto 250px auto;
-  }
-  .pet-create-footer .desktop-pet-action-row {
-    grid-template-columns: 1fr;
-    justify-content: stretch;
   }
   .pet-create-fields {
     grid-template-columns: 1fr;
+  }
+  .pet-create-submit .desktop-pet-generate {
+    width: 100%;
+  }
+  .pet-import-card .desktop-pet-import-package {
+    width: 100%;
   }
   .pet-motion-portrait {
     width: 160px;
@@ -1407,6 +1605,10 @@ html[data-window-surface="desktop-pet"] #root {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .pet-setting-switch,
+  .pet-setting-switch .prefs-switch-thumb {
+    transition: none;
+  }
   .pet-manager button:not(:disabled):active {
     transform: none;
   }

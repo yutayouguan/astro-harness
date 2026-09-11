@@ -66,7 +66,7 @@ for (const theme of ["light", "dark"]) {
     await page.locator(".pet-create-card").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/pet-manager-${theme}-create.png` });
     await page.getByRole("tab", { name: "通用设置" }).click();
-    await expect(page.getByRole("checkbox", { name: "全屏时自动隐藏" })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "全屏时自动隐藏" })).toBeVisible();
     await expect(page.getByRole("slider")).toHaveCount(0);
     await page.screenshot({ path: `test-results/pet-manager-${theme}-general.png` });
   });
@@ -96,7 +96,7 @@ test("wide pet content uses available width with side-by-side creation and prefe
   const fields = await page.locator(".pet-create-fields").boundingBox();
   expect(fields!.x).toBeGreaterThan(photo!.x + photo!.width);
   await page.getByRole("tab", { name: "通用设置" }).click();
-  const rows = page.locator(".pet-general-options > label");
+  const rows = page.locator(".pet-general-options > section");
   const first = await rows.nth(0).boundingBox(), second = await rows.nth(1).boundingBox();
   expect(second!.x).toBeGreaterThan(first!.x + first!.width);
   expect(Math.abs(second!.y - first!.y)).toBeLessThan(2);

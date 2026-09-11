@@ -1,4 +1,13 @@
-import { Eye, EyeOff, PawPrint, Plus, Settings2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Monitor,
+  Moon,
+  PawPrint,
+  Plus,
+  RotateCcw,
+  Settings2,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
@@ -8,6 +17,7 @@ import { DEFAULT_PET_PREFERENCES } from "../../lib/ui/petPreferences";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
 import conceptImage from "../../assets/generated/desktop-pet-concept.png";
 import PetCreatePanel from "./PetCreatePanel";
+import PetSettingSwitch from "./PetSettingSwitch";
 import PetLibraryPanel from "./PetLibraryPanel";
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
@@ -188,85 +198,135 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
         <section className="prefs-card desktop-pet-card pet-general-card">
           <header className="desktop-pet-card-head">
             <div>
-              <h3>
-                {zh ? "所有宠物共用的桌面策略" : "Desktop-wide preferences"}
-              </h3>
+              <h3>{zh ? "桌面陪伴偏好" : "Desktop companion preferences"}</h3>
               <p>
                 {zh
-                  ? "切换宠物或场景不会覆盖以下显示策略。"
-                  : "Switching companions never overrides these visibility policies."}
+                  ? "所有宠物共用，修改后立即生效。"
+                  : "Shared by all pets. Changes take effect immediately."}
               </p>
             </div>
           </header>
           <div className="pet-general-options">
-            {(
-              [
-                [
-                  "alwaysOnTop",
-                  zh ? "始终置顶" : "Always on top",
-                  state.alwaysOnTop,
-                  "set_desktop_pet_always_on_top",
-                  { alwaysOnTop: !state.alwaysOnTop },
-                ],
-                [
-                  "followWallpaper",
-                  zh ? "随配套壁纸切换宠物" : "Follow paired wallpapers",
-                  state.followWallpaper,
-                  "set_pet_scene_follow_wallpaper",
-                  { enabled: !state.followWallpaper },
-                ],
-                [
-                  "hideInFullscreen",
-                  zh ? "全屏时自动隐藏" : "Hide in fullscreen",
-                  preferences.hideInFullscreen,
-                  "configure_desktop_pet_preferences",
+            {[
+              {
+                id: "display",
+                title: zh ? "显示与联动" : "Display & wallpaper",
+                icon: <Monitor size={18} />,
+                items: [
                   {
-                    patch: { hideInFullscreen: !preferences.hideInFullscreen },
+                    key: "alwaysOnTop",
+                    label: zh ? "始终置顶" : "Always on top",
+                    hint: zh
+                      ? "让桌宠保持在其他窗口上方。"
+                      : "Keep the pet above other windows.",
+                    checked: state.alwaysOnTop,
+                    command: "set_desktop_pet_always_on_top",
+                    args: { alwaysOnTop: !state.alwaysOnTop },
+                  },
+                  {
+                    key: "followWallpaper",
+                    label: zh
+                      ? "随配套壁纸切换宠物"
+                      : "Follow paired wallpapers",
+                    hint: zh
+                      ? "只跟随已关联的壁纸；仅应用宠物时会关闭联动。"
+                      : "Follow paired wallpapers only. Applying just a pet disables linking.",
+                    checked: state.followWallpaper,
+                    command: "set_pet_scene_follow_wallpaper",
+                    args: { enabled: !state.followWallpaper },
                   },
                 ],
-                [
-                  "presentationMode",
-                  zh ? "演示时暂时隐藏" : "Presentation hide",
-                  preferences.presentationMode,
-                  "configure_desktop_pet_preferences",
+              },
+              {
+                id: "quiet",
+                title: zh ? "免打扰" : "Do not disturb",
+                icon: <Moon size={18} />,
+                items: [
                   {
-                    patch: { presentationMode: !preferences.presentationMode },
+                    key: "hideInFullscreen",
+                    label: zh ? "全屏时自动隐藏" : "Hide in fullscreen",
+                    hint: zh
+                      ? "macOS 检测前台应用全屏，退出全屏后自动恢复。"
+                      : "On macOS, hide during foreground fullscreen and restore afterward.",
+                    checked: preferences.hideInFullscreen,
+                    command: "configure_desktop_pet_preferences",
+                    args: {
+                      patch: {
+                        hideInFullscreen: !preferences.hideInFullscreen,
+                      },
+                    },
+                  },
+                  {
+                    key: "presentationMode",
+                    label: zh ? "演示时暂时隐藏" : "Presentation hide",
+                    hint: zh
+                      ? "临时隐藏桌宠；点击「恢复显示」退出演示模式。"
+                      : "Temporarily hide your pet. Restore visibility to leave presentation mode.",
+                    checked: preferences.presentationMode,
+                    command: "configure_desktop_pet_preferences",
+                    args: {
+                      patch: {
+                        presentationMode: !preferences.presentationMode,
+                      },
+                    },
                   },
                 ],
-              ] as const
-            ).map(([key, label, checked, command, args]) => (
-              <label key={key} className="desktop-pet-preference-row">
-                <span>{label}</span>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={busy}
-                  onChange={() => void run(command, args)}
-                />
-              </label>
+              },
+            ].map((group) => (
+              <section
+                key={group.id}
+                className="pet-general-group"
+                aria-labelledby={`pet-general-${group.id}-title`}
+              >
+                <h4 id={`pet-general-${group.id}-title`}>
+                  {group.icon}
+                  {group.title}
+                </h4>
+                {group.items.map((item) => (
+                  <PetSettingSwitch
+                    key={item.key}
+                    label={item.label}
+                    description={item.hint}
+                    checked={item.checked}
+                    disabled={busy}
+                    onChange={() => void run(item.command, item.args)}
+                  />
+                ))}
+              </section>
             ))}
           </div>
-          <p className="desktop-pet-model">
-            {zh
-              ? "未关联的壁纸保留当前宠物；仅应用宠物会关闭壁纸联动。全屏检测在 macOS 支持前台应用。"
-              : "Unpaired wallpapers keep your pet. Pet-only applies disable linking. Foreground fullscreen detection is available on macOS."}
-          </p>
-          <div className="pet-scene-actions">
-            <button
-              type="button"
-              disabled={busy || !state.petPath}
-              onClick={() => void run("reset_desktop_pet_position")}
-            >
-              {zh ? "回到屏幕内" : "Bring back on screen"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void run("resume_desktop_pet")}
-            >
-              {zh ? "恢复显示" : "Restore visibility"}
-            </button>
-          </div>
+          <section
+            className="pet-general-recovery"
+            aria-label={zh ? "找回桌宠" : "Recover your pet"}
+          >
+            <div>
+              <h4>
+                <RotateCcw size={17} aria-hidden />
+                {zh ? "找回桌宠" : "Recover your pet"}
+              </h4>
+              <p>
+                {zh
+                  ? "宠物移出屏幕时重置位置，被临时隐藏时恢复显示。"
+                  : "Reset an off-screen position, or restore a temporarily hidden pet."}
+              </p>
+            </div>
+            <div className="pet-scene-actions">
+              <button
+                type="button"
+                disabled={busy || !state.petPath}
+                onClick={() => void run("reset_desktop_pet_position")}
+              >
+                {zh ? "回到屏幕内" : "Bring back on screen"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run("resume_desktop_pet")}
+              >
+                {zh ? "恢复显示" : "Restore visibility"}
+              </button>
+            </div>
+          </section>
         </section>
       </div>
     </section>

@@ -22,7 +22,7 @@ import concept from "../assets/generated/desktop-pet-concept.png";
 const meta = {
   title: "Settings/PetSceneStudio",
   component: DesktopPetPanel,
-  beforeEach: () => {
+  beforeEach: (context) => {
     const photo = new URL(concept, window.location.href).href;
     const identity = {
       petId: "fixture-naitang",
@@ -83,7 +83,7 @@ const meta = {
     let state: DesktopPetState = {
       ...EMPTY_DESKTOP_PET_STATE,
       revision: 1,
-      sourcePath: photo,
+      sourcePath: context.id.endsWith("--empty-photo") ? null : photo,
       petPath: identity.petPath,
       displayName: "奶糖",
       enabled: true,
@@ -112,6 +112,22 @@ const meta = {
         throw new Error("验收样例：壁纸请求失败，已保留桌宠，可单独重试。");
       if (command === "cancel_pet_generation") return true;
       if (command === "set_desktop_pet_enabled") state.enabled = !!args.enabled;
+      if (command === "set_desktop_pet_always_on_top")
+        state.alwaysOnTop = !!args.alwaysOnTop;
+      if (command === "configure_desktop_pet_preferences")
+        state.preferences = {
+          ...DEFAULT_PET_PREFERENCES,
+          ...state.preferences,
+          ...(args.patch as object),
+        };
+      if (command === "resume_desktop_pet") {
+        state.enabled = true;
+        state.preferences = {
+          ...DEFAULT_PET_PREFERENCES,
+          ...state.preferences,
+          presentationMode: false,
+        };
+      }
       if (command === "set_pet_scene_follow_wallpaper")
         state.followWallpaper = !!args.enabled;
       if (command === "edit_pet_library") {
@@ -201,3 +217,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const PreviewAndFailure: Story = {};
+export const EmptyPhoto: Story = {};
