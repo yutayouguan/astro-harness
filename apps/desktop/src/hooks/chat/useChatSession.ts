@@ -9,6 +9,14 @@ import {
 } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+  respondInteraction,
+  usePendingInteractions,
+} from "./usePendingInteractions";
+import {
+  approvalDetails,
+  inlineInteraction,
+} from "../../lib/chat/pendingInteractions";
 import { sealOpenReasoning } from "../../lib/chat/chatTimeline";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
@@ -165,6 +173,9 @@ export function useChatSession({
   });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const interactionState = usePendingInteractions();
+  const knownInteractions = useRef(new Set<string>());
+  const navigationVersion = useRef(0);
   const [queuedFollowUps, setQueuedFollowUps] = useState<QueuedFollowUp[]>([]);
   const [queueKick, setQueueKick] = useState(0);
   const [modeSwitchPrompt, setModeSwitchPrompt] =
@@ -184,6 +195,22 @@ export function useChatSession({
     headSha: string;
   } | null>(null);
   const steeringQueueIdsRef = useRef(new Set<string>());
+  const petNavigationDrafts = useRef(
+    new Map<
+      string,
+      {
+        input: string;
+        attachments: ChatAttachment[];
+        queue: QueuedFollowUp[];
+        worktree: typeof sessionWorktreeRef.current;
+        mode: ModeSwitchRequest | null;
+      }
+    >(),
+  );
+  const petNavigationTurn = useRef<{
+    sessionId: string;
+    turnId: string;
+  } | null>(null);
   const stopStreamRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
@@ -1663,10 +1690,76 @@ export function useChatSession({
           t.status === "waiting" &&
           (t.pendingInterrupts?.length ?? 0) > 0,
       );
-      const interrupts = parallelTask?.pendingInterrupts?.length
+      const candidates = parallelTask?.pendingInterrupts?.length
         ? parallelTask.pendingInterrupts
         : sessionPendingInterrupts;
-      if (!activeProvider || interrupts.length === 0) return;
+      const interrupts = candidates.filter(
+        (item) =>
+          item.assistantMessageId === messageId ||
+          (!item.assistantMessageId && candidates.length === 1),
+      );
+      if (interrupts.length !== 1) {
+        showTransientToast(
+          "请在待处理请求卡片中逐项操作，不能一次提交多个请求",
+        );
+        return;
+      }
+      const targetSessionId = parallelTask?.sessionId ?? sessionId;
+      const live = interactionState.snapshot.requests.find(
+        (request) =>
+          request.sessionId === targetSessionId &&
+          (request.requestId === interrupts[0].id ||
+            request.toolCallId === interrupts[0].id),
+      );
+      if (live && inlineInteraction(live)) {
+        try {
+          const option =
+            live.kind === "approval"
+              ? live.actions.find((a) => a.id === name)
+              : undefined;
+          if (live.kind === "approval" && !option) {
+            showTransientToast("请使用当前审批卡片提供的授权选项");
+            return;
+          }
+          if (
+            option?.persistent &&
+            !(await confirm({
+              title: option.label,
+              message: `${approvalDetails(live)}\n${option.id === "allow_session" ? "授权持续到本会话结束。" : "此授权持续生效，后续匹配的操作可能不再询问。"}`,
+            }))
+          )
+            return;
+          await respondInteraction(
+            live,
+            option?.id ?? "submit",
+            context,
+            !!option?.persistent,
+          );
+        } catch (error) {
+          showTransientToast(String(error), { tone: "error" });
+        }
+        return;
+      }
+      if (parallelTask && candidates.length !== 1) {
+        showTransientToast("请逐项处理该任务的请求");
+        return;
+      }
+      if (
+        [
+          "approve_always",
+          "approve_type",
+          "allow_session",
+          "allow_always",
+        ].includes(name) &&
+        !(await confirm({
+          title: "确认长期授权",
+          message:
+            name === "allow_session"
+              ? "此授权持续到本会话结束，请核对原始卡片中的权限范围。"
+              : "此授权持续生效，后续匹配的操作可能不再询问，请核对原始卡片中的权限范围。",
+        }))
+      )
+        return;
 
       const isLocationHitl = interrupts.some(
         (p) => p.reason === "location_required",
@@ -1826,25 +1919,12 @@ export function useChatSession({
       }
 
       const resumeJson = JSON.stringify(
-        sessionPendingInterrupts.map((p) => ({
+        interrupts.map((p) => ({
           interrupt_id: p.id,
           status: "resolved",
           payload,
         })),
       );
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== messageId) return m;
-          return {
-            ...m,
-            uiSurfaces: m.uiSurfaces?.map((s) => ({
-              ...s,
-              status: "resolved" as const,
-            })),
-          };
-        }),
-      );
-      setSessionPendingInterrupts([]);
       if (!sessionId) {
         showTransientToast(t("chat.interrupt.pending"));
         return;
@@ -1855,6 +1935,23 @@ export function useChatSession({
         setStatus("busy");
         setStatusPhase("generating");
         await invoke("interrupt_resume", { sessionId, resumeJson });
+        const resolvedIds = new Set(interrupts.map((p) => p.id));
+        setSessionPendingInterrupts((prev) =>
+          prev.filter((p) => !resolvedIds.has(p.id)),
+        );
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id !== messageId
+              ? message
+              : {
+                  ...message,
+                  uiSurfaces: message.uiSurfaces?.map((surface) => ({
+                    ...surface,
+                    status: "resolved" as const,
+                  })),
+                },
+          ),
+        );
       } catch (e) {
         setStreaming(false);
         showTransientToast(
@@ -1863,7 +1960,8 @@ export function useChatSession({
       }
     },
     [
-      activeProvider,
+      interactionState,
+      confirm,
       parallelTasks,
       resumeParallelHitl,
       sessionPendingInterrupts,
@@ -1907,6 +2005,15 @@ export function useChatSession({
     resetChatSurface();
     setInput("");
     setEmptyMode("chat");
+    const draft = petNavigationDrafts.current.get("new");
+    if (draft) {
+      petNavigationDrafts.current.delete("new");
+      setInput(draft.input);
+      setAttachments(draft.attachments);
+      setQueuedFollowUps(draft.queue);
+      sessionWorktreeRef.current = draft.worktree;
+      setModeSwitchPrompt(draft.mode);
+    }
   }, [confirmIfStreaming, resetChatSurface]);
 
   const resetSchedulingSurface = useCallback(() => {
@@ -1938,21 +2045,138 @@ export function useChatSession({
   }, []);
 
   // ── Open session from file space ──────────────────────────────────────────
+  const navigationUi = useRef({
+    sessionId,
+    input,
+    attachments,
+    queuedFollowUps,
+    modeSwitchPrompt,
+  });
+  navigationUi.current = {
+    sessionId,
+    input,
+    attachments,
+    queuedFollowUps,
+    modeSwitchPrompt,
+  };
+  useEffect(() => {
+    const tracked = petNavigationTurn.current;
+    if (!tracked || !interactionState.connected) return;
+    if (tracked.sessionId !== sessionId) {
+      petNavigationTurn.current = null;
+      return;
+    }
+    if (
+      !interactionState.snapshot.tasks.some(
+        (task) =>
+          task.sessionId === tracked.sessionId &&
+          task.turnId === tracked.turnId,
+      )
+    ) {
+      petNavigationTurn.current = null;
+      if (currentRunIdRef.current === tracked.turnId) {
+        setStreaming(false);
+        setTurnInFlight(false);
+        turnInFlightRef.current = false;
+      }
+    }
+  }, [interactionState, sessionId]);
+  useEffect(() => {
+    if (!interactionState.connected || !sessionId) return;
+    const live = interactionState.snapshot.requests.filter(
+      (r) => r.sessionId === sessionId,
+    );
+    for (const request of live)
+      knownInteractions.current.add(`${sessionId}:${request.requestId}`);
+    const gone = sessionPendingInterrupts.filter(
+      (p) =>
+        knownInteractions.current.has(`${sessionId}:${p.id}`) &&
+        !live.some((r) => r.requestId === p.id),
+    );
+    if (!gone.length) return;
+    const ids = new Set(gone.map((p) => p.id));
+    const remaining = sessionPendingInterrupts.filter((p) => !ids.has(p.id));
+    setSessionPendingInterrupts(remaining);
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (
+          !gone.some((p) => p.assistantMessageId === message.id) ||
+          remaining.some((p) => p.assistantMessageId === message.id)
+        )
+          return message;
+        return {
+          ...message,
+          uiSurfaces: message.uiSurfaces?.map((surface) => ({
+            ...surface,
+            status: "resolved" as const,
+          })),
+        };
+      }),
+    );
+  }, [interactionState, sessionId, sessionPendingInterrupts]);
+
   const openSessionFromFilespace = useCallback(
-    async (targetSessionId: string, messageId?: string | null) => {
+    async (
+      targetSessionId: string,
+      messageId?: string | null,
+      preserveCurrent = false,
+    ) => {
+      const generation = ++navigationVersion.current;
       try {
-        await discardCurrentSide(targetSessionId);
-        resetSchedulingSurface();
+        if (
+          preserveCurrent &&
+          (sendStartLockRef.current || queueDrainLockRef.current)
+        ) {
+          showTransientToast("正在提交输入，请稍后再切换任务");
+          return;
+        }
+        if (!preserveCurrent) {
+          await discardCurrentSide(targetSessionId);
+          resetSchedulingSurface();
+        }
         const hist = await invoke<ResponseItemHistoryDto>("get_chat_history", {
           sessionId: targetSessionId,
           limit: 200,
         });
         const restored = projectResponseItemsToEntries(hist.items ?? []);
+        if (generation !== navigationVersion.current) return;
+        if (
+          preserveCurrent &&
+          (sendStartLockRef.current || queueDrainLockRef.current)
+        ) {
+          showTransientToast("输入正在提交，已保留当前会话，请稍后再切换");
+          return;
+        }
+        if (preserveCurrent) {
+          const current = navigationUi.current;
+          petNavigationDrafts.current.set(current.sessionId ?? "new", {
+            input: current.input,
+            attachments: current.attachments,
+            queue: current.queuedFollowUps,
+            worktree: sessionWorktreeRef.current,
+            mode: current.modeSwitchPrompt,
+          });
+          // Detach UI ownership only. Do not revoke previews, delete a side
+          // session/worktree or cancel an existing backend turn.
+          setQueuedFollowUps([]);
+          sessionWorktreeRef.current = null;
+          setModeSwitchPrompt(null);
+          modeSwitchPromptRef.current = null;
+          modeSwitchArmedRef.current = false;
+          steeringQueueIdsRef.current.clear();
+          queueFailedIdRef.current = null;
+          setStreamPaused(false);
+          setStreaming(false);
+          setTurnInFlight(false);
+          turnInFlightRef.current = false;
+        }
         const endReason = hist.endReason ?? null;
         const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {
           applyRestoredHistory(resolvedSessionId, restored, [], endReason);
         } else {
+          setMessages([]);
+          setSessionPendingInterrupts([]);
           currentRunIdRef.current = null;
           setCurrentTurnId(null);
           setSessionId(resolvedSessionId);
@@ -1975,9 +2199,37 @@ export function useChatSession({
             hist.excludedTurnCount ?? 0,
           );
         }
-        const canFocus =
-          !!messageId && restored.some((m) => m.id === messageId);
-        setFocusMessageId(canFocus ? messageId! : null);
+        const focus = messageId
+          ? restored.find(
+              (m) =>
+                m.id === messageId ||
+                m.activities?.some((a) => a.id === messageId),
+            )?.id
+          : null;
+        setFocusMessageId(focus ?? null);
+        const draft = petNavigationDrafts.current.get(targetSessionId);
+        if (preserveCurrent || draft) {
+          petNavigationDrafts.current.delete(targetSessionId);
+          setInput(draft?.input ?? "");
+          setAttachments(draft?.attachments ?? []);
+          setQueuedFollowUps(draft?.queue ?? []);
+          sessionWorktreeRef.current = draft?.worktree ?? null;
+          setModeSwitchPrompt(draft?.mode ?? null);
+          const running = interactionState.snapshot.tasks.find(
+            (task) => task.sessionId === targetSessionId,
+          );
+          if (running) {
+            petNavigationTurn.current = {
+              sessionId: running.sessionId,
+              turnId: running.turnId,
+            };
+            currentRunIdRef.current = running.turnId;
+            setCurrentTurnId(running.turnId);
+            setStreaming(true);
+            setTurnInFlight(true);
+            turnInFlightRef.current = true;
+          }
+        }
         setEmptyMode(null);
         setNav("chat");
       } catch (e) {
@@ -1993,8 +2245,48 @@ export function useChatSession({
       resetSchedulingSurface,
       discardCurrentSide,
       persistClientState,
+      sessionId,
+      input,
+      attachments,
+      interactionState,
+      showTransientToast,
     ],
   );
+
+  const petNavigateRef = useRef(openSessionFromFilespace);
+  petNavigateRef.current = openSessionFromFilespace;
+  useEffect(() => {
+    if (!persistClientState || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const seen = new Set<string>();
+    const open = async () => {
+      const nav = await invoke<{
+        id: string;
+        sessionId: string;
+        itemId?: string;
+      } | null>("take_pet_task_navigation");
+      if (disposed || !nav || seen.has(nav.id)) return;
+      seen.add(nav.id);
+      await petNavigateRef.current(nav.sessionId, nav.itemId, true);
+    };
+    void listen("pet-task-open-session", () => {
+      void open().catch(() => {});
+    })
+      .then((cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
+        stop = cleanup;
+        void open().catch(() => {});
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [persistClientState]);
 
   // ── Attach artifacts ──────────────────────────────────────────────────────
   const attachArtifactsToChat = useCallback(

@@ -92,6 +92,7 @@ mod context_maintenance;
 mod event_dispatch;
 pub(crate) mod event_identity;
 mod history_control;
+pub mod live_interactions;
 pub(crate) mod model_ctx;
 mod recording;
 mod response_journal;
@@ -208,6 +209,7 @@ pub struct Session {
     pub(crate) services: SessionServices,
     pub(crate) mcp_hub: Arc<TokioMutex<McpHub>>,
     mcp_elicitation: Arc<mcp::McpElicitationBroker>,
+    mcp_elicitation_bound: AtomicBool,
     pub(crate) guardian_retry: crate::control::guardian::GuardianRetryState,
 
     // ── 注入的依赖 ─────────────────────────────────────────
@@ -674,6 +676,7 @@ impl Session {
             ),
             mcp_hub,
             mcp_elicitation,
+            mcp_elicitation_bound: AtomicBool::new(false),
             guardian_retry: crate::control::guardian::GuardianRetryState::default(),
             hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
             hook_run_observer: StdMutex::new(None),
@@ -744,10 +747,17 @@ impl Session {
             .map_err(|_| RuntimeIoBindError::AlreadyBound)
     }
 
+    pub fn interaction_broker(&self) -> &Arc<mcp::McpElicitationBroker> {
+        &self.mcp_elicitation
+    }
+
     /// Forward MCP server elicitation callbacks into the unified thread event stream.
     pub(crate) fn bind_mcp_elicitation_events(self: &Arc<Self>) {
+        if self.mcp_elicitation_bound.swap(true, Ordering::AcqRel) {
+            return;
+        }
         let requests = self.mcp_elicitation.requests();
-        let session = Arc::clone(self);
+        let weak_session = Arc::downgrade(self);
         let shutdown = self.runtime_shutdown_complete.clone();
         tokio::spawn(async move {
             loop {
@@ -758,6 +768,9 @@ impl Session {
                         Err(_) => break,
                     },
                 };
+                let Some(session) = weak_session.upgrade() else {
+                    break;
+                };
                 let turn_id = session
                     .current_turn_id()
                     .await
@@ -765,6 +778,12 @@ impl Session {
                 let item_id = format!(
                     "mcp-elicitation:{}:{}",
                     request.server_name, request.request_id
+                );
+                session.mcp_elicitation.bind_turn(
+                    &request.server_name,
+                    &request.request_id,
+                    request.generation,
+                    turn_id.clone(),
                 );
                 let operations = elicitation_operations(&request.request_id, &request.params);
                 session
@@ -1040,6 +1059,7 @@ impl Session {
             .turn
             .set_current_turn_id(turn_context.sub_id().to_string());
         state.current_turn_context = Some(turn_context);
+        types::pending_interaction::changed();
     }
 
     /// 清除当前 turn_id（run 结束或中断时调用）。
@@ -1048,6 +1068,7 @@ impl Session {
         state.turn.clear_current_turn_id();
         state.current_turn_context = None;
         state.current_step_context = None;
+        types::pending_interaction::changed();
     }
 
     /// 当前绑定的 turn_id（若有）。

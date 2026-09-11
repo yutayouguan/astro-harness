@@ -14,3 +14,4 @@ home = { path = "../agent-home" }
 async-trait = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"
+tokio = { workspace = true, features = ["sync"] }

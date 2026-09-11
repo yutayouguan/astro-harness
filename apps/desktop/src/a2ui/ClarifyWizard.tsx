@@ -32,6 +32,17 @@ type Props = {
   allowAlways?: boolean;
   approvalTypeLabel?: string;
   disabled?: boolean;
+  deferCommit?: boolean;
+  initialDraft?: {
+    answers: Record<string, string>;
+    customDrafts: Record<string, string>;
+    index: number;
+  };
+  onDraftChange?: (draft: {
+    answers: Record<string, string>;
+    customDrafts: Record<string, string>;
+    index: number;
+  }) => void;
   onAction: (name: string, context: Record<string, unknown>) => void;
 };
 
@@ -48,12 +59,22 @@ export default function ClarifyWizard({
   allowAlways = false,
   approvalTypeLabel,
   disabled = false,
+  deferCommit = false,
+  initialDraft,
+  onDraftChange,
   onAction,
 }: Props) {
   const { t } = useI18n();
-  const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [customDrafts, setCustomDrafts] = useState<Record<string, string>>({});
+  const [index, setIndex] = useState(initialDraft?.index ?? 0);
+  const [answers, setAnswers] = useState<Record<string, string>>(
+    initialDraft?.answers ?? {},
+  );
+  const [customDrafts, setCustomDrafts] = useState<Record<string, string>>(
+    initialDraft?.customDrafts ?? {},
+  );
+  useEffect(() => {
+    onDraftChange?.({ answers, customDrafts, index });
+  }, [answers, customDrafts, index, onDraftChange]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
@@ -119,9 +140,9 @@ export default function ClarifyWizard({
         answers: finalAnswers,
         value: summary || Object.values(finalAnswers).join("；"),
       });
-      setCollapsed(true);
+      if (!deferCommit) setCollapsed(true);
     },
-    [onAction, steps],
+    [onAction, steps, deferCommit],
   );
 
   const advanceWithAnswer = useCallback(

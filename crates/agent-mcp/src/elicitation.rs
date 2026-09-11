@@ -11,6 +11,7 @@ pub struct McpElicitationRequest {
     pub server_name: String,
     pub request_id: String,
     pub params: Value,
+    pub generation: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +35,8 @@ const MAX_PENDING_ELICITATIONS: usize = 128;
 struct PendingEntry {
     token: u64,
     sender: oneshot::Sender<McpElicitationResponse>,
+    params: Value,
+    turn_id: Option<String>,
 }
 
 struct PendingCleanup<'a> {
@@ -50,6 +53,7 @@ impl Drop for PendingCleanup<'_> {
             .is_some_and(|entry| entry.token == self.token)
         {
             pending.remove(&self.key);
+            types::pending_interaction::changed();
         }
     }
 }
@@ -111,8 +115,17 @@ impl McpElicitationBroker {
                     None,
                 ));
             }
-            pending.insert(key.clone(), PendingEntry { token, sender: tx });
+            pending.insert(
+                key.clone(),
+                PendingEntry {
+                    token,
+                    sender: tx,
+                    params: params.clone(),
+                    turn_id: None,
+                },
+            );
         }
+        types::pending_interaction::changed();
         let _cleanup = PendingCleanup {
             pending: &self.pending,
             key: key.clone(),
@@ -124,6 +137,7 @@ impl McpElicitationBroker {
                 server_name,
                 request_id,
                 params,
+                generation: token,
             })
             .is_err()
         {
@@ -172,11 +186,66 @@ impl McpElicitationBroker {
         request_id: &str,
         response: McpElicitationResponse,
     ) -> bool {
-        self.pending
+        let resolved = self
+            .pending
             .lock()
             .expect("MCP elicitation mutex poisoned")
             .remove(&(server_name.to_string(), request_id.to_string()))
-            .is_some_and(|entry| entry.sender.send(response).is_ok())
+            .is_some_and(|entry| entry.sender.send(response).is_ok());
+        types::pending_interaction::changed();
+        resolved
+    }
+
+    pub fn pending_requests(&self) -> Vec<(McpElicitationRequest, Option<String>)> {
+        self.pending
+            .lock()
+            .expect("MCP elicitation mutex poisoned")
+            .iter()
+            .map(|((server_name, request_id), entry)| {
+                (
+                    McpElicitationRequest {
+                        server_name: server_name.clone(),
+                        request_id: request_id.clone(),
+                        params: entry.params.clone(),
+                        generation: entry.token,
+                    },
+                    entry.turn_id.clone(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn bind_turn(&self, server: &str, id: &str, generation: u64, turn_id: String) {
+        if let Some(entry) = self
+            .pending
+            .lock()
+            .expect("MCP elicitation mutex poisoned")
+            .get_mut(&(server.into(), id.into()))
+        {
+            if entry.token == generation {
+                entry.turn_id = Some(turn_id);
+                types::pending_interaction::changed();
+            }
+        }
+    }
+
+    pub fn resolve_generation(
+        &self,
+        server: &str,
+        id: &str,
+        token: u64,
+        response: McpElicitationResponse,
+    ) -> bool {
+        let mut pending = self.pending.lock().expect("MCP elicitation mutex poisoned");
+        let key = (server.to_string(), id.to_string());
+        if !pending.get(&key).is_some_and(|entry| entry.token == token) {
+            return false;
+        }
+        let resolved = pending
+            .remove(&key)
+            .is_some_and(|entry| entry.sender.send(response).is_ok());
+        types::pending_interaction::changed();
+        resolved
     }
 }
 
@@ -324,6 +393,8 @@ mod tests {
             PendingEntry {
                 token: 1,
                 sender: old_sender,
+                params: Value::Null,
+                turn_id: None,
             },
         );
         let cleanup = PendingCleanup {
@@ -337,6 +408,8 @@ mod tests {
             PendingEntry {
                 token: 2,
                 sender: new_sender,
+                params: Value::Null,
+                turn_id: None,
             },
         );
 

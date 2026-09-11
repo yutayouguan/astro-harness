@@ -137,6 +137,7 @@ impl HitlGate {
             .lock()
             .await
             .insert(id, Waiting { tx, interrupt });
+        types::pending_interaction::changed();
         rx
     }
 
@@ -160,6 +161,7 @@ impl HitlGate {
             },
         };
         self.waiting.lock().await.remove(interrupt_id);
+        types::pending_interaction::changed();
         resolution
     }
 
@@ -178,6 +180,7 @@ impl HitlGate {
                 let _ = waiting.tx.send(resolution);
             }
         }
+        types::pending_interaction::changed();
         Ok(())
     }
 
@@ -201,6 +204,14 @@ impl HitlGate {
             let Some(waiting) = map.get(&item.interrupt_id) else {
                 return Err(format!("unknown interrupt id: {}", item.interrupt_id));
             };
+            if prepared.iter().any(|(id, _)| id == &item.interrupt_id) {
+                return Err("duplicate interrupt id".into());
+            }
+            if chrono::DateTime::parse_from_rfc3339(&waiting.interrupt.expires_at)
+                .is_ok_and(|expiry| expiry <= chrono::Utc::now())
+            {
+                return Err("interrupt expired".into());
+            }
             if item.status == "resolved" {
                 validate_resume_payload(&waiting.interrupt, &item.payload_json)?;
             }
@@ -227,6 +238,7 @@ impl HitlGate {
                 payload_json: String::new(),
             });
         }
+        types::pending_interaction::changed();
     }
 }
 
@@ -260,14 +272,18 @@ impl HitlRegistry {
             .write()
             .expect("HITL registry lock poisoned")
             .insert(gate.session_id().to_string(), gate);
+        types::pending_interaction::changed();
     }
 
     /// 原子替换一个 session 闸门，用于取消安全的同步提交。
     pub fn replace_for_admission(&self, gate: Arc<HitlGate>) -> Option<Arc<HitlGate>> {
-        self.inner
+        let old = self
+            .inner
             .write()
             .expect("HITL registry lock poisoned")
-            .insert(gate.session_id().to_string(), gate)
+            .insert(gate.session_id().to_string(), gate);
+        types::pending_interaction::changed();
+        old
     }
 
     pub async fn get(&self, session_id: &str) -> Option<Arc<HitlGate>> {
@@ -279,10 +295,13 @@ impl HitlRegistry {
     }
 
     pub async fn remove(&self, session_id: &str) -> Option<Arc<HitlGate>> {
-        self.inner
+        let removed = self
+            .inner
             .write()
             .expect("HITL registry lock poisoned")
-            .remove(session_id)
+            .remove(session_id);
+        types::pending_interaction::changed();
+        removed
     }
 
     pub async fn cancel_and_remove(&self, session_id: &str) {
@@ -337,6 +356,40 @@ pub fn is_exclusive_tool(name: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn expired_and_duplicate_responses_leave_waiters_unconsumed() {
+        let gate = HitlGate::new("expiry");
+        let mut expired = gate
+            .begin_wait(Interrupt {
+                id: "expired".into(),
+                expires_at: "2000-01-01T00:00:00Z".into(),
+                ..Default::default()
+            })
+            .await;
+        let item = |id: &str| ResumeItem {
+            interrupt_id: id.into(),
+            status: "resolved".into(),
+            payload_json: "{}".into(),
+        };
+        assert!(gate.resolve(&[item("expired")]).await.is_err());
+        assert!(expired.try_recv().is_err());
+        let mut active = gate
+            .begin_wait(Interrupt {
+                id: "active".into(),
+                ..Default::default()
+            })
+            .await;
+        assert!(gate
+            .resolve(&[item("active"), item("active")])
+            .await
+            .is_err());
+        assert!(active.try_recv().is_err());
+        gate.resolve(&[item("active")]).await.unwrap();
+        assert_eq!(active.try_recv().unwrap().status, "resolved");
+        gate.cancel_all().await;
+        assert_eq!(expired.await.unwrap().status, "cancelled");
+    }
 
     #[tokio::test]
     async fn resolve_unblocks_request() {

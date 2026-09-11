@@ -178,6 +178,9 @@ import { useRealtimeConversation } from "../../hooks/chat/useRealtimeConversatio
 import LocationA2UISurface from "./LocationA2UISurface";
 import A2UISurfaceCard from "./A2UISurfaceCard";
 import ComposerClarifySurface from "./ComposerClarifySurface";
+import ConversationInteractions from "../desktop-pet/ConversationInteractions";
+import { usePendingInteractions } from "../../hooks/chat/usePendingInteractions";
+import { inlineInteraction } from "../../lib/chat/pendingInteractions";
 import TodoProgress from "./TodoProgress";
 import TurnChangeSummaryCard from "./TurnChangeSummaryCard";
 import {
@@ -253,7 +256,7 @@ export function MessageTokenStats({
   const { locale, t } = useI18n();
   const hasUsage = Boolean(
     usage &&
-      (usage.totalTokens || usage.promptTokens || usage.completionTokens),
+    (usage.totalTokens || usage.promptTokens || usage.completionTokens),
   );
   const hasDuration = generationDurationSec != null;
   if (!hasUsage && !hasDuration) return null;
@@ -1366,7 +1369,7 @@ export default function ChatView({
 
   const assistantHasCustomAvatar = Boolean(
     activeAgent &&
-      (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
+    (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
   );
 
   useEffect(() => {
@@ -2314,6 +2317,10 @@ export default function ChatView({
   };
 
   const interruptBlocked = pendingInterrupts.length > 0;
+  const pendingInteractionState = usePendingInteractions();
+  const hasLiveInteraction = pendingInteractionState.snapshot.requests.some(
+    (r) => r.sessionId === sessionId && inlineInteraction(r),
+  );
   const composerClarify = useMemo(
     () => findComposerClarifySurface(messages, pendingInterrupts),
     [messages, pendingInterrupts],
@@ -2470,8 +2477,9 @@ export default function ChatView({
     }
   }, [input, welcomeTemplateActive]);
 
-  const effectiveSendMode: ChatSendMode | undefined =
-    showStopControl ? sendMode : undefined;
+  const effectiveSendMode: ChatSendMode | undefined = showStopControl
+    ? sendMode
+    : undefined;
 
   const trySubmitComposer = () => {
     if (!canSend) return;
@@ -2831,7 +2839,7 @@ export default function ChatView({
             hasAnswer={Boolean(contextMenuMessage.content.trim())}
             hasProcess={Boolean(
               contextMenuMessage.reasoning?.trim() ||
-                contextMenuMessage.activities?.length,
+              contextMenuMessage.activities?.length,
             )}
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
             canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
@@ -3061,9 +3069,7 @@ export default function ChatView({
                                 ? projectCanonicalTimelineSegments(m)
                                 : m.segments;
                             const reasoningOutcome:
-                              | "done"
-                              | "error"
-                              | "interrupted" =
+                              "done" | "error" | "interrupted" =
                               m.turnStatus === "error" || m.error
                                 ? "error"
                                 : m.turnStatus === "interrupted"
@@ -3123,8 +3129,8 @@ export default function ChatView({
                                   hasTimelineText = true;
                                   const active = Boolean(
                                     isStreamingBubble &&
-                                      segmentIndex ===
-                                        timelineSegments.length - 1,
+                                    segmentIndex ===
+                                      timelineSegments.length - 1,
                                   );
                                   steps.push({
                                     key: seg.id,
@@ -3205,9 +3211,9 @@ export default function ChatView({
                                 m.segments?.[m.segments.length - 1];
                               const groupedReasoningActive = Boolean(
                                 isStreamingBubble &&
-                                  (lastSegment
-                                    ? lastSegment.type === "reasoning"
-                                    : reasoningActive),
+                                (lastSegment
+                                  ? lastSegment.type === "reasoning"
+                                  : reasoningActive),
                               );
 
                               if (groupedAnswer.reasoning) {
@@ -4036,7 +4042,9 @@ export default function ChatView({
                 {t("chat.welcomeTemplateNeedRequired")}
               </p>
             ) : null}
-            {composerClarify ? (
+            {hasLiveInteraction ? (
+              <ConversationInteractions sessionId={sessionId} />
+            ) : composerClarify ? (
               <ComposerClarifySurface
                 surface={composerClarify.surface}
                 mediaBaseDir={mediaBaseDir}
@@ -4499,10 +4507,7 @@ export default function ChatView({
                 </div>
                 {showStopControl ? (
                   <>
-                    <div
-                      className="composer-send-mode"
-                      ref={sendModeWrapRef}
-                    >
+                    <div className="composer-send-mode" ref={sendModeWrapRef}>
                       <button
                         type="button"
                         className={`composer-mode-pill composer-send-mode-pill ${sendModeOpen ? "is-open" : ""}`}
@@ -4540,9 +4545,7 @@ export default function ChatView({
                               ref={sendModePanelRef}
                               className="composer-mode-menu composer-send-mode-menu"
                               role="menu"
-                              style={
-                                sendModeStyle ?? { visibility: "hidden" }
-                              }
+                              style={sendModeStyle ?? { visibility: "hidden" }}
                             >
                               {CHAT_SEND_MODES.map((mode) => {
                                 const Meta = sendModeMeta[mode];
@@ -4571,10 +4574,7 @@ export default function ChatView({
                                       </span>
                                     </span>
                                     {selected ? (
-                                      <Check
-                                        size={14}
-                                        strokeWidth={2.4}
-                                      />
+                                      <Check size={14} strokeWidth={2.4} />
                                     ) : null}
                                   </button>
                                 );

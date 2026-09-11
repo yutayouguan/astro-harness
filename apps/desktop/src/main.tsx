@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import DesktopPetSurface from "./components/desktop-pet/DesktopPetSurface";
+import PetTaskSurface from "./components/desktop-pet/PetTaskSurface";
 import OnboardingGate from "./components/onboarding/OnboardingGate";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ActiveAgentProvider } from "./hooks/app/useActiveAgent";
@@ -22,11 +23,17 @@ import {
 } from "./lib/ui/interfaceScale";
 import "./styles/index.css";
 import "./styles/features/settings-material-unified.css";
+import "./styles/features/pet-tasks.css";
 
 installContextMenuGuard();
 
 const isDesktopPetWindow =
   new URLSearchParams(window.location.search).get("surface") === "desktop-pet";
+const taskSurface = new URLSearchParams(window.location.search).get("surface");
+const isPetTaskWindow =
+  taskSurface === "pet-task-badge" || taskSurface === "pet-task-popup";
+if (isPetTaskWindow)
+  document.documentElement.dataset.windowSurface = "pet-task";
 if (isDesktopPetWindow) {
   document.documentElement.dataset.windowSurface = "desktop-pet";
   document.documentElement.style.colorScheme = "normal";
@@ -103,6 +110,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <RootErrorBoundary>
       {isDesktopPetWindow ? (
         <DesktopPetSurface />
+      ) : isPetTaskWindow ? (
+        <LocaleProvider>
+          <PetTaskSurface badge={taskSurface === "pet-task-badge"} />
+        </LocaleProvider>
       ) : (
         <ThemeProvider>
           <MorphiconProvider>

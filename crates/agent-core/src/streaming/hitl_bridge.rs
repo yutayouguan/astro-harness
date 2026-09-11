@@ -166,8 +166,12 @@ async fn park_astro_hitl_resolution(
         message: hitl.message.clone(),
         tool_call_id: tool_call_id.to_string(),
         response_schema_json: hitl.response_schema.to_string(),
-        expires_at: String::new(),
-        metadata_json: String::new(),
+        expires_at: (chrono::Utc::now()
+            + chrono::Duration::seconds(HITL_DEFAULT_TIMEOUT_SECS as i64))
+        .to_rfc3339(),
+        metadata_json:
+            serde_json::json!({"turnId":turn_context.sub_id(),"operations":hitl.operations})
+                .to_string(),
     };
     let rx = gate.begin_wait(interrupt.clone()).await;
     emit(

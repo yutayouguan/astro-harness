@@ -194,6 +194,8 @@ pub(crate) async fn install_multi_turn_task(
     let events = session.subscribe_turn_events(&sub_id).await;
     let turn_context = session.create_turn_context(sub_id.clone()).await;
     turn_context.initialize_provider_settings(targets.clone(), base_config.clone());
+    let interaction_gate = hitl_gate.clone();
+    session.bind_mcp_elicitation_events();
     let task = RegularTask::new(RunTurnArgs {
         session: session.clone(),
         turn_context: Arc::clone(&turn_context),
@@ -214,6 +216,7 @@ pub(crate) async fn install_multi_turn_task(
             message: error.to_string(),
         });
     }
+    crate::runtime::live_interactions::register(&session, interaction_gate.as_ref(), &sub_id);
     Ok(InstalledMultiTurn {
         session,
         turn_id: sub_id,

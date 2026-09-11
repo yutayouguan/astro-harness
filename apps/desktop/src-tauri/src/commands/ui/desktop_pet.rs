@@ -486,7 +486,7 @@ fn apply_position<R: Runtime>(
     Ok(())
 }
 
-fn fullscreen_now<R: Runtime>(app: &AppHandle<R>) -> bool {
+pub(super) fn fullscreen_now<R: Runtime>(app: &AppHandle<R>) -> bool {
     #[cfg(target_os = "macos")]
     {
         let _ = app;

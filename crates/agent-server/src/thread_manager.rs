@@ -100,6 +100,14 @@ pub struct ThreadManager {
 }
 
 impl ThreadManager {
+    pub async fn live_entries(&self) -> Vec<(String, Arc<ManagedThread>)> {
+        self.entries
+            .read()
+            .await
+            .iter()
+            .map(|(id, thread)| (id.clone(), thread.clone()))
+            .collect()
+    }
     pub async fn get(&self, thread_id: &str) -> Option<Arc<ManagedThread>> {
         let creation_lock = self.creation_lock(thread_id).await;
         let _operation = creation_lock.lock().await;

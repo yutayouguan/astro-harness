@@ -651,8 +651,9 @@ pub struct AstroServiceImpl {
     release_ownerships: ReleaseOwnerships,
     /// session_id → 活 HITL 闸门。
     pub(crate) hitl_registry: HitlRegistry,
+    pub(crate) interaction_snapshot: Arc<Mutex<types::pending_interaction::InteractionSnapshot>>,
     /// 记忆根目录。
-    memory_dir: PathBuf,
+    pub(crate) memory_dir: PathBuf,
     /// Plugin / Gateway / Shell 钩子运行时。
     pub(crate) hook_runtime: Arc<::hooks::HookRuntime>,
     /// root thread → 当前 V2 AgentControl generation。
@@ -688,6 +689,12 @@ impl AstroServiceImpl {
             generation_operations: Arc::new(StdMutex::new(HashMap::new())),
             release_ownerships: Arc::new(StdMutex::new(HashMap::new())),
             hitl_registry: HitlRegistry::new(),
+            interaction_snapshot: Arc::new(Mutex::new(
+                types::pending_interaction::InteractionSnapshot {
+                    epoch: uuid::Uuid::new_v4().to_string(),
+                    ..Default::default()
+                },
+            )),
             memory_dir,
             hook_runtime,
             agent_thread_watchers: Arc::new(Mutex::new(HashMap::new())),
@@ -2022,6 +2029,34 @@ impl AstroServiceImpl {
 
 #[tonic::async_trait]
 impl AstroService for AstroServiceImpl {
+    type WatchPendingInteractionsStream =
+        Pin<Box<dyn futures::Stream<Item = Result<proto::PendingInteractionsJson, Status>> + Send>>;
+    async fn get_pending_interactions(
+        &self,
+        _: Request<Empty>,
+    ) -> Result<Response<proto::PendingInteractionsJson>, Status> {
+        Ok(Response::new(super::pending_interactions::encode(
+            super::pending_interactions::snapshot(self).await?,
+        )?))
+    }
+    async fn watch_pending_interactions(
+        &self,
+        _: Request<Empty>,
+    ) -> Result<Response<Self::WatchPendingInteractionsStream>, Status> {
+        Ok(Response::new(Box::pin(super::pending_interactions::watch(
+            self.clone(),
+        ))))
+    }
+    async fn respond_pending_interaction(
+        &self,
+        request: Request<proto::PendingInteractionsJson>,
+    ) -> Result<Response<proto::PendingInteractionsJson>, Status> {
+        let input = serde_json::from_str(&request.into_inner().json)
+            .map_err(|e| Status::invalid_argument(format!("Invalid interaction response: {e}")))?;
+        Ok(Response::new(super::pending_interactions::encode(
+            super::pending_interactions::respond(self, input).await?,
+        )?))
+    }
     type SubscribeThreadEventsStream =
         Pin<Box<dyn futures::Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
     /// [`generate_image`](Self::generate_image) 流类型。
@@ -2307,6 +2342,12 @@ impl AstroService for AstroServiceImpl {
         let gate = {
             let _admission = operation.lock().await;
             self.hitl_registry.get(&req.session_id).await
+        };
+        let gate = match gate {
+            Some(gate) => Some(gate),
+            None => agent::runtime::live_interactions::find(&self.memory_dir, &req.session_id)
+                .await
+                .and_then(|entry| entry.gate),
         };
         let Some(gate) = gate else {
             return Err(Status::failed_precondition(

@@ -13,9 +13,60 @@ pub fn validate_against_schema(schema: &Value, instance: &Value) -> Result<(), S
 }
 
 fn validate_node(schema: &Value, instance: &Value, path: &str) -> Result<(), String> {
+    if schema == &Value::Bool(false) {
+        return Err(format!("{path}: schema rejects this value"));
+    }
     let Some(obj) = schema.as_object() else {
         return Ok(());
     };
+    if let Some(values) = obj.get("enum").and_then(Value::as_array) {
+        if !values.contains(instance) {
+            return Err(format!("{path}: value is not an allowed option"));
+        }
+    }
+    if let Some(value) = obj.get("const") {
+        if value != instance {
+            return Err(format!("{path}: const mismatch"));
+        }
+    }
+    if let Some(value) = instance.as_str() {
+        let len = value.chars().count() as u64;
+        if obj
+            .get("minLength")
+            .and_then(Value::as_u64)
+            .is_some_and(|n| len < n)
+            || obj
+                .get("maxLength")
+                .and_then(Value::as_u64)
+                .is_some_and(|n| len > n)
+        {
+            return Err(format!("{path}: string length outside bounds"));
+        }
+    }
+    if let Some(value) = instance.as_f64() {
+        if obj
+            .get("minimum")
+            .and_then(Value::as_f64)
+            .is_some_and(|n| value < n)
+            || obj
+                .get("maximum")
+                .and_then(Value::as_f64)
+                .is_some_and(|n| value > n)
+        {
+            return Err(format!("{path}: number outside bounds"));
+        }
+    }
+    if let Some(map) = instance.as_object() {
+        if obj.get("additionalProperties") == Some(&Value::Bool(false)) {
+            let props = obj.get("properties").and_then(Value::as_object);
+            if map
+                .keys()
+                .any(|key| props.is_none_or(|p| !p.contains_key(key)))
+            {
+                return Err(format!("{path}: unexpected property"));
+            }
+        }
+    }
 
     if let Some(ty) = obj.get("type").and_then(|v| v.as_str()) {
         check_type(ty, instance, path)?;

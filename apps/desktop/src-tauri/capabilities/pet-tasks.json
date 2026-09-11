@@ -1,0 +1,1 @@
+{"identifier":"pet-tasks","description":"Task and interaction surfaces, without shell or broad file permissions","windows":["pet-task-badge","pet-task-popup"],"permissions":["core:default"]}

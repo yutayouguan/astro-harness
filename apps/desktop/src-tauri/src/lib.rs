@@ -264,6 +264,14 @@ pub fn run() {
             commands::wallpaper::analyze_wallpaper,
             commands::wallpaper::get_system_wallpaper,
             commands::desktop_pet::get_desktop_pet_state,
+            commands::ui::pet_tasks::get_pending_interactions,
+            commands::ui::pet_tasks::respond_pending_interaction,
+            commands::ui::pet_tasks::open_pet_tasks,
+            commands::ui::pet_tasks::dismiss_pet_tasks,
+            commands::ui::pet_tasks::focus_pet_tasks,
+            commands::ui::pet_tasks::report_pending_interactions_visible,
+            commands::ui::pet_tasks::open_pet_task_session,
+            commands::ui::pet_tasks::take_pet_task_navigation,
             commands::desktop_pet::get_desktop_pet_visible,
             commands::desktop_pet::resume_desktop_pet,
             commands::desktop_pet::configure_desktop_pet_preferences,
@@ -683,6 +691,7 @@ pub fn run() {
 
             commands::desktop_pet::restore_window(app.handle());
             commands::desktop_pet::install_change_bridge(app.handle());
+            commands::ui::pet_tasks::install(app.handle());
 
             Ok(())
         })

@@ -33,6 +33,9 @@ service AstroService {
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
   rpc ResolveElicitation(ResolveElicitationRequest) returns (Empty);
+  rpc GetPendingInteractions(Empty) returns (PendingInteractionsJson);
+  rpc WatchPendingInteractions(Empty) returns (stream PendingInteractionsJson);
+  rpc RespondPendingInteraction(PendingInteractionsJson) returns (PendingInteractionsJson);
   rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
   rpc ReconcileExtensions(ReconcileExtensionsRequest) returns (ReconcileExtensionsResponse);
   rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
@@ -362,6 +365,9 @@ message ThreadDelta {
   string item_id = 1;
   string delta = 2;
 }
+
+// Shared types::pending_interaction model, carried without answer persistence.
+message PendingInteractionsJson { string json = 1; }
 
 message ThreadControlRequest {
   string kind = 1;

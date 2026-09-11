@@ -3,6 +3,7 @@
 mod astro_service;
 mod files;
 mod interrupt_store;
+mod pending_interactions;
 mod realtime_service;
 mod thread_service;
 mod thread_settings;
