@@ -1550,6 +1550,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                       <button
                         type="button"
                         className={`providers-list-item ${selectedId === p.id ? "is-selected" : ""}`}
+                        aria-pressed={selectedId === p.id}
                         onClick={() => {
                           if (drag) return;
                           setSelectedId(p.id);
@@ -1567,24 +1568,40 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                           <IconGrip />
                         </span>
                         <span className="providers-list-icon" aria-hidden>
-                          <ProviderBrandIcon kind={p.kind} />
+                          <ProviderBrandIcon kind={p.kind} size={24} />
                         </span>
                         <span className="providers-list-text">
                           <span className="providers-list-name">
-                            {p.display_name}
+                            <span
+                              className="providers-list-label"
+                              title={p.display_name}
+                            >
+                              {p.display_name}
+                            </span>
                             {activeDefault && (
-                              <span className="providers-badge">
-                                {t("providers.active")}
+                              <span
+                                className="providers-badge"
+                                title={t("providers.active")}
+                              >
+                                {t("providers.defaultBadge")}
                               </span>
                             )}
                           </span>
-                          <span className="providers-list-model">
+                          <span
+                            className="providers-list-model"
+                            title={p.model}
+                          >
                             {p.model}
                           </span>
                         </span>
                         <span
                           className={`providers-status-dot ${statusDotClass(p.enabled, healthById[p.id])}`}
                           title={statusDotTitle(p.enabled, healthById[p.id])}
+                          role="img"
+                          aria-label={statusDotTitle(
+                            p.enabled,
+                            healthById[p.id],
+                          )}
                         />
                       </button>
                     </li>
@@ -1602,6 +1619,7 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                   return (
                     <div
                       className="providers-drag-ghost"
+                      aria-hidden
                       style={{
                         width: drag.width,
                         height: drag.height,
@@ -1613,18 +1631,29 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
                           <IconGrip />
                         </span>
                         <span className="providers-list-icon" aria-hidden>
-                          <ProviderBrandIcon kind={p.kind} />
+                          <ProviderBrandIcon kind={p.kind} size={24} />
                         </span>
                         <span className="providers-list-text">
                           <span className="providers-list-name">
-                            {p.display_name}
+                            <span
+                              className="providers-list-label"
+                              title={p.display_name}
+                            >
+                              {p.display_name}
+                            </span>
                             {activeDefault && (
-                              <span className="providers-badge">
-                                {t("providers.active")}
+                              <span
+                                className="providers-badge"
+                                title={t("providers.active")}
+                              >
+                                {t("providers.defaultBadge")}
                               </span>
                             )}
                           </span>
-                          <span className="providers-list-model">
+                          <span
+                            className="providers-list-model"
+                            title={p.model}
+                          >
                             {p.model}
                           </span>
                         </span>
