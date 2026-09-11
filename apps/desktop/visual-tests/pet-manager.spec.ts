@@ -138,3 +138,39 @@ test("Pudding has canine previews and its own scenes without replacing Naitang o
   await page.getByRole("button", { name: "应用宠物默认配置" }).click();
   await expect(page.locator(".pet-manager-current")).toContainText("布丁");
 });
+
+test("Pudding tail wag changes tail pixels without moving the body", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width:1280, height:1000 });
+  await page.goto(story);
+  await page.getByRole("button",{name:"管理 布丁",exact:true}).click();
+  await page.getByRole("tab",{name:"动作与偏好"}).click();
+  await page.getByRole("button",{name:"摇尾巴",exact:true}).click();
+  await expect.poll(()=>page.locator("canvas.pet-motion-portrait").evaluate((node)=>{
+    const canvas=node as HTMLCanvasElement;
+    return canvas.getContext("2d")!.getImageData(100,100,1,1).data[3];
+  })).toBeGreaterThan(0);
+  const result=await page.locator("canvas.pet-motion-portrait").evaluate(async (node)=>{
+    const canvas=node as HTMLCanvasElement, ctx=canvas.getContext("2d")!;
+    let first:Uint8ClampedArray|undefined, bodyChanges=0, tailSamples=0;
+    for(let sample=0;sample<60;sample++) {
+      await new Promise<void>((resolve)=>requestAnimationFrame(()=>resolve()));
+      const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      if(!first){first=data;continue;}
+      let tailChanged=false;
+      for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++) {
+        const offset=(y*canvas.width+x)*4;
+        const changed=[0,1,2,3].some((channel)=>data[offset+channel]!==first![offset+channel]);
+        if(!changed)continue;
+        const logicalX=x*192/canvas.width,logicalY=y*208/canvas.height;
+        if(logicalX>=74||logicalY<123||logicalY>=190)bodyChanges++;
+        else tailChanged=true;
+      }
+      if(tailChanged)tailSamples++;
+    }
+    return {bodyChanges,tailSamples};
+  });
+  expect(result.bodyChanges).toBe(0);
+  expect(result.tailSamples).toBeGreaterThan(5);
+  await page.screenshot({path:"test-results/pudding-tail-fixed.png"});
+});

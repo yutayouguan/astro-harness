@@ -1,4 +1,5 @@
 //! Offline, versioned companion assets shared by onboarding and Settings.
+use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::Path};
 
 pub(super) const SPRITESHEET: &[u8] =
@@ -56,7 +57,7 @@ const PUDDING: BuiltinPetSpec = BuiltinPetSpec {
     motion_spec: include_str!("../../../../src/assets/pets/pudding/motion-clips.json"),
     assets: &[
         ("spritesheet.webp", PUDDING_ATLAS),
-        ("tail-wag.webp", PUDDING_TAIL),
+        ("tail-wag-v2.webp", PUDDING_TAIL),
         ("head-tilt.webp", PUDDING_HEAD),
         ("stretch.webp", PUDDING_STRETCH),
         ("nap.webp", PUDDING_NAP),
@@ -214,6 +215,103 @@ pub(super) fn ensure_library(base: &Path) -> anyhow::Result<()> {
     ensure_catalog(base, BUILTIN_PETS)
 }
 
+const OLD_PUDDING_TAIL_SHA256: &str =
+    "a8fa62bc14c2b09cf31e6bc3c4aa5f4584d6ab3010203f0ac410b43ffdc70155";
+
+fn old_pudding_tail(base: &Path) -> types::pet_motion::PetMotionClip {
+    let mut durations_ms = vec![90; 39];
+    durations_ms[0] = 180;
+    durations_ms[38] = 220;
+    types::pet_motion::PetMotionClip {
+        path: types::desktop_pet_root(base)
+            .join("builtin-pudding-v1/tail-wag.webp")
+            .to_string_lossy()
+            .into_owned(),
+        frame_width: 192,
+        frame_height: 208,
+        columns: 4,
+        durations_ms,
+        loop_start: 4,
+        loop_end: 34,
+        loop_repeats: 1,
+        neutral_bookends: true,
+    }
+}
+
+/// Only upgrade the recognized shipped tail and timings. Keep the old file for
+/// recovery and change the URL so decoded WebView image caches cannot reuse it.
+fn upgrade_pudding_tail_with_hash(base: &Path, legacy_hash: &str) -> anyhow::Result<()> {
+    let legacy = old_pudding_tail(base);
+    let main = types::desktop_pet_root(base).join("builtin-pudding-v1/spritesheet.webp");
+    let eligible = |state: &types::DesktopPetState| {
+        state.pets.iter().any(|pet| {
+            pet.id == "builtin-pudding"
+                && pet.builtin
+                && Some(pet.identity.pet_path.as_str()) == main.to_str()
+                && pet.identity.motion_clips.get("tail-wag") == Some(&legacy)
+        })
+    };
+    let original_files = || -> anyhow::Result<bool> {
+        let old_path = types::pet_scene::managed_file(base, Path::new(&legacy.path))?;
+        let bytes = types::desktop_pet::read_limited_pet_file(&old_path, 16 * 1024 * 1024)?;
+        let original_main = types::pet_scene::managed_file(base, &main)
+            .and_then(|path| types::desktop_pet::read_limited_pet_file(&path, 50 * 1024 * 1024))
+            .ok();
+        Ok(format!("{:x}", Sha256::digest(&bytes)) == legacy_hash
+            && original_main.as_deref() == Some(PUDDING_ATLAS))
+    };
+    if !eligible(&types::read_desktop_pet_state(base)?) || !original_files()? {
+        return Ok(());
+    }
+    types::update_desktop_pet_state(base, |state| {
+        if !eligible(state) || !original_files()? {
+            return Ok(());
+        }
+        let clips: types::pet_motion::PetMotionClips = serde_json::from_str(PUDDING.motion_spec)?;
+        let mut updated = clips["tail-wag"].clone();
+        super::desktop_pet::validate_motion_image(PUDDING_TAIL, &updated)
+            .map_err(anyhow::Error::msg)?;
+        let destination = types::desktop_pet_root(base)
+            .join(PUDDING.directory)
+            .join(&updated.path);
+        if destination.exists()
+            && types::desktop_pet::read_limited_pet_file(&destination, 16 * 1024 * 1024)?.as_slice()
+                != PUDDING_TAIL
+        {
+            anyhow::bail!("新的布丁尾巴路径已有自定义素材，未覆盖");
+        }
+        types::pet_scene::atomic_write(&destination, PUDDING_TAIL)?;
+        updated.path = destination.to_string_lossy().into_owned();
+        state
+            .pets
+            .iter_mut()
+            .find(|p| p.id == "builtin-pudding")
+            .unwrap()
+            .identity
+            .motion_clips
+            .insert("tail-wag".into(), updated.clone());
+        if state.active_pet_id.as_deref() == Some("builtin-pudding")
+            && state.motion_clips.get("tail-wag") == Some(&legacy)
+        {
+            state
+                .motion_clips
+                .insert("tail-wag".into(), updated.clone());
+        }
+        for scene in &mut state.scenes {
+            if scene.pet.pet_id == "builtin-pudding"
+                && scene.pet.motion_clips.get("tail-wag") == Some(&legacy)
+            {
+                scene
+                    .pet
+                    .motion_clips
+                    .insert("tail-wag".into(), updated.clone());
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 fn can_upgrade(base: &Path, state: &types::DesktopPetState) -> bool {
     let root = types::desktop_pet_root(base);
     let v1 = root.join("builtin-naitang-v1/spritesheet.webp");
@@ -240,6 +338,7 @@ fn can_upgrade(base: &Path, state: &types::DesktopPetState) -> bool {
 
 /// Upgrade only untouched built-in art and timing; preserve all user preferences.
 pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
+    upgrade_pudding_tail_with_hash(base, OLD_PUDDING_TAIL_SHA256)?;
     let current = types::read_desktop_pet_state(base)?;
     if !can_upgrade(base, &current) {
         return Ok(());
@@ -278,6 +377,147 @@ pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn legacy_pudding_fixture() -> (tempfile::TempDir, types::DesktopPetState, String) {
+        let root = tempfile::tempdir().unwrap();
+        ensure_library(root.path()).unwrap();
+        let legacy = old_pudding_tail(root.path());
+        // Only the expected hash is injected for this synthetic migration fixture.
+        // Production uses the fixed fingerprint of the previously shipped asset.
+        let bytes = b"previous shipped tail fixture";
+        fs::write(&legacy.path, bytes).unwrap();
+        let hash = format!("{:x}", Sha256::digest(bytes));
+        types::update_desktop_pet_state(root.path(), |state| {
+            let pet = state
+                .pets
+                .iter_mut()
+                .find(|p| p.id == "builtin-pudding")
+                .unwrap();
+            pet.identity
+                .motion_clips
+                .insert("tail-wag".into(), legacy.clone());
+            pet.identity.display_name = Some("My Pudding".into());
+            pet.defaults.scale = 0.35;
+            Ok(())
+        })
+        .unwrap();
+        types::pet_library::apply_pet(root.path(), "builtin-pudding").unwrap();
+        let saved = types::pet_library::edit_library(
+            root.path(),
+            types::pet_library::PetLibraryEdit::AddScene {
+                pet_id: "builtin-pudding".into(),
+                name: "My home".into(),
+            },
+        )
+        .unwrap();
+        let scene_id = saved.scenes[0].id.clone();
+        let state = types::update_desktop_pet_state(root.path(), |state| {
+            state.scale = 0.5;
+            state.active_scene_id = Some(scene_id);
+            state.preferences.presentation_mode = true;
+            state.preferences.position_locked = true;
+            state.animation_paused = true;
+            state.follow_wallpaper = true;
+            Ok(())
+        })
+        .unwrap();
+        (root, state, hash)
+    }
+
+    #[test]
+    fn pudding_tail_upgrade_changes_only_the_recognized_tail_and_is_idempotent() {
+        let (root, before, hash) = legacy_pudding_fixture();
+        upgrade_pudding_tail_with_hash(root.path(), &hash).unwrap();
+        let after = types::read_desktop_pet_state(root.path()).unwrap();
+        let tail = after.motion_clips["tail-wag"].clone();
+        assert!(tail.path.ends_with("tail-wag-v2.webp"));
+        assert_eq!(tail.durations_ms.len(), 49);
+        assert_eq!(fs::read(&tail.path).unwrap(), PUDDING_TAIL);
+        let mut expected = before.clone();
+        expected.revision += 1;
+        expected
+            .motion_clips
+            .insert("tail-wag".into(), tail.clone());
+        expected
+            .pets
+            .iter_mut()
+            .find(|p| p.id == "builtin-pudding")
+            .unwrap()
+            .identity
+            .motion_clips
+            .insert("tail-wag".into(), tail.clone());
+        expected.scenes[0]
+            .pet
+            .motion_clips
+            .insert("tail-wag".into(), tail);
+        assert_eq!(after, expected);
+        assert!(Path::new(&old_pudding_tail(root.path()).path).is_file());
+        upgrade_pudding_tail_with_hash(root.path(), &hash).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), after);
+    }
+
+    #[test]
+    fn pudding_tail_upgrade_preserves_user_modified_assets_and_timings() {
+        let (root, before, hash) = legacy_pudding_fixture();
+        fs::write(&old_pudding_tail(root.path()).path, b"user modified tail").unwrap();
+        upgrade_pudding_tail_with_hash(root.path(), &hash).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), before);
+        let (root, _, hash) = legacy_pudding_fixture();
+        let changed = types::update_desktop_pet_state(root.path(), |state| {
+            state
+                .pets
+                .iter_mut()
+                .find(|p| p.id == "builtin-pudding")
+                .unwrap()
+                .identity
+                .motion_clips
+                .get_mut("tail-wag")
+                .unwrap()
+                .durations_ms[1] = 100;
+            Ok(())
+        })
+        .unwrap();
+        upgrade_pudding_tail_with_hash(root.path(), &hash).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), changed);
+        let (root, before, hash) = legacy_pudding_fixture();
+        fs::write(
+            types::desktop_pet_root(root.path()).join("builtin-pudding-v1/spritesheet.webp"),
+            b"user changed body",
+        )
+        .unwrap();
+        upgrade_pudding_tail_with_hash(root.path(), &hash).unwrap();
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), before);
+    }
+
+    #[test]
+    fn pudding_tail_upgrade_does_not_overwrite_a_conflicting_destination() {
+        let (root, before, hash) = legacy_pudding_fixture();
+        let target =
+            types::desktop_pet_root(root.path()).join("builtin-pudding-v1/tail-wag-v2.webp");
+        fs::write(&target, b"user created destination").unwrap();
+        assert!(upgrade_pudding_tail_with_hash(root.path(), &hash).is_err());
+        assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), before);
+        assert_eq!(fs::read(&target).unwrap(), b"user created destination");
+    }
+
+    #[test]
+    fn pudding_tail_frames_keep_body_and_paws_still() {
+        let atlas = image::load_from_memory(PUDDING_ATLAS).unwrap().to_rgba8();
+        let tail = image::load_from_memory(PUDDING_TAIL).unwrap().to_rgba8();
+        for i in 0..49 {
+            for y in 0..208 {
+                for x in 0..192 {
+                    if x >= 72 || y < 125 || y >= 188 {
+                        assert_eq!(
+                            tail.get_pixel((i % 4) * 192 + x, (i / 4) * 208 + y),
+                            atlas.get_pixel(x, y),
+                            "frame {i}, pixel {x},{y}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn pudding_and_naitang_keep_independent_scenes_and_global_visibility_policy() {

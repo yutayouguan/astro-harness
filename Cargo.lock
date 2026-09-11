@@ -291,6 +291,7 @@ dependencies = [
  "serde_json",
  "server",
  "session",
+ "sha2 0.10.9",
  "skills",
  "subagents",
  "tauri",
