@@ -193,6 +193,10 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
   assert.ok(layoutBase, "missing shared chat dock surface tokens");
   assert.match(layoutBase, /--chat-dock-inset:\s*0px;/);
   assert.match(layoutBase, /--chat-dock-radius:\s*0px;/);
+  assert.match(
+    layoutBase,
+    /--chat-dock-header-inset:\s*calc\(var\(--titlebar-control-row-h, 34px\) \+ 4px\);/,
+  );
   assert.match(layoutBase, /--chat-workbench-radius:\s*18px;/);
   assert.match(
     layoutBase,
@@ -239,7 +243,7 @@ test("file workspace shares the titlebar material and keeps square edges", () =>
     assert.match(panel, /box-shadow:\s*var\(--chat-dock-surface-shadow\);/);
     assert.match(
       panel,
-      /padding-top:\s*var\(--chat-header-overlay-height, 50px\);/,
+      /padding-top:\s*var\(--chat-dock-header-inset, 38px\);/,
     );
   }
   for (const panel of [runtimePanel, projectPanel, sidePanel, reviewPanel]) {

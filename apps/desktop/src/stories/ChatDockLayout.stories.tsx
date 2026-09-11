@@ -7,6 +7,7 @@ import {
   FolderTree,
   Gauge,
   GitBranch,
+  Globe,
   Layers,
   MessageSquare,
   PanelRight,
@@ -19,11 +20,12 @@ import {
 import SubagentActivityBar from "../components/chat/SubagentActivityBar";
 import TaskMonitorPanel from "../components/chat/TaskMonitorPanel";
 import ConversationTitle from "../components/chat/ConversationTitle";
+import BrowserDock from "../components/chat/BrowserDock";
 import { LocaleProvider } from "../i18n/LocaleContext";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { useBeautifyTips } from "../hooks/ui/useBeautifyTips";
 
-type DockKind = "files" | "side" | "runtime";
+type DockKind = "files" | "side" | "runtime" | "browser";
 
 function HeaderActions({
   kind,
@@ -58,6 +60,15 @@ function HeaderActions({
           onClick={() => toggle("files")}
         >
           <FolderTree size={16} />
+        </button>
+        <button
+          type="button"
+          className={`header-icon-btn${kind === "browser" ? " is-active" : ""}`}
+          aria-label="浏览器"
+          aria-pressed={kind === "browser"}
+          onClick={() => toggle("browser")}
+        >
+          <Globe size={16} />
         </button>
         <button
           type="button"
@@ -374,6 +385,7 @@ function ChatDockLayout({
   onSelect?: (kind: DockKind | null) => void;
 }) {
   useBeautifyTips();
+  const [browserExpanded, setBrowserExpanded] = useState(false);
   const dockWidth =
     kind === "files"
       ? 320
@@ -389,7 +401,9 @@ function ChatDockLayout({
         ? " has-side-chat"
         : kind === "runtime"
           ? " has-chat-right"
-          : "";
+          : kind === "browser"
+            ? " has-browser"
+            : "";
   const hasDock = kind !== null;
   return (
     <main
@@ -402,7 +416,7 @@ function ChatDockLayout({
     >
       <section className="content-pane content-pane--chat">
         <div
-          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file" : ""}`}
+          className={`content-header content-header--chat${hasDock ? " has-right-dock" : ""}${kind === "files" ? " has-project-file" : ""}${kind === "browser" && browserExpanded ? " is-browser-expanded" : ""}`}
         >
           <div className="content-heading">
             {kind === "files" ? (
@@ -433,7 +447,7 @@ function ChatDockLayout({
           className={`page-body page-body--chat${kind === "files" ? " has-project-file" : ""}`}
         >
           <div
-            className={`chat-layout-with-right${hasDock ? " has-right-dock" : ""}${dockClasses}`}
+            className={`chat-layout-with-right${hasDock ? " has-right-dock" : ""}${dockClasses}${kind === "browser" && browserExpanded ? " is-browser-expanded" : ""}`}
             style={
               {
                 "--project-files-current-width": `${dockWidth}px`,
@@ -500,6 +514,18 @@ function ChatDockLayout({
               {kind === "side" ? <DockPanel kind="side" /> : null}
             </div>
             {kind === "runtime" ? <DockPanel kind={kind} /> : null}
+            {kind === "browser" ? (
+              <LocaleProvider>
+                <BrowserDock
+                  open
+                  preview={null}
+                  expanded={browserExpanded}
+                  onExpandedChange={setBrowserExpanded}
+                  onControl={async () => undefined}
+                  onClose={() => onSelect?.(null)}
+                />
+              </LocaleProvider>
+            ) : null}
           </div>
         </div>
       </section>
@@ -525,4 +551,5 @@ type Story = StoryObj<typeof meta>;
 export const ProjectFiles: Story = {};
 export const SideChat: Story = { args: { kind: "side" } };
 export const RuntimePanel: Story = { args: { kind: "runtime" } };
+export const Browser: Story = { args: { kind: "browser" } };
 export const UnifiedSwitching: Story = { render: () => <UnifiedDockPreview /> };

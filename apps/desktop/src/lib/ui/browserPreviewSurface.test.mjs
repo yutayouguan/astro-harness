@@ -108,6 +108,12 @@ test("browser preview supports standalone browsing and completed browser tool re
   assert.match(dock, /actionsOpen \? " has-actions-menu"/);
   assert.match(css, /\.browser-dock\.has-actions-menu \.browser-viewport/);
   assert.match(css, /margin-top:\s*112px/);
+  assert.match(css, /\.browser-native-viewport\s*\{[^}]*inset:\s*0;/);
+  assert.doesNotMatch(css, /\.browser-dock:not\(\.is-expanded\) \.browser-native-viewport/);
+  assert.match(
+    css,
+    /\.browser-dock-resizer\s*\{[^}]*height:\s*var\(--titlebar-control-row-h, 34px\);/,
+  );
   assert.match(dock, /normalizeBrowserUrl\(preview\?\.url \|\| ""\)/);
   assert.match(dock, /fallbackUrl:/);
   assert.match(dock, /tabId:\s*preview\?\.activeTabId/);

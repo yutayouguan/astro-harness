@@ -21,7 +21,7 @@
   min-width: 0;
   min-height: 0;
   margin: var(--chat-dock-inset) 0;
-  padding-top: var(--chat-header-overlay-height, 50px);
+  padding-top: var(--chat-dock-header-inset, 38px);
   display: flex;
   flex-direction: column;
   isolation: isolate;

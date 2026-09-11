@@ -118,10 +118,6 @@
   inset: 0;
 }
 
-.browser-dock:not(.is-expanded) .browser-native-viewport {
-  left: 10px;
-}
-
 .content-header--chat.is-browser-expanded .content-heading {
   visibility: hidden;
   opacity: 0;
@@ -399,7 +395,9 @@
   position: absolute;
   z-index: 5;
   top: 0;
-  bottom: 0;
+  /* Native WebViews paint above DOM. Keep a reachable resize handle in chrome
+     rather than reserving a blank gutter beside the edge-to-edge webpage. */
+  height: var(--titlebar-control-row-h, 34px);
   left: 0;
   width: 12px;
   padding: 0;

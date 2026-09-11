@@ -3,6 +3,8 @@
 .chat-layout-with-right {
   --chat-dock-inset: 0px;
   --chat-dock-radius: 0px;
+  /* Dock headings sit just below the controls, not the taller message safe area. */
+  --chat-dock-header-inset: calc(var(--titlebar-control-row-h, 34px) + 4px);
   --chat-workbench-radius: 18px;
   --chat-dock-surface-border: var(--content-card-border-width, 0.5px) solid
     var(--titlebar-menu-border);
@@ -83,7 +85,7 @@
   bottom: var(--chat-dock-inset);
   z-index: 21;
   width: min(var(--chat-right-panel-width, 360px), calc(100% - 20px));
-  padding-top: var(--chat-header-overlay-height, 50px);
+  padding-top: var(--chat-dock-header-inset, 38px);
   display: flex;
   flex-direction: column;
   isolation: isolate;
