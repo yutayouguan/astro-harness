@@ -133,6 +133,53 @@ function terminalTheme() {
   };
 }
 
+function terminalOptions(settings: TerminalSettings) {
+  return {
+    allowProposedApi: false,
+    allowTransparency: true,
+    convertEol: false,
+    cursorBlink: settings.cursorBlink,
+    cursorStyle: settings.cursorStyle,
+    fontFamily: settings.fontFamily,
+    fontSize: settings.fontSize,
+    lineHeight: settings.lineHeight,
+    scrollback: settings.scrollback,
+    theme: terminalTheme(),
+  };
+}
+
+function measureTerminalDimensions(
+  host: HTMLDivElement | null,
+  settings: TerminalSettings,
+) {
+  if (!host) throw new Error("Terminal surface is not ready");
+  // Measure with the same renderer, padding and font as the real pane, before
+  // the shell emits width-dependent prompt control sequences into its history.
+  const probe = document.createElement("div");
+  probe.className = "terminal-dock-screen";
+  probe.style.cssText =
+    "position:absolute;inset:0;visibility:hidden;pointer-events:none";
+  host.appendChild(probe);
+  const terminal = new XtermTerminal(terminalOptions(settings));
+  const fit = new FitAddon();
+  try {
+    terminal.loadAddon(fit);
+    terminal.open(probe);
+    const dimensions = fit.proposeDimensions();
+    if (
+      !dimensions ||
+      !Number.isFinite(dimensions.cols) ||
+      !Number.isFinite(dimensions.rows)
+    ) {
+      throw new Error("Terminal dimensions are not ready");
+    }
+    return dimensions;
+  } finally {
+    terminal.dispose();
+    probe.remove();
+  }
+}
+
 function TerminalPane({
   clientId,
   visible,
@@ -156,18 +203,7 @@ function TerminalPane({
     let pendingInput = "";
     let writing = false;
 
-    const terminal = new XtermTerminal({
-      allowProposedApi: false,
-      allowTransparency: true,
-      convertEol: false,
-      cursorBlink: settings.cursorBlink,
-      cursorStyle: settings.cursorStyle,
-      fontFamily: settings.fontFamily,
-      fontSize: settings.fontSize,
-      lineHeight: settings.lineHeight,
-      scrollback: settings.scrollback,
-      theme: terminalTheme(),
-    });
+    const terminal = new XtermTerminal(terminalOptions(settings));
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host);
@@ -240,8 +276,22 @@ function TerminalPane({
 
     const readOutput = async () => {
       let retries = 0;
+      let dimensionsSynced = false;
       while (!disposed) {
         try {
+          if (!dimensionsSynced) {
+            // The first fit ran before onResize was subscribed. Explicitly
+            // synchronize it, including when xterm stayed at its default size.
+            await invoke("terminal_resize", {
+              request: {
+                id: session.id,
+                cols: terminal.cols,
+                rows: terminal.rows,
+              },
+            });
+            if (disposed) return;
+            dimensionsSynced = true;
+          }
           const result = await invoke<TerminalReadResultDto>("terminal_read", {
             request: {
               id: session.id,
@@ -363,6 +413,7 @@ export default function TerminalTabsDock({
   const mutatingRef = useRef(new Set<string>());
   const removedTokensRef = useRef(new Set<string>());
   const resizeDragCleanupRef = useRef<(() => void) | null>(null);
+  const startupHostRef = useRef<HTMLDivElement>(null);
 
   tabsRef.current = tabs;
   sessionsRef.current = sessions;
@@ -395,13 +446,17 @@ export default function TerminalTabsDock({
           if (wasRemoved()) break;
         }
         try {
+          const dimensions = measureTerminalDimensions(
+            startupHostRef.current,
+            settings,
+          );
           const opened = await withTimeout(
             invoke<TerminalSessionDto>("terminal_open", {
               request: {
                 scope: projectRoot,
                 cwd: tab.cwd,
-                cols: 120,
-                rows: 32,
+                cols: dimensions.cols,
+                rows: dimensions.rows,
                 executionMode: tab.executionMode,
                 clientToken: tab.clientId,
                 agentDefault: tab.agentDefault,
@@ -440,12 +495,13 @@ export default function TerminalTabsDock({
         removedTokensRef.current.delete(tab.clientId);
       }
     },
-    [projectRoot, t],
+    [projectRoot, settings, t],
   );
 
   useEffect(() => {
+    if (!open) return;
     if (activeTab && !activeSession && !activeError) void openTab(activeTab);
-  }, [activeError, activeSession, activeTab, openTab]);
+  }, [activeError, activeSession, activeTab, open, openTab]);
 
   const createTab = useCallback(() => {
     if (tabsRef.current.length >= MAX_TERMINAL_TABS) {
@@ -843,8 +899,14 @@ export default function TerminalTabsDock({
           }}
         />
       ) : (
-        <div className="terminal-dock-loading">
-          {activeError ?? t("chat.terminal.tab.starting")}
+        <div
+          ref={startupHostRef}
+          className="terminal-dock-screen"
+          style={{ position: "relative" }}
+        >
+          <div className="terminal-dock-loading">
+            {activeError ?? t("chat.terminal.tab.starting")}
+          </div>
         </div>
       )}
     </section>

@@ -54,6 +54,17 @@ test("terminal startup is bounded in both the webview and gRPC client", () => {
   assert.match(tauri, /entry\.address == address/);
 });
 
+test("terminal startup measures the renderer before opening and syncs dimensions before reading", () => {
+  assert.match(dock, /function measureTerminalDimensions/);
+  assert.match(dock, /new XtermTerminal\(terminalOptions\(settings\)\)/);
+  assert.match(dock, /cols: dimensions\.cols,[\s\S]*?rows: dimensions\.rows/);
+  assert.doesNotMatch(dock, /cols: 120|rows: 32/);
+  const readLoop = dock.slice(dock.indexOf("const readOutput = async"));
+  assert.match(readLoop, /await invoke\("terminal_resize"/);
+  assert.ok(readLoop.indexOf('"terminal_resize"') < readLoop.indexOf('"terminal_read"'));
+  assert.match(dock, /terminal\.dispose\(\);\s*probe\.remove\(\)/);
+});
+
 test("desktop tab tokens are idempotent and closing is session-scoped", () => {
   assert.match(proto, /string client_token = 7/);
   assert.match(proto, /rpc CloseTerminal/);
