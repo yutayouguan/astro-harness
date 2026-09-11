@@ -23,8 +23,13 @@ for (const theme of ["light", "dark"]) {
       const before = await card.locator(".providers-list-text").boundingBox();
       await card.hover();
       await expect(card.locator(".providers-drag-handle")).toHaveCSS("opacity", "0.85");
-      await expect(card.locator(".providers-list-icon")).toHaveCSS("opacity", "0");
+      await expect(card.locator(".providers-list-icon")).toHaveCSS("opacity", "1");
+      const handleBounds = await card.locator(".providers-drag-handle").boundingBox();
+      const logoBounds = await card.locator(".providers-list-icon").boundingBox();
+      expect(handleBounds!.x - bounds!.x).toBeLessThanOrEqual(2);
+      expect(handleBounds!.x + handleBounds!.width).toBeLessThan(logoBounds!.x);
       expect(await card.locator(".providers-list-text").boundingBox()).toEqual(before);
+      await card.screenshot({ path: `test-results/provider-card-hover-${theme}-${locale}.png` });
       await page.mouse.move(1000, 750);
       await page.locator(".providers-pane-list").screenshot({ path: `test-results/provider-cards-${theme}-${locale}.png` });
       await card.screenshot({ path: `test-results/provider-card-${theme}-${locale}.png` });
@@ -42,6 +47,7 @@ test("long names and models truncate without growing the cards or losing labels"
   expect((await card.boundingBox())!.height).toBeLessThanOrEqual(72);
   await expect(page.locator('[data-provider-id="openai"] .providers-list-model')).toHaveAttribute("title", /long-deployment/);
   await card.focus();
+  await expect(card.locator(".providers-list-icon")).toHaveCSS("opacity", "1");
   await expect(card).toHaveCSS("outline-style", "solid");
   await page.keyboard.press("Tab");
   const second = page.locator('[data-provider-id="openai"] .providers-list-item');
@@ -68,6 +74,10 @@ test("the compact drag handle still reorders providers and the ghost stays two-l
   await page.mouse.down();
   const ghost = page.locator(".providers-drag-ghost");
   await expect(ghost).toBeVisible();
+  await expect(ghost.locator(".providers-list-icon")).toHaveCSS("opacity", "1");
+  const ghostHandle = await ghost.locator(".providers-drag-handle").boundingBox();
+  const ghostLogo = await ghost.locator(".providers-list-icon").boundingBox();
+  expect(ghostHandle!.x + ghostHandle!.width).toBeLessThan(ghostLogo!.x);
   expect((await ghost.boundingBox())!.height).toBeLessThanOrEqual(72);
   await page.mouse.move(target!.x + 40, target!.y + 4, { steps: 5 });
   await page.mouse.up();

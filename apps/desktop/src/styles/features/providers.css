@@ -261,7 +261,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 28px;
   border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
@@ -302,9 +302,9 @@
 }
 
 .providers-drag-handle {
-  /* Reuse the brand slot on hover instead of reserving an empty column. */
+  /* Keep the handle in the leading gutter, separate from the brand icon. */
   position: absolute;
-  left: 16px;
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
   z-index: 1;
@@ -343,12 +343,6 @@
 
 .providers-drag-handle:active {
   cursor: grabbing;
-}
-
-.providers-list-item:hover .providers-list-icon,
-.providers-list-item:focus-within .providers-list-icon,
-.providers-list-item.is-ghost .providers-list-icon {
-  opacity: 0;
 }
 
 .providers-drag-ghost {
