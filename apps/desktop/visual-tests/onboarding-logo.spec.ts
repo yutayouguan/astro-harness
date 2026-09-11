@@ -40,3 +40,33 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.locator(".onboarding-brand-motion .chat-welcome-logo-stack")).toHaveCount(0);
   });
 }
+
+for (const reducedMotion of ["reduce", "no-preference"] as const) {
+  test(`logo and wordmark stay continuous from intro to setup · ${reducedMotion}`, async ({ page }, testInfo) => {
+    await page.addInitScript(() => { localStorage.setItem("astro-locale", "zh"); localStorage.setItem("astro-theme-mode", "dark"); });
+    await page.emulateMedia({ reducedMotion });
+    await page.goto("/iframe.html?id=app-first-run-onboarding--intro&viewMode=story");
+    const wordmark = page.locator(".onboarding-brand-wordmark");
+    await expect(wordmark).toHaveText("Astro Agent");
+    await expect(wordmark).toHaveAttribute("data-phase", "intro");
+    const wordmarkNode = (await wordmark.elementHandle())!;
+    const logoNode = (await page.locator(".onboarding-brand-motion").elementHandle())!;
+    await page.getByRole("button", { name: "跳过动画", exact: true }).click();
+    await expect(wordmark).toHaveAttribute("data-phase", "header");
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect.poll(async () => {
+        const actual = (await wordmark.boundingBox())!;
+        const target = (await page.locator("[data-onboarding-wordmark-anchor=header]").boundingBox())!;
+        return Math.max(...(["x", "y", "width", "height"] as const).map(key => Math.abs(actual[key] - target[key])));
+      }).toBeLessThan(1);
+      await expect(wordmark).toBeInViewport();
+    }
+    await page.getByRole("button", { name: "继续", exact: true }).click();
+    await expect(page.locator(".onboarding-stage--provider")).toHaveCSS("transform", "none");
+    expect(await wordmarkNode.evaluate(el => el.isConnected)).toBe(true);
+    expect(await logoNode.evaluate(el => el.isConnected)).toBe(true);
+    await expect(page.locator(".onboarding-brand-wordmark")).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath("brand-handoff.png") });
+  });
+}

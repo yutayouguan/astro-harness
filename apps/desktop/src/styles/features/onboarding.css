@@ -13,9 +13,11 @@
     ),
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--shell-bg) 96%, var(--tone) 4%),
-      var(--shell-bg)
+      color-mix(in srgb, var(--color-bg-base) 96%, var(--tone) 4%),
+      var(--color-bg-base)
     );
+  /* --shell-bg is an image stack, not a color. Always cover the native underlay. */
+  background-color: var(--color-bg-base);
   isolation: isolate;
 }
 
@@ -93,7 +95,7 @@
   border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   border-radius: 999px;
   color: var(--ink-secondary, var(--color-text-secondary));
-  background: color-mix(in srgb, var(--shell-bg) 68%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 68%, transparent);
   backdrop-filter: blur(18px) saturate(150%);
   cursor: pointer;
   transition:
@@ -106,7 +108,7 @@
 .onboarding-skip:focus-visible {
   border-color: color-mix(in srgb, var(--tone) 44%, transparent);
   color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 10%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 10%, var(--color-bg-base));
   outline: none;
 }
 
@@ -317,7 +319,7 @@
   border-radius: 50%;
   place-items: center;
   color: var(--ink-tertiary, var(--color-text-muted));
-  background: color-mix(in srgb, var(--shell-bg) 78%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 78%, transparent);
   font-size: 10px;
   font-weight: 700;
 }
@@ -325,7 +327,7 @@
 .onboarding-progress li.is-active span {
   border-color: color-mix(in srgb, var(--tone) 48%, transparent);
   color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 12%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 12%, var(--color-bg-base));
 }
 
 .onboarding-card {
@@ -335,7 +337,7 @@
   padding: 24px;
   border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--shell-bg) 72%, transparent);
+  background: color-mix(in srgb, var(--color-bg-subtle) 92%, transparent);
   /* Keep the soft shadow within the stage's 18–24px scroll gutter. */
   box-shadow:
     0 4px 12px -6px color-mix(in srgb, black 12%, transparent),
@@ -408,7 +410,7 @@
   border-radius: 13px;
   outline: none;
   color: var(--ink);
-  background: color-mix(in srgb, var(--shell-bg) 68%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 68%, transparent);
   font: inherit;
   font-size: 13px;
 }
@@ -451,7 +453,7 @@
   justify-content: center;
   gap: 9px;
   color: var(--ink-secondary, var(--color-text-secondary));
-  background: color-mix(in srgb, var(--shell-bg) 62%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 62%, transparent);
   cursor: pointer;
   font-size: 13px;
   transition:
@@ -473,7 +475,7 @@
 .onboarding-choice-grid button.is-selected {
   border-color: color-mix(in srgb, var(--tone) 50%, transparent);
   color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 12%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 12%, var(--color-bg-base));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 10%, transparent);
 }
 
@@ -616,7 +618,7 @@
   border-radius: 12px;
   outline: none;
   color: var(--ink);
-  background: color-mix(in srgb, var(--shell-bg) 76%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 76%, transparent);
   font: inherit;
   /* Focus feedback is immediate, not a delayed editing affordance. */
   transition: none;
@@ -645,14 +647,14 @@
   align-items: center;
   gap: 8px;
   color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 11%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 11%, var(--color-bg-base));
   cursor: pointer;
 }
 
 .onboarding-test-button[data-status="success"] {
   border-color: color-mix(in srgb, #22c55e 48%, transparent);
   color: #22a85a;
-  background: color-mix(in srgb, #22c55e 10%, var(--shell-bg));
+  background: color-mix(in srgb, #22c55e 10%, var(--color-bg-base));
 }
 
 .onboarding-test-button:disabled {
@@ -727,13 +729,13 @@
   gap: 12px;
   color: var(--ink);
   text-align: left;
-  background: color-mix(in srgb, var(--shell-bg) 64%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 64%, transparent);
   cursor: pointer;
 }
 
 .onboarding-folder-picker:hover {
   border-color: color-mix(in srgb, var(--tone) 40%, transparent);
-  background: color-mix(in srgb, var(--tone) 7%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 7%, var(--color-bg-base));
 }
 
 .onboarding-folder-icon {
@@ -789,7 +791,7 @@
 }
 
 .onboarding-test-button.is-next-action {
-  background: color-mix(in srgb, var(--tone) 16%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 16%, var(--color-bg-base));
   border-color: var(--tone);
 }
 
@@ -944,7 +946,7 @@
   border-radius: 15px;
   place-items: center;
   color: #22a85a;
-  background: color-mix(in srgb, #22c55e 11%, var(--shell-bg));
+  background: color-mix(in srgb, #22c55e 11%, var(--color-bg-base));
   box-shadow: 0 18px 52px color-mix(in srgb, #22c55e 16%, transparent);
 }
 
@@ -1026,7 +1028,7 @@
   gap: 9px;
   color: var(--ink-secondary, var(--color-text-secondary));
   text-align: left;
-  background: color-mix(in srgb, var(--shell-bg) 58%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 58%, transparent);
   cursor: pointer;
   transition:
     color 150ms ease,
@@ -1039,7 +1041,7 @@
   border-color: color-mix(in srgb, var(--tone) 42%, transparent);
   outline: none;
   color: var(--ink);
-  background: color-mix(in srgb, var(--tone) 8%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 8%, var(--color-bg-base));
 }
 
 .onboarding-root .is-spinning {
@@ -1182,7 +1184,7 @@
 @media (prefers-reduced-transparency: reduce) {
   .onboarding-card,
   .onboarding-skip {
-    background: var(--shell-bg);
+    background: var(--color-bg-base);
     backdrop-filter: none;
   }
 }
@@ -1208,6 +1210,36 @@
   left: 0;
   z-index: 10010;
   pointer-events: none;
+}
+
+.onboarding-brand-wordmark {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10010;
+  color: var(--color-text);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.onboarding-brand-wordmark,
+.onboarding-intro-wordmark-anchor,
+.onboarding-header-wordmark-anchor {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.onboarding-intro-wordmark-anchor {
+  margin-top: 8px;
+  font-size: 28px;
+  visibility: hidden;
+}
+
+.onboarding-brand .onboarding-header-wordmark-anchor {
+  display: inline-block;
+  font-size: 13px;
+  visibility: hidden;
 }
 
 .onboarding-brand-motion .onboarding-logo {
@@ -1263,6 +1295,10 @@
   transform: translateX(-50%);
   color: var(--ink-secondary);
   font-size: 10px;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .onboarding-model-hint,
 .onboarding-test-cost,
@@ -1326,7 +1362,7 @@
 }
 @media (prefers-reduced-transparency: reduce) {
   .onboarding-connection-issue {
-    background: var(--shell-bg);
+    background: var(--color-bg-base);
   }
 }
 @media (prefers-contrast: more) {
@@ -1391,7 +1427,7 @@
   color: var(--ink-secondary, var(--color-text-secondary));
 }
 .onboarding-task-card:active {
-  background: color-mix(in srgb, var(--tone) 15%, var(--shell-bg));
+  background: color-mix(in srgb, var(--tone) 15%, var(--color-bg-base));
 }
 .onboarding-task-card:focus-visible,
 .onboarding-task-input textarea:focus-visible {
@@ -1421,7 +1457,7 @@
   max-height: 200px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  background: color-mix(in srgb, var(--shell-bg) 80%, transparent);
+  background: color-mix(in srgb, var(--color-bg-base) 80%, transparent);
   color: var(--ink);
   padding: 10px 12px;
   font: inherit;

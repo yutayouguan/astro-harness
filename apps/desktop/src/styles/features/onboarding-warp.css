@@ -19,8 +19,8 @@
   --portal-duration: var(--warp-duration);
   background: radial-gradient(
     ellipse at 50% 45%,
-    color-mix(in srgb, var(--tone) 18%, var(--shell-bg)),
-    var(--shell-bg)
+    color-mix(in srgb, var(--tone) 18%, var(--color-bg-base)),
+    var(--color-bg-base)
   );
   animation-name: onboarding-warp-arrival;
 }
@@ -207,8 +207,8 @@
   color: var(--ink);
   background: radial-gradient(
     ellipse at 50% 35%,
-    color-mix(in srgb, var(--tone) 12%, var(--shell-bg)),
-    var(--shell-bg) 70%
+    color-mix(in srgb, var(--tone) 12%, var(--color-bg-base)),
+    var(--color-bg-base) 70%
   );
 }
 

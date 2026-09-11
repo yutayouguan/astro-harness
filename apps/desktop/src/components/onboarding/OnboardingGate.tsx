@@ -941,7 +941,12 @@ export function FirstRunOnboarding({
               className="onboarding-header-anchor"
               data-onboarding-brand-anchor="header"
             />
-            <span>Astro Agent</span>
+            <span
+              className="onboarding-header-wordmark-anchor"
+              data-onboarding-wordmark-anchor="header"
+            >
+              Astro Agent
+            </span>
           </div>
         </div>
       )}
@@ -1001,6 +1006,13 @@ export function FirstRunOnboarding({
                 data-onboarding-brand-anchor="intro"
                 aria-hidden
               />
+              <span
+                className="onboarding-intro-wordmark-anchor"
+                data-onboarding-wordmark-anchor="intro"
+                aria-hidden
+              >
+                Astro Agent
+              </span>
               <motion.div
                 className="onboarding-intro-copy"
                 initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}

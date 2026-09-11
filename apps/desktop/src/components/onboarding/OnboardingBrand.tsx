@@ -93,6 +93,9 @@ export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
 }) {
   const reduced = useReducedMotion();
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [wordmarkBounds, setWordmarkBounds] = useState<
+    (Bounds & { fontSize: number }) | null
+  >(null);
   useLayoutEffect(() => {
     let frame = 0;
     let observer: ResizeObserver | undefined;
@@ -130,10 +133,27 @@ export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
           width: r.width,
           height: r.height,
         });
+        const wordmark = document.querySelector<HTMLElement>(
+          `[data-onboarding-wordmark-anchor="${phase}"]`,
+        );
+        if (wordmark) {
+          const textRect = wordmark.getBoundingClientRect();
+          setWordmarkBounds({
+            x: textRect.x,
+            y: textRect.y,
+            width: textRect.width,
+            height: textRect.height,
+            fontSize: parseFloat(getComputedStyle(wordmark).fontSize),
+          });
+        }
       };
       update();
       observer = new ResizeObserver(update);
       observer.observe(anchor);
+      const wordmark = document.querySelector(
+        `[data-onboarding-wordmark-anchor="${phase}"]`,
+      );
+      if (wordmark) observer.observe(wordmark);
       resizeHandler = update;
       window.addEventListener("resize", update);
     };
@@ -146,21 +166,34 @@ export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
     };
   }, [phase]);
   if (!bounds) return null;
+  const transition = reduced
+    ? { duration: 0 }
+    : { type: "spring" as const, bounce: 0, duration: 0.64 };
   return createPortal(
-    <motion.div
-      className="onboarding-brand-motion"
-      data-phase={phase}
-      aria-hidden
-      initial={false}
-      animate={bounds}
-      transition={
-        reduced
-          ? { duration: 0 }
-          : { type: "spring", bounce: 0, duration: 0.64 }
-      }
-    >
-      <OnboardingLogo compact={phase !== "intro"} />
-    </motion.div>,
+    <>
+      <motion.div
+        className="onboarding-brand-motion"
+        data-phase={phase}
+        aria-hidden
+        initial={false}
+        animate={bounds}
+        transition={transition}
+      >
+        <OnboardingLogo compact={phase !== "intro"} />
+      </motion.div>
+      {wordmarkBounds && (
+        <motion.span
+          className="onboarding-brand-wordmark"
+          data-phase={phase}
+          aria-hidden
+          initial={false}
+          animate={wordmarkBounds}
+          transition={transition}
+        >
+          Astro Agent
+        </motion.span>
+      )}
+    </>,
     document.body,
   );
 });
