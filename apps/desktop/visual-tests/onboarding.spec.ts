@@ -433,7 +433,7 @@ test("cancelled test ignores late success and cannot activate a model", async ({
   await request;
   await expect(testButton).toHaveAccessibleName("取消等待");
   await expect(testButton).toBeEnabled();
-  await expect(testButton.locator("svg.lucide-square")).toHaveCount(1);
+  await expect(testButton.locator("svg.lucide-circle-x")).toHaveCount(1);
   await expect(page.locator(".onboarding-load-models")).toBeDisabled();
   await expect(page.getByRole("button", { name: "取消等待", exact: true })).toHaveCount(1);
   await expect(page.locator(".onboarding-cancel-test")).toHaveCount(0);
@@ -982,7 +982,7 @@ test("cancelled model loading ignores late results", async ({ page }, testInfo) 
   await request;
   await expect(loadButton).toHaveAccessibleName("取消等待");
   await expect(loadButton).toBeEnabled();
-  await expect(loadButton.locator("svg.lucide-square")).toHaveCount(1);
+  await expect(loadButton.locator("svg.lucide-circle-x")).toHaveCount(1);
   await expect(page.locator(".onboarding-test-button")).toHaveAccessibleName("测试");
   await expect(page.locator(".onboarding-test-button")).toBeDisabled();
   await expect(page.getByRole("button", { name: "取消等待", exact: true })).toHaveCount(1);

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   CircleAlert,
   CircleCheck,
+  CircleX,
   Clock3,
   Cpu,
   FolderOpen,
@@ -37,7 +38,6 @@ import {
   ShieldQuestion,
   Sparkles,
   Sun,
-  Square,
   Zap,
 } from "lucide-react";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
@@ -1302,7 +1302,7 @@ export function FirstRunOnboarding({
                             }
                           >
                             {modelsStatus === "loading" ? (
-                              <Square size={15} aria-hidden />
+                              <CircleX size={15} aria-hidden />
                             ) : (
                               <ListRestart size={15} aria-hidden />
                             )}
@@ -1384,7 +1384,7 @@ export function FirstRunOnboarding({
                               }
                             >
                               {providerStatus === "testing" ? (
-                                <Square size={17} aria-hidden />
+                                <CircleX size={17} aria-hidden />
                               ) : (
                                 <Zap size={17} aria-hidden />
                               )}
