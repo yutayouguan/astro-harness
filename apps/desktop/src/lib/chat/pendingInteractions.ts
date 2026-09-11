@@ -1,4 +1,9 @@
 import { parseClarifySteps } from "../../a2ui/clarifySteps.ts";
+import type { PendingInterrupt } from "../../types.ts";
+import {
+  buildElicitationContent,
+  resolveElicitationAction,
+} from "./elicitation.ts";
 export type InteractionAction = {
   id: string;
   label: string;
@@ -35,12 +40,14 @@ export type InteractionSnapshot = {
   requests: PendingInteraction[];
 };
 export type InteractionState = {
+  uiRevision: number;
   connected: boolean;
   snapshot: InteractionSnapshot;
   selected: string | null;
   retiredEpochs?: string[];
 };
 export const EMPTY_INTERACTIONS: InteractionState = {
+  uiRevision: 0,
   connected: false,
   snapshot: { epoch: "", revision: 0, tasks: [], requests: [] },
   selected: null,
@@ -59,7 +66,8 @@ export function acceptInteractions(
   if (current.snapshot.epoch && !next.snapshot.epoch) return current;
   if (
     current.snapshot.epoch === next.snapshot.epoch &&
-    next.snapshot.revision < current.snapshot.revision
+    (next.snapshot.revision < current.snapshot.revision ||
+      next.uiRevision < current.uiRevision)
   )
     return current;
   const retired = current.retiredEpochs ?? [];
@@ -132,12 +140,74 @@ export function inlineInteraction(request: PendingInteraction) {
     : request.kind === "question" &&
         (wizardSteps(request).length > 0 || !!simpleSchema(request));
 }
+
+/** Raw MCP IDs can collide across servers or with a HITL UUID. */
+export function interactionIdentity(request: PendingInteraction): string {
+  return request.serverName
+    ? `mcp:${request.toolCallId}`
+    : `hitl:${request.requestId}`;
+}
+export function interruptIdentity(interrupt: PendingInterrupt): string {
+  if (interrupt.reason === "elicitation") {
+    const metadata = asRecord(interrupt.metadata?.payload);
+    const callId =
+      interrupt.toolCallId ??
+      (typeof metadata.server_name === "string"
+        ? `mcp-elicitation:${metadata.server_name}:${metadata.mcp_request_id ?? interrupt.id}`
+        : "");
+    return `mcp:${callId}`;
+  }
+  return `hitl:${interrupt.id}`;
+}
+export function interactionMatchesInterrupt(
+  request: PendingInteraction,
+  sessionId: string | null,
+  interrupt: PendingInterrupt,
+) {
+  return (
+    request.sessionId === sessionId &&
+    interactionIdentity(request) === interruptIdentity(interrupt)
+  );
+}
+
+/** Normalize a legacy A2UI action before entering the request-level controller. */
+export function legacyInteractionResponse(
+  request: PendingInteraction,
+  name: string,
+  context: Record<string, unknown>,
+) {
+  if (request.kind === "approval") {
+    const option = request.actions.find((action) => action.id === name);
+    if (!option) throw new Error("请使用当前审批卡片提供的授权选项");
+    return { action: option.id, payload: {}, persistent: option.persistent };
+  }
+  if (request.serverName) {
+    const action =
+      name === "decline" ? "decline" : resolveElicitationAction(name);
+    return {
+      action: action === "accept" ? "submit" : action,
+      payload:
+        action === "accept"
+          ? buildElicitationContent(
+              {
+                id: request.requestId,
+                reason: "elicitation",
+                responseSchema: request.responseSchema,
+              },
+              context,
+            )
+          : {},
+      persistent: false,
+    };
+  }
+  return { action: "submit", payload: context, persistent: false };
+}
 export function redactInteractionDisplay(value: string) {
   return value
     .replace(/\bBearer\s+[^\s"']+/gi, "Bearer [已隐藏]")
     .replace(/\bsk-[A-Za-z0-9_-]{12,}/g, "[已隐藏]")
     .replace(
-      /((?:api[_-]?key|access[_-]?token|password|secret)\s*[=:]\s*)(["']?)[^\s"',;]+\2/gi,
+      /((?:api[_-]?key|access[_-]?token|password|secret)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;]+)/gi,
       "$1[已隐藏]",
     );
 }

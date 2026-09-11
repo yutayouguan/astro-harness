@@ -10,15 +10,20 @@ use types::pending_interaction::{InteractionResponse, InteractionSnapshot};
 
 const BADGE: &str = "pet-task-badge";
 const POPUP: &str = "pet-task-popup";
+// Commands and the timer may ask to refresh concurrently. Window construction
+// is serialized separately from the request state mutex used by WebView IPC.
+static WINDOW_REFRESH: Mutex<()> = Mutex::new(());
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopInteractions {
+    pub ui_revision: u64,
     pub connected: bool,
     pub snapshot: InteractionSnapshot,
     pub selected: Option<String>,
 }
 #[derive(Default)]
 struct State {
+    ui_revision: u64,
     connected: bool,
     snapshot: InteractionSnapshot,
     seen: HashSet<String>,
@@ -35,6 +40,7 @@ struct State {
 pub struct PetTasks(Mutex<State>);
 fn dto(state: &State) -> DesktopInteractions {
     DesktopInteractions {
+        ui_revision: state.ui_revision,
         connected: state.connected,
         snapshot: state.snapshot.clone(),
         selected: state.selected.clone(),
@@ -42,7 +48,12 @@ fn dto(state: &State) -> DesktopInteractions {
 }
 
 fn publish(app: &AppHandle) {
-    let value = dto(&app.state::<PetTasks>().0.lock().unwrap());
+    let value = {
+        let holder = app.state::<PetTasks>();
+        let mut state = holder.0.lock().unwrap();
+        state.ui_revision = state.ui_revision.saturating_add(1);
+        dto(&state)
+    };
     for label in ["main", BADGE, POPUP] {
         let _ = app.emit_to(label, "pending-interactions-changed", &value);
     }
@@ -131,6 +142,25 @@ fn receive(app: &AppHandle, snapshot: InteractionSnapshot) {
 }
 
 impl State {
+    fn suppress_popup(&mut self) {
+        self.open = false;
+        self.auto_candidate = None;
+    }
+    fn update_anchor(&mut self, visible: bool, position: (i32, i32)) {
+        if !visible || self.last_position.is_some_and(|old| old != position) {
+            self.suppress_popup();
+        }
+        self.last_position = Some(position);
+    }
+    fn surface_visibility(&self, pet_visible: bool) -> (bool, bool) {
+        let popup = pet_visible && self.open;
+        (
+            pet_visible
+                && !popup
+                && (!self.snapshot.tasks.is_empty() || !self.snapshot.requests.is_empty()),
+            popup,
+        )
+    }
     fn apply_snapshot(
         &mut self,
         snapshot: InteractionSnapshot,
@@ -165,8 +195,7 @@ impl State {
             .requests
             .iter()
             .find(|r| {
-                (!self.seen.contains(&r.key) || candidate_gone)
-                    && !(main_front && self.main_visible.contains(&r.key))
+                !self.seen.contains(&r.key) && !(main_front && self.main_visible.contains(&r.key))
             })
             .map(|r| r.key.clone());
         if self.initialized && allowed && !self.open && self.auto_candidate.is_none() {
@@ -246,10 +275,15 @@ fn place(
     )
 }
 fn refresh_windows(app: &AppHandle) -> Result<(), String> {
+    let Ok(_refresh) = WINDOW_REFRESH.try_lock() else {
+        return Ok(());
+    };
     let Some(pet) = app.get_webview_window("desktop-pet") else {
+        app.state::<PetTasks>().0.lock().unwrap().suppress_popup();
         for label in [BADGE, POPUP] {
             if let Some(window) = app.get_webview_window(label) {
                 let _ = window.hide();
+                let _ = window.set_focusable(false);
             }
         }
         return Ok(());
@@ -264,16 +298,7 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
     let (badge_visible, popup_visible) = {
         let holder = app.state::<PetTasks>();
         let mut state = holder.0.lock().unwrap();
-        if state
-            .last_position
-            .is_some_and(|old| old != (position.x, position.y))
-            || !visible
-        {
-            state.open = false;
-        }
-        if !visible {
-            state.auto_candidate = None;
-        }
+        state.update_anchor(visible, (position.x, position.y));
         if state
             .auto_candidate
             .as_ref()
@@ -293,13 +318,28 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
                 state = holder.0.lock().unwrap();
             }
         }
-        state.last_position = Some((position.x, position.y));
-        (
-            visible && (!state.snapshot.tasks.is_empty() || !state.snapshot.requests.is_empty()),
-            visible && state.open,
-        )
+        state.surface_visibility(visible)
     };
+    // Suppression must work even while a monitor is being unplugged.
+    for (label, show) in [(BADGE, badge_visible), (POPUP, popup_visible)] {
+        if !show {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.hide();
+                let _ = window.set_focusable(false);
+            }
+        }
+    }
+    if !badge_visible && !popup_visible {
+        return Ok(());
+    }
     let Some(monitor) = pet.current_monitor().map_err(|e| e.to_string())? else {
+        app.state::<PetTasks>().0.lock().unwrap().suppress_popup();
+        for label in [BADGE, POPUP] {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.hide();
+                let _ = window.set_focusable(false);
+            }
+        }
         return Ok(());
     };
     let area = monitor.work_area();
@@ -307,12 +347,6 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
     let scale = monitor.scale_factor();
     for (label, show) in [(BADGE, badge_visible), (POPUP, popup_visible)] {
         if !show {
-            if let Some(window) = app.get_webview_window(label) {
-                if window.is_visible().unwrap_or(false) {
-                    let _ = window.hide();
-                    let _ = window.set_focusable(false);
-                }
-            }
             continue;
         }
         let window = ensure_window(app, label)?;
@@ -391,6 +425,7 @@ pub async fn open_pet_tasks(app: AppHandle, request_key: Option<String>) -> Resu
     {
         let holder = app.state::<PetTasks>();
         let mut state = holder.0.lock().unwrap();
+        state.auto_candidate = None;
         state.open = true;
         state.selected =
             request_key.filter(|key| state.snapshot.requests.iter().any(|r| &r.key == key));
@@ -403,8 +438,7 @@ pub async fn dismiss_pet_tasks(app: AppHandle) {
     let holder = app.state::<PetTasks>();
     {
         let mut state = holder.0.lock().unwrap();
-        state.open = false;
-        state.auto_candidate = None;
+        state.suppress_popup();
     }
     let _ = refresh_windows(&app);
 }
@@ -455,7 +489,7 @@ pub async fn open_pet_task_session(
         });
         let nav = serde_json::json!({"id":uuid::Uuid::new_v4().to_string(),"sessionId":session_id,"itemId":item});
         state.navigation = Some(nav.clone());
-        state.open = false;
+        state.suppress_popup();
         nav
     };
     let _ = refresh_windows(&app);
@@ -527,6 +561,32 @@ mod tests {
         assert!(!state.apply_snapshot(snapshot(3, &[]), true, false));
         state.apply_snapshot(snapshot(5, &["b", "c", "d"]), true, false);
         assert_eq!(state.selected.as_deref(), Some("b"));
+    }
+    #[test]
+    fn moving_or_hiding_clears_a_scheduled_popup_and_surfaces_never_overlap() {
+        let mut state = State::default();
+        state.apply_snapshot(snapshot(0, &[]), true, false);
+        state.update_anchor(true, (10, 10));
+        state.apply_snapshot(snapshot(1, &["request"]), true, false);
+        assert!(state.auto_candidate.is_some());
+        state.update_anchor(true, (11, 10));
+        assert!(state.auto_candidate.is_none());
+        assert_eq!(state.surface_visibility(true), (true, false));
+        state.open = true;
+        assert_eq!(state.surface_visibility(true), (false, true));
+        state.update_anchor(false, (11, 10));
+        assert_eq!(state.surface_visibility(false), (false, false));
+        assert!(!state.open);
+    }
+    #[test]
+    fn expiring_a_new_candidate_does_not_replay_a_snoozed_request() {
+        let mut state = State::default();
+        state.apply_snapshot(snapshot(0, &["snoozed"]), true, false);
+        state.apply_snapshot(snapshot(1, &["snoozed", "new"]), true, false);
+        assert!(state.auto_candidate.is_some());
+        state.apply_snapshot(snapshot(2, &["snoozed"]), true, false);
+        assert!(state.auto_candidate.is_none());
+        assert!(!state.open);
     }
     #[test]
     fn popup_placement_clamps_negative_monitor_origins_and_avoids_pet() {

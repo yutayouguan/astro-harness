@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { parseHitlRunFinished } from "./hitlRunFinished.ts";
 import {
   acceptInteractions,
   EMPTY_INTERACTIONS,
   inlineInteraction,
+  interactionIdentity,
+  interactionMatchesInterrupt,
+  interruptIdentity,
+  legacyInteractionResponse,
   simpleSchema,
   redactInteractionDisplay,
   taskRows,
@@ -61,6 +66,26 @@ test("interaction snapshots reject out-of-order updates but accept backend resta
     0,
   );
 });
+
+test("late desktop replies cannot reset selection without a backend revision change", () => {
+  const current = {
+    ...EMPTY_INTERACTIONS,
+    uiRevision: 9,
+    connected: true,
+    selected: "editing",
+    snapshot: { ...EMPTY_INTERACTIONS.snapshot, epoch: "backend", revision: 3 },
+  };
+  const oldReply = { ...current, uiRevision: 8, selected: null };
+  assert.equal(acceptInteractions(current, oldReply), current);
+  assert.equal(
+    acceptInteractions(current, {
+      ...current,
+      uiRevision: 10,
+      selected: "next",
+    }).selected,
+    "next",
+  );
+});
 test("only advertised approval options and supported original forms are interactive", () => {
   assert.equal(inlineInteraction(request), true);
   assert.equal(inlineInteraction({ ...request, kind: "approval" }), false);
@@ -83,6 +108,67 @@ test("operation previews redact common inline credentials", () => {
   assert.ok(!display.includes("abcdefghijklmnop"));
   assert.ok(!display.includes("abcdef-secret"));
   assert.ok(!display.includes("test-secret"));
+});
+
+test("quoted JSON and space-containing credentials are fully redacted", () => {
+  const display = redactInteractionDisplay(
+    'curl -d \'{"api_key":"json-secret", "password":"space secret"}\' PASSWORD="shell secret"',
+  );
+  for (const secret of ["json-secret", "space secret", "shell secret"])
+    assert.ok(!display.includes(secret));
+});
+
+test("MCP legacy actions keep decline/cancel and schema-typed answers", () => {
+  const mcp = {
+    ...request,
+    serverName: "server",
+    toolCallId: "mcp-elicitation:server:r",
+    responseSchema: {
+      type: "object",
+      properties: { count: { type: "integer" }, enabled: { type: "boolean" } },
+    },
+  };
+  assert.deepEqual(
+    legacyInteractionResponse(mcp, "choose", {
+      answers: { count: "3", enabled: "true" },
+      value: "summary",
+    }),
+    {
+      action: "submit",
+      payload: { count: 3, enabled: true },
+      persistent: false,
+    },
+  );
+  assert.deepEqual(
+    legacyInteractionResponse(mcp, "deny", { answers: { count: "3" } }),
+    { action: "decline", payload: {}, persistent: false },
+  );
+  assert.equal(legacyInteractionResponse(mcp, "cancel", {}).action, "cancel");
+  assert.equal(legacyInteractionResponse(mcp, "decline", {}).action, "decline");
+});
+
+test("MCP reconciliation uses server-qualified UI aliases, not colliding raw IDs", () => {
+  const mcp = {
+    ...request,
+    serverName: "one",
+    toolCallId: "mcp-elicitation:one:r",
+  };
+  const [one, two] = parseHitlRunFinished(
+    JSON.stringify([
+      { id: "r", reason: "elicitation", tool_call_id: "mcp-elicitation:one:r" },
+      { id: "r", reason: "elicitation", tool_call_id: "mcp-elicitation:two:r" },
+    ]),
+    "assistant",
+  ).interrupts;
+  assert.equal(one.id, two.id); // Actual transport retains the server's raw ID.
+  assert.equal(interactionIdentity(mcp), interruptIdentity(one));
+  assert.equal(interactionMatchesInterrupt(mcp, "s", one), true);
+  assert.equal(interactionMatchesInterrupt(mcp, "s", two), false);
+  assert.equal(interactionMatchesInterrupt(mcp, "other", one), false);
+  assert.equal(
+    interactionMatchesInterrupt(mcp, "s", { id: "r", reason: "confirmation" }),
+    false,
+  );
 });
 test("a late reply from a retired backend cannot resurrect its requests", () => {
   const first = {
@@ -142,6 +228,14 @@ test("legacy cards cannot bulk-resolve and task navigation retains detached draf
     source.includes("petNavigationDrafts.current.delete(targetSessionId)"),
   );
   assert.ok(source.includes("if (!preserveCurrent)"));
+  const navigation = source.slice(
+    source.indexOf("const openSessionFromFilespace ="),
+  );
+  assert.match(
+    navigation,
+    /\+\+streamGenRef.current;\s*unlistenRef.current\?\.\(\);\s*unlistenRef.current = null;\s*clearStreamBuffers\(\)/,
+  );
+  assert.ok(source.includes("completedBeforeRead"));
 });
 
 test("the selected popup request is synchronized with native queue ownership", () => {

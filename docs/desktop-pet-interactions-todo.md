@@ -47,3 +47,20 @@ InteractionCard（主会话和桌宠）`。
 最终普通包通过 `tsc -b`、Vite 和 Tauri debug bundle 构建，产物为 `target/debug/bundle/macos/Astro Agent.app`。构建源为 HEAD 加本轮 36 个相关文件的隔离快照，不包含 QA 注入；未自动替换/重启正在使用的正式应用。Vite 仍有既有大 chunk 与混合动态导入警告。
 
 尚待解锁后原生逐项确认：自动弹出不打断其他应用输入、单击填写、收起/恢复草稿、审批 ACK 后下一项、会话跳转/主窗去重、多屏边缘与透明区域穿透。
+
+## 后续 Review 修复（2026-09-11）
+
+本轮使用 code-review 审查上述提交，修复以下缺陷：
+
+- **P1 — 旧 MCP 卡片动作误路由**：旧 A2UI 的 `deny/cancel` 原先被共享控制器统一当成 `submit`；向导 `answers/value` 也未还原成 MCP 的 schema 对象。现在保留 accept/decline/cancel 语义及字段类型；schema 真正声明的 `value/approved` 字段不再被误删。拒绝/取消不附带回答内容，普通 HITL 问题不能伪造未提供的取消操作。
+- **P1 — 会话导航串流**：跳转前未撤销旧 UI listener，旧任务的 token/done 回调可能写入新会话状态。现在切换时提升 UI generation、解绑 listener 并清空旧缓冲，不取消后台任务。仅观察任务的会话串行刷新持久化历史；请求失败保留界面，迟到响应和新发送 generation 不可覆盖当前会话。确认任务结束后再读取一次最终历史，随后释放排队输入；同步结束/只读状态。点击当前会话只定位，不重建流。
+- **P2 — MCP 同名请求冲突**：实际传输保留原始 request ID，服务器限定的标识在 `tool_call_id`。匹配及主窗待办清理由“会话＋MCP 服务器限定标识”确定，避免两个 MCP server 使用相同 request ID 时串用或残留。测试经过实际 `parseHitlRunFinished`，不只使用手造前端 ID。
+- **P2 — 弹窗竞态**：拖动/隐藏会清理尚未触发的自动弹出计划；新候选过期不会重新弹出已稍后处理的旧请求。窗口刷新单独串行化；弹窗打开时隐藏重叠徽标；屏幕暂不可用时仍执行隐藏。
+- **P2 — 迟到桌面响应覆盖选择**：桌面 envelope 增加 `uiRevision`，与后端 epoch/revision 分开；相同后端快照下的旧选择响应不再覆盖当前表单。快照获取的迟到错误也不能覆盖已经收到的有效实时状态。
+- **P2 — 脱敏遗漏**：原正则漏掉 JSON 带引号的 key 和含空格的凭证值；已补齐对应处理和回归测试。
+
+验证：前端行为/契约测试 17 项、服务端交互 6 项、原生窗口策略 4 项、Playwright 桌宠表单流程 3 项通过。隔离快照的 TypeScript、Vite 和普通 Tauri debug app bundle 构建通过；共享工作区另一个材质设置改动曾暂时缺少 i18n key，未纳入本次修改。
+
+本轮前端全套：938 项中 936 通过、2 个既有侧栏断言失败（`sidebarInformationArchitecture.test.mjs` 的 icon-only controls、`windowChromeSafeArea.test.mjs` 的 sidebar occupancy）。测试读取的 `App.tsx` 与 HEAD blob 一致，未将基线失败混入本轮修复。
+
+原生点击/键盘/多屏验收仍保留未完成状态；本轮不调用图片模型、不修改动画、不导入凭证、不自动重启正式应用。

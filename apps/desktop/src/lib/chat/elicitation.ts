@@ -50,7 +50,11 @@ export function buildElicitationContent(
       : payload;
   return Object.fromEntries(
     Object.entries(raw)
-      .filter(([key]) => key !== "value" && key !== "approved")
+      .filter(
+        ([key]) =>
+          propertyNames.includes(key) ||
+          (key !== "value" && key !== "approved"),
+      )
       .map(([key, value]) => [key, coerceSchemaValue(value, properties[key])]),
   );
 }

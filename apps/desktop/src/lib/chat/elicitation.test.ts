@@ -41,3 +41,19 @@ test("MCP elicitation preserves accept, decline, and cancel semantics", () => {
   assert.equal(resolveElicitationAction("deny"), "decline");
   assert.equal(resolveElicitationAction("cancel"), "cancel");
 });
+
+test("schema fields named value and approved are not mistaken for UI wrapper fields", () => {
+  const schema = {
+    ...interrupt,
+    responseSchema: {
+      properties: { value: { type: "string" }, approved: { type: "boolean" } },
+    },
+  };
+  assert.deepEqual(
+    buildElicitationContent(schema, {
+      answers: { value: "keep", approved: "false" },
+      value: "summary",
+    }),
+    { value: "keep", approved: false },
+  );
+});

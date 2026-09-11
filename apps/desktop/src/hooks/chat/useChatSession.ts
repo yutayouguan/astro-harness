@@ -15,9 +15,14 @@ import {
 } from "./usePendingInteractions";
 import {
   approvalDetails,
+  interactionIdentity,
+  interactionMatchesInterrupt,
+  interruptIdentity,
   inlineInteraction,
+  legacyInteractionResponse,
 } from "../../lib/chat/pendingInteractions";
 import { sealOpenReasoning } from "../../lib/chat/chatTimeline";
+import { createObservedTaskHistory } from "../../lib/chat/observedTaskHistory";
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import {
   buildElicitationContent,
@@ -207,10 +212,13 @@ export function useChatSession({
       }
     >(),
   );
-  const petNavigationTurn = useRef<{
+  const [observedTask, setObservedTask] = useState<{
     sessionId: string;
     turnId: string;
+    generation: number;
   } | null>(null);
+  const interactionStateRef = useRef(interactionState);
+  interactionStateRef.current = interactionState;
   const stopStreamRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const checkpointFiredForTurnRef = useRef(false);
   const [streamPaused, setStreamPaused] = useState(false);
@@ -1705,11 +1713,8 @@ export function useChatSession({
         return;
       }
       const targetSessionId = parallelTask?.sessionId ?? sessionId;
-      const live = interactionState.snapshot.requests.find(
-        (request) =>
-          request.sessionId === targetSessionId &&
-          (request.requestId === interrupts[0].id ||
-            request.toolCallId === interrupts[0].id),
+      const live = interactionState.snapshot.requests.find((request) =>
+        interactionMatchesInterrupt(request, targetSessionId, interrupts[0]),
       );
       if (live && inlineInteraction(live)) {
         try {
@@ -1717,10 +1722,7 @@ export function useChatSession({
             live.kind === "approval"
               ? live.actions.find((a) => a.id === name)
               : undefined;
-          if (live.kind === "approval" && !option) {
-            showTransientToast("请使用当前审批卡片提供的授权选项");
-            return;
-          }
+          const response = legacyInteractionResponse(live, name, context);
           if (
             option?.persistent &&
             !(await confirm({
@@ -1731,9 +1733,9 @@ export function useChatSession({
             return;
           await respondInteraction(
             live,
-            option?.id ?? "submit",
-            context,
-            !!option?.persistent,
+            response.action,
+            response.payload,
+            response.persistent,
           );
         } catch (error) {
           showTransientToast(String(error), { tone: "error" });
@@ -2060,42 +2062,83 @@ export function useChatSession({
     modeSwitchPrompt,
   };
   useEffect(() => {
-    const tracked = petNavigationTurn.current;
-    if (!tracked || !interactionState.connected) return;
-    if (tracked.sessionId !== sessionId) {
-      petNavigationTurn.current = null;
-      return;
-    }
-    if (
-      !interactionState.snapshot.tasks.some(
-        (task) =>
-          task.sessionId === tracked.sessionId &&
-          task.turnId === tracked.turnId,
-      )
-    ) {
-      petNavigationTurn.current = null;
-      if (currentRunIdRef.current === tracked.turnId) {
-        setStreaming(false);
-        setTurnInFlight(false);
-        turnInFlightRef.current = false;
-      }
-    }
-  }, [interactionState, sessionId]);
+    if (!observedTask || observedTask.sessionId !== sessionId) return;
+    const tracked = observedTask;
+    let previous = "";
+    const reader = createObservedTaskHistory({
+      load: async () => {
+        const state = interactionStateRef.current;
+        const completedBeforeRead =
+          state.connected &&
+          !state.snapshot.tasks.some(
+            (task) => task.sessionId === tracked.sessionId,
+          );
+        const history = await invoke<ResponseItemHistoryDto>(
+          "get_chat_history",
+          { sessionId: tracked.sessionId, limit: 200 },
+        );
+        return { history, completedBeforeRead };
+      },
+      isCurrent: () =>
+        navigationUi.current.sessionId === tracked.sessionId &&
+        streamGenRef.current === tracked.generation,
+      commit: ({ history, completedBeforeRead }) => {
+        if (history.sessionId !== tracked.sessionId) return;
+        const signature = JSON.stringify(history.items);
+        setSessionReadOnly(!!history.endReason);
+        setSessionEndReason(history.endReason ?? null);
+        if (signature !== previous) {
+          previous = signature;
+          setMessages(
+            settleRestoredActivities(
+              projectResponseItemsToEntries(history.items ?? []),
+            ),
+          );
+        }
+        const latest = interactionStateRef.current;
+        const running = latest.snapshot.tasks.find(
+          (task) => task.sessionId === tracked.sessionId,
+        );
+        if (latest.connected && !running && completedBeforeRead) {
+          // Load the final persisted response before releasing the UI's queued input.
+          setObservedTask(null);
+          setStreaming(false);
+          setTurnInFlight(false);
+          turnInFlightRef.current = false;
+          currentRunIdRef.current = null;
+          setCurrentTurnId(null);
+        } else if (running) {
+          currentRunIdRef.current = running.turnId;
+          setCurrentTurnId(running.turnId);
+        }
+      },
+    });
+    void reader.refresh();
+    const timer = window.setInterval(() => void reader.refresh(), 1000);
+    return () => {
+      reader.dispose();
+      window.clearInterval(timer);
+    };
+  }, [observedTask, sessionId]);
   useEffect(() => {
     if (!interactionState.connected || !sessionId) return;
     const live = interactionState.snapshot.requests.filter(
       (r) => r.sessionId === sessionId,
     );
     for (const request of live)
-      knownInteractions.current.add(`${sessionId}:${request.requestId}`);
+      knownInteractions.current.add(
+        `${sessionId}:${interactionIdentity(request)}`,
+      );
     const gone = sessionPendingInterrupts.filter(
       (p) =>
-        knownInteractions.current.has(`${sessionId}:${p.id}`) &&
-        !live.some((r) => r.requestId === p.id),
+        knownInteractions.current.has(`${sessionId}:${interruptIdentity(p)}`) &&
+        !live.some((r) => interactionMatchesInterrupt(r, sessionId, p)),
     );
     if (!gone.length) return;
-    const ids = new Set(gone.map((p) => p.id));
-    const remaining = sessionPendingInterrupts.filter((p) => !ids.has(p.id));
+    const ids = new Set(gone.map(interruptIdentity));
+    const remaining = sessionPendingInterrupts.filter(
+      (p) => !ids.has(interruptIdentity(p)),
+    );
     setSessionPendingInterrupts(remaining);
     setMessages((prev) =>
       prev.map((message) => {
@@ -2123,6 +2166,19 @@ export function useChatSession({
     ) => {
       const generation = ++navigationVersion.current;
       try {
+        if (
+          preserveCurrent &&
+          targetSessionId === navigationUi.current.sessionId
+        ) {
+          setNav("chat");
+          const focus = messages.find(
+            (message) =>
+              message.id === messageId ||
+              message.activities?.some((activity) => activity.id === messageId),
+          );
+          setFocusMessageId(focus?.id ?? null);
+          return;
+        }
         if (
           preserveCurrent &&
           (sendStartLockRef.current || queueDrainLockRef.current)
@@ -2170,6 +2226,13 @@ export function useChatSession({
           setTurnInFlight(false);
           turnInFlightRef.current = false;
         }
+        // Revoke only the old UI listener. Backend work keeps running. Its late
+        // token/done callbacks must never mutate the newly selected conversation.
+        ++streamGenRef.current;
+        unlistenRef.current?.();
+        unlistenRef.current = null;
+        clearStreamBuffers();
+        setObservedTask(null);
         const endReason = hist.endReason ?? null;
         const resolvedSessionId = hist.sessionId ?? targetSessionId;
         if (restored.length > 0) {
@@ -2215,14 +2278,15 @@ export function useChatSession({
           setQueuedFollowUps(draft?.queue ?? []);
           sessionWorktreeRef.current = draft?.worktree ?? null;
           setModeSwitchPrompt(draft?.mode ?? null);
-          const running = interactionState.snapshot.tasks.find(
+          const running = interactionStateRef.current.snapshot.tasks.find(
             (task) => task.sessionId === targetSessionId,
           );
           if (running) {
-            petNavigationTurn.current = {
+            setObservedTask({
               sessionId: running.sessionId,
               turnId: running.turnId,
-            };
+              generation: streamGenRef.current,
+            });
             currentRunIdRef.current = running.turnId;
             setCurrentTurnId(running.turnId);
             setStreaming(true);
@@ -2249,6 +2313,8 @@ export function useChatSession({
       input,
       attachments,
       interactionState,
+      messages,
+      clearStreamBuffers,
       showTransientToast,
     ],
   );

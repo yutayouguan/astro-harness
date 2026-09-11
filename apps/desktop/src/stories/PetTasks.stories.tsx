@@ -124,6 +124,7 @@ const meta = {
         }
       : question;
     let state: InteractionState = {
+      uiRevision: 1,
       connected: true,
       selected: context.parameters.failFirst ? question.key : approval.key,
       snapshot: {

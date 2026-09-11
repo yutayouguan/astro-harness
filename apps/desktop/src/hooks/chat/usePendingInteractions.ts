@@ -24,9 +24,12 @@ function start() {
     accept(payload),
   )
     .then(() => {
+      const beforeFetch = state;
       void invoke<InteractionState>("get_pending_interactions")
         .then(accept)
-        .catch(() => accept({ ...state, connected: false }));
+        .catch(() => {
+          if (state === beforeFetch) accept({ ...state, connected: false });
+        });
     })
     .catch(() => {
       accept({ ...state, connected: false });

@@ -82,6 +82,9 @@ fn response_payload(
     if !["submit", "decline", "cancel"].contains(&input.action.as_str()) {
         return Err(Status::invalid_argument("无效回答操作"));
     }
+    if input.action != "submit" && request.server_name.is_none() {
+        return Err(Status::invalid_argument("此请求未提供取消或拒绝回答操作"));
+    }
     if input.action == "submit" {
         if !supported_schema(&request.response_schema) {
             return Err(Status::failed_precondition("此表单需要完整会话处理"));
@@ -169,7 +172,10 @@ pub async fn snapshot(service: &AstroServiceImpl) -> Result<InteractionSnapshot,
                     )
                     .is_ok()
                 });
-                let kind = if binding.is_none() || !supported_schema(&response_schema) {
+                let kind = if binding.is_none()
+                    || pending.reason == "location_required"
+                    || !supported_schema(&response_schema)
+                {
                     "unsupported"
                 } else if !actions.is_empty() {
                     "approval"
@@ -320,7 +326,7 @@ pub async fn respond(
             request.generation.unwrap_or_default(),
             mcp::McpElicitationResponse {
                 action,
-                content: Some(payload),
+                content: matches!(action, mcp::McpElicitationAction::Accept).then_some(payload),
                 meta: None,
             },
         ) {
@@ -403,6 +409,9 @@ mod tests {
         assert!(response_payload(&req, &input).is_err());
         input.payload = json!({"choice":"a"});
         assert!(response_payload(&req, &input).is_ok());
+        input.action = "cancel".into();
+        assert!(response_payload(&req, &input).is_err());
+        input.action = "submit".into();
         req.kind = "external".into();
         assert!(response_payload(&req, &input).is_err());
     }
@@ -563,8 +572,26 @@ mod tests {
         broker.bind_turn("server", "request", event.generation, "turn-live".into());
         assert!(respond(&service, input).await.is_err());
         assert_eq!(broker.pending_requests().len(), 1);
-        second.abort();
-        let _ = second.await;
+        let current = snapshot(&service).await.unwrap().requests.remove(0);
+        respond(
+            &service,
+            InteractionResponse {
+                key: current.key,
+                session_id: current.session_id,
+                turn_id: current.turn_id,
+                action: "decline".into(),
+                payload: json!({"choice":"must-not-be-sent"}),
+                confirmed_persistent: false,
+            },
+        )
+        .await
+        .unwrap();
+        let response = second.await.unwrap().unwrap();
+        assert_eq!(
+            serde_json::to_value(&response).unwrap()["action"],
+            "decline"
+        );
+        assert!(response.content.is_none());
         assert!(snapshot(&service).await.unwrap().requests.is_empty());
     }
 }
