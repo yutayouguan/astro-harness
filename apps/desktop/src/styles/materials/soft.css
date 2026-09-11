@@ -146,9 +146,17 @@ html[data-material="soft"]
 }
 
 html[data-material="soft"]
-  :is(button, input, select, textarea, a):focus-visible {
+  :is(button, input, select, textarea:not(.composer-input), a):focus-visible {
   outline: 2px solid var(--tone, var(--accent));
   outline-offset: 3px;
+}
+
+/* The composer is one rounded input surface. Its inner textarea must keep
+ * the shared borderless editor contract in both expanded and capsule layouts. */
+html[data-material="soft"]
+  .composer:not(.has-clarify):has(.composer-input:focus-visible) {
+  outline: 2px solid var(--tone, var(--accent));
+  outline-offset: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

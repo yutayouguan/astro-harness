@@ -91,3 +91,20 @@ test("material preserves approval composition, focus, reduced motion and contras
     /@container \(max-width: 760px\)[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/,
   );
 });
+
+test("composer focus belongs to its rounded shell, not the inner textarea", async () => {
+  const editorStyles = await read("../../styles/features/chat/markdown.css");
+  assert.match(
+    css,
+    /:is\(button, input, select, textarea:not\(\.composer-input\), a\):focus-visible/,
+  );
+  assert.match(
+    css,
+    /\.composer:not\(\.has-clarify\):has\(\.composer-input:focus-visible\)\s*\{\s*outline: 2px solid var\(--tone, var\(--accent\)\);/,
+  );
+  assert.match(editorStyles, /\.composer-input\s*\{[^}]*outline: none;/);
+  assert.doesNotMatch(
+    css,
+    /:is\(button, input, select, textarea, a\):focus-visible/,
+  );
+});
