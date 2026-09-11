@@ -170,9 +170,10 @@
   -webkit-backdrop-filter: none;
 }
 
-/* The permissions card is already the owning surface. This exception follows
- * the generic inset rule so it cannot be materialized again by `.prefs-toggle-list`. */
-.prefs-page.is-embedded .browser-permission-toggles {
+/* The permissions card owns the surface. Include the page class to outrank
+ * the generic :is() inset and hover rules, whose strongest arms include a
+ * descendant element or interaction state even when another arm matches. */
+.prefs-page.is-embedded.browser-settings-page .browser-permission-toggles {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -181,13 +182,13 @@
   -webkit-backdrop-filter: none;
 }
 
-.prefs-page.is-embedded
+.prefs-page.is-embedded.browser-settings-page
   .browser-permission-toggles
   > .prefs-toggle-row,
-.prefs-page.is-embedded
+.prefs-page.is-embedded.browser-settings-page
   .browser-permission-toggles
   > .prefs-toggle-row:hover,
-.prefs-page.is-embedded
+.prefs-page.is-embedded.browser-settings-page
   .browser-permission-toggles
   > .prefs-toggle-row:focus-within {
   border-top: 1px solid var(--settings-divider);
