@@ -1,0 +1,179 @@
+/* Soft is an opt-in material, independent of theme mode, accent and wallpaper.
+ * Remap the existing surface contract; never overwrite saved glass intensity. */
+html[data-material="soft"][data-theme="light"] {
+  --soft-base: #eceef2;
+  --soft-surface: #f7f8fa;
+  --soft-inset: #e9ecf1;
+  --soft-hover: #fff;
+  --soft-ink: #202329;
+  --soft-muted: #5d6572;
+  --soft-edge: rgba(255, 255, 255, 0.9);
+  --soft-highlight: rgba(255, 255, 255, 0.95);
+  --soft-shade: rgba(48, 57, 75, 0.13);
+}
+
+html[data-material="soft"][data-theme="dark"] {
+  --soft-base: #202329;
+  --soft-surface: #2a2e35;
+  --soft-inset: #23262c;
+  --soft-hover: #323740;
+  --soft-ink: #eceef3;
+  --soft-muted: #aab2bf;
+  --soft-edge: rgba(255, 255, 255, 0.1);
+  --soft-highlight: rgba(255, 255, 255, 0.07);
+  --soft-shade: rgba(0, 0, 0, 0.3);
+}
+
+html[data-material="soft"] {
+  --soft-raised-shadow:
+    0 4px 9px -3px var(--soft-shade), inset 0 1px 0 var(--soft-highlight);
+  --soft-control-shadow:
+    0 4px 7px -2px var(--soft-shade), inset 0 1px 0 var(--soft-highlight);
+  --soft-inset-shadow:
+    inset 0 2px 4px var(--soft-shade), inset 0 -1px 0 var(--soft-highlight);
+  --color-bg-base: var(--soft-base);
+  --color-bg-subtle: var(--soft-inset);
+  --color-bg-raised: var(--soft-surface);
+  --color-text: var(--soft-ink);
+  --color-text-secondary: var(--soft-muted);
+  --color-text-muted: var(--soft-muted);
+  --color-text-tertiary: var(--soft-muted);
+  --color-border: var(--soft-edge);
+  --immersive-reference-color: var(--soft-surface);
+  --immersive-reference-background: var(--soft-surface);
+  --immersive-reference-border: var(--soft-edge);
+  --immersive-reference-shadow: var(--soft-raised-shadow);
+  --immersive-reference-backdrop: none;
+  --immersive-glass-rim: inset 0 1px 0 var(--soft-highlight);
+  --immersive-glass-inner: var(--soft-highlight);
+  --immersive-field-opacity: 0;
+  --immersive-particle-opacity: 0;
+  --glass-blur-scale: 0;
+  --glass-saturate: 1;
+  --shadow-card: var(--soft-raised-shadow);
+  --shadow: var(--soft-raised-shadow);
+  --shell-bg: var(--soft-base);
+  --surface-panel-hover: var(--soft-hover);
+  --material-inset-shadow: none;
+}
+
+html[data-material="soft"] .app-shell {
+  background: var(--soft-base);
+}
+
+html[data-material="soft"] .shell-immersive-light-field {
+  display: none;
+}
+
+/* The sidebar is a structural plane, not an oversized raised button. */
+html[data-material="soft"] .sidebar {
+  --sidebar-chrome-background: var(--soft-base);
+  --sidebar-chrome-shadow: none;
+  --sidebar-chrome-filter: none;
+}
+
+html[data-material="soft"] .bubble:is(.user, .assistant) {
+  background: var(--soft-surface);
+  box-shadow: var(--soft-raised-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Approval surfaces retain their own composition and semantic status colors. */
+html[data-material="soft"] .composer:not(.has-clarify) {
+  background: var(--soft-inset);
+  box-shadow: var(--soft-inset-shadow);
+  border-color: var(--soft-edge);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-material="soft"] .composer:not(.has-clarify):focus-within {
+  border-color: var(--tone, var(--accent));
+}
+
+html[data-material="soft"]
+  :is(.composer-plus-btn, .composer-mode-pill, .send-btn) {
+  box-shadow: var(--soft-control-shadow);
+  transition:
+    background 120ms ease,
+    transform 100ms ease;
+}
+
+html[data-material="soft"] :is(.composer-plus-btn, .composer-mode-pill) {
+  background: var(--soft-surface);
+  border-color: var(--soft-edge);
+}
+
+html[data-material="soft"]
+  :is(.composer-plus-btn, .composer-mode-pill):hover:not(:disabled) {
+  background: var(--soft-hover);
+}
+
+html[data-material="soft"] .send-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: var(--soft-control-shadow);
+}
+
+html[data-material="soft"]
+  :is(.composer-plus-btn, .composer-mode-pill).is-open {
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 12%,
+    var(--soft-surface)
+  );
+  border-color: var(--tone, var(--accent));
+}
+
+/* Full access must remain a warning state, including while its menu is open. */
+html[data-material="soft"] .composer-policy-pill.is-full-access {
+  color: var(--tone-orange);
+  background: color-mix(in srgb, var(--tone-orange) 12%, var(--soft-surface));
+  border-color: var(--tone-orange);
+}
+
+html[data-material="soft"]
+  :is(.composer-plus-btn, .composer-mode-pill, .send-btn):active:not(
+    :disabled
+  ) {
+  transform: translateY(1px);
+  box-shadow: var(--soft-inset-shadow);
+}
+
+html[data-material="soft"]
+  :is(.composer-plus-btn, .composer-mode-pill, .send-btn):disabled {
+  box-shadow: none;
+}
+
+html[data-material="soft"]
+  :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--tone, var(--accent));
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-material="soft"]
+    :is(.composer-plus-btn, .composer-mode-pill, .send-btn) {
+    transition: none;
+  }
+
+  html[data-material="soft"]
+    :is(.composer-plus-btn, .composer-mode-pill, .send-btn):active:not(
+      :disabled
+    ) {
+    transform: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  html[data-material="soft"][data-theme] {
+    --soft-edge: var(--soft-muted);
+    --soft-raised-shadow: none;
+    --soft-control-shadow: none;
+    --soft-inset-shadow: none;
+  }
+
+  html[data-material="soft"] :is(.bubble, .composer:not(.has-clarify)) {
+    border-width: 1px;
+  }
+}

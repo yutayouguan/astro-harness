@@ -123,3 +123,5 @@
 /* 统一分段 Tab：overrides 层显式声明「压过各功能页历史外观」，
    不再依赖它是 index.css 最后一行 */
 @import "./components/tabs.css" layer(overrides);
+@import "./features/material-picker.css" layer(features);
+@import "./materials/soft.css" layer(overrides);

@@ -33,6 +33,13 @@ import {
   readPreference,
   writePreference,
 } from "../../lib/storage/preferenceStore";
+import {
+  applyInterfaceMaterial,
+  normalizeInterfaceMaterial,
+  persistInterfaceMaterial,
+  readStoredInterfaceMaterial,
+  type InterfaceMaterial,
+} from "../../lib/ui/interfaceMaterial";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type { GlassIntensity } from "../../lib/ui/glassIntensity";
@@ -98,6 +105,8 @@ async function syncNativeWindowTheme(
 }
 
 type ThemeContextValue = {
+  material: InterfaceMaterial;
+  setMaterial: (material: InterfaceMaterial) => void;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   resolved: ResolvedTheme;
@@ -113,6 +122,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [material, setMaterialState] = useState(readStoredInterfaceMaterial);
   const [mode, setModeState] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "auto" : readStoredMode(),
   );
@@ -151,9 +161,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     apply(mode, wallpaperTheme);
+    applyInterfaceMaterial(document.documentElement, material);
     applyGlassIntensity(document.documentElement, glassIntensity);
     applyInterfaceScale(document.documentElement, interfaceScale);
-  }, [mode, apply, glassIntensity, interfaceScale, wallpaperTheme]);
+  }, [mode, apply, material, glassIntensity, interfaceScale, wallpaperTheme]);
 
   useEffect(() => {
     if (mode !== "auto") return;
@@ -167,6 +178,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
+  }, []);
+
+  const setMaterial = useCallback((next: InterfaceMaterial) => {
+    const normalized = normalizeInterfaceMaterial(next);
+    setMaterialState(normalized);
+    applyInterfaceMaterial(document.documentElement, normalized);
+    persistInterfaceMaterial(normalized);
   }, []);
 
   const setGlassIntensity = useCallback((intensity: GlassIntensity) => {
@@ -188,15 +206,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reassert = useCallback(() => {
+    applyInterfaceMaterial(document.documentElement, material);
     applyResolved(
       resolveThemePreference(mode, systemPrefersDark(), wallpaperTheme),
     );
     applyGlassIntensity(document.documentElement, glassIntensity);
     applyInterfaceScale(document.documentElement, interfaceScale);
-  }, [mode, glassIntensity, interfaceScale, wallpaperTheme]);
+  }, [mode, material, glassIntensity, interfaceScale, wallpaperTheme]);
 
   const value = useMemo(
     () => ({
+      material,
+      setMaterial,
       mode,
       setMode,
       resolved,
@@ -208,6 +229,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       reassert,
     }),
     [
+      material,
+      setMaterial,
       mode,
       setMode,
       resolved,

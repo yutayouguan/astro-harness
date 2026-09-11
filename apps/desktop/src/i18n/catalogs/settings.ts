@@ -8,7 +8,14 @@ export const settingsMessages = {
     "prefs.category.diagnostics": "诊断",
     "prefs.category.about": "关于",
     "prefs.appearance.material.title": "主题与材质",
-    "prefs.appearance.material.sub": "控制明暗模式与玻璃强度。",
+    "prefs.appearance.material.sub": "选择界面材质，独立调整明暗模式。",
+    "prefs.appearance.surface.title": "界面材质",
+    "prefs.appearance.surface.glass": "玻璃",
+    "prefs.appearance.surface.glassDesc": "通透光感，映衬背景色彩",
+    "prefs.appearance.surface.soft": "柔塑 Soft",
+    "prefs.appearance.surface.softDesc": "亮色白瓷，暗色石墨，细腻轻浮雕",
+    "prefs.appearance.glass.softDisabled":
+      "柔塑使用实色表面；玻璃强度已保留，切回玻璃后生效。",
     "prefs.appearance.accent.title": "强调色",
     "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
     "prefs.appearance.motion.title": "动效与图标",
@@ -352,7 +359,16 @@ export const settingsMessages = {
     "prefs.category.about": "About",
     "prefs.appearance.material.title": "Theme and material",
     "prefs.appearance.material.sub":
-      "Control appearance mode and glass intensity.",
+      "Choose a surface material independently of light and dark mode.",
+    "prefs.appearance.surface.title": "Interface material",
+    "prefs.appearance.surface.glass": "Glass",
+    "prefs.appearance.surface.glassDesc":
+      "Translucent surfaces reflecting the background",
+    "prefs.appearance.surface.soft": "Soft",
+    "prefs.appearance.surface.softDesc":
+      "Porcelain in light mode, graphite in dark mode",
+    "prefs.appearance.glass.softDisabled":
+      "Soft uses solid surfaces. Your glass intensity is saved and will apply when you switch back.",
     "prefs.appearance.accent.title": "Accent color",
     "prefs.appearance.accent.sub":
       "Keep controls and status colors clear over every wallpaper.",

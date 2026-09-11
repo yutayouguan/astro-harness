@@ -12,6 +12,10 @@ import { ThemeProvider } from "./hooks/app/useTheme";
 import { DialogProvider } from "./hooks/ui/DialogContext";
 import { installContextMenuGuard } from "./lib/ui/contextMenuGuard";
 import {
+  applyInterfaceMaterial,
+  readStoredInterfaceMaterial,
+} from "./lib/ui/interfaceMaterial";
+import {
   applyGlassIntensity,
   DEFAULT_GLASS_INTENSITY,
   readStoredGlassIntensity,
@@ -40,6 +44,14 @@ if (isDesktopPetWindow) {
 }
 
 (() => {
+  // Material is independent of wallpaper/theme, and must exist before first paint.
+  // Companion windows keep their transparent canvas and existing material.
+  if (!isDesktopPetWindow && !isPetTaskWindow) {
+    applyInterfaceMaterial(
+      document.documentElement,
+      readStoredInterfaceMaterial(),
+    );
+  }
   try {
     const mode = localStorage.getItem("astro-theme-mode");
     const resolved =

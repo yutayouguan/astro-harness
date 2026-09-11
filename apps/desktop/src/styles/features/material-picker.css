@@ -1,0 +1,131 @@
+.material-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 18px;
+  border: 0;
+}
+
+.material-picker legend {
+  padding: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.material-picker-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.material-option {
+  position: relative;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.material-option input {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 1;
+  accent-color: var(--tone, var(--accent));
+}
+
+.material-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid var(--settings-inset-border, var(--border));
+  border-radius: 16px;
+  background: var(--surface-panel-background);
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.material-option-body strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.material-option input:checked + .material-option-body {
+  border-color: var(--tone, var(--accent));
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 8%,
+    var(--surface-panel-background)
+  );
+}
+
+.material-option input:focus-visible + .material-option-body {
+  outline: 2px solid var(--tone, var(--accent));
+  outline-offset: 3px;
+}
+
+.material-swatch {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 10px;
+  margin: 0 20px 4px 0;
+  border-radius: 12px;
+}
+
+.material-swatch i {
+  display: block;
+  width: 30px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.material-swatch--glass {
+  background: linear-gradient(
+    125deg,
+    var(--tone-soft),
+    var(--surface-panel-background)
+  );
+}
+
+.material-swatch--glass i {
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.material-swatch--soft {
+  background: #eceef2;
+}
+
+.material-swatch--soft i {
+  background: #f7f8fa;
+  box-shadow:
+    0 3px 5px #30394b21,
+    inset 0 1px 0 #fff;
+}
+
+html[data-theme="dark"] .material-swatch--soft {
+  background: #202329;
+}
+
+html[data-theme="dark"] .material-swatch--soft i {
+  background: #2a2e35;
+  box-shadow:
+    0 3px 5px #0005,
+    inset 0 1px 0 #ffffff12;
+}
+
+.appearance-range-slider:has(input:disabled) {
+  opacity: 0.5;
+}
+
+.appearance-range-input:disabled {
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .material-picker-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

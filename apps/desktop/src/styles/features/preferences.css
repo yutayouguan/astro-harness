@@ -3684,7 +3684,7 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   .prefs-category-stack--appearance:not([hidden]),
   .prefs-category-stack--about:not([hidden]),
   .prefs-conversation-layout-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .prefs-conversation-choice-group .answer-layout-options {

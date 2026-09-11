@@ -41,6 +41,7 @@ import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import type { AppIconId } from "../../types";
 import type { ShellColorStyle } from "../../hooks/app/useShellColorStyle";
 import { useTheme, type ThemeMode } from "../../hooks/app/useTheme";
+import InterfaceMaterialPicker from "./InterfaceMaterialPicker";
 import type {
   ChatAnswerLayout,
   ChatDisplayPrefs,
@@ -417,6 +418,7 @@ export default function PreferencesPanel({
   const { locale, setLocale, t } = useI18n();
   const {
     glassIntensity,
+    material,
     setGlassIntensity,
     interfaceScale,
     setInterfaceScale,
@@ -826,6 +828,7 @@ export default function PreferencesPanel({
             </div>
 
             <div className="appearance-control-list">
+              <InterfaceMaterialPicker />
               <div className="appearance-control-row appearance-control-row--split">
                 <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.theme.title")}</strong>
@@ -901,7 +904,11 @@ export default function PreferencesPanel({
                 <div className="appearance-control-copy">
                   <strong>{t("prefs.appearance.glass.title")}</strong>
                   <span id="appearance-glass-description">
-                    {t("prefs.appearance.glass.sub")}
+                    {t(
+                      material === "soft"
+                        ? "prefs.appearance.glass.softDisabled"
+                        : "prefs.appearance.glass.sub",
+                    )}
                   </span>
                 </div>
                 <div
@@ -915,6 +922,7 @@ export default function PreferencesPanel({
                   <div className="appearance-range-track">
                     <input
                       id="appearance-glass-intensity"
+                      disabled={material === "soft"}
                       className="appearance-range-input"
                       type="range"
                       min={GLASS_INTENSITY_MIN}
