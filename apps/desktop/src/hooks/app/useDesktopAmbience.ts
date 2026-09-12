@@ -9,6 +9,10 @@ import {
   type AppearanceUndoSnapshot,
 } from "../../lib/ui/ambienceSession";
 import { useTheme } from "./useTheme";
+import {
+  wallpaperDisplayValue,
+  type WallpaperDisplay,
+} from "../../lib/ui/wallpaperDisplay";
 import { useDesktopPetState } from "./useDesktopPetState";
 import { useAmbienceShufflePrefs } from "./useAmbienceShufflePrefs";
 import {
@@ -50,6 +54,7 @@ export type AmbienceProps = {
 type Change =
   | { kind: "scene"; sceneId: string; expectedPetId?: string }
   | { kind: "wallpaper"; path: string | null }
+  | ({ kind: "wallpaper_display"; path: string } & WallpaperDisplay)
   | {
       kind: "palette";
       adaptiveColor: boolean;
@@ -345,6 +350,31 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       ]),
     );
   };
+  const setWallpaperDisplay = (
+    path: string,
+    patch: Partial<WallpaperDisplay>,
+  ) =>
+    guard(async () => {
+      const p = live.current;
+      const current = materializeWallpaper(
+        p.wallpaper.prefs,
+        p.activeStyle.style,
+        p.theme,
+      );
+      if (current.mode !== "wallpaper" || current.current?.path !== path)
+        throw new Error("壁纸已切换，请重试");
+      const next = wallpaperDisplayValue({ ...current, ...patch });
+      if (
+        next.fit === current.fit &&
+        next.shade === current.shade &&
+        next.blur === current.blur
+      )
+        return;
+      await change(
+        { kind: "wallpaper_display", path, ...next },
+        (prefs, colors) => [{ ...prefs, ...next }, colors],
+      );
+    });
   const stopFollowingSystem = () =>
     guard(() => {
       const p = live.current;
@@ -507,6 +537,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       appearanceGesture.current = null;
     },
     setAmbientColors,
+    setWallpaperDisplay,
     stopFollowingSystem,
     rotationChoices,
     reportError: setError,

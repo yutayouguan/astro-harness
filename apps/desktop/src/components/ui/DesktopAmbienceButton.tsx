@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import DynamicPaletteButton from "./DynamicPaletteButton";
 import AmbiencePetScaleControl from "./AmbiencePetScaleControl";
+import AmbienceWallpaperDisplay from "./AmbienceWallpaperDisplay";
 import { PopoverSurface } from "./Overlay";
 import { SegmentedTabs } from "./SegmentedTabs";
 import DesktopPetVisibilityButton from "../desktop-pet/DesktopPetVisibilityButton";
@@ -549,6 +550,14 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                       {tr("上传或生成…", "Upload or generate…")}
                     </button>
                   </div>
+                  <AmbienceWallpaperDisplay
+                    key={current.current?.path ?? "no-wallpaper"}
+                    path={hasWallpaper ? current.current!.path : null}
+                    value={current}
+                    disabled={state.busy}
+                    zh={locale.startsWith("zh")}
+                    onCommit={state.setWallpaperDisplay}
+                  />
                   <label className="ambience-check">
                     <input
                       type="checkbox"

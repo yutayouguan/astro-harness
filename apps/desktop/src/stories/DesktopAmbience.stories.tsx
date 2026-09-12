@@ -14,6 +14,7 @@ import { dynamicGradientForTab } from "../lib/ui/dynamicGradient";
 import { resolveMediaSrc } from "../lib/media/resolveMediaSrc";
 import {
   DEFAULT_WALLPAPER_PREFS,
+  wallpaperBackgroundSize,
   WALLPAPER_STORAGE_KEY,
 } from "../lib/ui/wallpaper";
 import {
@@ -52,37 +53,70 @@ function Harness() {
       <main
         style={{
           position: "relative",
+          isolation: "isolate",
           height: "100vh",
-          background: backgroundSrc
-            ? "linear-gradient(var(--soft-material-background, #ffffff99), transparent), url(" +
-              JSON.stringify(backgroundSrc) +
-              ") center / cover"
-            : gradientSwatchBackground(previewGradient),
+          boxSizing: "border-box",
+          background: gradientSwatchBackground(previewGradient),
           color: "var(--ink)",
           padding: 28,
         }}
       >
-        <h2>桌面氛围</h2>
-        <p>测试环境 · 所有操作均为本地模拟，不调用模型。</p>
-        <output data-testid="manage-target">{managed}</output>
-        {managed ? (
-          <button type="button" onClick={() => setManaged("")}>
-            返回对话
-          </button>
-        ) : (
-          <DesktopAmbienceButton
-            wallpaper={wallpaper}
-            colors={{
-              style: colors.colorStyle,
-              gradient: colors.gradient,
-              dynamicSeed: colors.dynamicSeed,
+        {backgroundSrc && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              overflow: "hidden",
+              pointerEvents: "none",
+              zIndex: -1,
             }}
-            restoreColors={colors.restoreColorPrefs}
-            activeStyle={activeStyle}
-            theme={resolved}
-            onManage={setManaged}
-          />
+          >
+            <div
+              data-testid="wallpaper-display-preview"
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundImage: "url(" + JSON.stringify(backgroundSrc) + ")",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+                backgroundSize: wallpaperBackgroundSize(current.fit),
+                filter: "blur(" + current.blur + "px)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: resolved === "dark" ? "#0d1420" : "#f7f8fa",
+                opacity: current.shade / 100,
+              }}
+            />
+          </div>
         )}
+        <>
+          <h2>桌面氛围</h2>
+          <p>测试环境 · 所有操作均为本地模拟，不调用模型。</p>
+          <output data-testid="manage-target">{managed}</output>
+          {managed ? (
+            <button type="button" onClick={() => setManaged("")}>
+              返回对话
+            </button>
+          ) : (
+            <DesktopAmbienceButton
+              wallpaper={wallpaper}
+              colors={{
+                style: colors.colorStyle,
+                gradient: colors.gradient,
+                dynamicSeed: colors.dynamicSeed,
+              }}
+              restoreColors={colors.restoreColorPrefs}
+              activeStyle={activeStyle}
+              theme={resolved}
+              onManage={setManaged}
+            />
+          )}
+        </>
       </main>
     </LocaleProvider>
   );
@@ -226,6 +260,20 @@ const meta = {
             displayName: scene.pet.displayName!,
             revision: state.revision + 1,
           };
+        } else if (args.change.kind === "wallpaper_display") {
+          if (style?.wallpaper)
+            style = {
+              ...style,
+              id: `ambience-${state.revision + 1}`,
+              revision: `${state.revision + 1}`,
+              wallpaper: {
+                ...style.wallpaper,
+                fit: args.change.fit,
+                shade: args.change.shade,
+                blur: args.change.blur,
+              },
+            };
+          state = { ...state, revision: state.revision + 1 };
         } else {
           if (args.change.kind === "palette" && style?.wallpaper) {
             const colors = args.change.colors;

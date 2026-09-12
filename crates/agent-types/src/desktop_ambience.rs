@@ -20,6 +20,13 @@ pub enum AmbienceChange {
     Wallpaper {
         path: Option<String>,
     },
+    /// Adjust the active wallpaper without switching its pet or editing the saved scene.
+    WallpaperDisplay {
+        path: String,
+        fit: crate::UiStyleWallpaperFit,
+        shade: u8,
+        blur: u8,
+    },
     /// Keep the background, non-palette tokens and icons; save only an active-style variant.
     Palette {
         adaptive_color: bool,
@@ -151,6 +158,37 @@ pub fn change(
                 state.follow_wallpaper = false;
                 state.pending_scene_style = None;
                 state.pending_style_reset = true;
+            }
+            AmbienceChange::WallpaperDisplay {
+                path,
+                fit,
+                shade,
+                blur,
+            } => {
+                anyhow::ensure!(shade <= 55 && blur <= 12, "壁纸显示参数超出范围");
+                let expected_path = crate::pet_scene::managed_file(base, Path::new(&path))?;
+                if let Some(mut style) =
+                    crate::read_active_ui_style(base).map_err(anyhow::Error::msg)?
+                {
+                    let wallpaper = style
+                        .wallpaper
+                        .as_mut()
+                        .ok_or_else(|| anyhow::anyhow!("当前没有图片壁纸"))?;
+                    let active_path = crate::pet_scene::managed_file(
+                        base,
+                        &crate::ui_style_root(base).join(&wallpaper.path),
+                    )?;
+                    anyhow::ensure!(active_path == expected_path, "壁纸已切换，请重试");
+                    wallpaper.fit = fit;
+                    wallpaper.shade = shade;
+                    wallpaper.blur = blur;
+                    style.id = format!("ambience-{}", uuid::Uuid::new_v4().simple());
+                    style.revision = uuid::Uuid::new_v4().to_string();
+                    state.pending_scene_style = Some(style);
+                } else if let Some(path) = &state.last_wallpaper_path {
+                    let active_path = crate::pet_scene::managed_file(base, Path::new(path))?;
+                    anyhow::ensure!(active_path == expected_path, "壁纸已切换，请重试");
+                }
             }
             AmbienceChange::Palette {
                 adaptive_color,
@@ -366,6 +404,115 @@ mod tests {
         assert_eq!(restored.active_scene_id, before.active_scene_id);
         assert!(restored.follow_wallpaper);
         assert!(crate::read_active_ui_style(base).unwrap().is_some());
+    }
+    #[test]
+    fn wallpaper_display_preserves_scene_pet_and_undo_restores_style() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        setup(base);
+        let (before, _) = change(
+            base,
+            AmbienceChange::Scene {
+                scene_id: "pet-room".into(),
+                expected_pet_id: None,
+            },
+        )
+        .unwrap();
+        let original = crate::read_active_ui_style(base).unwrap().unwrap();
+        let request: AmbienceChange = serde_json::from_value(serde_json::json!({
+            "kind": "wallpaper_display", "path": crate::ui_style_root(base).join("room.png"),
+            "fit": "contain", "shade": 40, "blur": 8
+        }))
+        .unwrap();
+        let (after, checkpoint) = change(base, request).unwrap();
+        assert_eq!(after.active_pet_id, before.active_pet_id);
+        assert_eq!(after.active_scene_id, before.active_scene_id);
+        assert_eq!(after.pet_path, before.pet_path);
+        assert_eq!(after.scenes, before.scenes);
+        assert_eq!(after.scale, before.scale);
+        assert_eq!(after.follow_wallpaper, before.follow_wallpaper);
+        let updated = crate::read_active_ui_style(base).unwrap().unwrap();
+        assert_eq!(updated.tokens, original.tokens);
+        assert_eq!(updated.icons, original.icons);
+        let w = updated.wallpaper.unwrap();
+        assert_eq!(w.fit, crate::UiStyleWallpaperFit::Contain);
+        assert_eq!(w.shade, 40);
+        assert_eq!(w.blur, 8);
+        assert_eq!(w.path, original.wallpaper.as_ref().unwrap().path);
+        undo(base, &checkpoint).unwrap();
+        assert_eq!(
+            crate::read_active_ui_style(base).unwrap().unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn wallpaper_display_rejects_stale_paths_and_invalid_ranges() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        setup(base);
+        change(
+            base,
+            AmbienceChange::Scene {
+                scene_id: "pet-room".into(),
+                expected_pet_id: None,
+            },
+        )
+        .unwrap();
+        let before = crate::read_active_ui_style(base).unwrap();
+        let other = crate::ui_style_root(base).join("other.png");
+        atomic_write(&other, b"validated fixture").unwrap();
+        for (path, shade, blur) in [
+            (other, 18, 0),
+            (crate::ui_style_root(base).join("room.png"), 56, 0),
+            (crate::ui_style_root(base).join("room.png"), 18, 13),
+        ] {
+            assert!(change(
+                base,
+                AmbienceChange::WallpaperDisplay {
+                    path: path.to_string_lossy().into_owned(),
+                    fit: crate::UiStyleWallpaperFit::Cover,
+                    shade,
+                    blur
+                }
+            )
+            .is_err());
+            assert_eq!(crate::read_active_ui_style(base).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn wallpaper_display_supports_manual_background_without_creating_a_scene() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        setup(base);
+        let path = crate::ui_style_root(base)
+            .join("room.png")
+            .to_string_lossy()
+            .into_owned();
+        let (before, _) = change(
+            base,
+            AmbienceChange::Wallpaper {
+                path: Some(path.clone()),
+            },
+        )
+        .unwrap();
+        let (after, checkpoint) = change(
+            base,
+            AmbienceChange::WallpaperDisplay {
+                path,
+                fit: crate::UiStyleWallpaperFit::Stretch,
+                shade: 55,
+                blur: 12,
+            },
+        )
+        .unwrap();
+        assert_eq!(after.active_pet_id, before.active_pet_id);
+        assert_eq!(after.last_wallpaper_path, before.last_wallpaper_path);
+        assert_eq!(after.active_scene_id, before.active_scene_id);
+        assert!(crate::read_active_ui_style(base).unwrap().is_none());
+        undo(base, &checkpoint).unwrap();
+        assert!(crate::read_active_ui_style(base).unwrap().is_none());
     }
     #[test]
     fn palette_keeps_scene_and_conflicting_undo_is_rejected() {

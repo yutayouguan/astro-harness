@@ -480,6 +480,29 @@
   margin-top: 10px;
   font-size: 11px;
 }
+.ambience-wallpaper-display {
+  margin-top: 12px;
+  padding-block: 6px;
+  border-block: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 12px;
+}
+.ambience-wallpaper-display summary {
+  padding-block: 6px;
+  cursor: pointer;
+}
+.ambience-wallpaper-display fieldset {
+  min-width: 0;
+  padding: 8px 0 0;
+  margin: 0;
+  border: 0;
+}
+.ambience-display-label {
+  display: block;
+  margin-bottom: 8px;
+}
+.ambience-wallpaper-display .ambience-strength + .ambience-strength {
+  margin-top: 12px;
+}
 .ambience-save-options summary {
   cursor: pointer;
   padding: 8px 0;

@@ -1,5 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("wallpaper display settings preserve the scene and can be undone", async ({ page }) => {
+  const { dialog } = await open(page);
+  await dialog.getByText("显示调整", { exact: true }).click();
+  await dialog.getByRole("button", { name: "适应", exact: true }).click();
+  await expect(page.getByTestId("wallpaper-display-preview")).toHaveCSS("background-size", "contain");
+  const shade = dialog.getByRole("slider", { name: "内容保护", exact: true });
+  await shade.press("End");
+  await expect(shade).toHaveValue("55");
+  await dialog.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(shade).toHaveValue("18");
+  const blur = dialog.getByRole("slider", { name: "柔化背景", exact: true });
+  await blur.press("End");
+  await expect(page.getByTestId("wallpaper-display-preview")).toHaveCSS("filter", "blur(12px)");
+  await expect(dialog.locator(".ambience-current")).toContainText("奶糖");
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "还原场景", exact: true })).toBeVisible();
+});
+
 test("long names keep scene cards aligned and available in tooltips", async ({ page }) => {
   const { dialog } = await open(page, "long-labels");
   await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
