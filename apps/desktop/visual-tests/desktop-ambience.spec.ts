@@ -1,5 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("expanded random options fit the action area and save form receives focus", async ({ page }) => {
+  await page.setViewportSize({ width: 340, height: 480 });
+  const { dialog } = await open(page);
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const more = dialog.getByLabel("随机选项", { exact: true });
+  const before = await more.boundingBox();
+  await more.click();
+  const after = await more.boundingBox();
+  expect(after!.x).toBeCloseTo(before!.x, 0);
+  const shuffle = await dialog.getByRole("button", { name: "换个场景", exact: true }).boundingBox();
+  expect(after!.y).toBeCloseTo(shuffle!.y, 0);
+  const action = await dialog.locator(".ambience-context-action").boundingBox();
+  const lock = await dialog.getByRole("checkbox", { name: "锁定随机换景" }).boundingBox();
+  expect(lock!.y + lock!.height).toBeLessThanOrEqual(action!.y + action!.height);
+  await more.click();
+  await dialog.getByText("另存当前组合为场景", { exact: true }).click();
+  await expect(dialog.getByRole("textbox", { name: "新场景名称" })).toBeFocused();
+});
+
 test("tab positions stay stable, pet tiles align and actions remain outside the scroll area", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 900 });
   const { dialog } = await open(page);

@@ -40,3 +40,16 @@ test("pet status badges do not create a third row and size help remains accessib
   assert.match(size, /className=\{petId \? "sr-only" : "ambience-help"\}/);
   assert.match(size, /aria-describedby=\{id \+ "-hint"\}/);
 });
+
+test("random options keep their trigger anchored and avoid an extra summary row", () => {
+  assert.match(css, /\.ambience-context-action\s*\{[^}]*position: relative/);
+  assert.match(
+    css,
+    /\.ambience-more summary\s*\{[^}]*position: absolute;[^}]*top: var\(--ambience-action-inset\);[^}]*right: 0/,
+  );
+  assert.match(css, /width: calc\(100% - 40px\)/);
+  assert.doesNotMatch(css, /\.ambience-more\[open\]\s*\{[^}]*order:/);
+  assert.doesNotMatch(panel, /Only the current desktop pet's scenes/);
+  assert.match(panel, /<input\s+autoFocus\s+aria-label=\{tr\("新场景名称"/);
+  assert.match(panel, /setSaving\(false\);\s*setTab\(value\)/);
+});

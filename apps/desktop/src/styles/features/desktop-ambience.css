@@ -413,30 +413,34 @@
   height: 18px;
 }
 .ambience-context-action {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
+  --ambience-action-inset: 10px;
+  position: relative;
   border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   margin-top: 0;
-  padding-top: 10px;
+  padding-top: var(--ambience-action-inset);
   max-height: 30%;
   overflow: auto;
 }
 .ambience-context-action > button {
-  flex: 1;
+  box-sizing: border-box;
+  width: calc(100% - 40px);
+  min-height: 32px;
 }
 .ambience-context-action > small {
-  flex-basis: 100%;
+  display: block;
+  margin-top: 6px;
 }
-.ambience-more {
-  flex: 0 0 auto;
+.ambience-context-action:has(.ambience-more[open]) > small {
+  /* The open options explain the lock; keep the compact action row stable. */
+  display: none;
 }
 .ambience-more[open] {
-  flex-basis: 100%;
-  order: 2;
+  margin-top: 8px;
 }
 .ambience-more summary {
+  position: absolute;
+  top: var(--ambience-action-inset);
+  right: 0;
   box-sizing: border-box;
   width: 32px;
   height: 32px;
@@ -489,7 +493,7 @@
     padding-top: 6px;
   }
   .ambience-context-action {
-    padding-top: 6px;
+    --ambience-action-inset: 6px;
   }
 }
 @media (hover: hover) {

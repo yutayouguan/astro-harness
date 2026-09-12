@@ -128,14 +128,10 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
           ? tr("当前宠物暂无其他场景", "No other scene for the current pet")
           : availability?.reason === "no-pet"
             ? tr("先选择一只宠物", "Select a pet first")
-            : scope === "pet-scenes"
-              ? tr(
-                  "只换当前桌宠的场景",
-                  "Only the current desktop pet's scenes",
-                )
-              : "";
+            : "";
   const close = () => {
     state.finishAppearanceEdit();
+    setSaving(false);
     setOpen(false);
   };
   const manage = () => {
@@ -233,6 +229,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
           value={tab}
           onValueChange={(value) => {
             state.finishAppearanceEdit();
+            setSaving(false);
             setTab(value);
           }}
           size="sm"
@@ -738,6 +735,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                   }}
                 >
                   <input
+                    autoFocus
                     aria-label={tr("新场景名称", "New scene name")}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
