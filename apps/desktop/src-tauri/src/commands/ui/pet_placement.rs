@@ -102,6 +102,22 @@ pub(super) fn capture(
     })
 }
 
+/// Programmatic placement rounds normalized coordinates to physical pixels. Do not
+/// feed that rounding back into preferences as if the user had dragged the pet.
+pub(super) fn capture_changed_position(
+    point: (i32, i32),
+    physical_size: (u32, u32),
+    screens: &[Screen],
+    snap: bool,
+    stored: Option<&PetPosition>,
+    logical_size: (f64, f64),
+) -> Option<PetPosition> {
+    if target(stored, screens, logical_size) == Some(point) {
+        return None;
+    }
+    capture(point, physical_size, screens, snap).filter(|position| Some(position) != stored)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +150,45 @@ mod tests {
         assert_eq!(
             target(Some(&p), &screens, (120.0, 136.0)),
             Some((-1000, 500))
+        );
+    }
+
+    #[test]
+    fn programmatic_pixel_rounding_does_not_rewrite_saved_position() {
+        let screens = screens();
+        let stored = PetPosition {
+            monitor: Some("primary".into()),
+            monitor_x: 0,
+            monitor_y: 48,
+            x: 0.9642346208869814,
+            y: 0.19041450777202074,
+        };
+        let logical = (100.0, 120.0);
+        let physical = (200, 240);
+        let point = target(Some(&stored), &screens, logical).unwrap();
+        assert_ne!(capture(point, physical, &screens, false).unwrap(), stored);
+        assert!(
+            capture_changed_position(point, physical, &screens, false, Some(&stored), logical)
+                .is_none()
+        );
+        assert!(capture_changed_position(
+            (point.0 - 1, point.1),
+            physical,
+            &screens,
+            false,
+            Some(&stored),
+            logical
+        )
+        .is_some());
+    }
+
+    #[test]
+    fn default_anchor_does_not_become_a_manual_position() {
+        let screens = screens();
+        let logical = (100.0, 120.0);
+        let point = target(None, &screens, logical).unwrap();
+        assert!(
+            capture_changed_position(point, (200, 240), &screens, true, None, logical).is_none()
         );
     }
 

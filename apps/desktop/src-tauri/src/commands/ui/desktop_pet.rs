@@ -774,17 +774,17 @@ pub async fn settle_desktop_pet_position(
         }
         let p = window.outer_position().map_err(|e| e.to_string())?;
         let size = window.outer_size().map_err(|e| e.to_string())?;
-        let Some(position) = super::pet_placement::capture(
+        let logical_size = window_size(state.scale);
+        let Some(position) = super::pet_placement::capture_changed_position(
             (p.x, p.y),
             (size.width, size.height),
             &pet_screens(&app),
             state.preferences.snap_to_edge,
+            state.preferences.position.as_ref(),
+            (logical_size.width, logical_size.height),
         ) else {
             return Ok(true);
         };
-        if state.preferences.position.as_ref() == Some(&position) {
-            return Ok(true);
-        }
         let state = types::update_desktop_pet_state(&home::default_memory_dir(), |state| {
             if !state.preferences.position_locked {
                 state.preferences.position = Some(position);
