@@ -15,7 +15,7 @@ export const settingsMessages = {
     "prefs.appearance.surface.soft": "柔塑 Soft",
     "prefs.appearance.surface.softDesc": "亮色白瓷，暗色石墨，细腻轻浮雕",
     "prefs.appearance.glass.softDisabled":
-      "柔塑使用实色表面；玻璃强度已保留，切回玻璃后生效。",
+      "柔塑材质独立调校；此滑块仅作用于玻璃主题，当前数值已保留。",
     "prefs.appearance.accent.title": "强调色",
     "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
     "prefs.appearance.motion.title": "动效与图标",
@@ -368,7 +368,7 @@ export const settingsMessages = {
     "prefs.appearance.surface.softDesc":
       "Porcelain in light mode, graphite in dark mode",
     "prefs.appearance.glass.softDisabled":
-      "Soft uses solid surfaces. Your glass intensity is saved and will apply when you switch back.",
+      "Soft uses its own material settings. This slider only affects Glass; your value is saved.",
     "prefs.appearance.accent.title": "Accent color",
     "prefs.appearance.accent.sub":
       "Keep controls and status colors clear over every wallpaper.",

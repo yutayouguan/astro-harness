@@ -82,7 +82,7 @@ test("cards and category pills share the Start conversation material in every st
   );
   assert.match(
     css,
-    /\.soft-welcome-start,\s*\.soft-welcome-card,\s*\.soft-welcome-filters button\s*\{\s*border: 1px solid var\(--soft-edge\);\s*background: var\(--soft-surface\);\s*box-shadow: var\(--soft-control-shadow\);/,
+    /\.soft-welcome-start,\s*\.soft-welcome-card,\s*\.soft-welcome-filters button\s*\{\s*border: 1px solid var\(--soft-edge\);\s*background: var\(--welcome-action-surface\);\s*box-shadow: var\(--soft-control-shadow\);/,
   );
   assert.doesNotMatch(css, /linear-gradient|background: var\(--soft-ink\)/);
   assert.match(css, /\[aria-pressed="true"\]::after/);
@@ -91,4 +91,71 @@ test("cards and category pills share the Start conversation material in every st
     css,
     /prefers-contrast: more[\s\S]*\.soft-welcome-start,[\s\S]*box-shadow: none/,
   );
+});
+
+test("welcome frost has one shared recipe and solid accessibility fallbacks", async () => {
+  const css = await readFile(
+    new URL("../../styles/materials/soft-welcome.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    css,
+    /@supports \(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)/,
+  );
+  assert.match(css, /var\(--soft-surface\) 90%,\s*transparent/);
+  assert.match(
+    css,
+    /--welcome-action-backdrop: blur\(18px\) saturate\(1\.08\)/,
+  );
+  assert.match(
+    css,
+    /-webkit-backdrop-filter: var\(--welcome-action-backdrop\)/,
+  );
+  assert.match(
+    css,
+    /prefers-reduced-transparency: reduce[\s\S]*--welcome-action-surface: var\(--soft-surface\);[\s\S]*--welcome-action-backdrop: none/,
+  );
+});
+
+test("frost text remains readable over worst-case black and white backdrops", async () => {
+  const css = await readFile(
+    new URL("../../styles/materials/soft-welcome.css", import.meta.url),
+    "utf8",
+  );
+  const palette = await readFile(
+    new URL("../../styles/materials/soft.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(css, /var\(--soft-surface\) 90%/);
+  assert.match(css, /var\(--soft-muted\) 95%, var\(--soft-ink\)/);
+  const luminance = (rgb: number[]) =>
+    rgb
+      .map((n) => {
+        const c = n / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      })
+      .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  for (const mode of ["light", "dark"]) {
+    const block = palette.match(
+      new RegExp(`\\[data-theme="${mode}"\\] \\{([^}]+)`),
+    )![1];
+    const rgb = (name: string) =>
+      block
+        .match(new RegExp(`--soft-${name}: #([0-9a-f]{6})`))![1]
+        .match(/../g)!
+        .map((v) => parseInt(v, 16));
+    const surface = rgb("surface"),
+      ink = rgb("ink"),
+      muted = rgb("muted").map((c, i) => c * 0.95 + ink[i] * 0.05);
+    for (const backdrop of [0, 255]) {
+      const bg = luminance(surface.map((c) => c * 0.9 + backdrop * 0.1));
+      for (const color of [ink, muted]) {
+        const fg = luminance(color);
+        assert.ok(
+          (Math.max(bg, fg) + 0.05) / (Math.min(bg, fg) + 0.05) >= 4.5,
+          `${mode}/${backdrop}`,
+        );
+      }
+    }
+  }
 });

@@ -1,4 +1,7 @@
 .soft-welcome {
+  --welcome-action-surface: var(--soft-surface);
+  --welcome-action-backdrop: none;
+  --welcome-muted: color-mix(in srgb, var(--soft-muted) 95%, var(--soft-ink));
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -6,6 +9,18 @@
   container-type: inline-size;
   padding: 24px 28px calc(var(--composer-overlay-height, 112px) + 28px);
   color: var(--soft-ink);
+}
+
+/* Keep a solid fallback: translucent fill without backdrop support is not frost. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .soft-welcome {
+    --welcome-action-surface: color-mix(
+      in srgb,
+      var(--soft-surface) 90%,
+      transparent
+    );
+    --welcome-action-backdrop: blur(18px) saturate(1.08);
+  }
 }
 
 .soft-welcome-content {
@@ -25,7 +40,7 @@
   gap: 8px;
   font-size: 13px;
   font-weight: 650;
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
 }
 .soft-welcome-header h2 {
   margin: 14px 0 8px;
@@ -36,7 +51,7 @@
 }
 .soft-welcome-header p {
   margin: 0;
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -45,8 +60,10 @@
 .soft-welcome-card,
 .soft-welcome-filters button {
   border: 1px solid var(--soft-edge);
-  background: var(--soft-surface);
+  background: var(--welcome-action-surface);
   box-shadow: var(--soft-control-shadow);
+  backdrop-filter: var(--welcome-action-backdrop);
+  -webkit-backdrop-filter: var(--welcome-action-backdrop);
 }
 
 .soft-welcome-start {
@@ -69,7 +86,7 @@
   position: relative;
   padding: 8px 16px;
   border-radius: 999px;
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -159,7 +176,7 @@
   line-height: 1.4;
 }
 .soft-welcome-card-copy > span {
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -168,7 +185,7 @@
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
 }
 .soft-welcome-card.is-featured {
   grid-template-columns: 120px minmax(0, 1fr);
@@ -197,7 +214,7 @@
 }
 .soft-welcome-hint {
   margin: 18px 0 0;
-  color: var(--soft-muted);
+  color: var(--welcome-muted);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -267,5 +284,13 @@
   .soft-welcome-filters button {
     border-color: var(--soft-muted);
     box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more),
+  (forced-colors: active) {
+  .soft-welcome {
+    --welcome-action-surface: var(--soft-surface);
+    --welcome-action-backdrop: none;
   }
 }

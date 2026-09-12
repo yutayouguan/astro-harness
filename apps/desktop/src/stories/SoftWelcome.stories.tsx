@@ -10,6 +10,7 @@ function SoftWelcomePreview() {
   const { locale, setLocale } = useI18n();
   const [draft, setDraft] = useState("");
   const [hints, setHints] = useState<string[]>([]);
+  const [texture, setTexture] = useState(false);
   const editor = useRef<HTMLTextAreaElement>(null);
   return (
     <div
@@ -18,6 +19,9 @@ function SoftWelcomePreview() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          background: texture
+            ? "repeating-linear-gradient(135deg, transparent 0 28px, rgba(56, 139, 183, 0.24) 28px 32px), var(--soft-base)"
+            : undefined,
           "--composer-overlay-height": "0px",
         } as CSSProperties
       }
@@ -43,6 +47,13 @@ function SoftWelcomePreview() {
           onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
         >
           中文 / English
+        </button>
+        <button
+          type="button"
+          aria-pressed={texture}
+          onClick={() => setTexture((value) => !value)}
+        >
+          纹理背景（仅样板）
         </button>
       </nav>
       <ChatWelcome
