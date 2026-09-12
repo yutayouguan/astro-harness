@@ -127,5 +127,6 @@
 @import "./features/material-picker.css" layer(features);
 @import "./materials/soft.css" layer(overrides);
 @import "./materials/soft-controls.css" layer(overrides);
+@import "./materials/soft-overlays.css" layer(overrides);
 @import "./materials/soft-focus.css" layer(overrides);
 @import "./components/ai-action-icon.css" layer(overrides);

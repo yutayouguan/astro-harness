@@ -1,0 +1,131 @@
+/* Floating surfaces share a neutral material; modal scrims convey modality,
+ * while anchored popovers remain transparent outside their own surface. */
+html[data-material="soft"][data-theme="light"] {
+  --soft-modal-scrim: rgba(20, 26, 38, 0.22);
+}
+
+html[data-material="soft"][data-theme="dark"] {
+  --soft-modal-scrim: rgba(0, 0, 0, 0.46);
+}
+
+html[data-material="soft"] {
+  --soft-floating-shadow: 0 14px 36px -14px var(--soft-shade);
+  --menu-glass-shadow: var(--soft-floating-shadow);
+  --menu-overlay-shadow: var(--soft-floating-shadow);
+  --titlebar-menu-shadow: var(--soft-floating-shadow);
+}
+
+html[data-material="soft"]
+  :is(.app-dialog-backdrop, .ui-overlay:not(.ui-overlay--transparent)) {
+  background: var(--soft-modal-scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-material="soft"]
+  :is(
+    .app-dialog,
+    .about-dialog,
+    .ui-overlay__surface,
+    .select-menu-list:not(.select-menu-results),
+    .fs-ctx-menu,
+    .project-context-menu,
+    .astro-toast
+  ) {
+  background: var(--soft-surface);
+  border-color: var(--soft-control-edge);
+  box-shadow: var(--soft-floating-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-material="soft"] .select-menu-list {
+  --soft-menu-accent: var(--select-tone, var(--tone, var(--accent)));
+}
+
+/* Search owns the input focus ring; keep that ring aligned with menu corners. */
+html[data-material="soft"] .select-menu-search {
+  border-radius: 8px;
+}
+
+html[data-material="soft"]
+  .select-menu-option:is(:hover, .is-highlighted):not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--soft-menu-accent) 10%,
+    var(--soft-surface)
+  );
+}
+
+html[data-material="soft"] .select-menu-option.is-active {
+  background: color-mix(
+    in srgb,
+    var(--soft-menu-accent) 14%,
+    var(--soft-surface)
+  );
+  color: var(--soft-ink);
+}
+
+html[data-material="soft"]
+  .select-menu-option.is-active:is(:hover, .is-highlighted) {
+  background: color-mix(
+    in srgb,
+    var(--soft-menu-accent) 18%,
+    var(--soft-surface)
+  );
+}
+
+html[data-material="soft"]
+  :is(.fs-ctx-item, .project-context-menu-item):hover:not(
+    :disabled,
+    .is-danger
+  ) {
+  background: var(--soft-inset);
+}
+
+html[data-material="soft"] .app-dialog-btn.is-cancel {
+  background: var(--soft-inset);
+  border-color: var(--soft-control-edge);
+  box-shadow: none;
+}
+
+html[data-material="soft"] .app-dialog-btn.is-cancel:hover:not(:disabled) {
+  background: var(--soft-hover);
+}
+
+html[data-material="soft"] .app-dialog-btn.is-confirm {
+  background: color-mix(in srgb, var(--dialog-accent) 12%, var(--soft-surface));
+  box-shadow: none;
+}
+
+html[data-material="soft"] .app-dialog-btn.is-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dialog-accent) 18%, var(--soft-surface));
+}
+
+html[data-material="soft"] .app-dialog-btn.is-confirm.is-danger {
+  background: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger)) 12%,
+    var(--soft-surface)
+  );
+}
+
+html[data-material="soft"]
+  .app-dialog-btn.is-confirm.is-danger:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger)) 18%,
+    var(--soft-surface)
+  );
+}
+
+@media (prefers-contrast: more) {
+  html[data-material="soft"] {
+    --soft-floating-shadow: none;
+  }
+
+  html[data-material="soft"] .astro-toast {
+    outline: 1px solid var(--soft-muted);
+    outline-offset: -1px;
+  }
+}
