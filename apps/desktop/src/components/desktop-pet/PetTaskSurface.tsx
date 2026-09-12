@@ -13,6 +13,11 @@ import {
 import InteractionCard from "./InteractionCard";
 import { taskRows } from "../../lib/chat/pendingInteractions";
 
+function surfaceZoom() {
+  const zoom = Number.parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+}
+
 export default function PetTaskSurface({
   preview = false,
 }: {
@@ -49,6 +54,10 @@ export default function PetTaskSurface({
     const apply = (frame: PetTaskMorphFrame) => {
       if (disposed || frame.sequence < sequence || !shell.current) return;
       sequence = frame.sequence;
+      const zoom = surfaceZoom();
+      shell.current.style.setProperty("--pet-shell-radius", `${19 / zoom}px`);
+      shell.current.style.setProperty("--pet-capsule-width", `${166 / zoom}px`);
+      shell.current.style.setProperty("--pet-capsule-height", `${38 / zoom}px`);
       shell.current.style.setProperty(
         "--pet-morph",
         String(Math.max(0, Math.min(1, frame.progress))),
@@ -58,11 +67,11 @@ export default function PetTaskSurface({
         frame.progress > 0 && frame.progress < 1 ? "moving" : "still";
       shell.current.style.setProperty(
         "--pet-content-width",
-        `${frame.contentWidth ?? 392}px`,
+        `${(frame.contentWidth ?? 392) / zoom}px`,
       );
       shell.current.style.setProperty(
         "--pet-content-height",
-        `${frame.contentHeight ?? 560}px`,
+        `${(frame.contentHeight ?? 560) / zoom}px`,
       );
     };
     if (!preview) {
@@ -142,8 +151,8 @@ export default function PetTaskSurface({
         }
       }
       if (shell.current) {
-        shell.current.style.width = `${width}px`;
-        shell.current.style.height = `${height}px`;
+        shell.current.style.width = `${width / surfaceZoom()}px`;
+        shell.current.style.height = `${height / surfaceZoom()}px`;
       }
       apply({
         sequence: ++sequence,
@@ -170,7 +179,8 @@ export default function PetTaskSurface({
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const height = Math.ceil(
-          (content.current?.getBoundingClientRect().height ?? 0) + 32,
+          (content.current?.getBoundingClientRect().height ?? 0) +
+            32 * surfaceZoom(),
         );
         if (height === lastHeight) return;
         lastHeight = height;

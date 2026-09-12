@@ -1,4 +1,21 @@
 import { test, expect } from "@playwright/test";
+test("morph keeps native capsule and panel widths at compact interface scale", async ({
+  page,
+}) => {
+  await page.goto("/iframe.html?id=desktop-pettasks--badge&viewMode=story");
+  await page.evaluate(() => (document.documentElement.style.zoom = "0.8"));
+  const shell = page.locator(".pet-task-morph");
+  await expect
+    .poll(async () => Math.round((await shell.boundingBox())!.width))
+    .toBe(166);
+  await page.getByRole("button", { name: "待处理 2", exact: true }).click();
+  await expect
+    .poll(async () => Math.round((await shell.boundingBox())!.width))
+    .toBe(392);
+  const panel = await page.locator(".pet-task-popup").boundingBox();
+  expect(panel!.width).toBeGreaterThan(389);
+  expect(panel!.width).toBeLessThanOrEqual(392);
+});
 test("capsule morphs in place, reverses mid-flight and retains the same draft", async ({
   page,
 }) => {
