@@ -60,3 +60,17 @@ test("soft cards keep localized prompt slots, never send requests or animate a c
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /prefers-contrast/);
 });
+
+test("welcome cards use compact horizontal previews without shrinking body text", async () => {
+  const css = await readFile(
+    new URL("../../styles/materials/soft-welcome.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(css, /grid-template-columns: 44px minmax\(0, 1fr\)/);
+  assert.match(css, /min-height: 84px/);
+  assert.match(css, /grid-template-columns: 120px minmax\(0, 1fr\)/);
+  assert.match(css, /min-height: 104px/);
+  assert.match(css, /\.soft-welcome-card-copy strong\s*\{\s*font-size: 14px/);
+  assert.match(css, /\.soft-welcome-card-copy > span\s*\{[^}]*font-size: 12px/);
+  assert.doesNotMatch(css, /height: 132px|height: 70px|height: 110px/);
+});
