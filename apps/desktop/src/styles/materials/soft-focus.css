@@ -1,25 +1,28 @@
-/* One input, one focus edge. Inset outlines replace the existing border visually
- * without changing dimensions, covering the border rather than adding to it. */
-html[data-material="soft"][data-theme="light"] {
+/* Shared focus edge for both materials. Older WebViews retain a solid outline. */
+html[data-theme="light"] {
   --input-focus-fallback: #6d83ad;
   --input-focus-lightness: 0.59;
+  --input-focus-end-lightness: 0.53;
 }
 
-html[data-material="soft"][data-theme="dark"] {
+html[data-theme="dark"] {
   --input-focus-fallback: #8194b8;
   --input-focus-lightness: 0.7;
+  --input-focus-end-lightness: 0.76;
 }
 
-html[data-material="soft"] {
+html {
   --input-focus-width: 1px;
 }
 
-html[data-material="soft"][data-focus-modality="keyboard"] {
+html[data-focus-modality="keyboard"] {
   --input-focus-width: 2px;
 }
 
-html[data-material="soft"][data-theme] [data-input-focus] {
-  --input-focus-color: var(--input-focus-fallback);
+html[data-theme] [data-input-focus] {
+  --input-focus-color: var(--tone, var(--accent, var(--input-focus-fallback)));
+  --input-focus-end: color-mix(in srgb, var(--input-focus-color) 80%, var(--ink));
+  --input-focus-gradient: linear-gradient(120deg, var(--input-focus-color), var(--input-focus-end));
 
   border-color: transparent;
   outline: var(--input-focus-width) solid var(--input-focus-color);
@@ -30,39 +33,72 @@ html[data-material="soft"][data-theme] [data-input-focus] {
 }
 
 @supports (color: oklch(from red 0.59 0.065 h)) {
-  html[data-material="soft"][data-theme] [data-input-focus] {
+  html[data-theme] [data-input-focus] {
     /* Resolve the hue at the focused surface, not the root: page-specific and
      * custom accent changes remain live. Chroma/lightness stay independently bounded. */
     --input-focus-color: oklch(
       from var(--tone, var(--accent)) var(--input-focus-lightness) 0.065 h
     );
+    --input-focus-end: oklch(
+      from var(--tone, var(--accent)) var(--input-focus-end-lightness) 0.065 h
+    );
   }
 }
 
-html[data-material="soft"][data-theme]
+html[data-theme]
   [data-input-focus]:is(
     [aria-invalid="true"],
     :user-invalid,
     :has([aria-invalid="true"], :user-invalid)
   ) {
   --input-focus-color: var(--danger);
+  --input-focus-end: var(--danger);
+}
+
+/* border-area paints only the rounded stroke, leaving the existing translucent
+ * fill/backdrop untouched. Captured spacing prevents focus from moving text. */
+@supports (background-clip: border-area) {
+  html[data-theme] [data-input-focus][data-input-focus-box] {
+    --input-focus-stroke: min(var(--input-focus-width), var(--input-focus-box-budget));
+    border: var(--input-focus-stroke) solid transparent;
+    padding-top: calc(var(--input-focus-box-top) - var(--input-focus-stroke));
+    padding-right: calc(var(--input-focus-box-right) - var(--input-focus-stroke));
+    padding-bottom: calc(var(--input-focus-box-bottom) - var(--input-focus-stroke));
+    padding-left: calc(var(--input-focus-box-left) - var(--input-focus-stroke));
+    outline-color: transparent;
+    background-image: var(--input-focus-gradient), linear-gradient(transparent, transparent);
+    background-origin: border-box;
+    background-clip: border-area, padding-box;
+  }
 }
 
 /* Only the focused control inside a composite loses its own decoration.
  * Sibling buttons keep their keyboard rings; unrelated form fields are untouched. */
-html[data-material="soft"][data-theme]
+html[data-theme]
 [data-input-focus-control]:not([data-input-focus]) {
   border-color: transparent;
   outline: none;
   box-shadow: none;
 }
 
-@media (prefers-contrast: more) {
-  html[data-material="soft"][data-theme] {
+@media (prefers-contrast: more), (forced-colors: active) {
+  html[data-theme] {
     --input-focus-width: 2px;
   }
 
-  html[data-material="soft"][data-theme] [data-input-focus] {
-    --input-focus-color: var(--soft-ink);
+  html[data-theme] [data-input-focus] {
+    --input-focus-color: var(--ink);
+    --input-focus-end: var(--ink);
+  }
+
+  html[data-theme] [data-input-focus][data-input-focus-box] {
+    outline-color: var(--input-focus-color);
+    background-image: none;
+    background-clip: padding-box;
+  }
+
+  html[data-theme] [data-input-focus]:is([aria-invalid="true"], :user-invalid, :has([aria-invalid="true"], :user-invalid)) {
+    --input-focus-color: var(--danger);
+    --input-focus-end: var(--danger);
   }
 }

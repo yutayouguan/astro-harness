@@ -56,9 +56,12 @@ export function installInputFocus(doc: Document): () => void {
   let control: HTMLElement | null = null;
   let surface: HTMLElement | null = null;
   const previousModality = root.dataset.focusModality;
+  let restoreBox: (() => void) | undefined;
   root.dataset.focusModality = "pointer";
 
   const clear = () => {
+    restoreBox?.();
+    restoreBox = undefined;
     control?.removeAttribute("data-input-focus-control");
     surface?.removeAttribute("data-input-focus");
     control = null;
@@ -73,6 +76,9 @@ export function installInputFocus(doc: Document): () => void {
       return;
     control = target;
     surface = resolveInputFocusSurface(control);
+    // Keep the padding+border footprint stable when the gradient ring changes
+    // from a 1px pointer edge to a 2px keyboard edge. Never wrap/reparent inputs.
+    restoreBox = prepareInputFocusBox(surface, doc.defaultView);
     control.setAttribute("data-input-focus-control", "");
     surface.setAttribute("data-input-focus", "");
   };
@@ -98,5 +104,51 @@ export function installInputFocus(doc: Document): () => void {
     doc.removeEventListener("focusout", onFocusOut, true);
     if (previousModality === undefined) delete root.dataset.focusModality;
     else root.dataset.focusModality = previousModality;
+  };
+}
+
+const FOCUS_SIDES = ["top", "right", "bottom", "left"] as const;
+
+export function prepareInputFocusBox(
+  surface: HTMLElement,
+  view: Window | null,
+) {
+  if (!view) return;
+  const computed = view.getComputedStyle(surface);
+  const spacing = FOCUS_SIDES.map(
+    (side) =>
+      parseFloat(computed.getPropertyValue(`padding-${side}`)) +
+      parseFloat(computed.getPropertyValue(`border-${side}-width`)),
+  );
+  // A bare contenteditable has no padding to borrow; keep its native outline.
+  if (spacing.some((value) => !Number.isFinite(value) || value <= 0)) return;
+  const properties = [
+    ...FOCUS_SIDES.map((side) => `--input-focus-box-${side}`),
+    "--input-focus-box-budget",
+  ];
+  const previous = properties.map((property) => {
+    return [
+      property,
+      surface.style.getPropertyValue(property),
+      surface.style.getPropertyPriority(property),
+    ] as const;
+  });
+  FOCUS_SIDES.forEach((side, index) => {
+    surface.style.setProperty(
+      `--input-focus-box-${side}`,
+      `${spacing[index]}px`,
+    );
+  });
+  surface.style.setProperty(
+    "--input-focus-box-budget",
+    `${Math.min(...spacing)}px`,
+  );
+  surface.setAttribute("data-input-focus-box", "");
+  return () => {
+    surface.removeAttribute("data-input-focus-box");
+    for (const [property, value, priority] of previous) {
+      if (value) surface.style.setProperty(property, value, priority);
+      else surface.style.removeProperty(property);
+    }
   };
 }

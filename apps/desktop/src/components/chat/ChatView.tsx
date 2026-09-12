@@ -39,7 +39,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  SendHorizontal,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -4627,7 +4626,7 @@ export default function ChatView({
                         aria-label={t("chat.send")}
                         title={`${sendModeMeta[sendMode].label}: ${sendModeMeta[sendMode].desc}`}
                       >
-                        <SendHorizontal size={17} strokeWidth={2.2} />
+                        <ArrowUp size={19} strokeWidth={2.2} aria-hidden />
                       </button>
                     ) : null}
                   </>
@@ -4640,7 +4639,7 @@ export default function ChatView({
                     aria-label={t("chat.send")}
                     title={t("chat.send")}
                   >
-                    <SendHorizontal size={17} strokeWidth={2.2} />
+                    <ArrowUp size={19} strokeWidth={2.2} aria-hidden />
                   </button>
                 ) : null}
               </div>

@@ -7,6 +7,7 @@ import {
   installInputFocus,
   isFocusNavigation,
   resolveInputFocusSurface,
+  prepareInputFocusBox,
 } from "./inputFocus.ts";
 
 test("only Tab navigation strengthens the input ring, not typing or IME", () => {
@@ -137,7 +138,7 @@ test("focus lifecycle moves one marker, preserves pointer typing and cleans list
   assert.equal(input.attributes.size, 0);
 });
 
-test("shared focus recipe is soft-only, no glow or layout sizing, with high contrast", async () => {
+test("shared focus uses theme gradients in both materials, with contrast and solid fallbacks", async () => {
   const css = await readFile(
     new URL("../../styles/materials/soft-focus.css", import.meta.url),
     "utf8",
@@ -149,6 +150,10 @@ test("shared focus recipe is soft-only, no glow or layout sizing, with high cont
   );
   assert.match(css, /outline-offset: calc\(-1 \* var\(--input-focus-width\)\)/);
   assert.match(css, /box-shadow: none/);
+  assert.match(css, /@supports \(background-clip: border-area\)/);
+  assert.match(css, /background-clip: border-area, padding-box/);
+  assert.match(css, /linear-gradient\(120deg/);
+  assert.doesNotMatch(css, /data-material/);
   assert.doesNotMatch(
     css,
     /(?:^|[;{])\s*(?:border-width|padding|height|width):|!important/,
@@ -172,6 +177,53 @@ test("shared focus recipe is soft-only, no glow or layout sizing, with high cont
   ]) {
     assert.ok(INPUT_FOCUS_SURFACES.includes(shell));
   }
+});
+
+test("gradient focus borrows border space from padding and restores inline values", () => {
+  const values = new Map([["--input-focus-box-top", "17px"]]);
+  const attributes = new Set<string>();
+  const surface = {
+    style: {
+      getPropertyValue: (key: string) => values.get(key) ?? "",
+      getPropertyPriority: () => "",
+      setProperty: (key: string, value: string) => {
+        values.set(key, value);
+      },
+      removeProperty: (key: string) => values.delete(key),
+    },
+    setAttribute: (key: string) => attributes.add(key),
+    removeAttribute: (key: string) => attributes.delete(key),
+  };
+  const view = {
+    getComputedStyle: () => ({
+      getPropertyValue: (key: string) =>
+        key.startsWith("padding") ? "12px" : "0.5px",
+    }),
+  };
+  const restore = prepareInputFocusBox(
+    surface as unknown as HTMLElement,
+    view as unknown as Window,
+  );
+  assert.equal(values.get("--input-focus-box-top"), "12.5px");
+  assert.equal(values.get("--input-focus-box-budget"), "12.5px");
+  assert.ok(attributes.has("data-input-focus-box"));
+  restore?.();
+  assert.deepEqual([...values], [["--input-focus-box-top", "17px"]]);
+  assert.equal(attributes.size, 0);
+  const bareView = {
+    getComputedStyle: () => ({ getPropertyValue: () => "0px" }),
+  };
+  assert.equal(
+    prepareInputFocusBox(
+      surface as unknown as HTMLElement,
+      bareView as unknown as Window,
+    ),
+    undefined,
+  );
+  assert.equal(
+    prepareInputFocusBox(surface as unknown as HTMLElement, null),
+    undefined,
+  );
 });
 
 test("bounded focus palette maintains 3:1 on soft surfaces across every hue", async () => {
@@ -212,7 +264,11 @@ test("bounded focus palette maintains 3:1 on soft surfaces across every hue", as
   for (const mode of ["light", "dark"]) {
     const block = (source: string) =>
       source.match(new RegExp(`\\[data-theme="${mode}"\\] \\{([^}]+)`))![1];
-    const L = Number(block(css).match(/--input-focus-lightness: ([\d.]+)/)![1]);
+    const lightness = ["lightness", "end-lightness"].map((name) =>
+      Number(
+        block(css).match(new RegExp(`--input-focus-${name}: ([\\d.]+)`))![1],
+      ),
+    );
     const fallback = block(css).match(
       /--input-focus-fallback: #([0-9a-f]{6})/,
     )![1];
@@ -224,8 +280,8 @@ test("bounded focus palette maintains 3:1 on soft surfaces across every hue", as
       );
       const foregrounds = [
         hexLuminance(fallback),
-        ...Array.from({ length: 72 }, (_, h) =>
-          oklchLuminance(L, 0.065, h * 5),
+        ...lightness.flatMap((L) =>
+          Array.from({ length: 72 }, (_, h) => oklchLuminance(L, 0.065, h * 5)),
         ),
       ];
       for (const fg of foregrounds) {

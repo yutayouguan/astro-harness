@@ -3,6 +3,7 @@ import { useTheme } from "../hooks/app/useTheme";
 import softMeta from "./SoftMaterial.stories";
 import { SelectMenu } from "../components/ui/SelectMenu";
 import { useState, type CSSProperties } from "react";
+import { ArrowUp } from "lucide-react";
 
 /** Uses the production editor structure/classes, without sending real messages. */
 function ComposerFocusSample() {
@@ -69,7 +70,7 @@ function ComposerFocusSample() {
                     className="send-btn send-btn--round"
                     aria-label={`${layout} 发送`}
                   >
-                    ↑
+                    <ArrowUp size={19} strokeWidth={2.2} aria-hidden />
                   </button>
                 </div>
               </div>
