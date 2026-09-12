@@ -9,7 +9,7 @@ html[data-material="soft"][data-theme="dark"] {
 }
 
 html[data-material="soft"] {
-  --soft-floating-shadow: 0 14px 36px -14px var(--soft-shade);
+  --soft-floating-shadow: 0 8px 24px -12px var(--soft-shade);
   --menu-glass-shadow: var(--soft-floating-shadow);
   --menu-overlay-shadow: var(--soft-floating-shadow);
   --titlebar-menu-shadow: var(--soft-floating-shadow);

@@ -3,7 +3,7 @@
 html[data-material="soft"] {
   --soft-control-edge: color-mix(
     in srgb,
-    var(--soft-muted) 24%,
+    var(--soft-muted) 16%,
     var(--soft-surface)
   );
   --soft-selection-width: 0.5px;
@@ -104,8 +104,8 @@ html[data-material="soft"] .select-menu {
   --select-glass-fill: var(--soft-material-background);
   --select-glass-fill-hover: var(--soft-hover);
   --select-glass-edge: var(--soft-control-edge);
-  --select-glass-rim: inset 0 1px 0 var(--soft-highlight);
-  --select-glass-shadow: 0 4px 7px -2px var(--soft-shade);
+  --select-glass-rim: var(--immersive-glass-rim);
+  --select-glass-shadow: var(--soft-control-drop-shadow);
   --select-glass-blur: none;
 }
 

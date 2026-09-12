@@ -69,7 +69,7 @@ test("tabs and provider selections share a single thin inset edge", () => {
   );
   assert.match(
     css,
-    /--select-glass-shadow: 0 4px 7px -2px var\(--soft-shade\)/,
+    /--select-glass-shadow: var\(--soft-control-drop-shadow\)/,
   );
   assert.match(css, /\.select-menu-trigger\s*\{\s*box-shadow: none;/);
 });
