@@ -44,6 +44,9 @@ export default function PetTaskSurface({ badge }: { badge: boolean }) {
     <main
       className="pet-task-popup"
       onPointerDown={(e) => {
+        // Only acquire native keyboard focus on the first click from outside.
+        // Cancelling every pointerdown also cancels caret placement and selection.
+        if (e.button !== 0 || document.hasFocus()) return;
         const field = (e.target as Element).closest<HTMLElement>(
           "input,textarea,select",
         );

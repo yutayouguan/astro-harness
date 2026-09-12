@@ -1,4 +1,20 @@
 import { test, expect } from "@playwright/test";
+test("an already-focused popup input allows clicking to reposition the caret", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=desktop-pettasks--retry-question&viewMode=story",
+  );
+  const note = page.getByRole("textbox", { name: "备注", exact: true });
+  await note.fill("alpha beta gamma");
+  await expect(note).toBeFocused();
+  await note.click({ position: { x: 12, y: 12 } });
+  await expect
+    .poll(() =>
+      note.evaluate((input: HTMLInputElement) => input.selectionStart),
+    )
+    .toBeLessThan(5);
+});
 test("multi-step original questions retain answers after a failed submission", async ({
   page,
 }) => {

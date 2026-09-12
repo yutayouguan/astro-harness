@@ -64,3 +64,12 @@ InteractionCard（主会话和桌宠）`。
 本轮前端全套：938 项中 936 通过、2 个既有侧栏断言失败（`sidebarInformationArchitecture.test.mjs` 的 icon-only controls、`windowChromeSafeArea.test.mjs` 的 sidebar occupancy）。测试读取的 `App.tsx` 与 HEAD blob 一致，未将基线失败混入本轮修复。
 
 原生点击/键盘/多屏验收仍保留未完成状态；本轮不调用图片模型、不修改动画、不导入凭证、不自动重启正式应用。
+
+## 原生验收续接（2026-09-12）
+
+- 使用当前 HEAD 的独立 QA 源码快照和 marker-guarded 测试 home，未复制正式凭证；后台只放入两个无副作用的真实 HITL waiter。
+- 补测发现 **P2：已聚焦输入框无法点击移动光标**。`PetTaskSurface` 的每次 `pointerdown` 都调用 `preventDefault`，导致正常光标定位/文本选择被取消。现仅在从外部首次获取键盘焦点时接管左键点击，已经聚焦时保持浏览器原生编辑行为。
+- 回归测试先在修复前失败（点击输入框左侧后 selectionStart 仍为 16），修复后通过；全部 4 项桌宠 Playwright 流程通过，TypeScript 检查与 13 项请求状态/历史观察测试通过。
+- 原生 QA 主窗口、桌宠窗口可启动；在 QA 主窗口输入测试草稿、关窗进入托盘、在 TextEdit 输入后，gRPC 确认两个测试请求进入待办。但没有取得弹窗的原生可操作证据；加诊断后再次启动时系统明确报告 Mac 锁屏。未把后台成功或浏览器测试标为原生通过。
+- 此次未确认的项目继续保留：弹窗不抢焦点、单击填写/提交、草稿收起恢复、会话跳转、主窗去重、透明穿透、多屏位置。前一次 QA 进程已结束；测试代码仅存在临时源码副本，不进入普通应用包或仓库。
+- 已重新完成不带 QA 环境绑定的普通 `Astro Agent.app` 构建（TypeScript、Vite、CSS layer 检查及 Tauri debug bundle）；未启动或重启正式应用。
