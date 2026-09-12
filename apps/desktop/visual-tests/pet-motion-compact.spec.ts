@@ -16,13 +16,19 @@ for (const theme of ["light", "dark"]) {
       const panel = page.locator(".pet-motion-settings");
       const preview = page.locator(".pet-motion-preview");
       const preferences = page.locator(".pet-motion-preferences");
-      expect((await panel.boundingBox())!.width).toBeLessThanOrEqual(960);
+      const panelBox = (await panel.boundingBox())!;
+      const headerBox = (await page.locator(".pet-detail-header").boundingBox())!;
+      expect(Math.abs(panelBox.x - headerBox.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(panelBox.width - headerBox.width)).toBeLessThanOrEqual(1);
       expect((await page.locator(".pet-motion-portrait").boundingBox())!.width).toBeLessThanOrEqual(144);
       expect((await preview.boundingBox())!.height).toBeLessThan(330);
       if (width === 1440) {
         expect((await preview.boundingBox())!.width).toBe(220);
         expect((await preferences.boundingBox())!.height).toBeLessThan(460);
         const previewBox = (await preview.boundingBox())!;
+        const rightInset = panelBox.x + panelBox.width - previewBox.x - previewBox.width;
+        expect(rightInset).toBeGreaterThanOrEqual(16);
+        expect(rightInset).toBeLessThanOrEqual(18);
         const size = (await page.locator(".desktop-pet-size-row").boundingBox())!;
         const interval = (await page.locator(".pet-detail-interval").boundingBox())!;
         expect(size.x + size.width).toBeLessThanOrEqual(previewBox.x - 16);
@@ -74,7 +80,7 @@ for (const theme of ["light", "dark"]) {
         const canvas = node as HTMLCanvasElement;
         return canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0);
       })).toBe(true);
-      await panel.screenshot({ path: testInfo.outputPath("compact-motion.png") });
+      await page.locator(".pet-detail-view").screenshot({ path: testInfo.outputPath("compact-motion.png") });
     });
   }
 }

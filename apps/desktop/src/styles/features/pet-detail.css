@@ -180,7 +180,7 @@
      below it. Keep the form in normal flow so its semantics remain intact. */
   display: flow-root;
   width: 100%;
-  max-width: 960px;
+  max-width: none;
   box-sizing: border-box;
   padding: 16px;
   min-width: 0;
