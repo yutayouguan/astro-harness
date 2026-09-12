@@ -1,5 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("tab positions stay stable, pet tiles align and actions remain outside the scroll area", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 900 });
+  const { dialog } = await open(page);
+  const tops: number[] = [];
+  for (const name of ["材质", "背景", "宠物"]) {
+    await dialog.getByRole("tab", { name, exact: true }).click();
+    const tabBox = await dialog.getByRole("tablist").boundingBox();
+    tops.push(tabBox!.y);
+  }
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(2);
+  const tabs = await dialog.getByRole("tab").all();
+  const widths = await Promise.all(tabs.map(async tab => (await tab.boundingBox())!.width));
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+  const avatars = await dialog.locator(".ambience-pets > button").all();
+  const heights = await Promise.all(avatars.map(async button => (await button.boundingBox())!.height));
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(2);
+  await expect(dialog.locator(".ambience-content .ambience-context-action")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "换个场景", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 340, height: 480 });
+  const box = await dialog.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(340);
+  expect(box!.height).toBeLessThanOrEqual(480 * 0.75 + 1);
+});
+
 test("pet size targets the current pet, persists on release and supports undo", async ({ page }) => {
   const { dialog } = await open(page);
   await dialog.getByRole("tab", { name: "宠物", exact: true }).click();

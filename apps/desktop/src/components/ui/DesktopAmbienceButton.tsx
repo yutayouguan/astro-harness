@@ -185,7 +185,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
         align="end"
         minWidth={380}
         maxWidth={400}
-        maxHeightCap={620}
+        maxHeightCap={560}
         maxHeightRatio={0.75}
         sizeKey={[
           tab,
@@ -201,7 +201,23 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
         className="desktop-ambience"
       >
         <header className="ambience-header">
-          <strong>{tr("桌面氛围", "Desktop ambience")}</strong>
+          <div className="ambience-heading">
+            <strong>{tr("桌面氛围", "Desktop ambience")}</strong>
+            <div
+              className="ambience-current"
+              aria-live="polite"
+              title={hasWallpaper ? current.current?.name : undefined}
+            >
+              {appearance.material === "soft"
+                ? tr("柔塑", "Soft")
+                : tr("玻璃", "Glass")}{" "}
+              ·{" "}
+              {hasWallpaper
+                ? tr("图片壁纸", "Wallpaper")
+                : tr("氛围配色", "Ambient colors")}{" "}
+              · {state.pet.displayName ?? tr("无桌宠", "No pet")}
+            </div>
+          </div>
           <button
             type="button"
             className="ambience-icon"
@@ -211,21 +227,8 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
             <X size={18} />
           </button>
         </header>
-        <div
-          className="ambience-current"
-          aria-live="polite"
-          title={hasWallpaper ? current.current?.name : undefined}
-        >
-          {appearance.material === "soft"
-            ? tr("柔塑", "Soft")
-            : tr("玻璃", "Glass")}{" "}
-          ·{" "}
-          {hasWallpaper
-            ? tr("图片壁纸", "Wallpaper")
-            : tr("氛围配色", "Ambient colors")}{" "}
-          · {state.pet.displayName ?? tr("无桌宠", "No pet")}
-        </div>
         <SegmentedTabs
+          className="ambience-tabs"
           aria-label={tr("氛围分类", "Ambience category")}
           value={tab}
           onValueChange={(value) => {
@@ -604,10 +607,6 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
           )}
           {tab === "pets" && (
             <>
-              <div className="ambience-pet-status sidebar-footer-actions">
-                <span>{tr("桌面显示", "Desktop visibility")}</span>
-                <DesktopPetVisibilityButton onError={state.reportError} />
-              </div>
               <AmbiencePetScaleControl
                 key={state.pet.activePetId ?? "no-pet"}
                 petId={
@@ -619,26 +618,38 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                 zh={locale.startsWith("zh")}
                 onCommit={state.setPetScale}
               />
-              <div
-                className="ambience-pets"
-                role="group"
-                aria-label={tr("浏览宠物", "Browse pets")}
-              >
-                {[...pets].map(([petId, pet]) => (
-                  <button
-                    type="button"
-                    key={petId}
-                    aria-label={pet.displayName ?? tr("宠物", "Pet")}
-                    aria-pressed={selectedPet === petId}
-                    onClick={() => setBrowsedPet(petId)}
-                  >
-                    <PetAvatar pet={pet} />
-                    <span>{pet.displayName ?? tr("宠物", "Pet")}</span>
-                    {petId === state.pet.activePetId && (
-                      <Check size={12} aria-hidden />
-                    )}
-                  </button>
-                ))}
+              <div className="ambience-pet-picker">
+                <div
+                  className="ambience-pets"
+                  role="group"
+                  aria-label={tr("浏览宠物", "Browse pets")}
+                >
+                  {[...pets].map(([petId, pet]) => (
+                    <button
+                      type="button"
+                      key={petId}
+                      aria-label={pet.displayName ?? tr("宠物", "Pet")}
+                      aria-pressed={selectedPet === petId}
+                      onClick={() => setBrowsedPet(petId)}
+                    >
+                      <PetAvatar pet={pet} />
+                      <span>{pet.displayName ?? tr("宠物", "Pet")}</span>
+                      {petId === state.pet.activePetId && (
+                        <Check
+                          className="ambience-pet-current"
+                          size={12}
+                          aria-hidden
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <div className="ambience-pet-status sidebar-footer-actions">
+                  <span className="sr-only">
+                    {tr("桌面显示", "Desktop visibility")}
+                  </span>
+                  <DesktopPetVisibilityButton onError={state.reportError} />
+                </div>
               </div>
               <p className="ambience-help">
                 {tr(
@@ -705,45 +716,6 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
               )}
             </>
           )}
-          {scope && (
-            <div className="ambience-context-action">
-              <button
-                type="button"
-                disabled={state.busy || !availability?.choices.length}
-                onClick={() => void state.shuffle(scope)}
-                aria-describedby={id + "-shuffle-hint"}
-              >
-                <Shuffle size={14} />
-                {shuffleLabel}
-              </button>
-              <details className="ambience-more">
-                <summary aria-label={tr("随机选项", "Random options")}>
-                  <MoreHorizontal size={18} />
-                </summary>
-                <label className="ambience-check">
-                  <input
-                    type="checkbox"
-                    checked={state.shufflePrefs.backgroundLocked}
-                    disabled={state.busy}
-                    onChange={(e) =>
-                      state.setBackgroundLocked(e.target.checked)
-                    }
-                  />
-                  <LockKeyhole size={12} />
-                  {tr("锁定随机换景", "Lock random backgrounds")}
-                </label>
-                <small>
-                  {tr(
-                    "手动选择和换色不受影响",
-                    "Manual choices and colors are unaffected",
-                  )}
-                </small>
-              </details>
-              {shuffleHint && (
-                <small id={id + "-shuffle-hint"}>{shuffleHint}</small>
-              )}
-            </div>
-          )}
           {tab === "pets" && hasWallpaper && state.pet.activePetId && (
             <details
               className="ambience-save-options"
@@ -785,6 +757,43 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
             </p>
           )}
         </div>
+        {scope && (
+          <div className="ambience-context-action">
+            <button
+              type="button"
+              disabled={state.busy || !availability?.choices.length}
+              onClick={() => void state.shuffle(scope)}
+              aria-describedby={shuffleHint ? id + "-shuffle-hint" : undefined}
+            >
+              <Shuffle size={14} />
+              {shuffleLabel}
+            </button>
+            <details className="ambience-more">
+              <summary aria-label={tr("随机选项", "Random options")}>
+                <MoreHorizontal size={18} />
+              </summary>
+              <label className="ambience-check">
+                <input
+                  type="checkbox"
+                  checked={state.shufflePrefs.backgroundLocked}
+                  disabled={state.busy}
+                  onChange={(e) => state.setBackgroundLocked(e.target.checked)}
+                />
+                <LockKeyhole size={12} />
+                {tr("锁定随机换景", "Lock random backgrounds")}
+              </label>
+              <small>
+                {tr(
+                  "手动选择和换色不受影响",
+                  "Manual choices and colors are unaffected",
+                )}
+              </small>
+            </details>
+            {shuffleHint && (
+              <small id={id + "-shuffle-hint"}>{shuffleHint}</small>
+            )}
+          </div>
+        )}
         <footer className="ambience-footer">
           <button
             type="button"

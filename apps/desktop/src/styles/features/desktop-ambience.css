@@ -1,5 +1,7 @@
 /* One shared floating material; only the middle panel scrolls. */
 .desktop-ambience {
+  box-sizing: border-box;
+  height: min(560px, 75dvh);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -25,9 +27,18 @@
   gap: 8px;
 }
 .ambience-header strong {
+  display: block;
   font-size: 15px;
 }
+.ambience-heading {
+  flex: 1;
+  min-width: 0;
+}
+.ambience-header .ambience-icon {
+  align-self: flex-start;
+}
 .ambience-current {
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -35,10 +46,25 @@
   font-size: 11px;
 }
 .ambience-content {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 2px;
+  padding: 2px 4px 4px 2px;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 8px;
+}
+.desktop-ambience .ambience-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  box-sizing: border-box;
+}
+.ambience-tabs .ui-segmented-tabs__tab {
+  min-width: 0;
+  min-height: 32px;
+  padding-inline: 6px;
 }
 .desktop-ambience button {
   color: inherit;
@@ -96,7 +122,7 @@
 }
 .ambience-strength {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
 }
 .ambience-strength > span {
@@ -105,13 +131,27 @@
   gap: 8px;
 }
 .ambience-strength output {
+  min-width: 42px;
+  text-align: right;
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink-mute);
 }
 .ambience-strength input {
+  min-height: 24px;
   width: 100%;
   margin: 0;
   accent-color: var(--tone);
+}
+.ambience-size-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ambience-size-label small {
+  font-size: 11px;
+  color: var(--ink-mute);
 }
 .ambience-swatches {
   display: grid;
@@ -140,6 +180,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
+  align-items: start;
 }
 .ambience-tile {
   min-width: 0;
@@ -187,8 +228,11 @@
   gap: 6px;
   font-size: 11px;
   margin-top: 10px;
+  min-height: 24px;
 }
 .ambience-check input {
+  flex-shrink: 0;
+  margin: 0;
   accent-color: var(--tone);
 }
 .ambience-actions {
@@ -228,7 +272,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
+  min-height: 32px;
   padding: 3px 0;
   border: 0;
   background: transparent;
@@ -237,7 +281,10 @@
 .ambience-icon {
   display: grid;
   place-items: center;
-  padding: 5px;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  flex-shrink: 0;
   background: transparent;
   border: 0;
   border-radius: 6px;
@@ -282,7 +329,12 @@
 }
 .ambience-pet-status {
   font-size: 12px;
-  margin-bottom: 10px;
+  flex: 0 0 32px;
+}
+.ambience-pet-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ambience-pet-status > span {
   flex: 1;
@@ -296,20 +348,27 @@
   justify-content: center;
 }
 .ambience-pets {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding: 2px;
+  align-items: flex-start;
 }
 
 .ambience-pet-scale {
-  margin: 4px 0 16px;
+  margin: 4px 0 12px;
 }
 .ambience-pets > button {
+  position: relative;
   display: grid;
+  align-content: start;
+  grid-template-rows: 36px auto;
   justify-items: center;
   gap: 4px;
-  flex: 0 0 70px;
+  flex: 0 0 76px;
+  min-height: 68px;
   min-width: 0;
   padding: 6px;
   border: 1px solid transparent;
@@ -322,10 +381,17 @@
   background: var(--material-inset-background, transparent);
 }
 .ambience-pets > button > span {
-  max-width: 70px;
+  max-width: 62px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ambience-pet-current {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--tone);
+  pointer-events: none;
 }
 .ambience-pet-avatar {
   display: block;
@@ -352,8 +418,10 @@
   align-items: flex-start;
   gap: 8px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-  margin-top: 14px;
+  margin-top: 0;
   padding-top: 10px;
+  max-height: 30%;
+  overflow: auto;
 }
 .ambience-context-action > button {
   flex: 1;
@@ -369,6 +437,9 @@
   order: 2;
 }
 .ambience-more summary {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
   padding: 7px;
@@ -387,12 +458,39 @@
   margin-top: 4px;
 }
 .ambience-save-options {
-  margin-top: 14px;
+  margin-top: 10px;
   font-size: 11px;
 }
 .ambience-save-options summary {
   cursor: pointer;
-  padding: 6px 0;
+  padding: 8px 0;
+}
+@media (max-width: 390px) {
+  .desktop-ambience {
+    padding: 12px;
+    gap: 8px;
+  }
+  .ambience-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ambience-choice button {
+    flex-wrap: wrap;
+  }
+}
+@media (max-height: 520px) {
+  .desktop-ambience {
+    padding: 12px;
+    gap: 6px;
+  }
+  .ambience-tabs .ui-segmented-tabs__tab {
+    min-height: 28px;
+  }
+  .ambience-footer {
+    padding-top: 6px;
+  }
+  .ambience-context-action {
+    padding-top: 6px;
+  }
 }
 @media (hover: hover) {
   .desktop-ambience button:not(:disabled, .ambience-swatches button):hover {

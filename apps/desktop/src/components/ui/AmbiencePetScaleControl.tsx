@@ -82,7 +82,10 @@ export default function AmbiencePetScaleControl({
     <div className="ambience-pet-scale">
       <label className="ambience-strength" htmlFor={id}>
         <span>
-          {zh ? "桌宠大小" : "Pet size"}
+          <span className="ambience-size-label" title={name ?? undefined}>
+            {zh ? "桌宠大小" : "Pet size"}
+            {petId && <small> · {name ?? petId}</small>}
+          </span>
           <output>{petScalePercent(draft)}%</output>
         </span>
         <input
@@ -120,7 +123,7 @@ export default function AmbiencePetScaleControl({
           onBlur={() => void commit()}
         />
       </label>
-      <p className="ambience-help" id={id + "-hint"}>
+      <p className={petId ? "sr-only" : "ambience-help"} id={id + "-hint"}>
         {petId
           ? (zh ? "松手应用到当前桌宠：" : "Applies on release to: ") +
             (name ?? petId)
