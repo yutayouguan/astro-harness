@@ -55,6 +55,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { useI18n } from "../../i18n/LocaleContext";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import type { Locale, MessageKey } from "../../i18n/messages";
 import type { ComposerContextToken } from "../../lib/chat/composerContext";
 import {
@@ -289,6 +290,7 @@ function StoreSkillIcon({
       </span>
       {skill.icon_url ? (
         <img
+          key={skill.icon_url}
           className="skills-store-icon-image"
           src={skill.icon_url}
           alt=""
@@ -2480,14 +2482,16 @@ export default function SkillsPanel({
       <article
         key={skill.id}
         role="listitem"
-        className={`tool-card skill-card ${already ? "is-installed" : ""}`}
+        className={`tool-card skill-card skill-store-card ${already ? "is-installed" : ""}`}
         data-skill-tone={skillTone(skill.id)}
         data-state={already ? "installed" : "available"}
         aria-busy={installingId === skill.id}
       >
         <header className="skill-card-top">
           <StoreSkillIcon skill={skill} variant="card" />
-          <h3 className="skill-card-title">{skill.name}</h3>
+          <h3 className="skill-card-title" title={skill.name}>
+            {skill.name}
+          </h3>
           {already ? (
             <span className="skill-card-link-badge is-on">
               {t("skills.alreadyInstalled")}
@@ -2568,7 +2572,7 @@ export default function SkillsPanel({
                 title={t("skills.installWithAgent")}
                 aria-label={t("skills.installWithAgent")}
               >
-                <Bot size={15} strokeWidth={2.25} aria-hidden />
+                <AIActionIcon size={15} />
               </button>
             ) : null}
             <button
@@ -3050,7 +3054,7 @@ export default function SkillsPanel({
                             beginInstallSkill(selectedStore, "agent")
                           }
                         >
-                          <Bot size={14} strokeWidth={2.25} aria-hidden />
+                          <AIActionIcon size={14} />
                           {t("skills.installWithAgent")}
                         </button>
                       </>
@@ -4039,7 +4043,7 @@ export default function SkillsPanel({
                   {installingId === installPromptSkill.id ? (
                     <LoaderCircle size={15} className="is-spin" aria-hidden />
                   ) : installMode === "agent" ? (
-                    <Bot size={15} aria-hidden />
+                    <AIActionIcon size={15} />
                   ) : (
                     <Download size={15} aria-hidden />
                   )}

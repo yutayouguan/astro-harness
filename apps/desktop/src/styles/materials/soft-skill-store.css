@@ -1,0 +1,176 @@
+/* Content covers belong only to online gallery cards. Installed, list and
+ * detail views keep their compact operational layout and all existing actions. */
+html[data-material="soft"] .skills-pane-online .skills-gallery.is-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  grid-auto-rows: max-content;
+  gap: 16px;
+}
+
+html[data-material="soft"] .skills-gallery.is-gallery .skill-store-card {
+  padding: 0;
+  min-height: max-content;
+  gap: 12px;
+  overflow: hidden;
+  background: var(--soft-surface);
+  border-color: var(--soft-control-edge);
+  border-radius: 18px;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-material="soft"] .skills-gallery.is-gallery .skill-store-card:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--skill-tone, var(--tone)) 40%,
+    var(--soft-control-edge)
+  );
+  box-shadow: none;
+  transform: none;
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px 8px;
+  align-items: center;
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skills-store-icon {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 84px;
+  border-radius: 0;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--skill-tone, var(--tone)) 24%, var(--soft-surface)),
+    color-mix(in srgb, var(--skill-tone, var(--tone)) 8%, var(--soft-surface))
+  );
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .tool-icon-lens {
+  display: none;
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skills-store-icon::before {
+  content: "";
+  grid-area: 1 / 1;
+  width: 62px;
+  height: 54px;
+  border-radius: 12px;
+  background: var(--soft-surface);
+  opacity: 0.7;
+  transform: rotate(-7deg);
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .tool-icon-glyph
+  svg {
+  width: 30px;
+  height: 30px;
+}
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skills-store-icon-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: var(--soft-surface);
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-title {
+  margin-left: 16px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-top
+  > :is(.skill-card-link-badge, .skill-card-stat) {
+  margin-right: 16px;
+}
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-taxonomy {
+  margin-inline: 16px;
+}
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-desc {
+  padding: 0 16px;
+  flex: 1 0 auto;
+  font-size: 12px;
+  min-block-size: calc(3 * 1.55em + 1px);
+}
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-desc
+  p {
+  color: var(--soft-muted);
+}
+html[data-material="soft"]
+  .skills-gallery.is-gallery
+  .skill-store-card
+  .skill-card-actions {
+  padding: 12px 16px 16px;
+  border-top-color: var(--soft-control-edge);
+}
+
+html[data-material="soft"] .skills-pane-online .skills-store-toolbar {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-material="soft"] .skills-store-sort-tab {
+  border-radius: 999px;
+  color: var(--soft-ink);
+  background: var(--soft-surface);
+  box-shadow: none;
+}
+html[data-material="soft"] .skills-store-sort-tab.is-active {
+  background: var(--soft-ink);
+  color: var(--soft-base);
+}
+html[data-material="soft"] .skills-store-category-tag {
+  background: var(--soft-surface);
+  color: var(--soft-muted);
+  box-shadow: inset 0 0 0 0.5px var(--soft-control-edge);
+}
+html[data-material="soft"] .skills-store-category-tag.is-active {
+  background: var(--soft-inset);
+  color: var(--soft-ink);
+  box-shadow: inset 0 0 0 1px var(--soft-muted);
+}
+
+@media (prefers-contrast: more) {
+  html[data-material="soft"] .skills-gallery.is-gallery .skill-store-card {
+    border-color: var(--soft-muted);
+  }
+}

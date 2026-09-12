@@ -47,6 +47,11 @@
   background: var(--surface, #fff);
 }
 
+/* The explicit display rule above must not resurrect failed remote images. */
+.skills-store-icon-image[hidden] {
+  display: none;
+}
+
 /* 画廊卡片仅在图标上使用来源色，卡片层级继续继承页面主题色。 */
 .tool-card.skill-card[data-skill-tone="blue"] {
   --skill-tone: var(--tone-blue);
