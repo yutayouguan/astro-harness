@@ -222,6 +222,21 @@
   font-size: 10px;
   line-height: 1.5;
 }
+.ambience-tile .ambience-tile-name {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.4;
+  min-height: 2.8em;
+}
+.ambience-tile > span > svg {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+}
 .ambience-check {
   display: flex;
   align-items: center;

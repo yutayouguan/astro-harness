@@ -147,16 +147,29 @@ const meta = {
         favorite: false,
       };
     });
-    if (context.name === "Empty") scenes = [];
+    if (context.name === "Long Labels")
+      scenes = scenes.map((scene, index) => ({
+        ...scene,
+        name:
+          "窗边的午后阳光与远山森林——这是一段用于检查换行和溢出的很长场景名称 " +
+          index,
+        pet: {
+          ...scene.pet,
+          displayName: scene.pet.displayName + "·最喜欢在窗边晒太阳的桌面伙伴",
+        },
+      }));
+    if (context.name === "Empty" || context.name === "No Pet") scenes = [];
     let state: DesktopPetState = {
       ...EMPTY_DESKTOP_PET_STATE,
       activePetId: "naitang",
       petPath: url(atlas),
-      displayName: "奶糖",
+      displayName: scenes[0]?.pet.displayName ?? "奶糖",
       activeSceneId: scenes[0]?.id ?? null,
       scenes,
       revision: 1,
     };
+    if (context.name === "No Pet")
+      state = { ...EMPTY_DESKTOP_PET_STATE, revision: 1 };
     // Seed the recent library independently of scene selection.
     localStorage.setItem(
       WALLPAPER_STORAGE_KEY,
@@ -290,3 +303,5 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 export const Empty: Story = {};
 export const Failure: Story = {};
+export const LongLabels: Story = {};
+export const NoPet: Story = {};

@@ -53,3 +53,14 @@ test("random options keep their trigger anchored and avoid an extra summary row"
   assert.match(panel, /<input\s+autoFocus\s+aria-label=\{tr\("新场景名称"/);
   assert.match(panel, /setSaving\(false\);\s*setTab\(value\)/);
 });
+
+test("long tile names use two aligned lines and preserve full hover labels", () => {
+  assert.match(
+    css,
+    /\.ambience-tile \.ambience-tile-name\s*\{[^}]*-webkit-line-clamp: 2;[^}]*min-height: 2\.8em/,
+  );
+  assert.match(css, /\.ambience-tile > span > svg\s*\{[^}]*flex-shrink: 0/);
+  assert.match(panel, /title=\{asset.name\}/);
+  assert.match(panel, /title=\{item.name\}/);
+  assert.match(panel, /title=\{pet.displayName/);
+});

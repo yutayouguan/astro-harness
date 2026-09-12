@@ -1,5 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("long names keep scene cards aligned and available in tooltips", async ({ page }) => {
+  const { dialog } = await open(page, "long-labels");
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const names = await dialog.locator(".ambience-scene-tile .ambience-tile-name").all();
+  const heights = await Promise.all(names.map(async name => (await name.boundingBox())!.height));
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+  expect(Math.max(...heights)).toBeLessThan(34);
+  for (const card of await dialog.locator(".ambience-scene-tile").all()) {
+    const name = await card.locator(".ambience-tile-name").textContent();
+    await expect(card).toHaveAttribute("title", name!);
+  }
+});
+
+test("no pet disables resizing and offers a clear settings path", async ({ page }) => {
+  const { dialog, trigger } = await open(page, "no-pet");
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  await expect(dialog.getByRole("slider", { name: "桌宠大小", exact: true })).toBeDisabled();
+  await expect(dialog.locator(".ambience-empty")).toContainText("还没有桌宠");
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
 test("expanded random options fit the action area and save form receives focus", async ({ page }) => {
   await page.setViewportSize({ width: 340, height: 480 });
   const { dialog } = await open(page);

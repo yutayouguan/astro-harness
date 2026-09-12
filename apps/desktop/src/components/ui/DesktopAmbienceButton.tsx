@@ -489,6 +489,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                         <button
                           type="button"
                           className="ambience-tile"
+                          title={asset.name}
                           aria-pressed={
                             hasWallpaper && current.current?.path === asset.path
                           }
@@ -502,7 +503,11 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                             alt=""
                             loading="lazy"
                           />
-                          <span>{asset.name}</span>
+                          <span>
+                            <span className="ambience-tile-name">
+                              {asset.name}
+                            </span>
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -626,6 +631,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                       type="button"
                       key={petId}
                       aria-label={pet.displayName ?? tr("宠物", "Pet")}
+                      title={pet.displayName ?? tr("宠物", "Pet")}
                       aria-pressed={selectedPet === petId}
                       onClick={() => setBrowsedPet(petId)}
                     >
@@ -648,18 +654,21 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                   <DesktopPetVisibilityButton onError={state.reportError} />
                 </div>
               </div>
-              <p className="ambience-help">
-                {tr(
-                  "浏览不切换；选场景会应用宠物和背景",
-                  "Browsing keeps your desktop; a scene applies its pet and background",
-                )}
-              </p>
+              {pets.size > 0 && (
+                <p className="ambience-help">
+                  {tr(
+                    "浏览不切换；选场景会应用宠物和背景",
+                    "Browsing keeps your desktop; a scene applies its pet and background",
+                  )}
+                </p>
+              )}
               <div className="ambience-grid">
                 {petScenes.map((item) => (
                   <button
                     type="button"
                     key={item.id}
                     className="ambience-tile ambience-scene-tile"
+                    title={item.name}
                     disabled={state.busy || !item.wallpaperPath}
                     aria-pressed={scene?.id === item.id && !adjusted}
                     onClick={() => void state.selectScene(item.id)}
@@ -679,7 +688,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                       <PetAvatar pet={item.pet} />
                     </span>
                     <span>
-                      {item.name}
+                      <span className="ambience-tile-name">{item.name}</span>
                       {scene?.id === item.id && !adjusted && (
                         <Check size={14} />
                       )}
@@ -694,10 +703,15 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                 <p className="ambience-empty">
                   {state.busy
                     ? tr("正在读取场景…", "Loading scenes…")
-                    : tr(
-                        "暂无场景，前往设置创建",
-                        "No scenes yet. Create one in Settings",
-                      )}
+                    : !state.pet.petPath && pets.size === 0
+                      ? tr(
+                          "还没有桌宠，前往设置添加",
+                          "No pets yet. Add one in Settings",
+                        )
+                      : tr(
+                          "暂无场景，前往设置创建",
+                          "No scenes yet. Create one in Settings",
+                        )}
                 </p>
               )}
               {adjusted && scene && (
