@@ -2,6 +2,13 @@ import { readFile, realpath, lstat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { basename, dirname, join, isAbsolute } from "node:path";
 
+export function parseNativeArgs(args) {
+	if (!args.length) return { onboarding: false };
+	if (args.length === 1 && args[0] === "--onboarding") return { onboarding: true };
+	if (args.length === 2 && args[0] === "--resume") return { onboarding: false, resume: args[1] };
+	throw new Error("usage: node tools/verify-config-native.mjs [--onboarding | --resume <manifest.json>]");
+}
+
 // Build-isolation check only; this does not authenticate untrusted executables.
 export async function assertNativeBinaryBinding(binary, root) {
 	const expected = Buffer.from(root);

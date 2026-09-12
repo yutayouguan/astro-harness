@@ -13,8 +13,26 @@ fn main() {
         };
         std::env::set_var("ASTRO_MEMORY_DIR", path);
         std::env::set_var("ASTRO_ENV_HYDRATE", "disabled");
+        // LaunchServices may inherit credentials even when shell hydration is off.
+        // Dedicated QA bundles must only use credentials explicitly entered there.
+        for (name, _) in std::env::vars_os() {
+            if native_acceptance_secret_name(&name.to_string_lossy()) {
+                std::env::remove_var(name);
+            }
+        }
     }
     astro_agent_lib::run();
+}
+
+#[cfg(debug_assertions)]
+fn native_acceptance_secret_name(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    name.ends_with("_KEY")
+        || name.ends_with("_TOKEN")
+        || name.contains("PASSWORD")
+        || name.contains("SECRET")
+        || name.contains("CREDENTIAL")
+        || matches!(name.as_str(), "API_KEY" | "TOKEN" | "SSH_AUTH_SOCK")
 }
 
 #[cfg(debug_assertions)]
@@ -43,6 +61,29 @@ fn native_acceptance_root(path: &std::path::Path) -> Option<std::path::PathBuf> 
 #[cfg(all(test, debug_assertions))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn acceptance_scrubs_inherited_credentials_without_changing_runtime_paths() {
+        for name in [
+            "OPENAI_API_KEY",
+            "AZURE_OPENAI_KEY",
+            "GOOGLE_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "TEST_SECRET",
+            "SSH_AUTH_SOCK",
+        ] {
+            assert!(native_acceptance_secret_name(name));
+        }
+        for name in [
+            "PATH",
+            "HOME",
+            "ASTRO_MEMORY_DIR",
+            "ASTRO_ENV_HYDRATE",
+            "TAURI_CONFIG",
+        ] {
+            assert!(!native_acceptance_secret_name(name));
+        }
+    }
 
     #[test]
     fn native_acceptance_requires_the_private_marker() {

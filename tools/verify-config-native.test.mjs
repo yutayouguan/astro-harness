@@ -10,7 +10,15 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { loadNativeManifest } from "./lib/native-config-acceptance.mjs";
+import { loadNativeManifest, parseNativeArgs } from "./lib/native-config-acceptance.mjs";
+
+test("native onboarding is explicit and cannot reset a resumed profile", () => {
+	assert.deepEqual(parseNativeArgs([]), { onboarding: false });
+	assert.deepEqual(parseNativeArgs(["--onboarding"]), { onboarding: true });
+	assert.deepEqual(parseNativeArgs(["--resume", "qa.json"]), { onboarding: false, resume: "qa.json" });
+	assert.throws(() => parseNativeArgs(["--onboarding", "--resume", "qa.json"]));
+	assert.throws(() => parseNativeArgs(["--resume"]));
+});
 
 test("resume rejects an unbound executable", async (t) => {
 	const { file, data } = await fixture(t);

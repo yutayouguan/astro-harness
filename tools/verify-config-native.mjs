@@ -19,18 +19,15 @@ import { fileURLToPath } from "node:url";
 import {
 	loadNativeManifest,
 	assertNativeBinaryBinding,
+	parseNativeArgs,
 } from "./lib/native-config-acceptance.mjs";
 
 if (process.platform !== "darwin")
 	throw new Error("This native acceptance launcher requires macOS");
 const repo = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const frontend = join(repo, "apps/desktop");
-const args = process.argv.slice(2);
-if (args.length && (args.length !== 2 || args[0] !== "--resume"))
-	throw new Error(
-		"usage: node tools/verify-config-native.mjs [--resume <manifest.json>]",
-	);
-const resumed = args.length ? await loadNativeManifest(args[1]) : undefined;
+const args = parseNativeArgs(process.argv.slice(2));
+const resumed = args.resume ? await loadNativeManifest(args.resume) : undefined;
 const scratch =
 	resumed?.scratch ?? (await mkdtemp(join(tmpdir(), "astro-config-native-")));
 const astroRoot = join(scratch, "home");
@@ -120,6 +117,8 @@ try {
 		process.execPath,
 		[
 			join(frontend, "node_modules/vite/bin/vite.js"),
+			"--config",
+			join(repo, "tools/native-acceptance-vite.config.mjs"),
 			"--host",
 			"127.0.0.1",
 			"--port",
@@ -193,14 +192,14 @@ try {
 		if (stopping) throw new Error("Native acceptance cancelled");
 		for (const directory of ["mcp", "hooks", "ui"])
 			await mkdir(join(astroRoot, directory), { recursive: true });
-		// This fixture tests settings, not provider onboarding or credentials.
+		// Onboarding mode starts fresh and must pass the real verification command.
 		await writeFile(
 			join(astroRoot, "ui/onboarding.json"),
 			JSON.stringify({
 				version: 1,
-				step: "complete",
-				completed: true,
-				should_show: false,
+				step: args.onboarding ? "intro" : "complete",
+				completed: !args.onboarding,
+				should_show: args.onboarding,
 				inferred_existing_install: false,
 				updated_at: null,
 			}),
