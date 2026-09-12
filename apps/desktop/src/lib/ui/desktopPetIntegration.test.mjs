@@ -113,7 +113,7 @@ test("pet controls live in the context menu, without an overlay or invisible but
 
 test("static assets do not advertise working animation controls", () => {
   const pause = surface.split('id: "pet-pause"')[1].split('id: "pet-hide"')[0];
-  assert.match(pause, /enabled: state\.spriteVersionNumber === 2/);
+  assert.match(pause, /enabled:.*\[2, 3\]\.includes\(state\.spriteVersionNumber \?\? 0\)/);
   assert.match(pause, /静态形象/);
   assert.match(creation, /生成静态形象/);
   assert.match(creation, /不包含动画帧/);

@@ -32,10 +32,24 @@ impl PetMotionClip {
             (1..=16).contains(&self.columns) && (1..=128).contains(&self.durations_ms.len()),
             "Motion grid dimensions out of bounds"
         );
+        let apng = self.path.ends_with(".apng");
+        if apng {
+            anyhow::ensure!(
+                self.columns == 1
+                    && self.frame_width == 192
+                    && self.frame_height == 208
+                    && self.durations_ms.len() >= 2
+                    && !self.neutral_bookends
+                    && self.loop_start == 0
+                    && self.loop_end == self.durations_ms.len()
+                    && self.loop_repeats == 1,
+                "APNG requires baked 192x208 frames and timing"
+            );
+        }
         anyhow::ensure!(
             self.durations_ms
                 .iter()
-                .all(|duration| (20..=2000).contains(duration)),
+                .all(|duration| (20..=if apng { 10_000 } else { 2000 }).contains(duration)),
             "Motion frame duration out of bounds"
         );
         anyhow::ensure!(
@@ -46,7 +60,7 @@ impl PetMotionClip {
         );
         let (width, height) = self.dimensions();
         anyhow::ensure!(
-            width <= 4096 && height <= 4096 && self.duration_ms() <= 60_000,
+            (apng || (width <= 4096 && height <= 4096)) && self.duration_ms() <= 60_000,
             "Motion clip exceeds limits"
         );
         Ok(())
@@ -79,7 +93,7 @@ impl PetMotionClip {
 pub type PetMotionClips = BTreeMap<String, PetMotionClip>;
 
 pub fn validate_motion_clips(clips: &PetMotionClips) -> anyhow::Result<()> {
-    anyhow::ensure!(clips.len() <= 12, "Too many motion clips");
+    anyhow::ensure!(clips.len() <= 24, "Too many motion clips");
     let mut pixels = 0_u64;
     for (name, clip) in clips {
         anyhow::ensure!(

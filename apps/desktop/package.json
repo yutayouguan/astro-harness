@@ -51,6 +51,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.11.2",
+    "apng-js": "1.1.5",
     "driver.js": "1.8.0",
     "framer-motion": "^13.1.1",
     "lucide": "^0.468.0",

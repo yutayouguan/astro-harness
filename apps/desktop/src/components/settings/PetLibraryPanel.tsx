@@ -32,7 +32,7 @@ export function PetPortrait({
     src = resolveMediaSrc(identity.petPath) || "";
   const selectedAction =
     active && availablePetActions(identity).includes(action) ? action : "idle";
-  return identity.spriteVersionNumber === 2 ? (
+  return ([2, 3].includes(identity.spriteVersionNumber ?? 0)) ? (
     <DesktopPetCanvas
       src={src}
       state={selectedAction === "kneading" ? "running" : "idle"}
@@ -273,7 +273,7 @@ export default function PetLibraryPanel({
                             ? "自定义"
                             : "Custom"}{" "}
                         ·{" "}
-                        {item.identity.spriteVersionNumber === 2
+                        {([2, 3].includes(item.identity.spriteVersionNumber ?? 0))
                           ? zh
                             ? "动画"
                             : "Animated"
@@ -291,7 +291,7 @@ export default function PetLibraryPanel({
                       <span className="pet-library-action-tags">
                         {(actions.length
                           ? actions.slice(0, 3)
-                          : item.identity.spriteVersionNumber === 2
+                          : ([2, 3].includes(item.identity.spriteVersionNumber ?? 0))
                             ? ["idle"]
                             : []
                         ).map((name) => (
@@ -393,7 +393,7 @@ export default function PetLibraryPanel({
                     ? "自定义伙伴"
                     : "Custom companion"}
                 {" · "}
-                {pet.identity.spriteVersionNumber === 2
+                {([2, 3].includes(pet.identity.spriteVersionNumber ?? 0))
                   ? zh
                     ? "动画"
                     : "Animated"
@@ -571,7 +571,7 @@ export default function PetLibraryPanel({
                 className="pet-motion-portrait"
               />
               <div className="pet-scene-actions">
-                {(pet.identity.spriteVersionNumber === 2
+                {(([2, 3].includes(pet.identity.spriteVersionNumber ?? 0))
                   ? ["idle", ...availablePetActions(pet.identity)]
                   : []
                 ).map((name) => (

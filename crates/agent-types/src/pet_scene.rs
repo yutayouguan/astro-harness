@@ -98,7 +98,8 @@ impl PetScene {
             "舔爪扩展需要 v2 动画桌宠"
         );
         anyhow::ensure!(
-            self.pet.sprite_version_number.is_none() || self.pet.sprite_version_number == Some(2),
+            self.pet.sprite_version_number.is_none()
+                || matches!(self.pet.sprite_version_number, Some(2 | 3)),
             "不支持的桌宠版本"
         );
         if let Some(style) = &self.style {
@@ -389,7 +390,7 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
         fs::write(temporary.path().join(&name), bytes)?;
         scene.pet.grooming_path = Some(name);
     }
-    if scene.pet.sprite_version_number == Some(2) {
+    if matches!(scene.pet.sprite_version_number, Some(2 | 3)) {
         for (key, clip) in &mut scene.pet.motion_clips {
             let path = managed_file(base, Path::new(&clip.path))?;
             let bytes = read_limited_pet_file(&path, 16 * 1024 * 1024)?;
@@ -415,8 +416,18 @@ pub fn export_scene(base: &Path, id: &str, destination: &Path) -> anyhow::Result
                 .clone()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| "Exported Astro companion".into()),
-            sprite_version_number: 2,
-            spritesheet_path: pet_name,
+            sprite_version_number: scene.pet.sprite_version_number.unwrap(),
+            spritesheet_path: if scene.pet.sprite_version_number == Some(3) {
+                scene
+                    .pet
+                    .motion_clips
+                    .get("idle")
+                    .ok_or_else(|| anyhow::anyhow!("APNG缺少idle动作"))?
+                    .path
+                    .clone()
+            } else {
+                pet_name
+            },
             grooming_spritesheet_path: scene.pet.grooming_path.clone(),
             scene_preferences: scene.preferences.clone(),
             motion_clips: scene.pet.motion_clips.clone(),

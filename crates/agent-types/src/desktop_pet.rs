@@ -242,7 +242,7 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
         "桌宠大小必须在 0.30..=0.60 之间（界面 75%–150%）"
     );
     anyhow::ensure!(
-        state.sprite_version_number.is_none() || state.sprite_version_number == Some(2),
+        state.sprite_version_number.is_none() || matches!(state.sprite_version_number, Some(2 | 3)),
         "不支持的桌宠动画版本"
     );
     Ok(())

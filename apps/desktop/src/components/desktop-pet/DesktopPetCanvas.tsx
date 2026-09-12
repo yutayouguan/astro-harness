@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
+import DesktopPetApngCanvas from "./DesktopPetApngCanvas";
 import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
 import {
   motionFrame,
@@ -24,7 +25,7 @@ import {
   type DesktopPetAnimationState,
 } from "../../lib/ui/desktopPetAnimation";
 
-type Props = {
+export type DesktopPetCanvasProps = {
   src: string;
   groomingSrc?: string;
   motionClips?: PetMotionClips;
@@ -38,7 +39,13 @@ type Props = {
   clip?: "grooming";
 };
 
-export default function DesktopPetCanvas({
+export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
+  return /\.apng(?:[?#]|$)/i.test(props.src)
+    ? <DesktopPetApngCanvas {...props} />
+    : <LegacyDesktopPetCanvas {...props} />;
+}
+
+function LegacyDesktopPetCanvas({
   src,
   groomingSrc,
   motionClips,
@@ -50,7 +57,7 @@ export default function DesktopPetCanvas({
   label = "Animated desktop pet",
   reducedMotion = false,
   clip,
-}: Props) {
+}: DesktopPetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const images = useRef<Record<string, HTMLImageElement>>({});
   const motionRef = useRef(motionClips);

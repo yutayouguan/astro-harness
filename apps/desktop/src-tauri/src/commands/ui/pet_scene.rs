@@ -135,7 +135,7 @@ pub async fn generate_pet_scene_wallpaper(
     let mut bytes = types::desktop_pet::read_limited_pet_file(&path, 50 * 1024 * 1024)
         .map_err(|e| e.to_string())?;
     // Reference one canonical idle frame, never send the entire animation grid as a character.
-    if scene.pet.sprite_version_number == Some(2) {
+    if matches!(scene.pet.sprite_version_number, Some(2 | 3)) {
         let mut reader = image::ImageReader::new(Cursor::new(&bytes))
             .with_guessed_format()
             .map_err(|e| e.to_string())?;

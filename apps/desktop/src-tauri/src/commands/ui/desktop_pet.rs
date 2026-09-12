@@ -200,6 +200,10 @@ pub(super) fn validate_motion_image(
     clip: &types::pet_motion::PetMotionClip,
 ) -> Result<&'static str, String> {
     clip.validate().map_err(|e| e.to_string())?;
+    if clip.path.ends_with(".apng") {
+        super::pet_apng::validate(bytes, clip)?;
+        return Ok("apng");
+    }
     let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
@@ -243,8 +247,11 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     types::pet_motion::validate_motion_clips(&manifest.motion_clips).map_err(|e| e.to_string())?;
     validate_manifest_copy(&manifest.display_name, "displayName", 80)?;
     validate_manifest_copy(&manifest.description, "description", 500)?;
-    if manifest.sprite_version_number != types::DESKTOP_PET_V2_SPRITE_VERSION {
-        return Err("仅支持 spriteVersionNumber: 2 的动画桌宠".to_string());
+    if !matches!(manifest.sprite_version_number, 2 | 3) {
+        return Err("仅支持 v2图集或v3 APNG动画桌宠".to_string());
+    }
+    if manifest.sprite_version_number == 3 {
+        super::pet_apng::validate_manifest(&manifest)?;
     }
     let manifest_parent = manifest_path
         .parent()
@@ -264,7 +271,12 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     }
     let sheet_bytes = types::desktop_pet::read_limited_pet_file(&source_sheet, MAX_ATLAS_BYTES)
         .map_err(|error| format!("无法读取动画图集：{error}"))?;
-    let extension = validate_v2_atlas(&sheet_bytes)?;
+    let extension = if manifest.sprite_version_number == 3 {
+        super::pet_apng::validate(&sheet_bytes, &manifest.motion_clips["idle"])?;
+        "apng"
+    } else {
+        validate_v2_atlas(&sheet_bytes)?
+    };
     let grooming = manifest
         .grooming_spritesheet_path
         .as_deref()
@@ -326,7 +338,7 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     fs::create_dir_all(&temporary).map_err(|error| format!("无法准备宠物包：{error}"))?;
     let copied_sheet_name = format!("spritesheet.{extension}");
     let copied_sheet = temporary.join(&copied_sheet_name);
-    let managed_manifest = types::DesktopPetManifest {
+    let mut managed_manifest = types::DesktopPetManifest {
         id: pet_id,
         display_name: manifest.display_name.trim().to_string(),
         description: manifest.description.trim().to_string(),
@@ -335,6 +347,10 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
         motion_clips,
         ..manifest
     };
+    if managed_manifest.sprite_version_number == 3 {
+        managed_manifest.motion_clips.get_mut("idle").unwrap().path =
+            managed_manifest.spritesheet_path.clone();
+    }
     let import_result = (|| -> Result<(), String> {
         fs::write(&copied_sheet, &sheet_bytes)
             .map_err(|error| format!("无法复制动画图集：{error}"))?;
@@ -375,7 +391,7 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
             source_path: None,
             provider: None,
             model: None,
-            sprite_version_number: Some(types::DESKTOP_PET_V2_SPRITE_VERSION),
+            sprite_version_number: Some(managed_manifest.sprite_version_number),
             display_name: Some(managed_manifest.display_name.clone()),
             description: Some(managed_manifest.description.clone()),
         };
@@ -1034,6 +1050,56 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apng_pet_import_export_roundtrip_preserves_all_actions_without_applying() {
+        for pet in ["naitang", "pudding"] {
+            let base = tempfile::tempdir().unwrap();
+            let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../src/assets/pets/{pet}/apng/pet.json"));
+            let imported = import_animated_pet_at(base.path(), &manifest).unwrap();
+            assert!(!imported.enabled && imported.pet_path.is_none());
+            let record = &imported.pets[0];
+            assert_eq!(record.identity.sprite_version_number, Some(3));
+            assert_eq!(
+                record.identity.motion_clips.len(),
+                if pet == "naitang" { 12 } else { 14 }
+            );
+            assert!(record.identity.pet_path.ends_with(".apng"));
+            assert!(record
+                .identity
+                .motion_clips
+                .values()
+                .all(|clip| clip.path.ends_with(".apng")));
+            let saved = types::pet_library::edit_library(
+                base.path(),
+                types::pet_library::PetLibraryEdit::AddScene {
+                    pet_id: record.id.clone(),
+                    name: "APNG roundtrip".into(),
+                },
+            )
+            .unwrap();
+            let out = tempfile::tempdir().unwrap();
+            let package =
+                types::pet_scene::export_scene(base.path(), &saved.scenes[0].id, out.path())
+                    .unwrap();
+            let second_home = tempfile::tempdir().unwrap();
+            let second =
+                import_animated_pet_at(second_home.path(), &package.join("pet.json")).unwrap();
+            assert_eq!(
+                second.pets[0].identity.motion_clips.len(),
+                record.identity.motion_clips.len()
+            );
+            assert_eq!(second.pets[0].defaults, record.defaults);
+            assert!(!second.enabled && second.pet_path.is_none());
+            for (name, clip) in &record.identity.motion_clips {
+                assert_eq!(
+                    fs::read(&clip.path).unwrap(),
+                    fs::read(&second.pets[0].identity.motion_clips[name].path).unwrap()
+                );
+            }
+        }
+    }
 
     #[test]
     fn live_pet_scale_changes_only_size_and_rejects_stale_pet() {

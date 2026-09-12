@@ -23,7 +23,7 @@ export function petActionLabel(name: string, locale: "zh" | "en") {
 /** A single capability list for previews, context menus and auto-play. Unknown
  * imported clip names are playable too; a dog never inherits cat actions. */
 export function availablePetActions(source: PetActionSource): string[] {
-  if (source.spriteVersionNumber !== 2) return [];
+  if (![2, 3].includes(source.spriteVersionNumber ?? 0)) return [];
   const names = new Set(Object.keys(source.motionClips ?? {}));
   // The legacy six-frame grooming extension also signals the old kneading row.
   if (source.groomingPath) {
@@ -31,6 +31,22 @@ export function availablePetActions(source: PetActionSource): string[] {
     names.add("grooming");
   }
   names.delete("idle");
+  // v3 keeps lifecycle animations and gaze in the same APNG map; they are not
+  // leisure activities to be randomly played while the agent is idle.
+  if (source.spriteVersionNumber === 3) {
+    for (const name of [
+      "look",
+      "running-right",
+      "running-left",
+      "waving",
+      "jumping",
+      "failed",
+      "waiting",
+      "running",
+      "review",
+    ])
+      names.delete(name);
+  }
   const order = Object.keys(LABELS);
   return [...names].sort((a, b) => {
     const ai = order.indexOf(a),

@@ -34,7 +34,7 @@ export function canPlayPetLeisure(input: {
 }) {
   return (
     input.enabled &&
-    input.spriteVersionNumber === 2 &&
+    [2, 3].includes(input.spriteVersionNumber ?? 0) &&
     (Boolean(input.groomingPath) || Boolean(input.hasMotionClips)) &&
     !input.paused &&
     !input.quietMode &&

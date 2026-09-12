@@ -123,12 +123,12 @@ export default function DesktopPetSurface() {
           {
             id: "pet-pause",
             text:
-              state.spriteVersionNumber === 2
+              ([2, 3].includes(state.spriteVersionNumber ?? 0))
                 ? state.animationPaused
                   ? "恢复动画"
                   : "暂停动画"
                 : "静态形象（无动画帧）",
-            enabled: state.spriteVersionNumber === 2,
+            enabled: ([2, 3].includes(state.spriteVersionNumber ?? 0)),
             action: () =>
               act("edit_pet_scene", {
                 request: { action: "pause", paused: !state.animationPaused },
@@ -241,7 +241,7 @@ export default function DesktopPetSurface() {
       Boolean(previous.path) &&
       previous.path !== state.petPath;
     if (
-      state.spriteVersionNumber !== 2 ||
+      (![2, 3].includes(state.spriteVersionNumber ?? 0)) ||
       (!newlyVisible && !replacedWhileVisible)
     ) {
       return;
@@ -503,7 +503,7 @@ export default function DesktopPetSurface() {
         }}
         onDoubleClick={() => void invoke("open_desktop_pet_main")}
       >
-        {petSrc && state.spriteVersionNumber === 2 ? (
+        {petSrc && ([2, 3].includes(state.spriteVersionNumber ?? 0)) ? (
           <DesktopPetCanvas
             src={petSrc}
             groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}

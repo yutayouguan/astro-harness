@@ -401,7 +401,7 @@ export default function PetSceneLibrary({
                   alt=""
                 />
               )}
-              {scene.pet.spriteVersionNumber === 2 ? (
+              {([2, 3].includes(scene.pet.spriteVersionNumber ?? 0)) ? (
                 <DesktopPetCanvas
                   src={resolveMediaSrc(scene.pet.petPath) || ""}
                   state="idle"

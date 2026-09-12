@@ -1,5 +1,6 @@
 pub mod browser;
 mod builtin_pet;
+mod pet_apng;
 pub mod desktop_ambience;
 pub mod desktop_pet;
 pub mod desktop_preferences;
