@@ -16,9 +16,9 @@ pub const DESKTOP_PET_V2_WIDTH: u32 = DESKTOP_PET_V2_COLUMNS * DESKTOP_PET_V2_CE
 pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL_HEIGHT;
 pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
 pub const DESKTOP_PET_GROOMING_WIDTH: u32 = 6 * DESKTOP_PET_V2_CELL_WIDTH;
-pub const DESKTOP_PET_MIN_SCALE: f64 = 0.30;
+pub const DESKTOP_PET_MIN_SCALE: f64 = 0.15;
 pub const DESKTOP_PET_MAX_SCALE: f64 = 0.60;
-pub const DESKTOP_PET_DEFAULT_SCALE: f64 = 0.40;
+pub const DESKTOP_PET_DEFAULT_SCALE: f64 = 0.30;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -175,10 +175,11 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
     }
     let bytes = read_limited_pet_file(&path, 1024 * 1024)?;
     let mut state: DesktopPetState = serde_json::from_slice(&bytes)?;
-    // Display-size policy changed: old default 1.0 becomes the new default;
+    // Preserve the historical size migration independently of new-pet defaults:
+    // old default 1.0 became 0.40;
     // other formerly valid oversized choices are capped, without rewriting on read.
     if state.scale == 1.0 {
-        state.scale = DESKTOP_PET_DEFAULT_SCALE;
+        state.scale = 0.40;
     } else if state.scale > DESKTOP_PET_MAX_SCALE && state.scale <= 1.35 {
         state.scale = DESKTOP_PET_MAX_SCALE;
     }
@@ -239,7 +240,7 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
     anyhow::ensure!(
         state.scale.is_finite()
             && (DESKTOP_PET_MIN_SCALE..=DESKTOP_PET_MAX_SCALE).contains(&state.scale),
-        "桌宠大小必须在 0.30..=0.60 之间（界面 75%–150%）"
+        "桌宠大小必须在 0.15..=0.60 之间（界面 50%–200%）"
     );
     anyhow::ensure!(
         state.sprite_version_number.is_none() || matches!(state.sprite_version_number, Some(2 | 3)),
@@ -365,6 +366,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         for scale in [
             DESKTOP_PET_MIN_SCALE,
+            0.2,
+            0.3,
+            0.4,
             0.325,
             0.5,
             0.55,
@@ -375,9 +379,14 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+            let stored = fs::read(desktop_pet_state_path(temp.path())).unwrap();
             assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, scale);
+            assert_eq!(
+                fs::read(desktop_pet_state_path(temp.path())).unwrap(),
+                stored
+            );
         }
-        for scale in [0.29, 0.61, 1.36, f64::INFINITY] {
+        for scale in [0.14, 0.61, 1.36, f64::INFINITY] {
             assert!(update_desktop_pet_state(temp.path(), |state| {
                 state.scale = scale;
                 Ok(())

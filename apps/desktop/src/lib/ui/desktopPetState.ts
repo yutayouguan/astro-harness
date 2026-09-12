@@ -1,8 +1,8 @@
 export const DESKTOP_PET_SCALE = {
-  min: 0.3,
+  min: 0.15,
   max: 0.6,
   step: 0.01,
-  reference: 0.4,
+  reference: 0.3,
 } as const;
 
 export const petScalePercent = (scale: number) =>

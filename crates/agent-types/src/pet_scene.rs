@@ -1018,11 +1018,11 @@ mod tests {
         assert_eq!(wallpaper.scale, 0.6);
         assert!(wallpaper.preferences.quiet_mode);
         let both = apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
-        assert_eq!(both.scale, 0.4);
+        assert_eq!(both.scale, crate::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
         assert!(!both.preferences.quiet_mode);
         assert!(both.preferences.presentation_mode);
         crate::update_desktop_pet_state(dir.path(), |state| {
-            state.scale = 0.3;
+            state.scale = 0.15;
             state.preferences.position_locked = true;
             state.preferences.activity_interval_secs = 90;
             Ok(())
@@ -1036,7 +1036,7 @@ mod tests {
         )
         .unwrap();
         let saved = captured.scenes[0].preferences.as_ref().unwrap();
-        assert_eq!(saved.scale, 0.3);
+        assert_eq!(saved.scale, 0.15);
         assert_eq!(saved.behavior.activity_interval_secs, 90);
         assert!(saved.behavior.position_locked);
         assert!(!saved.behavior.presentation_mode);

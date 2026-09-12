@@ -8,8 +8,8 @@ import {
   EMPTY_DESKTOP_PET_STATE,
 } from "./desktopPetState.ts";
 
-test("slider allows less than half the old minimum and matches persistent native bounds", () => {
-  assert.ok(DESKTOP_PET_SCALE.min <= 0.65 / 2);
+test("slider reaches half the rebased default and matches persistent native bounds", () => {
+  assert.equal(DESKTOP_PET_SCALE.min, DESKTOP_PET_SCALE.reference / 2);
   assert.equal(DESKTOP_PET_SCALE.max, 0.6);
   assert.equal(DESKTOP_PET_SCALE.step, 0.01);
   const source = readFileSync(
@@ -22,6 +22,7 @@ test("slider allows less than half the old minimum and matches persistent native
   for (const [field, symbol] of [
     ["min", "MIN"],
     ["max", "MAX"],
+    ["reference", "DEFAULT"],
   ] as const) {
     const match = source.match(
       new RegExp("DESKTOP_PET_" + symbol + "_SCALE: f64 = ([0-9.]+)"),
@@ -31,13 +32,17 @@ test("slider allows less than half the old minimum and matches persistent native
   }
 });
 
-test("new 100 percent means the old 40 percent, with a 150 percent maximum", () => {
-  assert.equal(petScalePercent(0.4), 100);
-  assert.equal(petScalePercent(0.6), 150);
-  assert.equal(petScalePercent(0.3), 75);
-  assert.equal(petScalePercent(0.35), 87.5);
-  assert.equal(EMPTY_DESKTOP_PET_STATE.scale, 0.4);
-  assert.equal(petScaleFromPercent(100), 0.4);
-  assert.equal(petScaleFromPercent(150), 0.6);
+test("old 75 percent becomes 100 percent without rescaling stored values", () => {
+  assert.equal(petScalePercent(0.3), 100);
+  assert.equal(petScalePercent(0.15), 50);
+  assert.equal(petScalePercent(0.4), 133.3);
+  assert.equal(petScalePercent(0.6), 200);
+  assert.equal(EMPTY_DESKTOP_PET_STATE.scale, 0.3);
+  assert.equal(petScaleFromPercent(50), 0.15);
+  assert.equal(petScaleFromPercent(100), 0.3);
+  assert.equal(petScaleFromPercent(150), 0.45);
+  assert.equal(petScaleFromPercent(200), 0.6);
   assert.equal(petScaleFromPercent(1000), 0.6);
+  assert.equal(petScaleFromPercent(0), 0.15);
+  assert.equal(petScaleFromPercent(Number.NaN), 0.3);
 });

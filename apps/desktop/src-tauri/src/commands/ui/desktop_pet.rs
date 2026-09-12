@@ -1190,18 +1190,20 @@ mod tests {
     }
 
     #[test]
-    fn smallest_desktop_pet_window_is_less_than_half_the_previous_minimum() {
+    fn smallest_desktop_pet_window_is_half_the_rebased_default() {
         let size = window_size(types::desktop_pet::DESKTOP_PET_MIN_SCALE);
-        assert_eq!(size, LogicalSize::new(90.0, 102.0));
+        assert_eq!(size, LogicalSize::new(45.0, 51.0));
         assert_eq!(
             window_size(types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE),
-            LogicalSize::new(120.0, 136.0)
+            LogicalSize::new(90.0, 102.0)
         );
         assert_eq!(
             window_size(types::desktop_pet::DESKTOP_PET_MAX_SCALE),
             LogicalSize::new(180.0, 204.0)
         );
-        assert!(size.width <= window_size(0.65).width / 2.0);
+        let default_size = window_size(types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
+        assert_eq!(size.width, default_size.width / 2.0);
+        assert_eq!(size.height, default_size.height / 2.0);
     }
 
     #[test]
@@ -1356,7 +1358,7 @@ mod tests {
         assert_eq!(state.pets[0].defaults.scale, 0.5);
         assert!(state.pets[0].defaults.behavior.position_locked);
         assert_eq!(state.pets[0].defaults.behavior.activity_interval_secs, 90);
-        assert_eq!(state.scale, 0.4);
+        assert_eq!(state.scale, types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
         assert!(!state.enabled && state.pet_path.is_none());
         manifest.motion_clips.get_mut("grooming").unwrap().path = "../motion.webp".into();
         fs::write(

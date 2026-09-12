@@ -42,7 +42,7 @@ pub struct DesktopPetArgs {
     /// apply 可选：生成所依据的原始宠物照片路径，用于设置页保留来源预览。
     #[serde(default)]
     pub source_path: Option<String>,
-    /// configure/apply 可选：窗口缩放，范围 0.30..=0.60；0.40 对应界面 100%。
+    /// configure/apply 可选：窗口缩放，范围 0.15..=0.60（界面 50%–200%）；0.30 对应界面 100%。
     #[serde(default)]
     pub scale: Option<f64>,
     /// configure 可选：位置锁定、吸附、安静、全屏隐藏、演示隐藏和动作间隔。
@@ -557,7 +557,13 @@ mod tests {
     #[test]
     fn desktop_pet_display_options_support_smaller_sizes() {
         let mut state = types::DesktopPetState::default();
-        for (requested, expected) in [(-1.0, 0.3), (0.325, 0.325), (0.5, 0.5), (2.0, 0.6)] {
+        for (requested, expected) in [
+            (-1.0, 0.15),
+            (0.15, 0.15),
+            (0.3, 0.3),
+            (0.5, 0.5),
+            (2.0, 0.6),
+        ] {
             apply_display_options(&mut state, Some(requested), None);
             assert_eq!(state.scale, expected);
         }

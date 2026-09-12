@@ -5,10 +5,12 @@ the key/main window when shown, updated, clicked or restored.
 
 ## Focus and click routing
 
-The size slider displays 75%–150%, with a 100% default equal to the former 40%
-size. Internal scale remains physical: 0.30–0.60, default0.40. Thus the default
-window is120×136 logical pixels, maximum180×204, minimum90×102. Existing0.40
-choices stay the same size; old default1.0 reads as0.40, other formerly valid
+The size slider displays 50%–200%, with a 100% default equal to the previous 75%
+size (physical scale 0.30). Internal scale remains physical: 0.15–0.60, default
+0.30 for new pets. Thus the default window is 90×102 logical pixels, maximum
+180×204, minimum 45×51. Existing pet and scene scales are not rescaled: 0.30 now
+displays 100%, 0.40 displays 133.3%. The historical default 1.0 still reads as
+0.40 independently of the new-pet default; other formerly valid
 oversized values cap at0.60. Size normalization alone does not rewrite saved files;
 the pet-library migration below persists it with the backed-up state transition.
 Native, tools and UI share bounds.

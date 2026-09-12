@@ -570,7 +570,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(selected.active_pet_id.as_deref(), Some("builtin-pudding"));
-        assert_eq!(selected.scale, 0.4);
+        assert_eq!(selected.scale, types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
         assert!(selected.preferences.presentation_mode);
         assert_eq!(selected.motion_clips.len(), 4);
         let cat = types::pet_library::apply_pet(root.path(), "builtin-naitang").unwrap();
@@ -617,7 +617,10 @@ mod tests {
             .iter()
             .find(|p| p.id == "builtin-test-companion")
             .unwrap();
-        assert_eq!(added.defaults.scale, 0.4);
+        assert_eq!(
+            added.defaults.scale,
+            types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE
+        );
         assert_eq!(added.defaults.behavior.activity_interval_secs, 45);
         ensure_catalog(root.path(), &catalog).unwrap();
         assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), state);

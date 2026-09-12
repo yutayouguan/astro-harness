@@ -319,7 +319,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(saved.scale, 0.4);
+        assert_eq!(saved.scale, state.scale);
         let new = crate::update_desktop_pet_state(dir.path(), |s| {
             s.pet_path = Some("new.png".into());
             Ok(())
