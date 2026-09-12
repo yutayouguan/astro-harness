@@ -13,7 +13,7 @@ export const settingsMessages = {
     "prefs.appearance.surface.glass": "玻璃",
     "prefs.appearance.surface.glassDesc": "通透光感，映衬背景色彩",
     "prefs.appearance.surface.soft": "柔塑 Soft",
-    "prefs.appearance.surface.softDesc": "亮色白瓷，暗色石墨，细腻轻浮雕",
+    "prefs.appearance.surface.softDesc": "乳白磨砂，柔和透色，细腻轻边缘",
     "prefs.appearance.frost.title": "毛玻璃强度",
     "prefs.appearance.frost.sub": "调节透明度与模糊程度",
     "prefs.appearance.accent.title": "强调色",
@@ -366,7 +366,7 @@ export const settingsMessages = {
       "Translucent surfaces reflecting the background",
     "prefs.appearance.surface.soft": "Soft",
     "prefs.appearance.surface.softDesc":
-      "Porcelain in light mode, graphite in dark mode",
+      "Milky frost, softly diffused color and delicate edges",
     "prefs.appearance.frost.title": "Frost strength",
     "prefs.appearance.frost.sub": "Adjust transparency and blur",
     "prefs.appearance.accent.title": "Accent color",

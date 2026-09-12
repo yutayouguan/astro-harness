@@ -27,7 +27,7 @@ html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
  * action; warnings, destructive actions and checked switches keep semantics. */
 html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
   .prefs-diag-btn:not(.danger) {
-  background: var(--soft-material-background);
+  background: var(--soft-control-background);
   border-color: var(--soft-control-edge);
   color: var(--soft-ink);
   box-shadow: var(--soft-control-shadow);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { softFrostParameters } from "./softFrostIntensity.ts";
 import {
   SOFT_WELCOME_CATEGORIES,
   SOFT_WELCOME_GROUPS,
@@ -143,7 +144,10 @@ test("frost text remains readable over worst-case black and white backdrops", as
       ink = rgb("ink"),
       muted = rgb("muted");
     for (const backdrop of [0, 255]) {
-      const bg = luminance(surface.map((c) => c * 0.8 + backdrop * 0.2));
+      const opacity = softFrostParameters(100).opacity / 100;
+      const bg = luminance(
+        surface.map((c) => c * opacity + backdrop * (1 - opacity)),
+      );
       for (const color of [ink, muted]) {
         const fg = luminance(color);
         assert.ok(

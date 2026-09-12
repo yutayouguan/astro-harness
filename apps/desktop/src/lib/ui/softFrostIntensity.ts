@@ -16,10 +16,14 @@ export function normalizeSoftFrostIntensity(value: unknown): number {
     : DEFAULT_SOFT_FROST_INTENSITY;
 }
 
-/** The fill stays at least 80% opaque; foreground opacity never changes. */
+/** Ease into a milky frost, retaining a 72% floor for readable foregrounds. */
 export function softFrostParameters(value: unknown) {
   const intensity = normalizeSoftFrostIntensity(value);
-  return { opacity: 100 - intensity * 0.2, blur: intensity * 0.36 };
+  const progress = intensity / 100;
+  return {
+    opacity: 100 - 28 * (1 - (1 - progress) ** 2),
+    blur: intensity * 0.64,
+  };
 }
 
 export function readStoredSoftFrostIntensity(

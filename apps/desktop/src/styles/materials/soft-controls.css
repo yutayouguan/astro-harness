@@ -8,7 +8,7 @@ html[data-material="soft"] {
   );
   --soft-selection-width: 0.5px;
   --material-inset-background: var(--soft-material-background);
-  --material-inset-background-strong: var(--soft-material-background);
+  --material-inset-background-strong: var(--soft-input-background);
   --settings-card-backdrop: var(--soft-material-backdrop);
   --seg-item-sheen-a: transparent;
   --seg-item-sheen-b: transparent;
@@ -101,7 +101,7 @@ html[data-material="soft"] .header-icon-btn:active:not(:disabled) {
 }
 
 html[data-material="soft"] .select-menu {
-  --select-glass-fill: var(--soft-material-background);
+  --select-glass-fill: var(--soft-input-background);
   --select-glass-fill-hover: var(--soft-hover);
   --select-glass-edge: var(--soft-control-edge);
   --select-glass-rim: var(--immersive-glass-rim);
@@ -133,7 +133,7 @@ html[data-material="soft"]
   .user-message-editor-input,
   .app-dialog-input
 ) {
-  background: var(--soft-material-background);
+  background: var(--soft-input-background);
   border-color: var(--soft-control-edge);
   box-shadow: none;
   backdrop-filter: none;
@@ -152,7 +152,7 @@ html[data-material="soft"]
     .loop-palette-search-wrap,
     .cron-sched-stepper
   ) {
-  background: var(--soft-material-background);
+  background: var(--soft-input-background);
   border-color: var(--soft-control-edge);
   box-shadow: none;
   backdrop-filter: none;
@@ -167,6 +167,19 @@ html[data-material="soft"]
   --seg-shell-border: var(--soft-control-edge);
   --seg-item-bg-active: var(--material-selected-background);
   --seg-item-shadow-active: var(--material-selected-shadow);
+}
+
+/* Neutral filled buttons use the denser milk; primary/danger/ghost semantics
+ * and the component's dimensions remain owned by the existing button recipe. */
+html[data-material="soft"] .ui-button--secondary:not(.is-active) {
+  background: var(--soft-control-background);
+  border-color: var(--soft-edge);
+  color: var(--soft-ink);
+  box-shadow: var(--soft-control-shadow);
+}
+
+html[data-material="soft"] .ui-button--secondary:hover:not(:disabled, .is-active) {
+  background: var(--soft-hover);
 }
 
 html[data-material="soft"] .prefs-switch[aria-checked="false"] {

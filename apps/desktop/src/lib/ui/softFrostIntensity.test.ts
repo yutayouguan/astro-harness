@@ -10,7 +10,17 @@ import {
 } from "./softFrostIntensity.ts";
 
 test("frost clamps, rounds and rejects malformed stored values", () => {
-  for (const value of [null, undefined, "", "  ", NaN, Infinity, "bad", {}, true])
+  for (const value of [
+    null,
+    undefined,
+    "",
+    "  ",
+    NaN,
+    Infinity,
+    "bad",
+    {},
+    true,
+  ])
     assert.equal(normalizeSoftFrostIntensity(value), 50);
   assert.equal(normalizeSoftFrostIntensity(-4), 0);
   assert.equal(normalizeSoftFrostIntensity(105), 100);
@@ -19,8 +29,8 @@ test("frost clamps, rounds and rejects malformed stored values", () => {
 
 test("one range links opacity and blur without changing foreground opacity", () => {
   assert.deepEqual(softFrostParameters(0), { opacity: 100, blur: 0 });
-  assert.deepEqual(softFrostParameters(50), { opacity: 90, blur: 18 });
-  assert.deepEqual(softFrostParameters(100), { opacity: 80, blur: 36 });
+  assert.deepEqual(softFrostParameters(50), { opacity: 79, blur: 32 });
+  assert.deepEqual(softFrostParameters(100), { opacity: 72, blur: 64 });
   const properties = new Map<string, string>();
   const root = {
     dataset: {} as Record<string, string>,
@@ -33,8 +43,8 @@ test("one range links opacity and blur without changing foreground opacity", () 
   assert.deepEqual(
     [...properties],
     [
-      ["--soft-frost-opacity", "90%"],
-      ["--soft-frost-blur", "18px"],
+      ["--soft-frost-opacity", "79%"],
+      ["--soft-frost-blur", "32px"],
     ],
   );
 });
@@ -68,6 +78,17 @@ test("frost persists independently of Glass and tolerates unavailable storage", 
   );
 });
 
+test("every slider step increases blur and transmission within readable bounds", () => {
+  let previous = softFrostParameters(0);
+  for (let step = 1; step <= 100; step++) {
+    const current = softFrostParameters(step);
+    assert.ok(current.opacity < previous.opacity);
+    assert.ok(current.opacity >= 72 && current.opacity <= 100);
+    assert.ok(current.blur > previous.blur && current.blur <= 64);
+    previous = current;
+  }
+});
+
 test("global frost has solid fallbacks and settings/pet cards consume the same neutral recipe", async () => {
   const read = (path: string) =>
     readFile(new URL(path, import.meta.url), "utf8");
@@ -79,7 +100,7 @@ test("global frost has solid fallbacks and settings/pet cards consume the same n
     read("../../main.tsx"),
   ]);
   assert.match(css, /@supports \(backdrop-filter/);
-  assert.match(css, /var\(--soft-frost-opacity, 90%\)/);
+  assert.match(css, /var\(--soft-frost-opacity, 79%\)/);
   assert.match(
     css,
     /prefers-reduced-transparency: reduce[\s\S]*--soft-material-background: var\(--soft-surface\);\s*--soft-material-backdrop: none/,
@@ -87,8 +108,14 @@ test("global frost has solid fallbacks and settings/pet cards consume the same n
   assert.match(css, /forced-colors: active/);
   const index = await read("../../styles/index.css");
   assert.match(index, /@import "\.\/materials\/soft-focus.css";/);
-  assert.match(index, /@import "\.\/features\/pet-material.css" layer\(features\);/);
-  assert.doesNotMatch(await read("../../components/settings/DesktopPetPanel.tsx"), /import .*pet-material.css/);
+  assert.match(
+    index,
+    /@import "\.\/features\/pet-material.css" layer\(features\);/,
+  );
+  assert.doesNotMatch(
+    await read("../../components/settings/DesktopPetPanel.tsx"),
+    /import .*pet-material.css/,
+  );
   assert.match(
     settings,
     /:is\(\.prefs-card, \.prefs-section, \.pet-manager-commandbar\)/,

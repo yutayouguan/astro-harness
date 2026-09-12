@@ -4,13 +4,14 @@
   height: 100vh;
   padding: 24px;
   overflow: hidden;
-  background: var(--shell-bg);
   color: var(--ink);
 }
 
 .soft-material-sample {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(620px, 1.1fr);
   gap: 32px;
   height: 100%;
 }
@@ -26,6 +27,9 @@
 
 .soft-material-sample-chat header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
   justify-content: space-between;
   font-size: 13px;
   color: var(--ink-mute);
@@ -45,7 +49,7 @@
   min-width: 0;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1100px) {
   .soft-material-sample {
     grid-template-columns: minmax(0, 1fr);
     overflow: auto;
