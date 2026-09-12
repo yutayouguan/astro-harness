@@ -9,11 +9,23 @@ import { loadNativeManifest } from "../../../tools/lib/native-config-acceptance.
 
 const textItem = text => ({ type: "message", id: `msg_${randomUUID()}`, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] });
 const textOf = item => typeof item.content === "string" ? item.content : (item.content ?? []).map(part => part.text ?? "").join("\n");
+const testIntent = text => {
+  if (text.includes("Please follow this skill (first-meeting)")) return "intro";
+  if (text.length > 1000) return null;
+  if (text.includes("暂不保存") || text.includes("先做任务")) return "defer";
+  if (text.includes("确认记住")) return "confirm";
+  if (text.includes("搭档")) return "nickname";
+  return null;
+};
 
 export function fixtureOutput(body, workspace) {
   const input = Array.isArray(body.input) ? body.input : [];
-  const lastUser = input.findLastIndex(item => item.role === "user");
+  // Runtime admission/context messages can follow the actual user request.
+  // Only fixture-owned requests/answers select a scripted branch.
+  const lastAnswer = input.findLastIndex(item => item.role === "assistant");
+  const lastUser = input.findLastIndex((item, index) => index > lastAnswer && item.role === "user" && testIntent(textOf(item)));
   const user = lastUser < 0 ? "" : textOf(input[lastUser]);
+  const intent = testIntent(user);
   const subsequent = input.slice(lastUser + 1);
   if (subsequent.some(item => ["function_call", "custom_tool_call"].includes(item.type))) {
     return [textItem("本机模拟服务：这一轮已结束。请按页面选项继续；档案写入结果需实际读回核对。")];
@@ -22,19 +34,19 @@ export function fixtureOutput(body, workspace) {
   const ask = tools.find(tool => tool.name === "request_user_input_async");
   const question = (title, options) => [{ type: "function_call", id: `fc_${randomUUID()}`, call_id: `call_${randomUUID()}`, name: "request_user_input_async", arguments: JSON.stringify({ questions: [{ title, options }] }), status: "completed" }];
   if (!ask || !user) return [textItem("Local QA only")];
-  if (user.includes("Please follow this skill (first-meeting)")) {
+  if (intent === "intro") {
     return [textItem("你好，我是 Astro。这里是本机模拟的初次见面，用来验证真实 APP 的交互，不代表真实模型推理。"), ...question("怎么称呼你比较舒服？", ["直接称呼我‘你’（推荐）", "叫我搭档", "先做任务"])];
   }
-  if (user.includes("暂不保存") || user.includes("先做任务")) {
+  if (intent === "defer") {
     return [textItem("好的，不写入档案。现在想一起完成什么任务？")];
   }
-  if (user.includes("确认记住")) {
+  if (intent === "confirm") {
     const patchTool = tools.find(tool => tool.name === "apply_patch");
     if (!patchTool) return [textItem("测试失败：本轮未提供 apply_patch，未尝试写入。")];
     const patch = `*** Begin Patch\n*** Update File: ${join(workspace, "USER.md")}\n@@\n-- **What to call them:**\n+- **What to call them:** 搭档\n*** End Patch`;
     return [{ type: "custom_tool_call", id: `ct_${randomUUID()}`, call_id: `call_${randomUUID()}`, name: "apply_patch", input: patch, status: "completed" }];
   }
-  if (user.includes("搭档")) {
+  if (intent === "nickname") {
     return [textItem("我准备只把 USER.md 中的称呼记为‘搭档’。姓名、背景保持空白，IDENTITY.md 和 SOUL.md 保持原样。"), ...question("要记住这项称呼吗？", ["确认记住", "修改一下", "暂不保存"])];
   }
   return [textItem("本机模拟服务：没有对应的测试回答，不会写入文件。")];

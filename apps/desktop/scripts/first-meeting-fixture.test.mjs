@@ -5,6 +5,17 @@ import { once } from "node:events";
 
 const body = text => ({ tools: [{ type: "function", name: "request_user_input_async" }, { type: "custom", name: "apply_patch" }], input: [{ role: "user", content: [{ type: "input_text", text }] }] });
 const workspace = "/isolated-qa/workspace";
+test("runtime context after a user request does not hide the fixture intent", () => {
+  const request = body("Please follow this skill (first-meeting): 确认记住");
+  request.input.push({ role: "user", content: [{ type: "input_text", text: "<runtime_context>Current turn metadata</runtime_context>" }] });
+  assert.ok(fixtureOutput(request, workspace).some(item => item.name === "request_user_input_async"));
+});
+test("unrelated later input cannot reuse an earlier confirmation", () => {
+  const request = body("确认记住");
+  request.input.push({ role: "assistant", content: [{ type: "output_text", text: "Previous answer" }] });
+  request.input.push({ role: "user", content: [{ type: "input_text", text: "现在换个话题" }] });
+  assert.ok(fixtureOutput(request, workspace).every(item => item.type !== "custom_tool_call"));
+});
 test("first meeting and rejected summaries never emit file writes", () => {
   for (const input of ["Please follow this skill (first-meeting): 确认记住", "叫我搭档", "暂不保存", "先做任务"]) {
     assert.ok(fixtureOutput(body(input), workspace).every(item => item.type !== "custom_tool_call"));
