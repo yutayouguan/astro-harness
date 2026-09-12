@@ -129,3 +129,16 @@ test("lock persists but allows explicit picks and dynamic colors", async ({ page
   await page.getByRole("button", { name: "桌面氛围", exact: true }).click();
   await expect(dialog.getByRole("checkbox", { name: "锁定随机换景" })).toBeChecked();
 });
+
+test("navigation to settings and back preserves the undo checkpoint", async ({ page }) => {
+  const { dialog } = await open(page);
+  await dialog.getByRole("button", { name: "换一个", exact: true }).click();
+  await expect(dialog.locator(".ambience-current")).toContainText("森林小屋");
+  await dialog.getByRole("button", { name: "管理场景与壁纸" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "返回对话" }).click();
+  await page.getByRole("button", { name: "桌面氛围", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "撤销上一步" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "撤销上一步" }).click();
+  await expect(dialog.locator(".ambience-current")).toContainText("奶糖 · 午后窗台");
+});

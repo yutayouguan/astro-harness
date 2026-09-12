@@ -6,6 +6,7 @@ import { LocaleProvider } from "../i18n/LocaleContext";
 import { useShellColorStyle } from "../hooks/app/useShellColorStyle";
 import { useWallpaper } from "../hooks/app/useWallpaper";
 import { useActiveUiStyle } from "../hooks/app/useActiveUiStyle";
+import { ambienceSession } from "../lib/ui/ambienceSession";
 import {
   DEFAULT_WALLPAPER_PREFS,
   WALLPAPER_STORAGE_KEY,
@@ -40,20 +41,28 @@ function Harness() {
         <h2>桌面氛围</h2>
         <p>测试环境 · 所有操作均为本地模拟，不调用模型。</p>
         <output data-testid="manage-target">{managed}</output>
-        <DesktopAmbienceButton
-          wallpaper={wallpaper}
-          colors={{
-            style: colors.colorStyle,
-            gradient: colors.gradient,
-            dynamicSeed: colors.dynamicSeed,
-          }}
-          restoreColors={colors.restoreColorPrefs}
-          activeStyle={activeStyle}
-          theme={
-            document.documentElement.dataset.theme === "dark" ? "dark" : "light"
-          }
-          onManage={setManaged}
-        />
+        {managed ? (
+          <button type="button" onClick={() => setManaged("")}>
+            返回对话
+          </button>
+        ) : (
+          <DesktopAmbienceButton
+            wallpaper={wallpaper}
+            colors={{
+              style: colors.colorStyle,
+              gradient: colors.gradient,
+              dynamicSeed: colors.dynamicSeed,
+            }}
+            restoreColors={colors.restoreColorPrefs}
+            activeStyle={activeStyle}
+            theme={
+              document.documentElement.dataset.theme === "dark"
+                ? "dark"
+                : "light"
+            }
+            onManage={setManaged}
+          />
+        )}
       </main>
     </LocaleProvider>
   );
@@ -63,6 +72,8 @@ const meta = {
   title: "Shell/DesktopAmbience",
   component: Harness,
   beforeEach: (context) => {
+    ambienceSession.setUndo(null);
+    ambienceSession.finish();
     localStorage.setItem("astro-locale", "zh");
     localStorage.setItem(
       WALLPAPER_STORAGE_KEY,

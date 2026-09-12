@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ambienceSession } from "../../lib/ui/ambienceSession";
 import { useDesktopPetState } from "./useDesktopPetState";
 import { useAmbienceShufflePrefs } from "./useAmbienceShufflePrefs";
 import {
@@ -38,12 +39,6 @@ export type AmbienceProps = {
   theme: "light" | "dark";
   onManage: (target: "scenes" | "wallpapers") => void;
 };
-type Undo = {
-  token: string;
-  wallpaper: WallpaperPrefs;
-  colors: ShellColorPrefs;
-  expected: string;
-};
 type Change =
   | { kind: "scene"; sceneId: string; expectedPetId?: string }
   | { kind: "wallpaper"; path: string | null }
@@ -59,10 +54,13 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const shufflePrefs = useAmbienceShufflePrefs();
   const [scenes, setScenes] = useState<PetScene[]>([]);
   const [loadingScenes, setLoadingScenes] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { busy, undo } = useSyncExternalStore(
+    ambienceSession.subscribe,
+    ambienceSession.getSnapshot,
+    ambienceSession.getSnapshot,
+  );
+  const setUndo = ambienceSession.setUndo;
   const [error, setError] = useState("");
-  const [undo, setUndo] = useState<Undo | null>(null);
-  const locked = useRef(false);
   const live = useRef(props);
   live.current = props;
   const mounted = useRef(true);
@@ -94,9 +92,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const key = (p: AmbienceProps) =>
     `${ambiencePreferenceKey(p.wallpaper.prefs)}|${JSON.stringify(p.colors)}`;
   const guard = async (operation: () => Promise<void>) => {
-    if (locked.current) return false;
-    locked.current = true;
-    setBusy(true);
+    if (!ambienceSession.begin()) return false;
     setError("");
     try {
       await operation();
@@ -105,8 +101,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       if (mounted.current) setError(String(cause));
       return false;
     } finally {
-      locked.current = false;
-      if (mounted.current) setBusy(false);
+      ambienceSession.finish();
     }
   };
 
