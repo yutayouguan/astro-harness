@@ -191,6 +191,13 @@ const meta = {
       )
         return structuredClone(state);
       if (command === "get_pet_scenes") return structuredClone(scenes);
+      if (command === "set_desktop_pet_scale") {
+        if (context.name === "Failure") throw new Error("测试：大小调整失败");
+        if (args.petId !== state.activePetId)
+          throw new Error("Current pet changed");
+        state = { ...state, scale: args.scale, revision: state.revision + 1 };
+        return structuredClone(state);
+      }
       if (command === "get_active_ui_style") return structuredClone(style);
       if (command === "apply_desktop_ambience") {
         if (context.name === "Failure")

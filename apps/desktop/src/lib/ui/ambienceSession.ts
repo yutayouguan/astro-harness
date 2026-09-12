@@ -42,7 +42,20 @@ export function appearanceEditUndo(
     expected: appearanceKey(next),
   };
 }
-type Undo = AmbienceUndoSnapshot | AppearanceUndoSnapshot;
+export type PetScaleUndoSnapshot = {
+  kind: "pet-scale";
+  petId: string;
+  before: number;
+  expected: number;
+};
+export const canUndoPetScale = (
+  undo: PetScaleUndoSnapshot,
+  current: { activePetId?: string | null; scale: number },
+) => current.activePetId === undo.petId && current.scale === undo.expected;
+type Undo =
+  | AmbienceUndoSnapshot
+  | AppearanceUndoSnapshot
+  | PetScaleUndoSnapshot;
 type Snapshot = { busy: boolean; undo: Undo | null };
 
 /** WebView-session state, not persistent settings. Navigation must not discard native undo. */

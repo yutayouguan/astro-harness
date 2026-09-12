@@ -1,5 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("pet size targets the current pet, persists on release and supports undo", async ({ page }) => {
+  const { dialog } = await open(page);
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const slider = dialog.getByRole("slider", { name: "桌宠大小", exact: true });
+  await expect(slider).toHaveValue("0.3");
+  await slider.press("Home");
+  await expect(slider).toHaveAttribute("aria-valuetext", "50%");
+  await dialog.getByRole("button", { name: "布丁", exact: true }).click();
+  await expect(dialog.locator(".ambience-pet-scale")).toContainText("奶糖");
+  await dialog.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(slider).toHaveValue("0.3");
+});
+
+test("pet size failure restores the confirmed value", async ({ page }) => {
+  const { dialog } = await open(page, "failure");
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const slider = dialog.getByRole("slider", { name: "桌宠大小", exact: true });
+  await slider.press("Home");
+  await expect(dialog.getByRole("alert")).toContainText("大小调整失败");
+  await expect(slider).toHaveValue("0.3");
+});
+
 async function open(page: Page, variant = "default") {
   await page.goto("/iframe.html?id=shell-desktopambience--" + variant + "&viewMode=story");
   const trigger = page.getByRole("button", { name: "桌面氛围", exact: true });

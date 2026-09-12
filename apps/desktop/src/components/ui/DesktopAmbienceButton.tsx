@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import DynamicPaletteButton from "./DynamicPaletteButton";
+import AmbiencePetScaleControl from "./AmbiencePetScaleControl";
 import { PopoverSurface } from "./Overlay";
 import { SegmentedTabs } from "./SegmentedTabs";
 import DesktopPetVisibilityButton from "../desktop-pet/DesktopPetVisibilityButton";
@@ -607,6 +608,17 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                 <span>{tr("桌面显示", "Desktop visibility")}</span>
                 <DesktopPetVisibilityButton onError={state.reportError} />
               </div>
+              <AmbiencePetScaleControl
+                key={state.pet.activePetId ?? "no-pet"}
+                petId={
+                  state.pet.petPath ? (state.pet.activePetId ?? null) : null
+                }
+                name={state.pet.displayName}
+                scale={state.pet.scale}
+                disabled={state.busy}
+                zh={locale.startsWith("zh")}
+                onCommit={state.setPetScale}
+              />
               <div
                 className="ambience-pets"
                 role="group"

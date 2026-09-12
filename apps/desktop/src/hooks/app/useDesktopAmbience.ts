@@ -4,6 +4,7 @@ import {
   ambienceSession,
   appearanceKey,
   appearanceEditUndo,
+  canUndoPetScale,
   type AmbienceAppearance,
   type AppearanceUndoSnapshot,
 } from "../../lib/ui/ambienceSession";
@@ -360,6 +361,18 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const undoLast = () =>
     guard(async () => {
       if (!undo) return;
+      if (undo.kind === "pet-scale") {
+        const current = await invoke<DesktopPetState>("get_desktop_pet_state");
+        pet.accept(current);
+        if (!canUndoPetScale(undo, current))
+          throw new Error("桌宠或大小已更改，无法撤销这一步");
+        await pet.mutate("set_desktop_pet_scale", {
+          petId: undo.petId,
+          scale: undo.before,
+        });
+        setUndo(null);
+        return;
+      }
       if (undo.kind === "appearance") {
         if (appearanceKey(appearanceLive.current) !== undo.expected)
           throw new Error("外观已在其他位置修改，无法撤销这一步");
@@ -382,6 +395,35 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
         setUndo(null);
         await p.activeStyle.refresh();
       });
+    });
+  const setPetScale = (petId: string, scale: number) =>
+    guard(async () => {
+      const current = await invoke<DesktopPetState>("get_desktop_pet_state");
+      pet.accept(current);
+      if (current.activePetId !== petId || !current.petPath)
+        throw new Error("当前桌宠已切换，请重试");
+      if (!Number.isFinite(scale)) throw new Error("无效的桌宠大小");
+      if (current.scale === scale) return;
+      try {
+        const next = await pet.mutate("set_desktop_pet_scale", {
+          petId,
+          scale,
+        });
+        setUndo({
+          kind: "pet-scale",
+          petId,
+          before: current.scale,
+          expected: next.scale,
+        });
+      } catch (cause) {
+        // The native resize can fail after persistence; display its actual value.
+        try {
+          pet.accept(await invoke<DesktopPetState>("get_desktop_pet_state"));
+        } catch {
+          /* Keep last confirmed state. */
+        }
+        throw cause;
+      }
     });
   const saveAs = (name: string) =>
     guard(async () => {
@@ -455,6 +497,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   };
   return {
     appearance,
+    setPetScale,
     changeAppearance,
     beginAppearanceEdit: () => {
       const current = { ...appearanceLive.current };

@@ -284,11 +284,26 @@
   font-size: 12px;
   margin-bottom: 10px;
 }
+.ambience-pet-status > span {
+  flex: 1;
+  min-width: 0;
+}
+.ambience-pet-status > .sidebar-settings-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  justify-content: center;
+}
 .ambience-pets {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding: 2px;
+}
+
+.ambience-pet-scale {
+  margin: 4px 0 16px;
 }
 .ambience-pets > button {
   display: grid;
