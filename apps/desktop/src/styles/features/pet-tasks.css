@@ -1,3 +1,33 @@
+/* Companion windows: one glass shell, quieter surfaces within it. */
+.pet-task-popup,
+.pet-task-badge,
+.conversation-interactions {
+  --pet-glass: rgba(244, 248, 255, 0.7);
+  --pet-card: rgba(255, 255, 255, 0.36);
+  --pet-field: rgba(255, 255, 255, 0.68);
+  --pet-line: rgba(255, 255, 255, 0.78);
+  --pet-rule: rgba(44, 57, 84, 0.1);
+  --pet-ink: #253047;
+  --pet-muted: #647087;
+  --pet-action: #5467d9;
+  --pet-emphasis: #5467d9;
+  --pet-action-hover: #4557c2;
+  --pet-inset: rgba(255, 255, 255, 0.7);
+}
+html[data-theme="dark"]
+  :is(.pet-task-popup, .pet-task-badge, .conversation-interactions) {
+  --pet-glass: rgba(28, 33, 49, 0.78);
+  --pet-card: rgba(255, 255, 255, 0.035);
+  --pet-field: rgba(10, 14, 27, 0.4);
+  --pet-line: rgba(255, 255, 255, 0.16);
+  --pet-rule: rgba(255, 255, 255, 0.1);
+  --pet-ink: #f1f3fa;
+  --pet-muted: #b1b9cf;
+  --pet-action: #596bd4;
+  --pet-action-hover: #5d6ed4;
+  --pet-emphasis: #abb8ff;
+  --pet-inset: rgba(255, 255, 255, 0.08);
+}
 html[data-window-surface="pet-task"],
 html[data-window-surface="pet-task"] body,
 html[data-window-surface="pet-task"] #root {
@@ -5,26 +35,60 @@ html[data-window-surface="pet-task"] #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--color-bg-subtle);
+  background: transparent !important;
+  border-radius: 24px;
+}
+html[data-window-surface="pet-task"]:has(.pet-task-badge),
+html[data-window-surface="pet-task"]:has(.pet-task-badge) :is(body, #root) {
+  border-radius: 19px;
+}
+.pet-task-popup,
+.pet-task-badge {
+  box-sizing: border-box;
+  color: var(--pet-ink);
+  background:
+    linear-gradient(145deg, var(--pet-inset), transparent 60%), var(--pet-glass);
+  border: 1px solid var(--pet-line);
+  box-shadow:
+    inset 0 1px 0 var(--pet-inset),
+    0 14px 38px rgba(15, 23, 42, 0.16);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  font:
+    13px / 1.5 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 .pet-task-badge {
   width: 100%;
   height: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
-  font: 600 13px system-ui;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 19px;
+  font-weight: 600;
   cursor: pointer;
+}
+.pet-task-badge > svg:first-child {
+  color: var(--pet-emphasis);
+}
+.pet-task-badge > svg:last-child {
+  opacity: 0.55;
 }
 .pet-task-popup {
   height: 100%;
-  box-sizing: border-box;
   overflow: auto;
-  padding: 14px;
-  color: var(--color-text);
-  background: var(--color-bg-subtle);
-  font: 13px / 1.5 system-ui;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 15px;
+  border-radius: 24px;
+}
+.pet-task-content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }
 .pet-task-popup [hidden] {
   display: none !important;
@@ -33,14 +97,104 @@ html[data-window-surface="pet-task"] #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  position: sticky;
-  top: -14px;
-  padding: 10px 0;
-  background: var(--color-bg-subtle);
-  z-index: 2;
+  gap: 12px;
+  padding: 3px 1px 12px;
+  border-bottom: 1px solid var(--pet-rule);
 }
-.pet-task-row {
+.pet-task-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pet-task-heading strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.pet-task-heading small {
+  display: block;
+  margin-top: 1px;
+  color: var(--pet-muted);
+  font-size: 11px;
+}
+.pet-task-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--pet-action) 12%, transparent);
+  color: var(--pet-emphasis);
+}
+.pet-task-popup button,
+.pet-interaction-card button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--pet-rule, var(--color-border));
+  border-radius: 11px;
+  background: var(--pet-card, var(--glass-fill));
+  color: var(--pet-ink, var(--color-text));
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.pet-task-popup button:hover,
+.pet-interaction-card button:hover {
+  background: var(--pet-field, var(--glass-fill));
+}
+.pet-task-popup button:active,
+.pet-interaction-card button:active {
+  background: color-mix(
+    in srgb,
+    var(--pet-action, var(--accent)) 14%,
+    transparent
+  );
+}
+.pet-task-popup button.pet-task-quiet,
+.pet-task-popup button.pet-task-back,
+.pet-interaction-card button.pet-task-link {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pet-muted, var(--color-text-secondary));
+  font-size: 12px;
+}
+.pet-task-popup button.pet-task-back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  min-height: 24px;
+}
+.pet-task-popup button.pet-task-quiet {
+  white-space: nowrap;
+  padding: 6px 8px;
+}
+.pet-task-popup button.pet-task-primary,
+.pet-interaction-card button.pet-task-primary {
+  background: var(--pet-action, #5467d9);
+  color: #fff;
+  border-color: transparent;
+  box-shadow:
+    0 3px 10px rgba(63, 81, 181, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  font-weight: 600;
+}
+.pet-task-popup button.pet-task-primary:hover,
+.pet-interaction-card button.pet-task-primary:hover {
+  background: var(--pet-action-hover, #4557c2);
+}
+.pet-task-popup button:disabled,
+.pet-interaction-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.pet-task-popup button.pet-task-row {
   width: 100%;
   display: flex;
   align-items: center;
@@ -48,97 +202,109 @@ html[data-window-surface="pet-task"] #root {
   text-align: left;
   padding: 12px;
   margin: 4px 0;
+  border-radius: 14px;
 }
 .pet-task-row strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 550;
 }
 .pet-task-row span {
-  font-size: 11px;
-  color: var(--accent);
+  font-size: 10px;
+  color: var(--pet-emphasis);
+  background: color-mix(in srgb, var(--pet-action) 10%, transparent);
+  padding: 3px 6px;
+  border-radius: 6px;
   flex-shrink: 0;
-}
-.pet-task-child {
-  padding-left: 28px !important;
-  font-size: 12px !important;
 }
 .pet-interaction-card {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
+  padding: 16px;
+  border: 1px solid var(--pet-line, var(--color-border));
+  border-radius: 18px;
+  background: var(--pet-card, var(--color-bg-subtle));
+  color: var(--pet-ink, var(--color-text));
+  box-shadow: inset 0 1px 0 var(--pet-inset, transparent);
+}
+.pet-interaction-card header {
+  min-width: 0;
 }
 .pet-interaction-card h3 {
-  font-size: 15px;
-  margin: 6px 0;
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 650;
+  letter-spacing: -0.25px;
+  margin: 8px 0 0;
   overflow-wrap: anywhere;
 }
 .pet-interaction-card small {
   display: block;
-  color: var(--color-text-secondary);
+  color: var(--pet-muted, var(--color-text-secondary));
+  font-size: 11px;
 }
 .pet-task-project {
   overflow-wrap: anywhere;
-  font-size: 11px;
+  margin-top: 3px;
+}
+.pet-interaction-card p {
+  margin: 0;
+}
+.pet-interaction-card details summary {
+  font-size: 12px;
+  color: var(--pet-muted);
+  cursor: pointer;
 }
 .pet-interaction-details {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 220px;
+  max-height: 200px;
   overflow: auto;
-  margin: 0;
-  padding: 10px;
-  background: var(--glass-fill);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  margin: 8px 0 0;
+  padding: 12px;
+  background: var(--pet-field, var(--glass-fill));
+  border: 1px solid var(--pet-rule, var(--color-border));
+  border-radius: 12px;
   font:
-    12px / 1.5 ui-monospace,
+    12px / 1.6 ui-monospace,
     monospace;
 }
 .pet-interaction-card form,
 .pet-interaction-card label {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
 .pet-interaction-card form {
-  gap: 14px;
+  gap: 16px;
+}
+.pet-interaction-card label > span {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--pet-muted, var(--color-text-secondary));
 }
 .pet-interaction-card input,
 .pet-interaction-card select {
+  color-scheme: light;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  padding: 9px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--glass-fill);
-  color: var(--color-text);
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--pet-rule, var(--color-border));
+  border-radius: 12px;
+  background: var(--pet-field, var(--glass-fill));
+  color: var(--pet-ink, var(--color-text));
   font: inherit;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.025);
 }
-.pet-task-popup button,
-.pet-interaction-card button {
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--glass-fill);
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
+.pet-interaction-card form > button {
+  min-height: 40px;
 }
-.pet-task-popup button:active,
-.pet-interaction-card button:active {
-  background: var(--color-bg-subtle);
-}
-.pet-task-popup button:disabled,
-.pet-interaction-card button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+html[data-theme="dark"] .pet-interaction-card :is(input, select) {
+  color-scheme: dark;
 }
 .pet-interaction-actions,
 .pet-persistent-confirm {
@@ -151,9 +317,10 @@ html[data-window-surface="pet-task"] #root {
   width: 100%;
   margin: 0;
 }
-.pet-task-link {
+.pet-interaction-card > .pet-task-link {
   justify-self: start;
-  font-size: 12px !important;
+  padding-left: 0;
+  min-height: 24px;
 }
 .conversation-interactions {
   display: grid;
@@ -167,6 +334,25 @@ html[data-window-surface="pet-task"] #root {
 .pet-task-popup :focus-visible,
 .pet-interaction-card :focus-visible,
 .pet-task-badge:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--pet-emphasis, var(--accent));
   outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-task-popup button,
+  .pet-interaction-card button {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .pet-task-popup,
+  .pet-task-badge {
+    background: var(--color-bg-base, #eef2f7);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .pet-interaction-card,
+  .pet-task-popup button,
+  .pet-interaction-card :is(input, select, button) {
+    border-color: var(--pet-muted);
+  }
 }

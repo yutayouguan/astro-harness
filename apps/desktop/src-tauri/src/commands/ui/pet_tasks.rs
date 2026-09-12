@@ -10,6 +10,9 @@ use types::pending_interaction::{InteractionResponse, InteractionSnapshot};
 
 const BADGE: &str = "pet-task-badge";
 const POPUP: &str = "pet-task-popup";
+const POPUP_WIDTH: f64 = 392.0;
+const POPUP_MAX_HEIGHT: f64 = 560.0;
+const POPUP_MIN_HEIGHT: f64 = 180.0;
 // Commands and the timer may ask to refresh concurrently. Window construction
 // is serialized separately from the request state mutex used by WebView IPC.
 static WINDOW_REFRESH: Mutex<()> = Mutex::new(());
@@ -35,6 +38,7 @@ struct State {
     navigation: Option<serde_json::Value>,
     last_position: Option<(i32, i32)>,
     auto_candidate: Option<(String, std::time::Instant)>,
+    popup_height: Option<f64>,
 }
 #[derive(Default)]
 pub struct PetTasks(Mutex<State>);
@@ -226,17 +230,19 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> 
     if let Some(window) = app.get_webview_window(label) {
         return Ok(window);
     }
-    WebviewWindowBuilder::new(
+    let window = WebviewWindowBuilder::new(
         app,
         label,
         WebviewUrl::App(format!("index.html?surface={label}").into()),
     )
     .title("Astro Tasks")
     .inner_size(
-        if label == BADGE { 166.0 } else { 440.0 },
-        if label == BADGE { 38.0 } else { 560.0 },
+        if label == BADGE { 166.0 } else { POPUP_WIDTH },
+        if label == BADGE { 38.0 } else { 420.0 },
     )
     .decorations(false)
+    .transparent(true)
+    .shadow(true)
     .resizable(false)
     .skip_taskbar(true)
     .always_on_top(true)
@@ -245,7 +251,45 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> 
     .accept_first_mouse(true)
     .visible(false)
     .build()
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let effect_window = window.clone();
+        let radius = if label == BADGE { 19.0 } else { 24.0 };
+        // NSVisualEffectView must be installed on the main thread. CSS blur alone
+        // cannot sample pixels from the desktop behind a transparent WebView.
+        window.run_on_main_thread(move || {
+            if let Err(error) = window_vibrancy::apply_vibrancy(
+                &effect_window,
+                window_vibrancy::NSVisualEffectMaterial::Popover,
+                Some(window_vibrancy::NSVisualEffectState::Active),
+                Some(radius),
+            ) {
+                tracing::warn!(%error, "pet task vibrancy unavailable; keeping readable fallback");
+            }
+        }).map_err(|e| e.to_string())?;
+    }
+    Ok(window)
+}
+
+fn bounded_popup_height(height: f64) -> Result<f64, String> {
+    if !height.is_finite() {
+        return Err("无效的弹窗高度".into());
+    }
+    Ok(height.ceil().clamp(POPUP_MIN_HEIGHT, POPUP_MAX_HEIGHT))
+}
+
+#[tauri::command]
+pub fn resize_pet_task_content(
+    window: WebviewWindow,
+    app: AppHandle,
+    height: f64,
+) -> Result<(), String> {
+    if window.label() != POPUP {
+        return Err("Only the task popup may report its content size".into());
+    }
+    app.state::<PetTasks>().0.lock().unwrap().popup_height = Some(bounded_popup_height(height)?);
+    Ok(())
 }
 
 /// Physical-coordinate placement; preserves scale on negative-origin monitors.
@@ -345,6 +389,13 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
     let area = monitor.work_area();
     let size = pet.outer_size().map_err(|e| e.to_string())?;
     let scale = monitor.scale_factor();
+    let popup_height = app
+        .state::<PetTasks>()
+        .0
+        .lock()
+        .unwrap()
+        .popup_height
+        .unwrap_or(420.0);
     for (label, show) in [(BADGE, badge_visible), (POPUP, popup_visible)] {
         if !show {
             continue;
@@ -353,7 +404,7 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
         let wanted = if label == BADGE {
             (166., 38.)
         } else {
-            (440., 560.)
+            (POPUP_WIDTH, popup_height)
         };
         let (x, y, w, h) = place(
             (position.x, position.y, size.width, size.height),
@@ -587,6 +638,14 @@ mod tests {
         state.apply_snapshot(snapshot(2, &["snoozed"]), true, false);
         assert!(state.auto_candidate.is_none());
         assert!(!state.open);
+    }
+    #[test]
+    fn task_popup_content_size_is_bounded_and_rejects_nonfinite_values() {
+        assert_eq!(bounded_popup_height(20.0).unwrap(), 180.0);
+        assert_eq!(bounded_popup_height(321.2).unwrap(), 322.0);
+        assert_eq!(bounded_popup_height(2000.0).unwrap(), 560.0);
+        assert!(bounded_popup_height(f64::NAN).is_err());
+        assert!(bounded_popup_height(f64::INFINITY).is_err());
     }
     #[test]
     fn popup_placement_clamps_negative_monitor_origins_and_avoids_pet() {

@@ -1,4 +1,44 @@
 import { test, expect } from "@playwright/test";
+test("task glass has an opaque high-contrast fallback", async ({ page }) => {
+  await page.emulateMedia({ contrast: "more" });
+  await page.goto(
+    "/iframe.html?id=desktop-pettasks--retry-question&viewMode=story&globals=theme:light",
+  );
+  await expect(page.locator(".pet-task-popup")).toHaveCSS(
+    "backdrop-filter",
+    "none",
+  );
+});
+for (const theme of ["light", "dark"]) {
+  test(`task popup has rounded glass and clear primary action in ${theme}`, async ({
+    page,
+  }) => {
+    await page.goto(
+      `/iframe.html?id=desktop-pettasks--retry-question&viewMode=story&globals=theme:${theme}`,
+    );
+    const popup = page.locator(".pet-task-popup");
+    await expect(popup).toHaveCSS("border-radius", "24px");
+    await expect(popup).toHaveCSS(
+      "backdrop-filter",
+      "blur(28px) saturate(1.5)",
+    );
+    await expect(
+      page.getByRole("button", { name: "提交回答", exact: true }),
+    ).toHaveCSS("color", "rgb(255, 255, 255)");
+    await expect
+      .poll(async () => (await popup.boundingBox())?.height ?? 1000)
+      .toBeLessThan(520);
+    await popup.screenshot({
+      path: test.info().outputPath(`pet-popup-glass-${theme}.png`),
+    });
+    await page
+      .getByRole("button", { name: "返回任务列表", exact: true })
+      .click();
+    await popup.screenshot({
+      path: test.info().outputPath(`pet-task-list-${theme}.png`),
+    });
+  });
+}
 test("an already-focused popup input allows clicking to reposition the caret", async ({
   page,
 }) => {

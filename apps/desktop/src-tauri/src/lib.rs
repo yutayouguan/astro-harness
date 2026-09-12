@@ -269,6 +269,7 @@ pub fn run() {
             commands::ui::pet_tasks::open_pet_tasks,
             commands::ui::pet_tasks::dismiss_pet_tasks,
             commands::ui::pet_tasks::focus_pet_tasks,
+            commands::ui::pet_tasks::resize_pet_task_content,
             commands::ui::pet_tasks::report_pending_interactions_visible,
             commands::ui::pet_tasks::open_pet_task_session,
             commands::ui::pet_tasks::take_pet_task_navigation,

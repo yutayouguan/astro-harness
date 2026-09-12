@@ -89,7 +89,7 @@ export default function InteractionCard({
       aria-busy={busy}
     >
       <header>
-        <small>
+        <small className="pet-interaction-eyebrow">
           {request.kind === "approval" ? "需要审批" : "需要你的回答"} ·{" "}
           {task?.title ?? "任务"}
         </small>
@@ -136,6 +136,7 @@ export default function InteractionCard({
               请核对上方操作及权限范围。
             </p>
             <button
+              className="pet-task-primary"
               type="button"
               disabled={disabled}
               onClick={() => void submit(confirm.id, {}, true)}
@@ -155,6 +156,11 @@ export default function InteractionCard({
             {request.actions.map((action) => (
               <button
                 key={action.id}
+                className={
+                  action.id === "approve" || action.id === "allow_once"
+                    ? "pet-task-primary"
+                    : ""
+                }
                 type="button"
                 disabled={disabled}
                 onClick={() =>
@@ -277,7 +283,11 @@ export default function InteractionCard({
               </label>
             );
           })}
-          <button type="submit" disabled={disabled}>
+          <button
+            className="pet-task-primary"
+            type="submit"
+            disabled={disabled}
+          >
             提交回答
           </button>
         </form>

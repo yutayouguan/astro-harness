@@ -16,6 +16,25 @@ import {
   type PendingInteraction,
   type InteractionTask,
 } from "./pendingInteractions.ts";
+test("native task glass keeps the UA canvas transparent and sizes through scoped IPC", () => {
+  const main = readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
+  const native = readFileSync(
+    new URL("../../../src-tauri/src/commands/ui/pet_tasks.rs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    main,
+    /style\.colorScheme\s*=\s*isDesktopPetWindow\s*\|\|\s*isPetTaskWindow/,
+  );
+  assert.ok(native.includes(".transparent(true)"));
+  assert.ok(native.includes("NSVisualEffectMaterial::Popover"));
+  const sizing = native.slice(
+    native.indexOf("pub fn resize_pet_task_content"),
+    native.indexOf("/// Physical-coordinate placement"),
+  );
+  assert.ok(sizing.includes("window.label() != POPUP"));
+});
+
 const request: PendingInteraction = {
   key: "s/t/r",
   sessionId: "s",

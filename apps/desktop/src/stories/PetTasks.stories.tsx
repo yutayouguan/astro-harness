@@ -126,7 +126,11 @@ const meta = {
     let state: InteractionState = {
       uiRevision: 1,
       connected: true,
-      selected: context.parameters.failFirst ? question.key : approval.key,
+      selected: context.parameters.list
+        ? null
+        : context.parameters.failFirst
+          ? question.key
+          : approval.key,
       snapshot: {
         epoch: crypto.randomUUID(),
         revision: 1,
@@ -198,10 +202,25 @@ const meta = {
     return clearMocks;
   },
   decorators: [
-    (Story) => (
+    (Story, context) => (
       <LocaleProvider>
-        <div style={{ width: 440, height: 560, margin: 24 }}>
-          <Story />
+        <div
+          style={{
+            minHeight: 620,
+            padding: 32,
+            background:
+              "radial-gradient(ellipse at 12% 15%, rgba(123, 154, 226, .32), transparent 55%), radial-gradient(ellipse at 45% 85%, rgba(187, 155, 221, .26), transparent 60%)",
+          }}
+        >
+          <div
+            style={{
+              width: context.args.badge ? 166 : 392,
+              height: context.args.badge ? 38 : undefined,
+              maxHeight: 560,
+            }}
+          >
+            <Story />
+          </div>
         </div>
       </LocaleProvider>
     ),
@@ -210,6 +229,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ApprovalAndQuestion: Story = {};
+export const TaskList: Story = { parameters: { list: true } };
+export const Badge: Story = {
+  args: { badge: true },
+  parameters: { list: true },
+};
 export const RetryQuestion: Story = { parameters: { failFirst: true } };
 export const MultiStepQuestion: Story = {
   parameters: { failFirst: true, wizard: true },
