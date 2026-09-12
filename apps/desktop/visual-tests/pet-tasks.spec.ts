@@ -10,6 +10,23 @@ test("task glass has an opaque high-contrast fallback", async ({ page }) => {
   );
 });
 for (const theme of ["light", "dark"]) {
+  test(`task badge is a frosted capsule in ${theme}`, async ({ page }) => {
+    await page.goto(
+      `/iframe.html?id=desktop-pettasks--badge&viewMode=story&globals=theme:${theme}`,
+    );
+    const badge = page.getByRole("button", { name: "待处理 2", exact: true });
+    await expect(badge).toHaveCSS("border-radius", "19px");
+    await expect(badge).toHaveCSS(
+      "backdrop-filter",
+      "blur(28px) saturate(1.5)",
+    );
+    const bounds = await badge.boundingBox();
+    expect(bounds?.width).toBe(166);
+    expect(bounds?.height).toBe(38);
+    await badge.screenshot({
+      path: test.info().outputPath(`pet-badge-glass-${theme}.png`),
+    });
+  });
   test(`task popup has rounded glass and clear primary action in ${theme}`, async ({
     page,
   }) => {
