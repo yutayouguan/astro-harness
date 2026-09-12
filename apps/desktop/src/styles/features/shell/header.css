@@ -413,6 +413,12 @@ html[data-theme="dark"] .header-icon-btn.is-active {
   border-radius: 22px;
 }
 
+/* Native focus/edit controls and portalled content use the resolved tone too. */
+.model-picker,
+.model-picker-flyout {
+  --accent: var(--tone);
+}
+
 .model-picker {
   position: relative;
   flex-shrink: 0;
@@ -1092,6 +1098,7 @@ html[data-theme="dark"] .header-icon-btn.is-active {
 }
 
 .model-picker-option-check.is-visible {
+  color: var(--tone, var(--accent));
   opacity: 1;
 }
 

@@ -26,6 +26,9 @@ html:is([data-color-style="unified"], [data-color-style="dynamic"])
 }
 
 html:is([data-color-style="unified"], [data-color-style="dynamic"])[data-tone],
+/* Model trigger has a page-local header tone; the body portal must match it. */
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .model-picker,
+html:is([data-color-style="unified"], [data-color-style="dynamic"]) .model-picker-flyout,
 html:is([data-color-style="unified"], [data-color-style="dynamic"]) .app-shell,
 html:is([data-color-style="unified"], [data-color-style="dynamic"])
   .app-shell[data-tone],

@@ -19,7 +19,7 @@
 }
 
 .sidebar-footer-actions .sidebar-footer-icon[aria-pressed="true"] {
-  color: var(--accent, var(--ink));
+  color: var(--tone, var(--accent, var(--ink)));
   background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
@@ -29,7 +29,7 @@
 }
 
 .sidebar-footer-actions .sidebar-settings-btn:focus-visible {
-  outline: 2px solid var(--accent, var(--ink));
+  outline: 2px solid var(--tone, var(--accent, var(--ink)));
   outline-offset: -2px;
 }
 
