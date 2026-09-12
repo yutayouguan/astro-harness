@@ -20,8 +20,15 @@ for (const theme of ["light", "dark"]) {
       expect((await page.locator(".pet-motion-portrait").boundingBox())!.width).toBeLessThanOrEqual(144);
       expect((await preview.boundingBox())!.height).toBeLessThan(330);
       if (width === 1440) {
-        expect((await preview.boundingBox())!.width).toBe(240);
+        expect((await preview.boundingBox())!.width).toBe(220);
         expect((await preferences.boundingBox())!.height).toBeLessThan(460);
+        const previewBox = (await preview.boundingBox())!;
+        const size = (await page.locator(".desktop-pet-size-row").boundingBox())!;
+        const interval = (await page.locator(".pet-detail-interval").boundingBox())!;
+        expect(size.x + size.width).toBeLessThanOrEqual(previewBox.x - 16);
+        expect(size.y).toBeLessThan(previewBox.y + previewBox.height);
+        expect(interval.y).toBeGreaterThanOrEqual(previewBox.y + previewBox.height);
+        expect(interval.width).toBeGreaterThan(size.width + 180);
       } else {
         const a = (await preview.boundingBox())!, b = (await preferences.boundingBox())!;
         expect(b.y).toBeGreaterThanOrEqual(a.y + a.height);

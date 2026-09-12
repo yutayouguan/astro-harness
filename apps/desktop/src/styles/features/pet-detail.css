@@ -176,24 +176,28 @@
   color: var(--color-text-secondary);
 }
 .pet-library.pet-detail-view .pet-motion-settings {
-  grid-template-columns: 240px minmax(0, 1fr);
+  /* Individual setting rows avoid the float, then reclaim the full card width
+     below it. Keep the form in normal flow so its semantics remain intact. */
+  display: flow-root;
   width: 100%;
   max-width: 960px;
   box-sizing: border-box;
-  gap: 16px;
-  padding: 0;
+  padding: 16px;
   min-width: 0;
-  background: transparent;
-  border: 0;
+  background: var(--pet-material-surface, var(--settings-inset-background));
+  border: 1px solid var(--pet-material-border, var(--settings-inset-border));
+  border-radius: 14px;
   box-shadow: none;
-  align-items: start;
 }
 .pet-library.pet-detail-view .pet-motion-preview {
+  float: right;
+  width: 220px;
+  margin: 0 0 12px 24px;
   min-width: 0;
   box-sizing: border-box;
-  padding: 14px;
+  padding: 10px;
   background: var(--color-bg-subtle);
-  border: 1px solid var(--color-border);
+  border: 0;
   gap: 10px;
 }
 .pet-library.pet-detail-view .pet-motion-preview header {
@@ -229,13 +233,12 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--color-bg-subtle));
 }
 .pet-library.pet-detail-view .pet-motion-preferences {
+  display: block;
   min-width: 0;
   box-sizing: border-box;
-  padding: 16px;
-  background: var(--pet-material-surface, var(--settings-inset-background));
-  border: 1px solid var(--pet-material-border, var(--settings-inset-border));
-  border-radius: 14px;
-  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
 }
 .pet-library.pet-detail-view .pet-motion-preferences .desktop-pet-card-head h3 {
   font-size: 14px;
@@ -246,9 +249,12 @@
   line-height: 1.5;
 }
 .pet-library.pet-detail-view .pet-motion-preferences > .desktop-pet-model {
-  margin: 0;
+  margin: 8px 0;
+  display: flow-root;
 }
 .pet-library.pet-detail-view .pet-defaults-editor {
+  display: block;
+  width: auto;
   min-width: 0;
   gap: 0;
 }
@@ -263,6 +269,7 @@
   margin: 0;
 }
 .pet-library.pet-detail-view .pet-size-hint {
+  display: flow-root;
   margin: 0 0 4px;
   min-width: 0;
   color: var(--color-text-secondary);
@@ -280,6 +287,9 @@
 }
 .pet-library.pet-detail-view .pet-detail-preference-row label {
   cursor: pointer;
+}
+.pet-library.pet-detail-view .pet-detail-interval {
+  clear: both;
 }
 .pet-library.pet-detail-view .pet-detail-preference-row strong,
 .pet-library.pet-detail-view .pet-detail-interval strong {
@@ -345,6 +355,7 @@
   cursor: pointer;
 }
 .pet-library.pet-detail-view .pet-detail-save-row {
+  clear: both;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -373,8 +384,10 @@
   transition: none;
 }
 @container pet-detail (max-width: 760px) {
-  .pet-library.pet-detail-view .pet-motion-settings {
-    grid-template-columns: 1fr;
+  .pet-library.pet-detail-view .pet-motion-preview {
+    float: none;
+    width: 100%;
+    margin: 0 0 16px;
   }
 }
 @container pet-detail (max-width: 680px) {

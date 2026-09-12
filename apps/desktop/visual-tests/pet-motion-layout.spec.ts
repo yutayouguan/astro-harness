@@ -8,7 +8,7 @@ for (const width of [1280, 800, 430]) {
     await page.getByRole("tab", { name: "动作与偏好", exact: true }).click();
     const preferences = page.locator(".pet-motion-preferences");
     const measure = () => preferences.evaluate((el) => {
-      const rect = el.getBoundingClientRect();
+      const rect = el.parentElement!.getBoundingClientRect();
       const preview = document.querySelector(".pet-motion-preview")!.getBoundingClientRect();
       const save = el.querySelector(".pet-detail-save-row button")!.getBoundingClientRect();
       const header = el.querySelector("header")!.getBoundingClientRect();
@@ -19,8 +19,8 @@ for (const width of [1280, 800, 430]) {
         rightInset: Math.min(...switches.map((r) => rect.right - r.right), rect.right - save.right),
         bottomInset: rect.bottom - save.bottom,
         previewWidth: preview.width,
-        aligned: Math.abs(preview.top - rect.top) < 1,
-        stacked: rect.top >= preview.bottom,
+        aligned: Math.abs(preview.top - header.top) < 1,
+        stacked: header.top >= preview.bottom,
         overflow: wrapper.scrollWidth > wrapper.clientWidth + 1,
         background: getComputedStyle(wrapper).backgroundColor,
       };
@@ -30,7 +30,7 @@ for (const width of [1280, 800, 430]) {
     expect(bounds.rightInset).toBeGreaterThanOrEqual(16);
     expect(bounds.bottomInset).toBeGreaterThanOrEqual(16);
     expect(bounds.overflow).toBe(false);
-    expect(bounds.background).toBe("rgba(0, 0, 0, 0)");
+    expect(bounds.background).not.toBe("rgba(0, 0, 0, 0)");
     if (width > 800) {
       expect(bounds.previewWidth).toBeLessThanOrEqual(340);
       expect(bounds.aligned).toBe(true);
