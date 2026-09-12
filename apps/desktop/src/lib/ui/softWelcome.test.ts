@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import {
+  SOFT_WELCOME_CATEGORIES,
+  SOFT_WELCOME_GROUPS,
+  softWelcomeSections,
+} from "./softWelcome.ts";
+
+const cards = (
+  Object.keys(SOFT_WELCOME_GROUPS) as (keyof typeof SOFT_WELCOME_GROUPS)[]
+).map((id) => ({ id }));
+test("all existing actions appear exactly once with two featured content cards", () => {
+  const section = softWelcomeSections(cards, "all");
+  assert.deepEqual(
+    section.featured.map((card) => card.id),
+    ["data", "image"],
+  );
+  const ids = [...section.featured, ...section.cards].map((card) => card.id);
+  assert.equal(ids.length, 12);
+  assert.equal(new Set(ids).size, 12);
+});
+test("category filters are lossless and never duplicate featured actions", () => {
+  const groups = SOFT_WELCOME_CATEGORIES.filter(
+    (category) => category !== "all",
+  );
+  const ids = groups.flatMap((category) => {
+    const section = softWelcomeSections(cards, category);
+    assert.equal(section.featured.length, 0);
+    assert.ok(
+      section.cards.every((card) => SOFT_WELCOME_GROUPS[card.id] === category),
+    );
+    return section.cards.map((card) => card.id);
+  });
+  assert.equal(ids.length, 12);
+  assert.equal(new Set(ids).size, 12);
+});
+test("soft cards keep localized prompt slots, never send requests or animate a carousel", async () => {
+  const source = await readFile(
+    new URL("../../components/chat/SoftWelcome.tsx", import.meta.url),
+    "utf8",
+  );
+  const root = await readFile(
+    new URL("../../components/chat/ChatWelcome.tsx", import.meta.url),
+    "utf8",
+  );
+  const css = await readFile(
+    new URL("../../styles/materials/soft-welcome.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /onPickCard\(prompt, promptTemplateHints\(prompt\)\)/);
+  assert.match(root, /material === "soft"/);
+  assert.match(root, /<GlassWelcome/);
+  assert.doesNotMatch(
+    source,
+    /invoke\(|fetch\(|setInterval|ParticleField|Marquee/,
+  );
+  assert.match(css, /overflow: auto/);
+  assert.match(css, /@container/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /prefers-contrast/);
+});

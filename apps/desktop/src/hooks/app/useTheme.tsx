@@ -250,6 +250,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Presentational surfaces also render standalone; unprovided previews keep glass. */
+export function useInterfaceMaterial(): InterfaceMaterial {
+  return useContext(ThemeContext)?.material ?? "glass";
+}
+
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {

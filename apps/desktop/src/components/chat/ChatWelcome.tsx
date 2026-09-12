@@ -31,6 +31,8 @@ import { Pause as PauseData, Play as PlayData } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import { WelcomeLogoEffect } from "./WelcomeLogoEffect";
 import { promptTemplateHints } from "../../lib/chat/promptTemplate";
+import { useInterfaceMaterial } from "../../hooks/app/useTheme";
+import { SoftWelcome } from "./SoftWelcome";
 
 const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
@@ -198,6 +200,7 @@ const ALL_CARDS: { id: WelcomeCardId; meta: CardMeta }[] = [
 
 const ROW1 = ALL_CARDS.slice(0, 6);
 const ROW2 = ALL_CARDS.slice(6, 12);
+export type WelcomeCard = (typeof ALL_CARDS)[number];
 
 type LogoDragState = {
   pointerId: number;
@@ -303,7 +306,16 @@ function MarqueeRow({
   );
 }
 
-export function ChatWelcome({ onPickCard, onActivate }: Props) {
+export function ChatWelcome(props: Props) {
+  const material = useInterfaceMaterial();
+  return material === "soft" ? (
+    <SoftWelcome cards={ALL_CARDS} {...props} />
+  ) : (
+    <GlassWelcome {...props} />
+  );
+}
+
+function GlassWelcome({ onPickCard, onActivate }: Props) {
   const { t } = useI18n();
   const subtitleId = useId();
   const [marqueePaused, setMarqueePaused] = useState(false);
