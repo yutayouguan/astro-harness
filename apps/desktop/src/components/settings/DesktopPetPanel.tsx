@@ -92,8 +92,8 @@ export default function DesktopPetPanel({ active }: { active: boolean }) {
           </h2>
           <p>
             {zh
-              ? "收藏你的桌面伙伴，为它准备不同的场景。从一张照片开始，让每一次陪伴都有自己的模样。"
-              : "Collect your companions and give each one a home. Start with a photo and make every moment together your own."}
+              ? "管理桌宠与场景，或从照片创建新伙伴。"
+              : "Manage pets and scenes, or create a companion from a photo."}
           </p>
         </div>
         <img src={conceptImage} alt="" aria-hidden />

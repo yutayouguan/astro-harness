@@ -176,7 +176,6 @@ export function SoftWelcome({ cards, onPickCard }: Props) {
             <ContentCard key={card.id} card={card} onPickCard={onPickCard} />
           ))}
         </div>
-        <p className="soft-welcome-hint">{t("chat.softWelcome.hint")}</p>
       </div>
     </section>
   );

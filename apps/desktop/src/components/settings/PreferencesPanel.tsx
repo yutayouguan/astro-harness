@@ -830,9 +830,6 @@ export default function PreferencesPanel({
                 <h2 className="prefs-card-title">
                   {t("prefs.appearance.material.title")}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("prefs.appearance.material.sub")}
-                </p>
               </div>
             </div>
 
@@ -979,16 +976,12 @@ export default function PreferencesPanel({
                 <h2 className="prefs-card-title">
                   {t("prefs.appearance.motion.title")}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("prefs.appearance.motion.sub")}
-                </p>
               </div>
             </div>
 
             <div className="morphicon-setting-row">
               <div className="appearance-control-copy">
                 <strong>{t("prefs.appearance.motion.spring")}</strong>
-                <span>{t("prefs.appearance.motion.springSub")}</span>
               </div>
               <div
                 className="morphicon-segmented"
@@ -1030,7 +1023,6 @@ export default function PreferencesPanel({
             <div className="morphicon-setting-row">
               <div className="appearance-control-copy">
                 <strong>{t("prefs.appearance.motion.stroke")}</strong>
-                <span>{t("prefs.appearance.motion.strokeSub")}</span>
               </div>
               <div
                 className="morphicon-segmented"
@@ -1350,7 +1342,6 @@ export default function PreferencesPanel({
               </div>
               <div>
                 <h2 className="prefs-card-title">{t("prefs.chat.title")}</h2>
-                <p className="prefs-card-sub">{t("prefs.chat.sub")}</p>
               </div>
             </div>
 
@@ -1878,7 +1869,6 @@ export default function PreferencesPanel({
               </div>
               <div>
                 <h2 className="prefs-card-title">{t("prefs.lang.title")}</h2>
-                <p className="prefs-card-sub">{t("prefs.lang.sub")}</p>
               </div>
             </div>
 
@@ -1919,9 +1909,6 @@ export default function PreferencesPanel({
                 <h2 className="prefs-card-title">
                   {t("prefs.system.title" as never)}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("prefs.system.sub" as never)}
-                </p>
               </div>
             </div>
 

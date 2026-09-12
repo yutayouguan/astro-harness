@@ -15,7 +15,7 @@ const COPY = {
     eyebrow: "ASTRO DESKTOP COMPANION",
     title: "把熟悉的它，带到桌面上",
     subtitle:
-      "上传一张清晰的宠物照片，使用当前图片模型生成保留外貌特征的专属桌宠。点击生成时，照片会发送给你选择的图片 Provider；本地副本与结果保存在本机。",
+      "用宠物照片生成专属静态桌宠。",
     source: "宠物照片",
     sourceHint: "建议使用正面、光线均匀、主体完整的照片",
     upload: "选择照片",
@@ -37,14 +37,14 @@ const COPY = {
     importAnimatedHint: "选择 Astro 动画宠物包中的 pet.json，也支持 v2 图集",
     animatedBadge: "动画 v2",
     staticHint:
-      "当前照片生成不包含动画帧。可使用内置奶糖，或导入含独立动作片段的动画宠物包。",
+      "照片仅生成静态形象；动画可用内置奶糖或导入宠物包。",
     staticBadge: "静态图片",
   },
   en: {
     eyebrow: "ASTRO DESKTOP COMPANION",
     title: "Bring a familiar friend to your desktop",
     subtitle:
-      "Upload a clear pet photo and use your active image model to create a personal desktop companion. When you generate, the photo is sent to your selected image provider; the local copy and result stay on this device.",
+      "Create a static desktop pet from a photo.",
     source: "Pet photo",
     sourceHint: "Use a well-lit photo with the full subject clearly visible",
     upload: "Choose photo",
@@ -69,7 +69,7 @@ const COPY = {
       "Choose pet.json from an Astro animation package; v2 atlases are also supported",
     animatedBadge: "Animated v2",
     staticHint:
-      "Photo generation produces a static portrait. Use built-in Naitang or import an animation package with independent motion clips.",
+      "Photos produce static portraits. For animation, use Naitang or import a pet package.",
     staticBadge: "Static image",
   },
 } as const;
@@ -390,8 +390,8 @@ export default function PetCreatePanel({
               </strong>
               <p>
                 {zh
-                  ? "当前照片生成不包含动画帧；生成后先保存到宠物库，不会立即替换桌面。"
-                  : "Photo generation produces no animation frames. Results are saved to the library before you apply them."}
+                  ? "静态形象先保存到宠物库，手动应用后替换桌面。"
+                  : "Static portraits are saved to the library. Apply one to replace the desktop pet."}
               </p>
             </div>
             <button

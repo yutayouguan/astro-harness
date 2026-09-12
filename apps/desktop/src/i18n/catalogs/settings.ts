@@ -8,7 +8,6 @@ export const settingsMessages = {
     "prefs.category.diagnostics": "诊断",
     "prefs.category.about": "关于",
     "prefs.appearance.material.title": "主题与材质",
-    "prefs.appearance.material.sub": "选择界面材质，独立调整明暗模式。",
     "prefs.appearance.surface.title": "界面材质",
     "prefs.appearance.surface.glass": "玻璃",
     "prefs.appearance.surface.glassDesc": "通透光感，映衬背景色彩",
@@ -19,16 +18,15 @@ export const settingsMessages = {
     "prefs.appearance.accent.title": "强调色",
     "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
     "prefs.appearance.motion.title": "动效与图标",
-    "prefs.appearance.motion.sub": "调整界面反馈的节奏与图标重量。",
     "prefs.appearance.theme.title": "界面主题",
-    "prefs.appearance.theme.sub": "系统模式会跟随操作系统自动切换。",
+    "prefs.appearance.theme.sub": "系统模式自动切换明暗",
     "prefs.appearance.theme.light": "浅色",
     "prefs.appearance.theme.system": "系统",
     "prefs.appearance.theme.dark": "深色",
     "prefs.appearance.scale.title": "界面大小",
-    "prefs.appearance.scale.sub": "按当前比例缩小文字、图标与控件。",
+    "prefs.appearance.scale.sub": "缩放文字、图标和控件",
     "prefs.appearance.glass.title": "玻璃强度",
-    "prefs.appearance.glass.sub": "影响卡片的透明、柔化与景深。",
+    "prefs.appearance.glass.sub": "调节透明度与磨砂效果",
     "prefs.appearance.glass.minimal": "最简",
     "prefs.appearance.glass.normal": "标准",
     "prefs.appearance.glass.rich": "丰富",
@@ -37,22 +35,19 @@ export const settingsMessages = {
     "prefs.appearance.strategy.title": "色彩策略",
     "prefs.appearance.strategy.sub": "灵动模式会根据当前背景提取色彩。",
     "prefs.appearance.strategy.unified": "统一配色",
-    "prefs.appearance.strategy.unifiedSub": "为全局 Shell 选择一组稳定渐变。",
+    "prefs.appearance.strategy.unifiedSub": "所有页面使用同一配色",
     "prefs.appearance.strategy.dynamic": "灵动配色",
-    "prefs.appearance.strategy.dynamicSub": "每次重组会生成一组新的协调色彩。",
+    "prefs.appearance.strategy.dynamicSub": "重新生成协调配色",
     "prefs.appearance.strategy.colorful": "多彩策略",
-    "prefs.appearance.strategy.colorfulSub":
-      "根据页面语义为不同能力分配独立强调色。",
+    "prefs.appearance.strategy.colorfulSub": "不同页面使用不同强调色",
     "prefs.appearance.strategy.auto": "自动分配",
     "prefs.appearance.motion.spring": "图标动效",
-    "prefs.appearance.motion.springSub": "决定标签切换和操作反馈的弹性。",
     "prefs.appearance.motion.stroke": "图标线宽",
-    "prefs.appearance.motion.strokeSub": "同步应用主导视觉密度。",
     "prefs.appearance.motion.stroke.thin": "纤细",
     "prefs.appearance.motion.stroke.regular": "标准",
     "prefs.appearance.motion.stroke.bold": "醒目",
     "prefs.morphicons.title": "图标动画",
-    "prefs.morphicons.sub": "控制状态图标形变时的弹簧手感与线条粗细",
+    "prefs.morphicons.sub": "调整动效弹性和线宽",
     "prefs.morphicons.spring": "弹簧",
     "prefs.morphicons.spring.smooth": "柔和",
     "prefs.morphicons.spring.snappy": "利落",
@@ -60,22 +55,22 @@ export const settingsMessages = {
     "prefs.morphicons.stroke": "描边",
     "prefs.morphicons.preview": "播放图标形变预览",
     "prefs.theme.title": "外观主题",
-    "prefs.theme.sub": "Glassmorphism 亮色 / 暗色，或跟随系统自动切换",
+    "prefs.theme.sub": "选择明暗模式",
     "prefs.theme.light": "亮色",
-    "prefs.theme.lightDesc": "淡蓝白玻璃拟态，参考教程配图质感",
+    "prefs.theme.lightDesc": "明亮界面",
     "prefs.theme.dark": "暗色",
-    "prefs.theme.darkDesc": "深紫玻璃拟态，适合夜间使用",
+    "prefs.theme.darkDesc": "暗色界面",
     "prefs.theme.auto": "自动",
     "prefs.theme.autoDesc": "壁纸模式跟随画面明暗，否则跟随系统",
 
     "prefs.wallpaper.title": "全局背景",
-    "prefs.wallpaper.sub": "背景只位于 Shell 底层，内容表面会自动保持可读性。",
+    "prefs.wallpaper.sub": "选择配色或图片背景",
     "prefs.wallpaper.colorMode": "氛围配色",
-    "prefs.wallpaper.colorModeDesc": "使用应用生成的多层色彩背景",
+    "prefs.wallpaper.colorModeDesc": "渐变色背景",
     "prefs.wallpaper.imageMode": "图片壁纸",
     "prefs.wallpaper.imageModeDesc": "上传图片，或让 AI 生成一张",
     "prefs.wallpaper.followSystem": "跟随系统壁纸",
-    "prefs.wallpaper.followSystemDesc": "系统切换桌面壁纸后自动同步到 Astro",
+    "prefs.wallpaper.followSystemDesc": "随系统壁纸更新",
     "prefs.wallpaper.upload": "上传图片",
     "prefs.wallpaper.imageFiles": "图片",
     "prefs.wallpaper.aiGenerate": "AI 生成",
@@ -97,11 +92,10 @@ export const settingsMessages = {
     "prefs.wallpaper.paletteCustom": "自定义",
     "prefs.wallpaper.themeColor": "主题色",
     "prefs.wallpaper.highlightColor": "高亮色",
-    "prefs.wallpaper.paletteAutoDesc": "更换壁纸时会重新分析并自动更新。",
-    "prefs.wallpaper.paletteCustomDesc":
-      "手动颜色会持续使用；开启自动选择可恢复壁纸取色。",
+    "prefs.wallpaper.paletteAutoDesc": "随壁纸自动更新",
+    "prefs.wallpaper.paletteCustomDesc": "保留手动配色，开启自动选择可恢复取色",
     "prefs.wallpaper.aiTitle": "AI 生成壁纸",
-    "prefs.wallpaper.aiSub": "使用模型服务中选定的图片模型，按横向比例生成画面",
+    "prefs.wallpaper.aiSub": "使用当前图片模型生成横向壁纸",
     "prefs.wallpaper.prompt": "描述你想要的画面",
     "prefs.wallpaper.promptPlaceholder":
       "例如：宁静的未来山谷，柔和晨雾与紫蓝色天光，画面干净克制",
@@ -113,8 +107,7 @@ export const settingsMessages = {
     "prefs.wallpaper.failureKeepsCurrent": "失败时保留当前壁纸",
     "prefs.wallpaper.generateAndApply": "生成并应用",
     "prefs.wallpaper.generating": "正在生成壁纸",
-    "prefs.wallpaper.generatingHint":
-      "当前壁纸会一直保留，生成成功后再自动替换",
+    "prefs.wallpaper.generatingHint": "生成成功后替换当前壁纸",
     "prefs.wallpaper.cancelGeneration": "取消生成",
     "prefs.wallpaper.generateInBackground": "后台生成",
     "prefs.wallpaper.generatingInBackground": "后台生成中",
@@ -128,14 +121,12 @@ export const settingsMessages = {
     "prefs.colorStyle.unifiedDesc": "全局固定氛围色，可选手动渐变",
     "prefs.colorStyle.dynamic": "灵动",
     "prefs.colorStyle.dynamicDesc": "每个页面独特配色，刷新保持不变",
-    "prefs.colorStyle.dynamicHint":
-      "配色由本机种子决定；换页面会变色，刷新后仍稳定",
+    "prefs.colorStyle.dynamicHint": "各页面独立配色，刷新后保持不变",
     "prefs.colorStyle.reshuffle": "重新生成",
     "prefs.colorStyle.presets": "统一色预设",
     "prefs.colorStyle.custom": "自定义渐变",
     "prefs.colorStyle.editorTitle": "自定义渐变",
-    "prefs.colorStyle.editorSub":
-      "拖动色点调整位置，可用 + / − 增减颜色；光晕大小与透明度由系统按色点数自动调节，确认后保存",
+    "prefs.colorStyle.editorSub": "拖动色点定位，用 + / − 增减颜色，确认后保存",
     "prefs.colorStyle.primaryStop": "主色点",
     "prefs.colorStyle.secondaryStop": "辅色点",
     "prefs.colorStyle.colorStop": "色点 {index}",
@@ -156,10 +147,8 @@ export const settingsMessages = {
     "prefs.colorStyle.preset.forest": "森林",
 
     "prefs.appIcon.title": "应用图标",
-    "prefs.appIcon.sub":
-      "切换托盘、程序坞与窗口图标，选择保存在本机并在启动时应用",
-    "prefs.appIcon.finderNote":
-      "注：已安装应用在访达 / 任务栏的图标为安装包内置，不随此设置更改；仅影响托盘、macOS 程序坞与 Windows/Linux 窗口图标。",
+    "prefs.appIcon.sub": "更换托盘、程序坞和窗口图标",
+    "prefs.appIcon.finderNote": "不改变访达或任务栏中的安装包图标。",
     "prefs.appIcon.blue": "蓝色",
     "prefs.appIcon.deepBlue": "深蓝",
     "prefs.appIcon.black": "黑色",
@@ -168,30 +157,25 @@ export const settingsMessages = {
 
     "prefs.app.aboutTitle": "关于Astro",
     "prefs.app.about":
-      "Astro（阿童木）是本地 AI 桌面工作站，名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
+      "Astro（阿童木）：集对话、记忆、工具和 Skills 于一体的本地 AI 工作站。",
 
     "prefs.system.title": "系统",
-    "prefs.system.sub": "开机自启动与系统集成",
     "prefs.system.autostart": "开机自启动",
     "prefs.system.autostartDesc": "登录时自动启动 Astro Agent",
 
     "prefs.lang.title": "界面语言",
-    "prefs.lang.sub": "切换中文 / English，选择会保存在本机",
     "prefs.lang.zh": "中文",
     "prefs.lang.zhDesc": "简体中文界面",
     "prefs.lang.en": "English",
     "prefs.lang.enDesc": "English interface",
 
     "prefs.chat.title": "聊天面板显示",
-    "prefs.chat.sub":
-      "控制对话区的详细程度，以及工具 / Skills / MCP / Hook 等过程信息",
     "prefs.chat.layout.title": "AI 回答布局",
-    "prefs.chat.layout.sub": "选择思考、工具与正文的组织方式，切换后立即生效",
+    "prefs.chat.layout.sub": "调整思考、工具与正文的排列",
     "prefs.chat.layout.timeline": "时间线",
     "prefs.chat.layout.timelineDesc": "按真实顺序展示思考、工具和回答片段",
     "prefs.chat.layout.grouped": "归类视图",
-    "prefs.chat.layout.groupedDesc":
-      "合并思考、集中工具，并将正文整理为完整回答",
+    "prefs.chat.layout.groupedDesc": "归类思考和工具，正文合并展示",
     "prefs.chat.preview.title": "即时预览",
     "prefs.chat.preview.user": "整理今天完成的设置界面，并说明验证结果。",
     "prefs.chat.preview.status": "准备任务",
@@ -215,7 +199,7 @@ export const settingsMessages = {
     "prefs.chat.detailed": "详细",
     "prefs.chat.detailedDesc": "显示全部过程信息，含参数与结果细节",
     "prefs.chat.sendMode": "忙碌时发送模式",
-    "prefs.chat.sendModeDesc": "Agent 运行中发送消息时的默认投递方式",
+    "prefs.chat.sendModeDesc": "任务运行中新消息的处理方式",
     "prefs.chat.details": "过程信息开关",
     "prefs.chat.processDefaultOpen": "默认展开过程",
     "prefs.chat.processDefaultOpenDesc": "新回答的思考与过程卡片默认展开",
@@ -238,14 +222,11 @@ export const settingsMessages = {
     "prefs.chat.sidebarVisibleSessionsCount": "{count} 条",
 
     "prefs.context.title": "自动压缩",
-    "prefs.context.sub":
-      "配置 Run 内 Soft/Medium/Hard、mid-run 与建议 /compact 等卫生参数",
-    "prefs.context.viewHint":
-      "占用分层查看在聊天右栏「上下文」；此处只调整触发阈值与预算。",
+    "prefs.context.sub": "设置压缩阈值与保留范围",
+    "prefs.context.viewHint": "用量详情见聊天右栏「上下文」。",
     "prefs.context.loading": "正在加载压缩设置…",
     "prefs.context.enabled": "上下文压缩",
-    "prefs.context.enabledDesc":
-      "压缩会保留原始历史，只改变下一次模型看到的视图。",
+    "prefs.context.enabledDesc": "保留原始历史，仅压缩模型读取的内容。",
     "prefs.context.stages": "阶段触发比例（相对上下文窗口）",
     "prefs.context.soft": "Soft",
     "prefs.context.softDesc": "轻压；开始 prune 较长 tool 结果",
@@ -283,7 +264,7 @@ export const settingsMessages = {
     "prefs.context.invalidOrder": "须满足 Soft < Medium < Hard",
 
     "prefs.diag.title": "运行日志",
-    "prefs.diag.sub": "按时间查询本地日志，实时跟随最新运行事件。",
+    "prefs.diag.sub": "查询本地日志，支持实时跟随",
     "prefs.diag.scope": "范围",
     "prefs.diag.scope.current": "本次会话",
     "prefs.diag.scope.all": "全部会话",
@@ -340,8 +321,7 @@ export const settingsMessages = {
     "prefs.diag.newestFirst": "最新在前",
     "prefs.diag.emptySearch": "当前结果中没有匹配内容",
     "prefs.diag.export.title": "导出诊断包",
-    "prefs.diag.export.sub":
-      "包含近期日志、版本和脱敏后的运行状态，不包含 API 密钥。",
+    "prefs.diag.export.sub": "日志、版本与脱敏状态，不含 API 密钥。",
     "prefs.diag.export.action": "导出诊断包",
     "prefs.diag.export.exporting": "正在导出…",
     "prefs.diag.export.done": "已导出到 {path}",
@@ -358,8 +338,6 @@ export const settingsMessages = {
     "prefs.category.diagnostics": "Diagnostics",
     "prefs.category.about": "About",
     "prefs.appearance.material.title": "Theme and material",
-    "prefs.appearance.material.sub":
-      "Choose a surface material independently of light and dark mode.",
     "prefs.appearance.surface.title": "Interface material",
     "prefs.appearance.surface.glass": "Glass",
     "prefs.appearance.surface.glassDesc":
@@ -374,20 +352,15 @@ export const settingsMessages = {
     "prefs.appearance.accent.sub":
       "Keep controls and status colors clear over every wallpaper.",
     "prefs.appearance.motion.title": "Motion and icons",
-    "prefs.appearance.motion.sub":
-      "Tune the rhythm of interface feedback and the visual weight of icons.",
     "prefs.appearance.theme.title": "Interface theme",
-    "prefs.appearance.theme.sub":
-      "System mode follows the operating system automatically.",
+    "prefs.appearance.theme.sub": "System mode switches automatically",
     "prefs.appearance.theme.light": "Light",
     "prefs.appearance.theme.system": "System",
     "prefs.appearance.theme.dark": "Dark",
     "prefs.appearance.scale.title": "Interface size",
-    "prefs.appearance.scale.sub":
-      "Scale text, icons, and controls down from their current proportions.",
+    "prefs.appearance.scale.sub": "Scale text, icons, and controls",
     "prefs.appearance.glass.title": "Glass intensity",
-    "prefs.appearance.glass.sub":
-      "Adjust card transparency, softness, and visual depth.",
+    "prefs.appearance.glass.sub": "Adjust transparency and frost",
     "prefs.appearance.glass.minimal": "Minimal",
     "prefs.appearance.glass.normal": "Standard",
     "prefs.appearance.glass.rich": "Rich",
@@ -397,27 +370,20 @@ export const settingsMessages = {
     "prefs.appearance.strategy.sub":
       "Dynamic mode extracts colors from the current background.",
     "prefs.appearance.strategy.unified": "Unified palette",
-    "prefs.appearance.strategy.unifiedSub":
-      "Choose a stable gradient for the global shell.",
+    "prefs.appearance.strategy.unifiedSub": "Use one palette across pages",
     "prefs.appearance.strategy.dynamic": "Dynamic palette",
-    "prefs.appearance.strategy.dynamicSub":
-      "Regenerate a fresh set of coordinated colors.",
+    "prefs.appearance.strategy.dynamicSub": "Generate a coordinated palette",
     "prefs.appearance.strategy.colorful": "Colorful strategy",
     "prefs.appearance.strategy.colorfulSub":
-      "Assign distinct accents to capabilities by page semantics.",
+      "Use a distinct accent for each page",
     "prefs.appearance.strategy.auto": "Automatic",
     "prefs.appearance.motion.spring": "Icon motion",
-    "prefs.appearance.motion.springSub":
-      "Set the spring response for tab changes and actions.",
     "prefs.appearance.motion.stroke": "Icon stroke",
-    "prefs.appearance.motion.strokeSub":
-      "Keep icon weight aligned with the app's visual density.",
     "prefs.appearance.motion.stroke.thin": "Thin",
     "prefs.appearance.motion.stroke.regular": "Standard",
     "prefs.appearance.motion.stroke.bold": "Bold",
     "prefs.morphicons.title": "Icon animation",
-    "prefs.morphicons.sub":
-      "Control the spring feel and stroke weight of state icon morphs",
+    "prefs.morphicons.sub": "Adjust motion and stroke weight",
     "prefs.morphicons.spring": "Spring",
     "prefs.morphicons.spring.smooth": "Soft",
     "prefs.morphicons.spring.snappy": "Snappy",
@@ -425,25 +391,23 @@ export const settingsMessages = {
     "prefs.morphicons.stroke": "Stroke",
     "prefs.morphicons.preview": "Play icon morph preview",
     "prefs.theme.title": "Appearance",
-    "prefs.theme.sub": "Glassmorphism light / dark, or follow system",
+    "prefs.theme.sub": "Choose light or dark mode",
     "prefs.theme.light": "Light",
-    "prefs.theme.lightDesc": "Pale blue-white glass, matching tutorial art",
+    "prefs.theme.lightDesc": "Light appearance",
     "prefs.theme.dark": "Dark",
-    "prefs.theme.darkDesc": "Deep purple glass for night use",
+    "prefs.theme.darkDesc": "Dark appearance",
     "prefs.theme.auto": "Auto",
     "prefs.theme.autoDesc":
       "Match wallpaper brightness, otherwise follow the system",
 
     "prefs.wallpaper.title": "Global background",
-    "prefs.wallpaper.sub":
-      "The background stays beneath the shell while content surfaces remain readable.",
+    "prefs.wallpaper.sub": "Choose colors or an image",
     "prefs.wallpaper.colorMode": "Ambient colors",
-    "prefs.wallpaper.colorModeDesc": "Use the app's generated layered colors",
+    "prefs.wallpaper.colorModeDesc": "Gradient background",
     "prefs.wallpaper.imageMode": "Image wallpaper",
     "prefs.wallpaper.imageModeDesc": "Upload an image or generate one with AI",
     "prefs.wallpaper.followSystem": "Follow system wallpaper",
-    "prefs.wallpaper.followSystemDesc":
-      "Automatically sync when the desktop wallpaper changes",
+    "prefs.wallpaper.followSystemDesc": "Sync desktop wallpaper changes",
     "prefs.wallpaper.upload": "Upload image",
     "prefs.wallpaper.imageFiles": "Images",
     "prefs.wallpaper.aiGenerate": "Generate with AI",
@@ -466,13 +430,12 @@ export const settingsMessages = {
     "prefs.wallpaper.paletteCustom": "Custom",
     "prefs.wallpaper.themeColor": "Theme color",
     "prefs.wallpaper.highlightColor": "Highlight color",
-    "prefs.wallpaper.paletteAutoDesc":
-      "Colors are analyzed again and updated when the wallpaper changes.",
+    "prefs.wallpaper.paletteAutoDesc": "Update colors with the wallpaper",
     "prefs.wallpaper.paletteCustomDesc":
-      "Custom colors remain in use. Turn on automatic colors to restore wallpaper sampling.",
+      "Keep custom colors; enable automatic colors to sample the wallpaper",
     "prefs.wallpaper.aiTitle": "Generate AI wallpaper",
     "prefs.wallpaper.aiSub":
-      "Uses the image model selected in Model Providers and generates a landscape image",
+      "Generate a landscape wallpaper with the selected image model",
     "prefs.wallpaper.prompt": "Describe the scene you want",
     "prefs.wallpaper.promptPlaceholder":
       "For example: a quiet futuristic valley with soft mist and violet-blue morning light",
@@ -485,7 +448,7 @@ export const settingsMessages = {
     "prefs.wallpaper.generateAndApply": "Generate and apply",
     "prefs.wallpaper.generating": "Generating wallpaper",
     "prefs.wallpaper.generatingHint":
-      "The current wallpaper stays visible until generation succeeds",
+      "Replace the wallpaper only after generation succeeds",
     "prefs.wallpaper.cancelGeneration": "Cancel generation",
     "prefs.wallpaper.generateInBackground": "Generate in background",
     "prefs.wallpaper.generatingInBackground": "Generating in background",
@@ -503,14 +466,13 @@ export const settingsMessages = {
     "prefs.colorStyle.dynamic": "Dynamic",
     "prefs.colorStyle.dynamicDesc":
       "A unique palette per page that stays stable across reloads",
-    "prefs.colorStyle.dynamicHint":
-      "Colors come from a local seed; they change by page and stay put after refresh",
+    "prefs.colorStyle.dynamicHint": "Per-page palettes persist across reloads",
     "prefs.colorStyle.reshuffle": "Regenerate",
     "prefs.colorStyle.presets": "Unified color presets",
     "prefs.colorStyle.custom": "Custom gradient",
     "prefs.colorStyle.editorTitle": "Custom gradient",
     "prefs.colorStyle.editorSub":
-      "Drag stops to place them, use + / − to add or remove colors; halo size and opacity scale automatically with stop count, then confirm",
+      "Drag color stops, add or remove with + / −, then confirm to save",
     "prefs.colorStyle.primaryStop": "Primary stop",
     "prefs.colorStyle.secondaryStop": "Secondary stop",
     "prefs.colorStyle.colorStop": "Color stop {index}",
@@ -531,10 +493,9 @@ export const settingsMessages = {
     "prefs.colorStyle.preset.forest": "Forest",
 
     "prefs.appIcon.title": "App icon",
-    "prefs.appIcon.sub":
-      "Switch the tray, dock, and window icon. Saved locally and applied on launch.",
+    "prefs.appIcon.sub": "Change tray, dock, and window icons",
     "prefs.appIcon.finderNote":
-      "Note: the installed app icon in Finder / taskbar is baked into the bundle and does not change here; this only affects the tray, macOS dock, and Windows/Linux window icon.",
+      "The bundled Finder and taskbar icons stay unchanged.",
     "prefs.appIcon.blue": "Blue",
     "prefs.appIcon.deepBlue": "Deep blue",
     "prefs.appIcon.black": "Black",
@@ -543,33 +504,28 @@ export const settingsMessages = {
 
     "prefs.app.aboutTitle": "About Astro",
     "prefs.app.about":
-      "Astro (阿童木) is a local AI desktop workstation, named after the classic anime Astro Boy — meant to be a reliable, smart, and adventurous helper by your side. Chat, memory, workspace, and filespace in one; connect multiple model providers, and use tools & Skills for complex tasks. It can also learn from experience and evolve itself. Preferences are saved on this device.",
+      "Astro: a local AI workstation for chat, memory, tools, and Skills.",
 
     "prefs.system.title": "System",
-    "prefs.system.sub": "Startup and system integration",
     "prefs.system.autostart": "Launch at login",
     "prefs.system.autostartDesc":
       "Automatically start Astro Agent when you log in",
 
     "prefs.lang.title": "Language",
-    "prefs.lang.sub": "Switch Chinese / English — saved locally",
     "prefs.lang.zh": "中文",
     "prefs.lang.zhDesc": "Simplified Chinese",
     "prefs.lang.en": "English",
     "prefs.lang.enDesc": "English interface",
 
     "prefs.chat.title": "Chat panel display",
-    "prefs.chat.sub":
-      "Control chat verbosity and tool / Skills / MCP / Hook process cards",
     "prefs.chat.layout.title": "AI answer layout",
-    "prefs.chat.layout.sub":
-      "Choose how reasoning, tools, and answer text are organized; changes apply immediately",
+    "prefs.chat.layout.sub": "Arrange reasoning, tools, and answer text",
     "prefs.chat.layout.timeline": "Timeline",
     "prefs.chat.layout.timelineDesc":
       "Keep reasoning, tools, and answer fragments in their original order",
     "prefs.chat.layout.grouped": "Grouped view",
     "prefs.chat.layout.groupedDesc":
-      "Merge reasoning, collect tools, and combine text into one answer",
+      "Group reasoning and tools; combine the answer text",
     "prefs.chat.preview.title": "Live preview",
     "prefs.chat.preview.user":
       "Summarize the settings work completed today and include validation results.",
@@ -597,8 +553,7 @@ export const settingsMessages = {
     "prefs.chat.detailedDesc":
       "Show all process info including args and results",
     "prefs.chat.sendMode": "Send mode while busy",
-    "prefs.chat.sendModeDesc":
-      "Default delivery method when sending while the agent is running",
+    "prefs.chat.sendModeDesc": "Handle new messages while a task is running",
     "prefs.chat.details": "Process toggles",
     "prefs.chat.processDefaultOpen": "Expand process by default",
     "prefs.chat.processDefaultOpenDesc":
@@ -623,14 +578,12 @@ export const settingsMessages = {
     "prefs.chat.sidebarVisibleSessionsCount": "{count} sessions",
 
     "prefs.context.title": "Automatic Compression",
-    "prefs.context.sub":
-      "Configure Soft/Medium/Hard, mid-run, and /compact recommend thresholds",
-    "prefs.context.viewHint":
-      "Layered usage lives in the chat Context panel; this card only tunes triggers and budgets.",
+    "prefs.context.sub": "Set compression thresholds and retained context",
+    "prefs.context.viewHint": "See usage in the chat Context panel.",
     "prefs.context.loading": "Loading compression settings…",
     "prefs.context.enabled": "Context compression",
     "prefs.context.enabledDesc":
-      "Compression preserves the original history and only changes the next model view.",
+      "Keep original history; compress only the model's view.",
     "prefs.context.stages": "Stage trigger ratios (of context window)",
     "prefs.context.soft": "Soft",
     "prefs.context.softDesc":
@@ -675,8 +628,7 @@ export const settingsMessages = {
     "prefs.context.invalidOrder": "Require Soft < Medium < Hard",
 
     "prefs.diag.title": "Runtime logs",
-    "prefs.diag.sub":
-      "Query local logs by time and follow the latest runtime events live.",
+    "prefs.diag.sub": "Search local logs or follow live",
     "prefs.diag.scope": "Scope",
     "prefs.diag.scope.current": "Current session",
     "prefs.diag.scope.all": "All sessions",
@@ -734,8 +686,7 @@ export const settingsMessages = {
     "prefs.diag.newestFirst": "Newest first",
     "prefs.diag.emptySearch": "No matching content in the current results",
     "prefs.diag.export.title": "Export diagnostics bundle",
-    "prefs.diag.export.sub":
-      "Includes recent logs, version, and redacted runtime status. API keys are never included.",
+    "prefs.diag.export.sub": "Logs, version, and redacted status. No API keys.",
     "prefs.diag.export.action": "Export diagnostics",
     "prefs.diag.export.exporting": "Exporting…",
     "prefs.diag.export.done": "Exported to {path}",
