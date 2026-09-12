@@ -228,6 +228,9 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if !ALLOW_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
+                    if commands::ui::pet_tasks::close_from_native(window.app_handle(), window.label()) {
+                        return;
+                    }
                     let _ = window.hide();
                 }
             }

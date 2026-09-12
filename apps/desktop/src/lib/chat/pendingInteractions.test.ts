@@ -35,6 +35,21 @@ test("native task glass keeps the UA canvas transparent and sizes through scoped
   assert.ok(sizing.includes("window.label() != POPUP"));
 });
 
+test("native task close uses snooze before the generic window hide path", () => {
+  const shell = readFileSync(
+    new URL("../../../src-tauri/src/lib.rs", import.meta.url),
+    "utf8",
+  );
+  const handler = shell.slice(
+    shell.indexOf("WindowEvent::CloseRequested"),
+    shell.indexOf(".invoke_handler"),
+  );
+  assert.ok(handler.indexOf("close_from_native") >= 0);
+  assert.ok(
+    handler.indexOf("close_from_native") < handler.indexOf("window.hide()"),
+  );
+});
+
 const request: PendingInteraction = {
   key: "s/t/r",
   sessionId: "s",

@@ -83,6 +83,19 @@ fn publish(app: &AppHandle) {
         let _ = app.emit_to(label, "pending-interactions-changed", &value);
     }
 }
+/// OS Close/⌘W has the same semantics as snooze, never reject or cancel work.
+/// Called on the main thread: update state only; the frame driver owns geometry.
+pub fn close_from_native(app: &AppHandle, label: &str) -> bool {
+    if label != POPUP {
+        return false;
+    }
+    let Some(holder) = app.try_state::<PetTasks>() else {
+        return false;
+    };
+    holder.0.lock().unwrap().suppress_popup();
+    publish(app);
+    true
+}
 pub fn install(app: &AppHandle) {
     app.manage(PetTasks::default());
     let handle = app.clone();
@@ -798,6 +811,18 @@ mod tests {
         state.apply_snapshot(snapshot(2, &["snoozed"]), true, false);
         assert!(state.auto_candidate.is_none());
         assert!(!state.open);
+    }
+    #[test]
+    fn native_snooze_retains_all_requests_and_selection() {
+        let mut state = State::default();
+        state.apply_snapshot(snapshot(1, &["a", "b"]), true, false);
+        state.open = true;
+        state.selected = Some("a".into());
+        let requests = state.snapshot.requests.clone();
+        state.suppress_popup();
+        assert!(!state.open);
+        assert_eq!(state.snapshot.requests, requests);
+        assert_eq!(state.selected.as_deref(), Some("a"));
     }
     #[test]
     fn capsule_uses_the_panels_side_even_when_only_capsule_fits_on_the_right() {
