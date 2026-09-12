@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { useDesktopPetState } from "./useDesktopPetState";
+import { useAmbienceShufflePrefs } from "./useAmbienceShufflePrefs";
+import {
+  shuffleAvailability,
+  chooseShuffleCandidate,
+  toggleFavoriteWallpaper,
+  type ShuffleScope,
+} from "../../lib/ui/ambienceShuffle";
 import type { WallpaperController } from "./useWallpaper";
 import type { useActiveUiStyle } from "./useActiveUiStyle";
 import type { ShellColorPrefs } from "../../lib/ui/shellGradient";
@@ -38,7 +45,7 @@ type Undo = {
   expected: string;
 };
 type Change =
-  | { kind: "scene"; sceneId: string }
+  | { kind: "scene"; sceneId: string; expectedPetId?: string }
   | { kind: "wallpaper"; path: string | null }
   | {
       kind: "palette";
@@ -49,6 +56,7 @@ type Change =
 
 export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const pet = useDesktopPetState(open);
+  const shufflePrefs = useAmbienceShufflePrefs();
   const [scenes, setScenes] = useState<PetScene[]>([]);
   const [loadingScenes, setLoadingScenes] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -321,7 +329,54 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
             ),
       });
     });
+  const rotationChoices = () => {
+    const p = live.current;
+    const effective = materializeWallpaper(
+      p.wallpaper.prefs,
+      p.activeStyle.style,
+      p.theme,
+    );
+    return shuffleAvailability(
+      shufflePrefs.latest.current,
+      scenes,
+      pet.state.activePetId,
+      pet.state.activeSceneId,
+      effective.mode === "wallpaper" ? (effective.current?.path ?? null) : null,
+    );
+  };
+  const shuffle = async () => {
+    if (busy || pet.loading || loadingScenes) return false;
+    const choice = chooseShuffleCandidate(rotationChoices().choices);
+    if (!choice) return false;
+    if (choice.kind === "palette") return setPalette("dynamic");
+    if (choice.kind === "wallpaper")
+      return selectWallpaper(choice.asset, false);
+    return guard(() =>
+      change({
+        kind: "scene",
+        sceneId: choice.sceneId,
+        expectedPetId: choice.expectedPetId,
+      }),
+    );
+  };
+  const updateShuffle = (recipe: Parameters<typeof shufflePrefs.update>[0]) => {
+    try {
+      shufflePrefs.update(recipe);
+      setError("");
+    } catch (cause) {
+      setError(String(cause));
+    }
+  };
   return {
+    shufflePrefs: shufflePrefs.prefs,
+    shuffleAvailability: rotationChoices(),
+    shuffle,
+    setShuffleScope: (scope: ShuffleScope) =>
+      updateShuffle((prefs) => ({ ...prefs, scope })),
+    setBackgroundLocked: (backgroundLocked: boolean) =>
+      updateShuffle((prefs) => ({ ...prefs, backgroundLocked })),
+    toggleFavorite: (asset: WallpaperAsset) =>
+      updateShuffle((prefs) => toggleFavoriteWallpaper(prefs, asset)),
     pet: pet.state,
     scenes,
     busy: busy || pet.loading || loadingScenes,

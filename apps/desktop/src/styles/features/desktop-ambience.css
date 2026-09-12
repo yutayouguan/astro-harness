@@ -229,6 +229,69 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+.ambience-wallpaper-card {
+  position: relative;
+  min-width: 0;
+}
+.ambience-wallpaper-card > .ambience-tile {
+  width: 100%;
+  height: 100%;
+}
+.ambience-star {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--surface-panel-border);
+  border-radius: 7px;
+  background: var(--surface-panel-background, #fff);
+  color: var(--ink);
+}
+.ambience-star[aria-pressed="true"] {
+  color: var(--tone);
+}
+.ambience-shuffle {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  padding-top: 10px;
+}
+.ambience-shuffle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ambience-shuffle-row select {
+  min-width: 0;
+  flex: 1;
+  padding: 7px;
+  color: var(--ink);
+  background: var(--surface-panel-background);
+  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.ambience-shuffle-row button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, var(--tone) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.ambience-shuffle small {
+  color: var(--ink-mute);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.ambience-shuffle .ambience-check {
+  margin: 0;
+}
 @media (hover: hover) {
   .desktop-ambience button:not(:disabled):hover {
     background-color: color-mix(in srgb, var(--tone) 10%, transparent);

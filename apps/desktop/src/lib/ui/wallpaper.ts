@@ -169,7 +169,7 @@ export function resolveExtractedWallpaperPalette(
   return themeColor && highlightColor ? { themeColor, highlightColor } : null;
 }
 
-function normalizeAsset(raw: unknown): WallpaperAsset | null {
+export function normalizeWallpaperAsset(raw: unknown): WallpaperAsset | null {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
   if (
@@ -214,7 +214,7 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
     value.fit === "contain" || value.fit === "stretch" ? value.fit : "cover";
   const recent = Array.isArray(value.recent)
     ? value.recent
-        .map(normalizeAsset)
+        .map(normalizeWallpaperAsset)
         .filter((asset): asset is WallpaperAsset => asset !== null)
         .filter(
           (asset, index, assets) =>
@@ -223,7 +223,7 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
         )
         .slice(0, MAX_RECENT_WALLPAPERS)
     : [];
-  const current = normalizeAsset(value.current);
+  const current = normalizeWallpaperAsset(value.current);
   const legacySystemDefault =
     typeof value.followSystemWallpaper !== "boolean" &&
     !current &&

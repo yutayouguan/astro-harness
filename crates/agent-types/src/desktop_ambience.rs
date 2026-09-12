@@ -15,6 +15,7 @@ use std::path::Path;
 pub enum AmbienceChange {
     Scene {
         scene_id: String,
+        expected_pet_id: Option<String>,
     },
     Wallpaper {
         path: Option<String>,
@@ -122,7 +123,23 @@ pub fn change(
     crate::update_desktop_pet_state(base, |state| {
         before = Some(Appearance::capture(base, state)?);
         match request {
-            AmbienceChange::Scene { scene_id } => {
+            AmbienceChange::Scene {
+                scene_id,
+                expected_pet_id,
+            } => {
+                if let Some(pet_id) = expected_pet_id {
+                    anyhow::ensure!(
+                        state.active_pet_id.as_deref() == Some(pet_id.as_str()),
+                        "当前宠物已切换，请重新选择换景范围"
+                    );
+                    anyhow::ensure!(
+                        state
+                            .scenes
+                            .iter()
+                            .any(|scene| scene.id == scene_id && scene.pet.pet_id == pet_id),
+                        "该场景不属于当前宠物"
+                    );
+                }
                 crate::pet_scene::prepare_scene(base, state, &scene_id, SceneApplyMode::All)?
             }
             AmbienceChange::Wallpaper { path } => {
@@ -297,6 +314,7 @@ mod tests {
             base,
             AmbienceChange::Scene {
                 scene_id: "pet-room".into(),
+                expected_pet_id: None,
             },
         )
         .unwrap();
@@ -324,6 +342,7 @@ mod tests {
             base,
             AmbienceChange::Scene {
                 scene_id: "pet-room".into(),
+                expected_pet_id: None,
             },
         )
         .unwrap();
@@ -357,6 +376,7 @@ mod tests {
             base,
             AmbienceChange::Scene {
                 scene_id: "pet-room".into(),
+                expected_pet_id: None,
             },
         )
         .unwrap();
@@ -401,6 +421,7 @@ mod tests {
             base,
             AmbienceChange::Scene {
                 scene_id: "pet-room".into(),
+                expected_pet_id: None,
             },
         )
         .unwrap();
@@ -424,5 +445,50 @@ mod tests {
         )
         .is_err());
         assert_eq!(crate::read_desktop_pet_state(base).unwrap(), before);
+    }
+
+    #[test]
+    fn scoped_shuffle_rejects_stale_pet_and_cross_pet_scene_without_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        setup(base);
+        let mut other = crate::read_desktop_pet_state(base).unwrap().scenes[0].clone();
+        other.id = "pet-other".into();
+        other.style.as_mut().unwrap().id = other.id.clone();
+        other.pet.pet_id = "pet-two".into();
+        let other_path = base.join("ui/other.png");
+        atomic_write(&other_path, b"validated other pet").unwrap();
+        other.pet.pet_path = other_path.to_string_lossy().into_owned();
+        save_scene(base, other).unwrap();
+        let (before, _) = change(
+            base,
+            AmbienceChange::Scene {
+                scene_id: "pet-room".into(),
+                expected_pet_id: None,
+            },
+        )
+        .unwrap();
+        let pet_id = before.active_pet_id.clone().unwrap();
+        for (scene_id, expected_pet_id) in
+            [("pet-room", "stale-pet"), ("pet-other", pet_id.as_str())]
+        {
+            assert!(change(
+                base,
+                AmbienceChange::Scene {
+                    scene_id: scene_id.into(),
+                    expected_pet_id: Some(expected_pet_id.into())
+                }
+            )
+            .is_err());
+            assert_eq!(crate::read_desktop_pet_state(base).unwrap(), before);
+        }
+        assert!(change(
+            base,
+            AmbienceChange::Scene {
+                scene_id: "pet-room".into(),
+                expected_pet_id: Some(pet_id)
+            }
+        )
+        .is_ok());
     }
 }

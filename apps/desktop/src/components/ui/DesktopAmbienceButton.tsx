@@ -7,7 +7,11 @@ import {
   Settings2,
   X,
   Check,
+  Star,
+  Shuffle,
+  LockKeyhole,
 } from "lucide-react";
+import type { ShuffleScope } from "../../lib/ui/ambienceShuffle";
 import DynamicPaletteButton from "./DynamicPaletteButton";
 import { PopoverSurface } from "./Overlay";
 import { SegmentedTabs } from "./SegmentedTabs";
@@ -27,6 +31,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("scenes");
   const [linked, setLinked] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [primary, setPrimary] = useState("#4f6ef7");
@@ -53,9 +58,35 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
           ? "custom"
           : "default";
   const wallpapers = ambienceWallpaperChoices(
-    props.wallpaper.prefs.recent,
+    [...state.shufflePrefs.favorites, ...props.wallpaper.prefs.recent],
     state.scenes,
   );
+  const favoritePaths = new Set(
+    state.shufflePrefs.favorites.map((asset) => asset.path),
+  );
+  const visibleWallpapers = favoritesOnly
+    ? wallpapers.filter((asset) => favoritePaths.has(asset.path))
+    : wallpapers;
+  const shuffleHint =
+    state.shuffleAvailability.reason === "locked"
+      ? tr("已锁定随机换景", "Random background changes are locked")
+      : state.shuffleAvailability.reason === "no-pet"
+        ? tr("请先选择一只宠物", "Select a pet first")
+        : state.shuffleAvailability.reason === "no-scene"
+          ? tr("当前宠物没有其他可用场景", "No other scene for this pet")
+          : state.shuffleAvailability.reason === "no-favorite"
+            ? tr("请收藏另一张壁纸", "Favorite another wallpaper first")
+            : state.shufflePrefs.scope === "favorites"
+              ? tr(
+                  "只换收藏壁纸，保留当前宠物",
+                  "Favorites only; your pet stays",
+                )
+              : state.shufflePrefs.scope === "palette"
+                ? tr(
+                    "本地换色，不调用图片模型",
+                    "Local colors, no image generation",
+                  )
+                : tr("只换当前宠物的场景", "Only this pet's scenes");
   const close = () => setOpen(false);
   const show = () => {
     setPrimary(
@@ -93,7 +124,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
         maxWidth={400}
         maxHeightCap={620}
         maxHeightRatio={0.86}
-        sizeKey={`${tab}:${state.scenes.length}:${saving}:${state.error}`}
+        sizeKey={`${tab}:${state.scenes.length}:${saving}:${state.error}:${state.shufflePrefs.scope}:${favoritesOnly}:${state.shufflePrefs.favorites.length}`}
         trapFocus
         aria-label={tr("桌面氛围", "Desktop ambience")}
         className="desktop-ambience"
@@ -248,42 +279,75 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                   "For scene wallpapers, also switch the pet",
                 )}
               </label>
+              <label className="ambience-check">
+                <input
+                  type="checkbox"
+                  checked={favoritesOnly}
+                  onChange={(e) => setFavoritesOnly(e.target.checked)}
+                />
+                {tr("只看收藏", "Favorites only")} (
+                {state.shufflePrefs.favorites.length})
+              </label>
               <div className="ambience-grid">
-                {wallpapers.map((asset) => (
-                  <button
-                    type="button"
-                    key={asset.path}
-                    className="ambience-tile"
-                    aria-pressed={
-                      hasWallpaper && current.current?.path === asset.path
-                    }
-                    disabled={state.busy}
-                    onClick={() => void state.selectWallpaper(asset, linked)}
-                  >
-                    <img
-                      src={resolveMediaSrc(asset.path) ?? undefined}
-                      alt=""
-                      loading="lazy"
-                    />
-                    <span>{asset.name}</span>
-                    <small>
-                      {state.scenes.some((s) => s.wallpaperPath === asset.path)
-                        ? tr("宠物场景", "Pet scene")
-                        : asset.source === "upload"
-                          ? tr("我的上传", "Uploaded")
-                          : asset.source === "system"
-                            ? tr("系统壁纸", "System")
-                            : tr("AI 壁纸", "AI wallpaper")}
-                    </small>
-                  </button>
+                {visibleWallpapers.map((asset) => (
+                  <div key={asset.path} className="ambience-wallpaper-card">
+                    <button
+                      type="button"
+                      className="ambience-tile"
+                      aria-pressed={
+                        hasWallpaper && current.current?.path === asset.path
+                      }
+                      disabled={state.busy}
+                      onClick={() => void state.selectWallpaper(asset, linked)}
+                    >
+                      <img
+                        src={resolveMediaSrc(asset.path) ?? undefined}
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span>{asset.name}</span>
+                      <small>
+                        {state.scenes.some(
+                          (s) => s.wallpaperPath === asset.path,
+                        )
+                          ? tr("宠物场景", "Pet scene")
+                          : asset.source === "upload"
+                            ? tr("我的上传", "Uploaded")
+                            : asset.source === "system"
+                              ? tr("系统壁纸", "System")
+                              : tr("AI 壁纸", "AI wallpaper")}
+                      </small>
+                    </button>
+                    <button
+                      type="button"
+                      className="ambience-star"
+                      aria-label={`${favoritePaths.has(asset.path) ? tr("取消收藏", "Unfavorite") : tr("收藏", "Favorite")} ${asset.name}`}
+                      aria-pressed={favoritePaths.has(asset.path)}
+                      onClick={() => state.toggleFavorite(asset)}
+                    >
+                      <Star
+                        size={14}
+                        fill={
+                          favoritePaths.has(asset.path)
+                            ? "currentColor"
+                            : "none"
+                        }
+                      />
+                    </button>
+                  </div>
                 ))}
               </div>
-              {!wallpapers.length && (
+              {!visibleWallpapers.length && (
                 <p className="ambience-empty">
-                  {tr(
-                    "暂无壁纸，可在外观设置中上传或生成。",
-                    "Upload or generate wallpapers in Appearance settings.",
-                  )}
+                  {favoritesOnly
+                    ? tr(
+                        "暂无收藏，点击壁纸上的星标添加。",
+                        "No favorites yet. Star a wallpaper to add it.",
+                      )
+                    : tr(
+                        "暂无壁纸，可在外观设置中上传或生成。",
+                        "Upload or generate wallpapers in Appearance settings.",
+                      )}
                 </p>
               )}
               <div className="ambience-actions">
@@ -428,6 +492,54 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
               )}
             </>
           )}
+        </div>
+        <div className="ambience-shuffle">
+          <div className="ambience-shuffle-row">
+            <select
+              aria-label={tr("换一个的范围", "Shuffle scope")}
+              value={state.shufflePrefs.scope}
+              disabled={state.busy}
+              onChange={(e) =>
+                state.setShuffleScope(e.target.value as ShuffleScope)
+              }
+            >
+              <option value="pet-scenes">
+                {tr("当前宠物场景", "Current pet scenes")}
+              </option>
+              <option value="favorites">
+                {tr("收藏壁纸", "Favorite wallpapers")}
+              </option>
+              <option value="palette">
+                {tr("灵动配色", "Dynamic palette")}
+              </option>
+            </select>
+            <button
+              type="button"
+              disabled={state.busy || !state.shuffleAvailability.choices.length}
+              onClick={() => void state.shuffle()}
+              aria-describedby={`${id}-shuffle-hint`}
+            >
+              <Shuffle size={14} />
+              {tr("换一个", "Shuffle")}
+            </button>
+          </div>
+          <small id={`${id}-shuffle-hint`}>{shuffleHint}</small>
+          <label className="ambience-check">
+            <input
+              type="checkbox"
+              checked={state.shufflePrefs.backgroundLocked}
+              disabled={state.busy}
+              onChange={(e) => state.setBackgroundLocked(e.target.checked)}
+            />
+            <LockKeyhole size={12} />
+            {tr("锁定随机换景", "Lock random backgrounds")}
+          </label>
+          <small>
+            {tr(
+              "不影响手动选图、系统同步和配色",
+              "Manual choices, system sync and colors remain available",
+            )}
+          </small>
         </div>
         {state.error && (
           <p className="ambience-error" role="alert">
