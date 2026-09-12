@@ -1,13 +1,49 @@
 import type { WallpaperPrefs } from "./wallpaper.ts";
 import type { ShellColorPrefs } from "./shellGradient.ts";
+import type { InterfaceMaterial } from "./interfaceMaterial.ts";
+import type { ThemeMode } from "./themeResolution.ts";
+
+export type AmbienceAppearance = {
+  material: InterfaceMaterial;
+  mode: ThemeMode;
+  glassIntensity: number;
+  softFrostIntensity: number;
+};
+export const appearanceKey = (value: AmbienceAppearance) =>
+  JSON.stringify([
+    value.material,
+    value.mode,
+    value.glassIntensity,
+    value.softFrostIntensity,
+  ]);
 
 export type AmbienceUndoSnapshot = {
+  kind: "native";
   token: string;
   wallpaper: WallpaperPrefs;
   colors: ShellColorPrefs;
   expected: string;
 };
-type Snapshot = { busy: boolean; undo: AmbienceUndoSnapshot | null };
+export type AppearanceUndoSnapshot = {
+  kind: "appearance";
+  before: AmbienceAppearance;
+  expected: string;
+};
+/** Coalesce one gesture only while its last value is still current. */
+export function appearanceEditUndo(
+  current: AmbienceAppearance,
+  next: AmbienceAppearance,
+  gesture: AppearanceUndoSnapshot | null,
+): AppearanceUndoSnapshot {
+  return {
+    kind: "appearance",
+    before:
+      gesture?.expected === appearanceKey(current) ? gesture.before : current,
+    expected: appearanceKey(next),
+  };
+}
+type Undo = AmbienceUndoSnapshot | AppearanceUndoSnapshot;
+type Snapshot = { busy: boolean; undo: Undo | null };
 
 /** WebView-session state, not persistent settings. Navigation must not discard native undo. */
 export function createAmbienceSession() {
@@ -31,8 +67,7 @@ export function createAmbienceSession() {
       return true;
     },
     finish: () => publish({ ...snapshot, busy: false }),
-    setUndo: (undo: AmbienceUndoSnapshot | null) =>
-      publish({ ...snapshot, undo }),
+    setUndo: (undo: Undo | null) => publish({ ...snapshot, undo }),
   };
 }
 

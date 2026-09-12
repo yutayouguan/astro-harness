@@ -7,6 +7,11 @@ import { useShellColorStyle } from "../hooks/app/useShellColorStyle";
 import { useWallpaper } from "../hooks/app/useWallpaper";
 import { useActiveUiStyle } from "../hooks/app/useActiveUiStyle";
 import { ambienceSession } from "../lib/ui/ambienceSession";
+import { ThemeProvider, useTheme } from "../hooks/app/useTheme";
+import { materializeWallpaper } from "../lib/ui/desktopAmbience";
+import { gradientSwatchBackground } from "../lib/ui/shellGradient";
+import { dynamicGradientForTab } from "../lib/ui/dynamicGradient";
+import { resolveMediaSrc } from "../lib/media/resolveMediaSrc";
 import {
   DEFAULT_WALLPAPER_PREFS,
   WALLPAPER_STORAGE_KEY,
@@ -21,19 +26,38 @@ import room from "./assets/ambience-window.jpeg";
 import forest from "./assets/ambience-forest.jpeg";
 import meadow from "./assets/ambience-meadow.jpeg";
 import atlas from "../assets/pets/naitang/spritesheet.webp";
+import "../styles/features/shell/layout/sidebar-footer-actions.css";
 
 function Harness() {
+  const { resolved } = useTheme();
   const [managed, setManaged] = useState("");
   const wallpaper = useWallpaper();
   const colors = useShellColorStyle();
   const activeStyle = useActiveUiStyle();
+  const current = materializeWallpaper(
+    wallpaper.prefs,
+    activeStyle.style,
+    resolved,
+  );
+  const backgroundSrc =
+    current.mode === "wallpaper" && current.current
+      ? resolveMediaSrc(current.current.path)
+      : null;
+  const previewGradient =
+    colors.colorStyle === "dynamic"
+      ? dynamicGradientForTab(colors.dynamicSeed, "chat", resolved)
+      : colors.gradient;
   return (
     <LocaleProvider>
       <main
         style={{
           position: "relative",
           height: "100vh",
-          background: "var(--bg)",
+          background: backgroundSrc
+            ? "linear-gradient(var(--soft-material-background, #ffffff99), transparent), url(" +
+              JSON.stringify(backgroundSrc) +
+              ") center / cover"
+            : gradientSwatchBackground(previewGradient),
           color: "var(--ink)",
           padding: 28,
         }}
@@ -55,11 +79,7 @@ function Harness() {
             }}
             restoreColors={colors.restoreColorPrefs}
             activeStyle={activeStyle}
-            theme={
-              document.documentElement.dataset.theme === "dark"
-                ? "dark"
-                : "light"
-            }
+            theme={resolved}
             onManage={setManaged}
           />
         )}
@@ -71,6 +91,13 @@ function Harness() {
 const meta = {
   title: "Shell/DesktopAmbience",
   component: Harness,
+  decorators: [
+    (Story) => (
+      <ThemeProvider>
+        <Story />
+      </ThemeProvider>
+    ),
+  ],
   beforeEach: (context) => {
     ambienceSession.setUndo(null);
     ambienceSession.finish();
@@ -111,6 +138,7 @@ const meta = {
           ...EMPTY_DESKTOP_PET_STATE,
           petId: i < 2 ? "naitang" : "pudding",
           petPath: url(atlas),
+          spriteVersionNumber: 2,
           displayName: i < 2 ? "奶糖" : "布丁",
         },
         style,
@@ -129,6 +157,23 @@ const meta = {
       scenes,
       revision: 1,
     };
+    // Seed the recent library independently of scene selection.
+    localStorage.setItem(
+      WALLPAPER_STORAGE_KEY,
+      JSON.stringify({
+        ...DEFAULT_WALLPAPER_PREFS,
+        followSystemWallpaper: false,
+        recent: scenes.map((s) => ({
+          id: s.id,
+          path: s.wallpaperPath!,
+          name: s.name,
+          source: "ai",
+          width: 1536,
+          height: 1024,
+          createdAt: "now",
+        })),
+      }),
+    );
     let style: ActiveUiStyle | null = scenes[0]?.style ?? null;
     let undo: { state: typeof state; style: ActiveUiStyle | null } | null =
       null;

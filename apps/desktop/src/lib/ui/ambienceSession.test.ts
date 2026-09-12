@@ -1,9 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createAmbienceSession } from "./ambienceSession.ts";
+import {
+  createAmbienceSession,
+  appearanceKey,
+  appearanceEditUndo,
+  type AmbienceAppearance,
+} from "./ambienceSession.ts";
 import { DEFAULT_WALLPAPER_PREFS } from "./wallpaper.ts";
 import { DEFAULT_SHELL_COLOR_PREFS } from "./shellGradient.ts";
 const checkpoint = {
+  kind: "native" as const,
   token: "native-token",
   wallpaper: DEFAULT_WALLPAPER_PREFS,
   colors: DEFAULT_SHELL_COLOR_PREFS,
@@ -46,4 +52,40 @@ test("snapshot identity stays stable until a change for useSyncExternalStore", (
   assert.equal(first, session.getSnapshot());
   session.begin();
   assert.notEqual(first, session.getSnapshot());
+});
+
+const appearance: AmbienceAppearance = {
+  material: "soft",
+  mode: "auto",
+  glassIntensity: 64,
+  softFrostIntensity: 50,
+};
+test("one continuous material gesture restores its initial value", () => {
+  const middle = { ...appearance, softFrostIntensity: 60 };
+  const end = { ...appearance, softFrostIntensity: 90 };
+  const first = appearanceEditUndo(appearance, middle, null);
+  const last = appearanceEditUndo(middle, end, first);
+  assert.deepEqual(last.before, appearance);
+  assert.equal(last.expected, appearanceKey(end));
+  const session = createAmbienceSession();
+  session.setUndo(last);
+  assert.equal(session.getSnapshot().undo?.kind, "appearance");
+});
+test("external appearance edits break gesture coalescing rather than being overwritten", () => {
+  const middle = { ...appearance, softFrostIntensity: 60 };
+  const external = { ...middle, mode: "dark" as const };
+  const last = appearanceEditUndo(
+    external,
+    { ...external, softFrostIntensity: 90 },
+    appearanceEditUndo(appearance, middle, null),
+  );
+  assert.deepEqual(last.before, external);
+});
+test("a native change replaces appearance undo and vice versa", () => {
+  const session = createAmbienceSession();
+  session.setUndo(
+    appearanceEditUndo(appearance, { ...appearance, material: "glass" }, null),
+  );
+  session.setUndo(checkpoint);
+  assert.equal(session.getSnapshot().undo?.kind, "native");
 });

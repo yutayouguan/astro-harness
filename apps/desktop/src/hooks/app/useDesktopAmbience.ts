@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ambienceSession } from "../../lib/ui/ambienceSession";
+import {
+  ambienceSession,
+  appearanceKey,
+  appearanceEditUndo,
+  type AmbienceAppearance,
+  type AppearanceUndoSnapshot,
+} from "../../lib/ui/ambienceSession";
+import { useTheme } from "./useTheme";
 import { useDesktopPetState } from "./useDesktopPetState";
 import { useAmbienceShufflePrefs } from "./useAmbienceShufflePrefs";
 import {
@@ -50,6 +57,16 @@ type Change =
     };
 
 export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
+  const theme = useTheme();
+  const appearance: AmbienceAppearance = {
+    material: theme.material,
+    mode: theme.mode,
+    glassIntensity: theme.glassIntensity,
+    softFrostIntensity: theme.softFrostIntensity,
+  };
+  const appearanceLive = useRef(appearance);
+  appearanceLive.current = appearance;
+  const appearanceGesture = useRef<AppearanceUndoSnapshot | null>(null);
   const pet = useDesktopPetState(open);
   const shufflePrefs = useAmbienceShufflePrefs();
   const [scenes, setScenes] = useState<PetScene[]>([]);
@@ -154,6 +171,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       p.wallpaper.replacePrefs(next);
       p.restoreColors(colors);
       setUndo({
+        kind: "native",
         ...before,
         token: result.undoToken,
         expected: `${ambiencePreferenceKey(next)}|${JSON.stringify(colors)}`,
@@ -274,9 +292,82 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
         },
       );
     });
+  const applyAppearance = (next: AmbienceAppearance) => {
+    appearanceLive.current = next;
+    theme.setMaterial(next.material);
+    theme.setMode(next.mode);
+    theme.setGlassIntensity(next.glassIntensity);
+    theme.setSoftFrostIntensity(next.softFrostIntensity);
+  };
+  const changeAppearance = (patch: Partial<AmbienceAppearance>) => {
+    if (!ambienceSession.begin()) return;
+    try {
+      const current = appearanceLive.current;
+      const next = { ...current, ...patch };
+      if (appearanceKey(current) === appearanceKey(next)) return;
+      const nextUndo = appearanceEditUndo(
+        current,
+        next,
+        appearanceGesture.current,
+      );
+      setUndo(nextUndo);
+      if (appearanceGesture.current) appearanceGesture.current = nextUndo;
+      applyAppearance(next);
+      setError("");
+    } finally {
+      ambienceSession.finish();
+    }
+  };
+  const setAmbientColors = (colors: ShellColorPrefs) => {
+    const p = live.current;
+    const effective = materializeWallpaper(
+      p.wallpaper.prefs,
+      p.activeStyle.style,
+      p.theme,
+    );
+    if (
+      effective.mode === "color" &&
+      JSON.stringify(colors) === JSON.stringify(p.colors)
+    )
+      return Promise.resolve(true);
+    return guard(() =>
+      change({ kind: "wallpaper", path: null }, (prefs) => [
+        {
+          ...prefs,
+          mode: "color",
+          followSystemWallpaper: false,
+          adaptiveColor: false,
+          customThemeColor: undefined,
+          customHighlightColor: undefined,
+        },
+        colors,
+      ]),
+    );
+  };
+  const stopFollowingSystem = () =>
+    guard(() => {
+      const p = live.current;
+      const effective = materializeWallpaper(
+        p.wallpaper.prefs,
+        p.activeStyle.style,
+        p.theme,
+      );
+      return change(
+        { kind: "wallpaper", path: effective.current?.path ?? null },
+        (prefs, colors) => [{ ...prefs, followSystemWallpaper: false }, colors],
+      );
+    });
   const undoLast = () =>
     guard(async () => {
       if (!undo) return;
+      if (undo.kind === "appearance") {
+        if (appearanceKey(appearanceLive.current) !== undo.expected)
+          throw new Error("外观已在其他位置修改，无法撤销这一步");
+        applyAppearance(undo.before);
+        appearanceGesture.current = null;
+        setUndo(null);
+        return;
+      }
       const p = live.current;
       if (key(p) !== undo.expected)
         throw new Error("外观已在其他位置修改，无法撤销这一步");
@@ -324,7 +415,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
             ),
       });
     });
-  const rotationChoices = () => {
+  const rotationChoices = (scope = shufflePrefs.latest.current.scope) => {
     const p = live.current;
     const effective = materializeWallpaper(
       p.wallpaper.prefs,
@@ -332,16 +423,16 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       p.theme,
     );
     return shuffleAvailability(
-      shufflePrefs.latest.current,
+      { ...shufflePrefs.latest.current, scope },
       scenes,
       pet.state.activePetId,
       pet.state.activeSceneId,
       effective.mode === "wallpaper" ? (effective.current?.path ?? null) : null,
     );
   };
-  const shuffle = async () => {
+  const shuffle = async (scope = shufflePrefs.latest.current.scope) => {
     if (busy || pet.loading || loadingScenes) return false;
-    const choice = chooseShuffleCandidate(rotationChoices().choices);
+    const choice = chooseShuffleCandidate(rotationChoices(scope).choices);
     if (!choice) return false;
     if (choice.kind === "palette") return setPalette("dynamic");
     if (choice.kind === "wallpaper")
@@ -363,6 +454,19 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
     }
   };
   return {
+    appearance,
+    changeAppearance,
+    beginAppearanceEdit: () => {
+      const current = { ...appearanceLive.current };
+      appearanceGesture.current = appearanceEditUndo(current, current, null);
+    },
+    finishAppearanceEdit: () => {
+      appearanceGesture.current = null;
+    },
+    setAmbientColors,
+    stopFollowingSystem,
+    rotationChoices,
+    reportError: setError,
     shufflePrefs: shufflePrefs.prefs,
     shuffleAvailability: rotationChoices(),
     shuffle,
