@@ -95,3 +95,26 @@ test("AI entry points adopt shared icons without replacing busy indicators or or
     /AIActionIcon/,
   );
 });
+
+test("selected AI launchers keep their surface on hover and disabled buttons lose elevation", async () => {
+  assert.match(
+    css,
+    /:hover:not\(:disabled, \.is-active, \[aria-pressed="true"\]\)/,
+  );
+  assert.match(
+    css,
+    /\.ai-action-button:is\(\.is-active, \[aria-pressed="true"\]\)/,
+  );
+  assert.match(
+    css,
+    /\.ai-action-button:disabled\s*\{[^}]*opacity: 0\.45;[^}]*box-shadow: none;/,
+  );
+  assert.match(
+    await read("../../components/loop/LoopEditor.tsx"),
+    /aria-pressed=\{showAiAssistant\}/,
+  );
+  assert.match(
+    await read("../../components/loop/configs/ConfigField.tsx"),
+    /aria-busy=\{loading\}/,
+  );
+});

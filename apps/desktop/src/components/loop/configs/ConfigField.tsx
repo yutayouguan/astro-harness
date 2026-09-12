@@ -288,6 +288,7 @@ export function AiAssistField({
           onClick={handleAi}
           disabled={loading}
           title={value.trim() ? "AI 润色" : "AI 生成"}
+          aria-busy={loading}
           type="button"
         >
           {loading ? (

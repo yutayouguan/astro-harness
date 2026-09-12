@@ -1348,6 +1348,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
               className={`loop-icon-btn ai-action-button${showAiAssistant ? " is-active" : ""}`}
               title={t("loop.aiAssistant")}
               aria-label={t("loop.aiAssistant")}
+              aria-pressed={showAiAssistant}
               onClick={() => toggleSidePanel("ai")}
             >
               <AIActionIcon size={16} />

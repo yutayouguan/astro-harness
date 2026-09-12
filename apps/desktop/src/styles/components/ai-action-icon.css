@@ -70,17 +70,23 @@ html[data-theme="dark"] .ai-action-icon {
   box-shadow: var(--soft-control-shadow, var(--header-chip-shadow));
 }
 
-.ai-action-button:hover:not(:disabled) {
+.ai-action-button:hover:not(:disabled, .is-active, [aria-pressed="true"]) {
   background: var(--soft-hover, var(--surface-panel-hover));
 }
 
-.ai-action-button.is-active {
+.ai-action-button:is(.is-active, [aria-pressed="true"]) {
   background: color-mix(
     in srgb,
     var(--tone, var(--accent)) 12%,
     var(--soft-surface, var(--surface-panel-background))
   );
   border-color: var(--tone, var(--accent));
+}
+
+.ai-action-button:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 @media (prefers-contrast: more), (forced-colors: active) {
