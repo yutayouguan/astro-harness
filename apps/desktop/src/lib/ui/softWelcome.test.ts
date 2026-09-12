@@ -74,3 +74,21 @@ test("welcome cards use compact horizontal previews without shrinking body text"
   assert.match(css, /\.soft-welcome-card-copy > span\s*\{[^}]*font-size: 12px/);
   assert.doesNotMatch(css, /height: 132px|height: 70px|height: 110px/);
 });
+
+test("cards and category pills share the Start conversation material in every state", async () => {
+  const css = await readFile(
+    new URL("../../styles/materials/soft-welcome.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    css,
+    /\.soft-welcome-start,\s*\.soft-welcome-card,\s*\.soft-welcome-filters button\s*\{\s*border: 1px solid var\(--soft-edge\);\s*background: var\(--soft-surface\);\s*box-shadow: var\(--soft-control-shadow\);/,
+  );
+  assert.doesNotMatch(css, /linear-gradient|background: var\(--soft-ink\)/);
+  assert.match(css, /\[aria-pressed="true"\]::after/);
+  assert.match(css, /background: currentColor/);
+  assert.match(
+    css,
+    /prefers-contrast: more[\s\S]*\.soft-welcome-start,[\s\S]*box-shadow: none/,
+  );
+});

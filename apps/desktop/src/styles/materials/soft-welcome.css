@@ -40,17 +40,23 @@
   font-size: 13px;
   line-height: 1.6;
 }
+/* Start conversation is the reference material for every welcome action. */
+.soft-welcome-start,
+.soft-welcome-card,
+.soft-welcome-filters button {
+  border: 1px solid var(--soft-edge);
+  background: var(--soft-surface);
+  box-shadow: var(--soft-control-shadow);
+}
+
 .soft-welcome-start {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
   padding: 10px 14px;
-  border: 1px solid var(--soft-edge);
   border-radius: 999px;
-  background: var(--soft-surface);
   color: var(--soft-ink);
-  box-shadow: var(--soft-control-shadow);
   cursor: pointer;
 }
 .soft-welcome-filters {
@@ -60,19 +66,29 @@
   margin-bottom: 16px;
 }
 .soft-welcome-filters button {
+  position: relative;
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid transparent;
-  color: var(--soft-ink);
-  background: var(--soft-surface);
+  color: var(--soft-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
 .soft-welcome-filters button[aria-pressed="true"] {
-  color: var(--soft-base);
-  background: var(--soft-ink);
+  color: var(--soft-ink);
+}
+.soft-welcome-filters button[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 2px;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: currentColor;
+  pointer-events: none;
 }
 .soft-welcome-featured {
   display: grid;
@@ -95,15 +111,12 @@
   min-width: 0;
   min-height: 84px;
   padding: 12px;
-  border: 1px solid var(--soft-control-edge);
   border-radius: 14px;
   overflow: hidden;
-  background: var(--soft-surface);
   color: var(--soft-ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 140ms ease;
 }
 .soft-welcome-card[data-category="work"] {
   --sw-accent: #348c88;
@@ -123,11 +136,7 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: linear-gradient(
-    125deg,
-    color-mix(in srgb, var(--sw-accent) 20%, var(--soft-surface)),
-    color-mix(in srgb, var(--sw-accent) 6%, var(--soft-surface))
-  );
+  background: transparent;
   overflow: hidden;
 }
 .soft-welcome-symbol {
@@ -172,24 +181,12 @@
   height: 100%;
   align-self: stretch;
   border-radius: 0;
-  background: linear-gradient(
-    125deg,
-    color-mix(in srgb, var(--sw-accent) 38%, var(--soft-surface)),
-    color-mix(in srgb, var(--sw-accent) 16%, var(--soft-surface))
-  );
 }
 .soft-welcome-card.is-featured .soft-welcome-card-copy {
   padding: 14px 34px 14px 16px;
 }
 .soft-welcome-card.is-featured strong {
   font-size: 16px;
-}
-.soft-welcome-card:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--sw-accent) 55%,
-    var(--soft-control-edge)
-  );
 }
 .soft-welcome :is(.soft-welcome-card, .soft-welcome-start):active {
   transform: translateY(1px);
@@ -265,10 +262,10 @@
   }
 }
 @media (prefers-contrast: more) {
-  .soft-welcome-card {
-    border-color: var(--soft-muted);
-  }
+  .soft-welcome-start,
+  .soft-welcome-card,
   .soft-welcome-filters button {
     border-color: var(--soft-muted);
+    box-shadow: none;
   }
 }
