@@ -397,7 +397,7 @@ mod tests {
                 .motion_clips
                 .insert("tail-wag".into(), legacy.clone());
             pet.identity.display_name = Some("My Pudding".into());
-            pet.defaults.scale = 0.35;
+            pet.defaults.scale = 0.175;
             Ok(())
         })
         .unwrap();
@@ -412,7 +412,7 @@ mod tests {
         .unwrap();
         let scene_id = saved.scenes[0].id.clone();
         let state = types::update_desktop_pet_state(root.path(), |state| {
-            state.scale = 0.5;
+            state.scale = 0.25;
             state.active_scene_id = Some(scene_id);
             state.preferences.presentation_mode = true;
             state.preferences.position_locked = true;
@@ -689,11 +689,11 @@ mod tests {
     fn builtin_installs_both_assets_and_repairs_missing_files() {
         let root = tempfile::tempdir().unwrap();
         let mut state = types::DesktopPetState::default();
-        state.scale = 0.5;
+        state.scale = 0.25;
         install_into_state(root.path(), &mut state).unwrap();
         let original = state.pet_path.clone();
         assert_eq!(state.sprite_version_number, Some(2));
-        assert_eq!(state.scale, 0.5);
+        assert_eq!(state.scale, 0.25);
         assert_eq!(state.motion_clips["kneading"].durations_ms.len(), 16);
         assert_eq!(state.motion_clips["grooming"].durations_ms.len(), 17);
         assert_eq!(

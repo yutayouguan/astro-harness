@@ -238,10 +238,11 @@ fn import_animated_pet_at(base: &Path, manifest_path: &Path) -> Result<DesktopPe
     let manifest_bytes =
         types::desktop_pet::read_limited_pet_file(manifest_path, MAX_MANIFEST_BYTES)
             .map_err(|error| format!("无法读取 pet.json：{error}"))?;
-    let manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
+    let mut manifest: types::DesktopPetManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("pet.json 格式无效：{error}"))?;
     let pet_id = validate_pet_id(&manifest.id)?.to_string();
-    if let Some(preferences) = &manifest.scene_preferences {
+    if let Some(preferences) = &mut manifest.scene_preferences {
+        preferences.cap_legacy_scale();
         preferences.validate().map_err(|e| e.to_string())?;
     }
     types::pet_motion::validate_motion_clips(&manifest.motion_clips).map_err(|e| e.to_string())?;
@@ -1108,8 +1109,8 @@ mod tests {
         state.active_scene_id = Some("forest".into());
         state.follow_wallpaper = true;
         let mut expected = serde_json::to_value(&state).unwrap();
-        apply_pet_scale(&mut state, "naitang", 0.55).unwrap();
-        expected["scale"] = serde_json::json!(0.55);
+        apply_pet_scale(&mut state, "naitang", 0.25).unwrap();
+        expected["scale"] = serde_json::json!(0.25);
         assert_eq!(serde_json::to_value(&state).unwrap(), expected);
         assert!(apply_pet_scale(&mut state, "pudding", 0.3).is_err());
         assert!(apply_pet_scale(&mut state, "naitang", f64::NAN).is_err());
@@ -1133,7 +1134,7 @@ mod tests {
             .unwrap()
             .defaults
             .clone();
-        defaults.scale = 0.5;
+        defaults.scale = 0.25;
         defaults.behavior.quiet_mode = true;
         types::pet_library::edit_library(
             home.path(),
@@ -1199,7 +1200,7 @@ mod tests {
         );
         assert_eq!(
             window_size(types::desktop_pet::DESKTOP_PET_MAX_SCALE),
-            LogicalSize::new(180.0, 204.0)
+            LogicalSize::new(90.0, 102.0)
         );
         let default_size = window_size(types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
         assert_eq!(size.width, default_size.width / 2.0);
@@ -1337,6 +1338,7 @@ mod tests {
             description: "Motion test".into(),
             sprite_version_number: 2,
             scene_preferences: Some(types::pet_preferences::PetScenePreferences {
+                // Previously exported packages may exceed the new 100% ceiling.
                 scale: 0.5,
                 behavior: types::pet_preferences::PetPreferences {
                     position_locked: true,
@@ -1355,7 +1357,7 @@ mod tests {
         .unwrap();
         let state = import_animated_pet_at(&base, &package.join("pet.json")).unwrap();
         assert!(Path::new(&state.pets[0].identity.motion_clips["grooming"].path).is_file());
-        assert_eq!(state.pets[0].defaults.scale, 0.5);
+        assert_eq!(state.pets[0].defaults.scale, 0.3);
         assert!(state.pets[0].defaults.behavior.position_locked);
         assert_eq!(state.pets[0].defaults.behavior.activity_interval_secs, 90);
         assert_eq!(state.scale, types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
@@ -1408,14 +1410,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let state = DesktopPetStateDto {
             enabled: true,
-            scale: 0.5,
+            scale: 0.25,
             pet_path: Some("/tmp/pet.png".to_string()),
             ..DesktopPetStateDto::default()
         };
         save_state_at(temp.path(), &state).unwrap();
         let loaded = load_state_at(temp.path()).unwrap();
         assert!(loaded.enabled);
-        assert_eq!(loaded.scale, 0.5);
+        assert_eq!(loaded.scale, 0.25);
         assert_eq!(loaded.pet_path.as_deref(), Some("/tmp/pet.png"));
     }
 

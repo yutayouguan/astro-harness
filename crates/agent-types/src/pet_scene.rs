@@ -1008,14 +1008,14 @@ mod tests {
         let (dir, scene) = fixture();
         save_scene(dir.path(), scene.clone()).unwrap();
         crate::update_desktop_pet_state(dir.path(), |state| {
-            state.scale = 0.6;
+            state.scale = 0.25;
             state.preferences.quiet_mode = true;
             state.preferences.presentation_mode = true;
             Ok(())
         })
         .unwrap();
         let wallpaper = apply_scene(dir.path(), &scene.id, SceneApplyMode::Wallpaper).unwrap();
-        assert_eq!(wallpaper.scale, 0.6);
+        assert_eq!(wallpaper.scale, 0.25);
         assert!(wallpaper.preferences.quiet_mode);
         let both = apply_scene(dir.path(), &scene.id, SceneApplyMode::All).unwrap();
         assert_eq!(both.scale, crate::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);

@@ -17,7 +17,7 @@ pub const DESKTOP_PET_V2_HEIGHT: u32 = DESKTOP_PET_V2_ROWS * DESKTOP_PET_V2_CELL
 pub const DESKTOP_PET_V2_USED_COLUMNS: [u32; 11] = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8];
 pub const DESKTOP_PET_GROOMING_WIDTH: u32 = 6 * DESKTOP_PET_V2_CELL_WIDTH;
 pub const DESKTOP_PET_MIN_SCALE: f64 = 0.15;
-pub const DESKTOP_PET_MAX_SCALE: f64 = 0.60;
+pub const DESKTOP_PET_MAX_SCALE: f64 = 0.30;
 pub const DESKTOP_PET_DEFAULT_SCALE: f64 = 0.30;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -175,13 +175,18 @@ fn read_desktop_pet_state_unlocked(base: &Path) -> anyhow::Result<DesktopPetStat
     }
     let bytes = read_limited_pet_file(&path, 1024 * 1024)?;
     let mut state: DesktopPetState = serde_json::from_slice(&bytes)?;
-    // Preserve the historical size migration independently of new-pet defaults:
-    // old default 1.0 became 0.40;
-    // other formerly valid oversized choices are capped, without rewriting on read.
-    if state.scale == 1.0 {
-        state.scale = 0.40;
-    } else if state.scale > DESKTOP_PET_MAX_SCALE && state.scale <= 1.35 {
+    // Cap historically valid sizes to the new 100% ceiling in the read view.
+    // Invalid values still fail validation; only a later write persists the cap.
+    if state.scale > DESKTOP_PET_MAX_SCALE && state.scale <= 1.35 {
         state.scale = DESKTOP_PET_MAX_SCALE;
+    }
+    for pet in &mut state.pets {
+        pet.defaults.cap_legacy_scale();
+    }
+    for scene in &mut state.scenes {
+        if let Some(preferences) = &mut scene.preferences {
+            preferences.cap_legacy_scale();
+        }
     }
     if state.library_version == 0 {
         crate::pet_library::reconcile(&mut state)?;
@@ -240,7 +245,7 @@ fn validate_state(state: &DesktopPetState) -> anyhow::Result<()> {
     anyhow::ensure!(
         state.scale.is_finite()
             && (DESKTOP_PET_MIN_SCALE..=DESKTOP_PET_MAX_SCALE).contains(&state.scale),
-        "桌宠大小必须在 0.15..=0.60 之间（界面 50%–200%）"
+        "桌宠大小必须在 0.15..=0.30 之间（界面 50%–100%）"
     );
     anyhow::ensure!(
         state.sprite_version_number.is_none() || matches!(state.sprite_version_number, Some(2 | 3)),
@@ -303,7 +308,7 @@ mod tests {
         let mut state = DesktopPetState {
             enabled: true,
             pet_path: Some("/tmp/pet.png".into()),
-            scale: 0.5,
+            scale: 0.25,
             always_on_top: false,
             updated_at: "now".into(),
             ..DesktopPetState::default()
@@ -335,11 +340,11 @@ mod tests {
         };
         write_desktop_pet_state(temp.path(), &initial).unwrap();
         let updated = update_desktop_pet_state(temp.path(), |state| {
-            state.scale = 0.55;
+            state.scale = 0.25;
             Ok(())
         })
         .unwrap();
-        assert_eq!(updated.scale, 0.55);
+        assert_eq!(updated.scale, 0.25);
         assert_eq!(updated.pet_path, initial.pet_path);
         assert_eq!(updated.provider, initial.provider);
         assert_eq!(updated.revision, 2);
@@ -367,11 +372,8 @@ mod tests {
         for scale in [
             DESKTOP_PET_MIN_SCALE,
             0.2,
-            0.3,
-            0.4,
-            0.325,
-            0.5,
-            0.55,
+            0.225,
+            0.25,
             DESKTOP_PET_MAX_SCALE,
         ] {
             update_desktop_pet_state(temp.path(), |state| {
@@ -386,7 +388,7 @@ mod tests {
                 stored
             );
         }
-        for scale in [0.14, 0.61, 1.36, f64::INFINITY] {
+        for scale in [0.14, 0.31, 0.6, 1.36, f64::INFINITY] {
             assert!(update_desktop_pet_state(temp.path(), |state| {
                 state.scale = scale;
                 Ok(())
@@ -405,12 +407,12 @@ mod tests {
         fs::create_dir_all(desktop_pet_root(temp.path())).unwrap();
         let path = desktop_pet_state_path(temp.path());
         fs::write(&path, br#"{"scale":1.0}"#).unwrap();
-        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.4);
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.3);
         assert_eq!(read_desktop_pet_state(temp.path()).unwrap().revision, 1);
         fs::write(&path, br#"{"scale":0.65}"#).unwrap();
-        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.6);
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.3);
         fs::write(&path, br#"{"scale":0.4}"#).unwrap();
-        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.4);
+        assert_eq!(read_desktop_pet_state(temp.path()).unwrap().scale, 0.3);
         fs::write(&path, "broken").unwrap();
         assert!(write_desktop_pet_state(temp.path(), &DesktopPetState::default()).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "broken");

@@ -101,6 +101,14 @@ pub struct PetScenePreferences {
     pub behavior: PetPreferences,
 }
 impl PetScenePreferences {
+    /// Old library records and exported packages allowed scales through 0.60.
+    /// Cap only that formerly valid range; do not mask corrupt/non-finite input.
+    pub fn cap_legacy_scale(&mut self) {
+        if self.scale > crate::desktop_pet::DESKTOP_PET_MAX_SCALE && self.scale <= 0.60 {
+            self.scale = crate::desktop_pet::DESKTOP_PET_MAX_SCALE;
+        }
+    }
+
     pub fn from_state(state: &crate::DesktopPetState) -> Self {
         let mut behavior = state.preferences.clone();
         // Presentation is a temporary global intent, never a scene effect.
@@ -133,6 +141,26 @@ impl PetScenePreferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_scale_cap_preserves_supported_values_and_rejects_corruption() {
+        for scale in [0.15, 0.225, 0.3, 0.4, 0.6] {
+            let mut preferences = PetScenePreferences {
+                scale,
+                behavior: PetPreferences::default(),
+            };
+            preferences.cap_legacy_scale();
+            assert_eq!(preferences.scale, scale.min(0.3));
+            preferences.validate().unwrap();
+        }
+        for scale in [0.14, 0.61, f64::NAN, f64::INFINITY] {
+            let mut preferences = PetScenePreferences {
+                scale,
+                behavior: PetPreferences::default(),
+            };
+            preferences.cap_legacy_scale();
+            assert!(preferences.validate().is_err());
+        }
+    }
     #[test]
     fn pet_preferences_patch_preserves_unspecified_fields() {
         let mut prefs = PetPreferences::default();

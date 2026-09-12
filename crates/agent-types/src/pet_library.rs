@@ -310,7 +310,7 @@ mod tests {
     fn library_new_path_does_not_replace_old_pet_and_preferences_do_not_apply_on_edit() {
         let (dir, state) = fixture();
         let mut defaults = state.pets[0].defaults.clone();
-        defaults.scale = 0.5;
+        defaults.scale = 0.25;
         let saved = edit_library(
             dir.path(),
             PetLibraryEdit::SetDefaults {
@@ -327,6 +327,38 @@ mod tests {
         .unwrap();
         assert_eq!(new.pets.len(), 2);
         assert_ne!(new.active_pet_id, state.active_pet_id);
+    }
+
+    #[test]
+    fn saved_oversized_pet_and_scene_scales_load_at_the_new_ceiling() {
+        let (dir, state) = fixture();
+        let mut legacy = edit_library(
+            dir.path(),
+            PetLibraryEdit::AddScene {
+                pet_id: state.pets[0].id.clone(),
+                name: "Existing scene".into(),
+            },
+        )
+        .unwrap();
+        legacy.scale = 0.6;
+        legacy.pets[0].defaults.scale = 0.4;
+        legacy.scenes[0].preferences = Some(PetScenePreferences {
+            scale: 0.5,
+            behavior: legacy.preferences.clone(),
+        });
+        let path = crate::desktop_pet_state_path(dir.path());
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        let mut expected = legacy;
+        expected.scale = 0.3;
+        expected.pets[0].defaults.scale = 0.3;
+        expected.scenes[0].preferences.as_mut().unwrap().scale = 0.3;
+        assert_eq!(crate::read_desktop_pet_state(dir.path()).unwrap(), expected);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let saved = crate::update_desktop_pet_state(dir.path(), |_| Ok(())).unwrap();
+        expected.revision += 1;
+        assert_eq!(saved, expected);
+        assert_eq!(crate::read_desktop_pet_state(dir.path()).unwrap(), expected);
     }
     #[test]
     fn library_delete_checks_scene_count_and_keeps_files() {
@@ -399,7 +431,7 @@ mod tests {
         .unwrap();
         let scene_id = saved.scenes[0].id.clone();
         let mut defaults = saved.pets[0].defaults.clone();
-        defaults.scale = 0.5;
+        defaults.scale = 0.25;
         defaults.behavior.hide_in_fullscreen = false;
         edit_library(
             dir.path(),
@@ -420,7 +452,7 @@ mod tests {
             crate::pet_scene::SceneApplyMode::Pet,
         )
         .unwrap();
-        assert_eq!(applied.scale, 0.5);
+        assert_eq!(applied.scale, 0.25);
         assert!(applied.preferences.presentation_mode && applied.preferences.hide_in_fullscreen);
         assert_eq!(applied.active_scene_id.as_deref(), Some(scene_id.as_str()));
         let mut override_prefs = applied.pets[0].defaults.clone();
@@ -440,6 +472,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(applied.scale, 0.3);
-        assert_eq!(applied.pets[0].defaults.scale, 0.5);
+        assert_eq!(applied.pets[0].defaults.scale, 0.25);
     }
 }

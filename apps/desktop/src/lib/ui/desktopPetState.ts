@@ -1,6 +1,6 @@
 export const DESKTOP_PET_SCALE = {
   min: 0.15,
-  max: 0.6,
+  max: 0.3,
   step: 0.01,
   reference: 0.3,
 } as const;

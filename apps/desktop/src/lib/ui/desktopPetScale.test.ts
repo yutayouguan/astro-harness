@@ -10,7 +10,7 @@ import {
 
 test("slider reaches half the rebased default and matches persistent native bounds", () => {
   assert.equal(DESKTOP_PET_SCALE.min, DESKTOP_PET_SCALE.reference / 2);
-  assert.equal(DESKTOP_PET_SCALE.max, 0.6);
+  assert.equal(DESKTOP_PET_SCALE.max, DESKTOP_PET_SCALE.reference);
   assert.equal(DESKTOP_PET_SCALE.step, 0.01);
   const source = readFileSync(
     new URL(
@@ -32,17 +32,16 @@ test("slider reaches half the rebased default and matches persistent native boun
   }
 });
 
-test("old 75 percent becomes 100 percent without rescaling stored values", () => {
+test("old 75 percent is the new 100 percent ceiling with a 50 percent floor", () => {
   assert.equal(petScalePercent(0.3), 100);
   assert.equal(petScalePercent(0.15), 50);
-  assert.equal(petScalePercent(0.4), 133.3);
-  assert.equal(petScalePercent(0.6), 200);
+  assert.equal(petScalePercent(0.225), 75);
   assert.equal(EMPTY_DESKTOP_PET_STATE.scale, 0.3);
   assert.equal(petScaleFromPercent(50), 0.15);
   assert.equal(petScaleFromPercent(100), 0.3);
-  assert.equal(petScaleFromPercent(150), 0.45);
-  assert.equal(petScaleFromPercent(200), 0.6);
-  assert.equal(petScaleFromPercent(1000), 0.6);
+  assert.equal(petScaleFromPercent(150), 0.3);
+  assert.equal(petScaleFromPercent(200), 0.3);
+  assert.equal(petScaleFromPercent(1000), 0.3);
   assert.equal(petScaleFromPercent(0), 0.15);
   assert.equal(petScaleFromPercent(Number.NaN), 0.3);
 });

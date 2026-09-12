@@ -65,9 +65,9 @@ test("live resizing preserves the scene and other pets' saved defaults", async (
   await page.getByRole("tab", { name: "动作与偏好", exact: true }).click();
   const slider = page.getByRole("slider", { name: /桌宠大小/ });
   await slider.press("End");
-  await expect.poll(async () => (await snapshot()).scale).toBe(0.6);
-  await expect(slider).toHaveAttribute("aria-valuetext", "200%");
-  expect(await snapshot()).toEqual({ ...before, scale: 0.6 });
+  await expect.poll(async () => (await snapshot()).scale).toBe(0.3);
+  await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+  expect(await snapshot()).toEqual({ ...before, scale: 0.3 });
   await slider.press("Home");
   await expect.poll(async () => (await snapshot()).scale).toBe(0.15);
   await expect(slider).toHaveAttribute("aria-valuetext", "50%");
@@ -75,11 +75,11 @@ test("live resizing preserves the scene and other pets' saved defaults", async (
   await page.locator(".pet-library-back").click();
   await page.getByRole("button", { name: "管理 布丁", exact: true }).click();
   await page.getByRole("tab", { name: "动作与偏好", exact: true }).click();
-  await slider.press("End");
-  await expect(slider).toHaveValue("0.6");
+  await slider.press("Home");
+  await expect(slider).toHaveValue("0.15");
   expect(await snapshot()).toEqual({ ...before, scale: 0.15 });
   await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect.poll(async () => (await snapshot()).defaults.find((p: any) => p.id === "builtin-pudding")?.scale).toBe(0.6);
+  await expect.poll(async () => (await snapshot()).defaults.find((p: any) => p.id === "builtin-pudding")?.scale).toBe(0.15);
   expect((await snapshot()).scale).toBe(0.15);
   expect((await snapshot()).sceneId).toBe(before.sceneId);
 });
@@ -87,22 +87,27 @@ test("live resizing preserves the scene and other pets' saved defaults", async (
 test("rebased size labels reach 50 percent and agree with inherited scene cards", async ({ page }) => {
   await page.goto("/iframe.html?id=settings-petscenestudio--preview-and-failure&viewMode=story");
   await page.getByRole("button", { name: "管理 奶糖", exact: true }).click();
-  // This fixture deliberately retains an existing physical scale of 0.40.
-  await expect(page.locator(".pet-scene-card").first()).toContainText("133.3%");
+  await expect(page.locator(".pet-scene-card").first()).toContainText("100%");
   await page.getByRole("tab", { name: "动作与偏好", exact: true }).click();
   const slider = page.getByRole("slider", { name: /桌宠大小/ });
-  await expect(slider).toHaveValue("0.4");
-  await expect(slider).toHaveAttribute("aria-valuetext", "133.3%");
+  await expect(slider).toHaveValue("0.3");
+  await expect(slider).toHaveAttribute("max", "0.3");
+  await expect(slider).toHaveAttribute("aria-valuetext", "100%");
   await slider.press("Home");
   await expect(slider).toHaveValue("0.15");
   await expect(slider).toHaveAttribute("aria-valuetext", "50%");
+  const save = page.getByRole("button", { name: "保存配置", exact: true });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(save).toBeDisabled();
   for (let step = 1; step <= 15; step++) {
     await expect(slider).toBeEnabled();
     await slider.press("ArrowRight");
     await expect(slider).toHaveValue(((15 + step) / 100).toString());
   }
   await expect(slider).toHaveAttribute("aria-valuetext", "100%");
-  const save = page.getByRole("button", { name: "保存配置", exact: true });
+  await slider.press("ArrowRight");
+  await expect(slider).toHaveValue("0.3");
   await expect(save).toBeEnabled();
   await save.click();
   await expect(save).toBeDisabled();

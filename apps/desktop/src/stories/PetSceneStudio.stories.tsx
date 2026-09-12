@@ -37,7 +37,7 @@ const meta = {
       provider: null,
       model: null,
     };
-    const defaults = { scale: 0.4, behavior: { ...DEFAULT_PET_PREFERENCES } };
+    const defaults = { scale: 0.3, behavior: { ...DEFAULT_PET_PREFERENCES } };
     const puddingFiles: Record<string, string> = {
       "tail-wag": puddingTail,
       "head-tilt": puddingHead,
