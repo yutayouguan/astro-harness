@@ -260,7 +260,10 @@ test("bounded focus palette maintains 3:1 on soft surfaces across every hue", as
     );
     return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
   };
-  assert.match(css, /var\(--input-focus-lightness\) 0\.065 h/);
+  assert.match(css, /var\(--input-focus-lightness\) 0\.035 h/);
+  assert.match(css, /--input-focus-lightness: 0\.62/);
+  assert.match(css, /--input-focus-end-lightness: 0\.60/);
+  assert.doesNotMatch(css, /var\(--input-focus-color\) 80%, var\(--ink\)/);
   for (const mode of ["light", "dark"]) {
     const block = (source: string) =>
       source.match(new RegExp(`\\[data-theme="${mode}"\\] \\{([^}]+)`))![1];
@@ -281,7 +284,7 @@ test("bounded focus palette maintains 3:1 on soft surfaces across every hue", as
       const foregrounds = [
         hexLuminance(fallback),
         ...lightness.flatMap((L) =>
-          Array.from({ length: 72 }, (_, h) => oklchLuminance(L, 0.065, h * 5)),
+          Array.from({ length: 72 }, (_, h) => oklchLuminance(L, 0.035, h * 5)),
         ),
       ];
       for (const fg of foregrounds) {

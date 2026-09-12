@@ -1,14 +1,14 @@
 /* Shared focus edge for both materials. Older WebViews retain a solid outline. */
 html[data-theme="light"] {
-  --input-focus-fallback: #6d83ad;
-  --input-focus-lightness: 0.59;
-  --input-focus-end-lightness: 0.53;
+  --input-focus-fallback: #7c8999;
+  --input-focus-lightness: 0.62;
+  --input-focus-end-lightness: 0.60;
 }
 
 html[data-theme="dark"] {
-  --input-focus-fallback: #8194b8;
-  --input-focus-lightness: 0.7;
-  --input-focus-end-lightness: 0.76;
+  --input-focus-fallback: #82909f;
+  --input-focus-lightness: 0.65;
+  --input-focus-end-lightness: 0.69;
 }
 
 html {
@@ -20,8 +20,8 @@ html[data-focus-modality="keyboard"] {
 }
 
 html[data-theme] [data-input-focus] {
-  --input-focus-color: var(--tone, var(--accent, var(--input-focus-fallback)));
-  --input-focus-end: color-mix(in srgb, var(--input-focus-color) 80%, var(--ink));
+  --input-focus-color: color-mix(in srgb, var(--tone, var(--accent, var(--input-focus-fallback))) 25%, var(--input-focus-fallback));
+  --input-focus-end: color-mix(in srgb, var(--input-focus-color) 75%, var(--input-focus-fallback));
   --input-focus-gradient: linear-gradient(120deg, var(--input-focus-color), var(--input-focus-end));
 
   border-color: transparent;
@@ -32,15 +32,15 @@ html[data-theme] [data-input-focus] {
   transition-property: background-color, color;
 }
 
-@supports (color: oklch(from red 0.59 0.065 h)) {
+@supports (color: oklch(from red 0.62 0.035 h)) {
   html[data-theme] [data-input-focus] {
     /* Resolve the hue at the focused surface, not the root: page-specific and
      * custom accent changes remain live. Chroma/lightness stay independently bounded. */
     --input-focus-color: oklch(
-      from var(--tone, var(--accent)) var(--input-focus-lightness) 0.065 h
+      from var(--tone, var(--accent)) var(--input-focus-lightness) 0.035 h
     );
     --input-focus-end: oklch(
-      from var(--tone, var(--accent)) var(--input-focus-end-lightness) 0.065 h
+      from var(--tone, var(--accent)) var(--input-focus-end-lightness) 0.035 h
     );
   }
 }
