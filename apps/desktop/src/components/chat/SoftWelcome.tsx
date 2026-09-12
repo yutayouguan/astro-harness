@@ -15,7 +15,6 @@ import type { WelcomeCard } from "./ChatWelcome";
 type Props = {
   cards: readonly WelcomeCard[];
   onPickCard: (prompt: string, slotHints: string[]) => void;
-  onActivate?: () => void;
 };
 
 function CardPreview({
@@ -127,7 +126,7 @@ function ContentCard({
   );
 }
 
-export function SoftWelcome({ cards, onPickCard, onActivate }: Props) {
+export function SoftWelcome({ cards, onPickCard }: Props) {
   const { t } = useI18n();
   const [category, setCategory] = useState<SoftWelcomeCategory>("all");
   const section = softWelcomeSections(cards, category);
@@ -143,16 +142,6 @@ export function SoftWelcome({ cards, onPickCard, onActivate }: Props) {
             <h2>{t("chat.softWelcome.title")}</h2>
             <p>{t("chat.softWelcome.sub")}</p>
           </div>
-          {onActivate ? (
-            <button
-              className="soft-welcome-start"
-              type="button"
-              onClick={onActivate}
-            >
-              {t("chat.softWelcome.start")}
-              <ArrowUpRight size={16} aria-hidden />
-            </button>
-          ) : null}
         </header>
         <div
           className="soft-welcome-filters"

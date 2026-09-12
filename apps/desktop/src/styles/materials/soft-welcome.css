@@ -43,8 +43,7 @@
   font-size: 13px;
   line-height: 1.6;
 }
-/* Start conversation is the reference material for every welcome action. */
-.soft-welcome-start,
+/* Content cards and category filters share one welcome material. */
 .soft-welcome-card,
 .soft-welcome-filters button {
   border: 1px solid var(--soft-edge);
@@ -54,16 +53,6 @@
   -webkit-backdrop-filter: var(--welcome-action-backdrop);
 }
 
-.soft-welcome-start {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  padding: 10px 14px;
-  border-radius: 999px;
-  color: var(--soft-ink);
-  cursor: pointer;
-}
 .soft-welcome-filters {
   display: flex;
   gap: 8px;
@@ -193,7 +182,7 @@
 .soft-welcome-card.is-featured strong {
   font-size: 16px;
 }
-.soft-welcome :is(.soft-welcome-card, .soft-welcome-start):active {
+.soft-welcome .soft-welcome-card:active {
   transform: translateY(1px);
 }
 .soft-welcome button:focus-visible {
@@ -262,12 +251,11 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .soft-welcome :is(.soft-welcome-card, .soft-welcome-start):active {
+  .soft-welcome .soft-welcome-card:active {
     transform: none;
   }
 }
 @media (prefers-contrast: more) {
-  .soft-welcome-start,
   .soft-welcome-card,
   .soft-welcome-filters button {
     border-color: var(--soft-muted);

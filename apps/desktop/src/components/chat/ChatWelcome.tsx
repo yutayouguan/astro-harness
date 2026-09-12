@@ -309,7 +309,7 @@ function MarqueeRow({
 export function ChatWelcome(props: Props) {
   const material = useInterfaceMaterial();
   return material === "soft" ? (
-    <SoftWelcome cards={ALL_CARDS} {...props} />
+    <SoftWelcome cards={ALL_CARDS} onPickCard={props.onPickCard} />
   ) : (
     <GlassWelcome {...props} />
   );

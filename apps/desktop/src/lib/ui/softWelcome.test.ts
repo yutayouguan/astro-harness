@@ -76,22 +76,45 @@ test("welcome cards use compact horizontal previews without shrinking body text"
   assert.doesNotMatch(css, /height: 132px|height: 70px|height: 110px/);
 });
 
-test("cards and category pills share the Start conversation material in every state", async () => {
+test("cards and category pills retain the shared welcome material in every state", async () => {
   const css = await readFile(
     new URL("../../styles/materials/soft-welcome.css", import.meta.url),
     "utf8",
   );
   assert.match(
     css,
-    /\.soft-welcome-start,\s*\.soft-welcome-card,\s*\.soft-welcome-filters button\s*\{\s*border: 1px solid var\(--soft-edge\);\s*background: var\(--welcome-action-surface\);\s*box-shadow: var\(--soft-control-shadow\);/,
+    /\.soft-welcome-card,\s*\.soft-welcome-filters button\s*\{\s*border: 1px solid var\(--soft-edge\);\s*background: var\(--welcome-action-surface\);\s*box-shadow: var\(--soft-control-shadow\);/,
   );
   assert.doesNotMatch(css, /linear-gradient|background: var\(--soft-ink\)/);
   assert.match(css, /\[aria-pressed="true"\]::after/);
   assert.match(css, /background: currentColor/);
   assert.match(
     css,
-    /prefers-contrast: more[\s\S]*\.soft-welcome-start,[\s\S]*box-shadow: none/,
+    /prefers-contrast: more[\s\S]*\.soft-welcome-card,[\s\S]*box-shadow: none/,
   );
+});
+
+test("Soft welcome has no redundant start button and keeps card selection", async () => {
+  const read = (path: string) =>
+    readFile(new URL(path, import.meta.url), "utf8");
+  const [source, css, messages, root] = await Promise.all([
+    read("../../components/chat/SoftWelcome.tsx"),
+    read("../../styles/materials/soft-welcome.css"),
+    read("../../i18n/messages.ts"),
+    read("../../components/chat/ChatWelcome.tsx"),
+  ]);
+  assert.doesNotMatch(
+    source,
+    /onActivate|soft-welcome-start|chat\.softWelcome\.start/,
+  );
+  assert.doesNotMatch(css, /soft-welcome-start/);
+  assert.doesNotMatch(messages, /chat\.softWelcome\.start/);
+  assert.match(
+    root,
+    /<SoftWelcome cards=\{ALL_CARDS\} onPickCard=\{props\.onPickCard\}/,
+  );
+  assert.match(source, /onPickCard\(prompt, promptTemplateHints\(prompt\)\)/);
+  assert.match(root, /<GlassWelcome \{\.\.\.props\}/);
 });
 
 test("welcome frost has one shared recipe and solid accessibility fallbacks", async () => {
