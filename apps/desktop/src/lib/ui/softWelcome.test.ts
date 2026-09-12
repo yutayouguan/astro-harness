@@ -100,20 +100,15 @@ test("welcome frost has one shared recipe and solid accessibility fallbacks", as
   );
   assert.match(
     css,
-    /@supports \(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)/,
+    /--welcome-action-surface: var\(--soft-material-background\)/,
   );
-  assert.match(css, /var\(--soft-surface\) 90%,\s*transparent/);
   assert.match(
     css,
-    /--welcome-action-backdrop: blur\(18px\) saturate\(1\.08\)/,
+    /--welcome-action-backdrop: var\(--soft-material-backdrop\)/,
   );
   assert.match(
     css,
     /-webkit-backdrop-filter: var\(--welcome-action-backdrop\)/,
-  );
-  assert.match(
-    css,
-    /prefers-reduced-transparency: reduce[\s\S]*--welcome-action-surface: var\(--soft-surface\);[\s\S]*--welcome-action-backdrop: none/,
   );
 });
 
@@ -126,7 +121,7 @@ test("frost text remains readable over worst-case black and white backdrops", as
     new URL("../../styles/materials/soft.css", import.meta.url),
     "utf8",
   );
-  assert.match(css, /var\(--soft-surface\) 90%/);
+  assert.match(css, /var\(--soft-material-background\)/);
   assert.match(css, /var\(--soft-muted\) 95%, var\(--soft-ink\)/);
   const luminance = (rgb: number[]) =>
     rgb
@@ -146,9 +141,9 @@ test("frost text remains readable over worst-case black and white backdrops", as
         .map((v) => parseInt(v, 16));
     const surface = rgb("surface"),
       ink = rgb("ink"),
-      muted = rgb("muted").map((c, i) => c * 0.95 + ink[i] * 0.05);
+      muted = rgb("muted");
     for (const backdrop of [0, 255]) {
-      const bg = luminance(surface.map((c) => c * 0.9 + backdrop * 0.1));
+      const bg = luminance(surface.map((c) => c * 0.8 + backdrop * 0.2));
       for (const color of [ink, muted]) {
         const fg = luminance(color);
         assert.ok(

@@ -34,6 +34,18 @@ html[data-theme="dark"] .pet-manager {
   --pet-preview-center: color-mix(in srgb, var(--pet-material-surface) 94%, #fff);
 }
 
+/* The Soft palette belongs to the global material, not the wallpaper accent.
+ * Keep nested controls unblurred; the owning card supplies the frost layer. */
+html[data-material="soft"] .pet-manager {
+  --pet-material-surface: var(--soft-material-background);
+  --pet-material-control: var(--soft-material-background);
+  --pet-material-selected: var(--soft-material-background);
+  --pet-material-border: var(--soft-control-edge);
+  --pet-material-selected-border: var(--input-focus-fallback);
+  --pet-preview-center: var(--soft-surface);
+  --pet-preview-edge: var(--soft-inset);
+}
+
 .pet-manager .pet-library-card,
 .pet-manager .pet-library .pet-detail-name-editor,
 .pet-manager .pet-library .pet-detail-empty,

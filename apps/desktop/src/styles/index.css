@@ -94,6 +94,7 @@
 @import "./features/terminal-settings.css" layer(features);
 @import "./features/environment-dependencies.css" layer(features);
 @import "./features/desktop-pet.css" layer(features);
+@import "./features/pet-material.css" layer(features);
 @import "./features/desktop-ambience.css" layer(features);
 @import "./features/tools.css" layer(features);
 @import "./features/skills/core.css" layer(features);
@@ -130,5 +131,6 @@
 @import "./materials/soft-welcome.css" layer(overrides);
 @import "./materials/soft-skill-store.css" layer(overrides);
 @import "./materials/soft-overlays.css" layer(overrides);
-@import "./materials/soft-focus.css" layer(overrides);
+/* Focus must also outrank unlayered feature materials such as pet/settings. */
+@import "./materials/soft-focus.css";
 @import "./components/ai-action-icon.css" layer(overrides);

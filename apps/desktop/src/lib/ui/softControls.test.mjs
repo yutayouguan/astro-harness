@@ -10,7 +10,7 @@ const [css, settings, index] = await Promise.all([
 ]);
 
 test("soft chrome keeps dock geometry but drops the raised surface shadow", () => {
-  assert.match(css, /--chat-dock-surface-background: var\(--soft-base\)/);
+  assert.match(css, /--chat-dock-surface-background: var\(--soft-material-background\)/);
   assert.match(css, /--chat-dock-surface-shadow: none/);
   assert.doesNotMatch(
     css,
@@ -30,7 +30,7 @@ test("soft settings opt into opaque inset and local selection tokens; glass reta
     assert.match(settings, new RegExp(`var\\(\\s*--${token},`));
   }
   assert.match(settings, /var\(--surface-panel-background\) 68%, transparent/);
-  assert.match(css, /var\(--tone, var\(--accent\)\) 10%/);
+  assert.match(css, /--material-selected-background: var\(--soft-material-background\)/);
 });
 
 test("control styling never paints inner search fields or overrides active input rings", () => {

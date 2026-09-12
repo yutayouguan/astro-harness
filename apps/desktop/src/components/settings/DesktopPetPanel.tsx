@@ -19,7 +19,6 @@ import conceptImage from "../../assets/generated/desktop-pet-concept.png";
 import PetCreatePanel from "./PetCreatePanel";
 import PetSettingSwitch from "./PetSettingSwitch";
 import PetLibraryPanel from "./PetLibraryPanel";
-import "../../styles/features/pet-material.css";
 export type { DesktopPetState } from "../../lib/ui/desktopPetState";
 
 export default function DesktopPetPanel({ active }: { active: boolean }) {

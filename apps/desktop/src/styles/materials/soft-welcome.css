@@ -1,6 +1,6 @@
 .soft-welcome {
-  --welcome-action-surface: var(--soft-surface);
-  --welcome-action-backdrop: none;
+  --welcome-action-surface: var(--soft-material-background);
+  --welcome-action-backdrop: var(--soft-material-backdrop);
   --welcome-muted: color-mix(in srgb, var(--soft-muted) 95%, var(--soft-ink));
   flex: 1;
   min-height: 0;
@@ -9,18 +9,6 @@
   container-type: inline-size;
   padding: 24px 28px calc(var(--composer-overlay-height, 112px) + 28px);
   color: var(--soft-ink);
-}
-
-/* Keep a solid fallback: translucent fill without backdrop support is not frost. */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .soft-welcome {
-    --welcome-action-surface: color-mix(
-      in srgb,
-      var(--soft-surface) 90%,
-      transparent
-    );
-    --welcome-action-backdrop: blur(18px) saturate(1.08);
-  }
 }
 
 .soft-welcome-content {
@@ -284,13 +272,5 @@
   .soft-welcome-filters button {
     border-color: var(--soft-muted);
     box-shadow: none;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more),
-  (forced-colors: active) {
-  .soft-welcome {
-    --welcome-action-surface: var(--soft-surface);
-    --welcome-action-backdrop: none;
   }
 }

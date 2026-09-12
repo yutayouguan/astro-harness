@@ -32,11 +32,11 @@ html[data-material="soft"]
     .project-context-menu,
     .astro-toast
   ) {
-  background: var(--soft-surface);
+  background: var(--soft-material-background);
   border-color: var(--soft-control-edge);
   box-shadow: var(--soft-floating-shadow);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: var(--soft-material-backdrop);
+  -webkit-backdrop-filter: var(--soft-material-backdrop);
 }
 
 html[data-material="soft"] .select-menu-list {

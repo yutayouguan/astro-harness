@@ -41,6 +41,12 @@ import {
   type InterfaceMaterial,
 } from "../../lib/ui/interfaceMaterial";
 import { installInputFocus } from "../../lib/ui/inputFocus";
+import {
+  applySoftFrostIntensity,
+  normalizeSoftFrostIntensity,
+  persistSoftFrostIntensity,
+  readStoredSoftFrostIntensity,
+} from "../../lib/ui/softFrostIntensity";
 
 export type { ResolvedTheme, ThemeMode } from "../../lib/ui/themeResolution";
 export type { GlassIntensity } from "../../lib/ui/glassIntensity";
@@ -113,6 +119,8 @@ type ThemeContextValue = {
   resolved: ResolvedTheme;
   glassIntensity: GlassIntensity;
   setGlassIntensity: (intensity: GlassIntensity) => void;
+  softFrostIntensity: number;
+  setSoftFrostIntensity: (intensity: number) => void;
   interfaceScale: InterfaceScale;
   setInterfaceScale: (scale: InterfaceScale) => void;
   setWallpaperTheme: (theme: ResolvedTheme | null) => void;
@@ -125,6 +133,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => installInputFocus(document), []);
   const [material, setMaterialState] = useState(readStoredInterfaceMaterial);
+  const [softFrostIntensity, setSoftFrostIntensityState] = useState(
+    readStoredSoftFrostIntensity,
+  );
   const [mode, setModeState] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "auto" : readStoredMode(),
   );
@@ -163,10 +174,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     apply(mode, wallpaperTheme);
+  }, [mode, apply, wallpaperTheme]);
+
+  useEffect(() => {
     applyInterfaceMaterial(document.documentElement, material);
     applyGlassIntensity(document.documentElement, glassIntensity);
+    applySoftFrostIntensity(document.documentElement, softFrostIntensity);
     applyInterfaceScale(document.documentElement, interfaceScale);
-  }, [mode, apply, material, glassIntensity, interfaceScale, wallpaperTheme]);
+  }, [
+    material,
+    glassIntensity,
+    softFrostIntensity,
+    interfaceScale,
+  ]);
 
   useEffect(() => {
     if (mode !== "auto") return;
@@ -203,6 +223,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     persistInterfaceScale(normalized);
   }, []);
 
+  const setSoftFrostIntensity = useCallback((intensity: number) => {
+    const normalized = normalizeSoftFrostIntensity(intensity);
+    setSoftFrostIntensityState(normalized);
+    applySoftFrostIntensity(document.documentElement, normalized);
+    persistSoftFrostIntensity(normalized);
+  }, []);
+
   const setWallpaperTheme = useCallback((theme: ResolvedTheme | null) => {
     setWallpaperThemeState((current) => (current === theme ? current : theme));
   }, []);
@@ -213,8 +240,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolveThemePreference(mode, systemPrefersDark(), wallpaperTheme),
     );
     applyGlassIntensity(document.documentElement, glassIntensity);
+    applySoftFrostIntensity(document.documentElement, softFrostIntensity);
     applyInterfaceScale(document.documentElement, interfaceScale);
-  }, [mode, material, glassIntensity, interfaceScale, wallpaperTheme]);
+  }, [
+    mode,
+    material,
+    glassIntensity,
+    softFrostIntensity,
+    interfaceScale,
+    wallpaperTheme,
+  ]);
 
   const value = useMemo(
     () => ({
@@ -225,6 +260,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolved,
       glassIntensity,
       setGlassIntensity,
+      softFrostIntensity,
+      setSoftFrostIntensity,
       interfaceScale,
       setInterfaceScale,
       setWallpaperTheme,
@@ -238,6 +275,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolved,
       glassIntensity,
       setGlassIntensity,
+      softFrostIntensity,
+      setSoftFrostIntensity,
       interfaceScale,
       setInterfaceScale,
       setWallpaperTheme,

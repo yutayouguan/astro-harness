@@ -29,6 +29,10 @@ import {
 } from "./lib/ui/interfaceScale";
 import "./styles/features/settings-material-unified.css";
 import "./styles/features/pet-tasks.css";
+import {
+  applySoftFrostIntensity,
+  readStoredSoftFrostIntensity,
+} from "./lib/ui/softFrostIntensity";
 
 installContextMenuGuard();
 
@@ -49,6 +53,10 @@ if (isDesktopPetWindow) {
   // Material is independent of wallpaper/theme, and must exist before first paint.
   // Companion windows keep their transparent canvas and existing material.
   if (!isDesktopPetWindow && !isPetTaskWindow) {
+    applySoftFrostIntensity(
+      document.documentElement,
+      readStoredSoftFrostIntensity(),
+    );
     applyInterfaceMaterial(
       document.documentElement,
       readStoredInterfaceMaterial(),

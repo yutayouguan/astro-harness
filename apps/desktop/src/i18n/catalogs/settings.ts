@@ -14,8 +14,9 @@ export const settingsMessages = {
     "prefs.appearance.surface.glassDesc": "通透光感，映衬背景色彩",
     "prefs.appearance.surface.soft": "柔塑 Soft",
     "prefs.appearance.surface.softDesc": "亮色白瓷，暗色石墨，细腻轻浮雕",
-    "prefs.appearance.glass.softDisabled":
-      "柔塑材质独立调校；此滑块仅作用于玻璃主题，当前数值已保留。",
+    "prefs.appearance.frost.title": "毛玻璃强度",
+    "prefs.appearance.frost.sub":
+      "从实心到轻透：联动背景不透明度（100%–80%）与模糊（0–36px），文字保持清晰。系统减少透明度时使用实心材质。",
     "prefs.appearance.accent.title": "强调色",
     "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
     "prefs.appearance.motion.title": "动效与图标",
@@ -367,8 +368,9 @@ export const settingsMessages = {
     "prefs.appearance.surface.soft": "Soft",
     "prefs.appearance.surface.softDesc":
       "Porcelain in light mode, graphite in dark mode",
-    "prefs.appearance.glass.softDisabled":
-      "Soft uses its own material settings. This slider only affects Glass; your value is saved.",
+    "prefs.appearance.frost.title": "Frost strength",
+    "prefs.appearance.frost.sub":
+      "Solid to translucent: links background opacity (100%–80%) and blur (0–36px), keeping text clear. Reduced transparency uses solid surfaces.",
     "prefs.appearance.accent.title": "Accent color",
     "prefs.appearance.accent.sub":
       "Keep controls and status colors clear over every wallpaper.",

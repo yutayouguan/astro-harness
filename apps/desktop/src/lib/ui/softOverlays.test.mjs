@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 const css = await read("../../styles/materials/soft-overlays.css");
 
-test("soft floating surfaces use solid fill and one neutral shadow", () => {
+test("soft floating surfaces use shared frost and one neutral shadow", () => {
   for (const surface of [
     ".app-dialog",
     ".ui-overlay__surface",
@@ -13,7 +13,7 @@ test("soft floating surfaces use solid fill and one neutral shadow", () => {
     ".astro-toast",
   ])
     assert.ok(css.includes(surface));
-  assert.match(css, /background: var\(--soft-surface\)/);
+  assert.match(css, /background: var\(--soft-material-background\)/);
   assert.match(css, /box-shadow: var\(--soft-floating-shadow\)/);
   assert.match(css, /backdrop-filter: none/);
   assert.doesNotMatch(

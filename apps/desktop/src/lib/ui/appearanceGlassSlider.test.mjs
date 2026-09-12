@@ -29,13 +29,13 @@ test("glass intensity uses one accessible continuous 0-100 range", () => {
   assert.match(control, /min=\{GLASS_INTENSITY_MIN\}/);
   assert.match(control, /max=\{GLASS_INTENSITY_MAX\}/);
   assert.match(control, /step=\{1\}/);
-  assert.match(control, /value=\{glassIntensity\}/);
-  assert.match(control, /aria-valuetext=\{`\$\{glassIntensity\}%`\}/);
+  assert.match(control, /value=\{materialIntensity\}/);
+  assert.match(control, /aria-valuetext=\{`\$\{materialIntensity\}%`\}/);
   assert.match(
     control,
-    /setGlassIntensity\(Number\(event\.currentTarget\.value\)\)/,
+    /setSoftFrostIntensity\s*:\s*setGlassIntensity\)\(\s*Number\(event\.currentTarget\.value\),?\s*\)/,
   );
-  assert.match(control, /\{glassIntensity\}%/);
+  assert.match(control, /\{materialIntensity\}%/);
   assert.doesNotMatch(control, /glassOptions|appearance-glass-slider-ticks/);
   assert.doesNotMatch(control, /role="radiogroup"/);
 });

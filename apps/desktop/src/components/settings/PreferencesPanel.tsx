@@ -420,9 +420,18 @@ export default function PreferencesPanel({
     glassIntensity,
     material,
     setGlassIntensity,
+    softFrostIntensity,
+    setSoftFrostIntensity,
     interfaceScale,
     setInterfaceScale,
   } = useTheme();
+  const materialIntensity =
+    material === "soft" ? softFrostIntensity : glassIntensity;
+  const materialIntensityTitle = t(
+    material === "soft"
+      ? "prefs.appearance.frost.title"
+      : "prefs.appearance.glass.title",
+  );
   const { spring, strokeWidth, setSpring, setStrokeWidth } = useMorphicons();
   const reduceMotion = useReducedMotion();
   const { settings: appIcon, setIcon: setAppIcon } = useAppIcon();
@@ -902,11 +911,11 @@ export default function PreferencesPanel({
 
               <div className="appearance-control-row appearance-control-row--split">
                 <div className="appearance-control-copy">
-                  <strong>{t("prefs.appearance.glass.title")}</strong>
+                  <strong>{materialIntensityTitle}</strong>
                   <span id="appearance-glass-description">
                     {t(
                       material === "soft"
-                        ? "prefs.appearance.glass.softDisabled"
+                        ? "prefs.appearance.frost.sub"
                         : "prefs.appearance.glass.sub",
                     )}
                   </span>
@@ -915,25 +924,28 @@ export default function PreferencesPanel({
                   className="appearance-range-slider"
                   style={
                     {
-                      "--appearance-range-progress": `${glassIntensity}%`,
+                      "--appearance-range-progress": `${materialIntensity}%`,
                     } as CSSProperties
                   }
                 >
                   <div className="appearance-range-track">
                     <input
                       id="appearance-glass-intensity"
-                      disabled={material === "soft"}
                       className="appearance-range-input"
                       type="range"
                       min={GLASS_INTENSITY_MIN}
                       max={GLASS_INTENSITY_MAX}
                       step={1}
-                      value={glassIntensity}
-                      aria-label={t("prefs.appearance.glass.title")}
+                      value={materialIntensity}
+                      aria-label={materialIntensityTitle}
                       aria-describedby="appearance-glass-description"
-                      aria-valuetext={`${glassIntensity}%`}
+                      aria-valuetext={`${materialIntensity}%`}
                       onChange={(event) =>
-                        setGlassIntensity(Number(event.currentTarget.value))
+                        (material === "soft"
+                          ? setSoftFrostIntensity
+                          : setGlassIntensity)(
+                          Number(event.currentTarget.value),
+                        )
                       }
                     />
                   </div>
@@ -942,7 +954,7 @@ export default function PreferencesPanel({
                     htmlFor="appearance-glass-intensity"
                     aria-live="off"
                   >
-                    {glassIntensity}%
+                    {materialIntensity}%
                   </output>
                 </div>
               </div>

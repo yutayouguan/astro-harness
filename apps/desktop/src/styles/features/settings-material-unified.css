@@ -4,6 +4,41 @@
  * 3. Tone and semantic colors appear only on selected or status states.
  */
 
+/* Feature cards may sit inside grids rather than directly under the category
+ * stack (dependencies and pet creation/library). Give them the same contract.
+ * This file is intentionally unlayered, like the existing settings owners. */
+html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
+  :is(.prefs-card, .prefs-section, .pet-manager-commandbar) {
+  background: var(--soft-material-background);
+  border-color: var(--soft-edge);
+  box-shadow: var(--soft-raised-shadow);
+  backdrop-filter: var(--soft-material-backdrop);
+  -webkit-backdrop-filter: var(--soft-material-backdrop);
+}
+
+html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
+  .prefs-card :is(.prefs-card, .prefs-section) {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Accent remains on the label/icon. Installed/disabled is not a pink primary
+ * action; warnings, destructive actions and checked switches keep semantics. */
+html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
+  .prefs-diag-btn:not(.danger) {
+  background: var(--soft-material-background);
+  border-color: var(--soft-control-edge);
+  color: var(--soft-ink);
+  box-shadow: var(--soft-control-shadow);
+}
+
+html[data-material="soft"] :is(.settings-content-inline, .prefs-page)
+  .prefs-diag-btn:not(.danger):disabled {
+  color: var(--soft-muted);
+  box-shadow: none;
+}
+
 .settings-content-inline,
 .prefs-page.is-embedded {
   /* Settings surfaces bind directly to the global immersive-light recipe. This
@@ -59,9 +94,8 @@
   );
 }
 
-/* Page cards keep the shared translucent fill. Avoid backdrop-filter here:
- * macOS WebView composites that filter as a rectangular backing layer even
- * when the card itself has rounded clipping. */
+/* Glass keeps its existing single-plane compositing. Soft explicitly opts
+ * primary cards into its adjustable frost; nested groups never add blur. */
 .prefs-page.is-embedded
   .prefs-category-stack
   > :is(.prefs-card, .prefs-section) {
@@ -75,13 +109,11 @@
     var(--shadow-card),
     var(--glass-rim)
   );
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: var(--settings-card-backdrop, none);
+  -webkit-backdrop-filter: var(--settings-card-backdrop, none);
 }
 
-/* All settings pages render their primary panels and cards on the same glass
- * plane as Appearance. Per-card backdrop sampling makes one neutral material
- * look green, orange, or blue depending on the wallpaper directly behind it. */
+/* All settings pages share the same primary surface recipe. */
 .settings-content-inline
 :is(
   .providers-pane,
@@ -107,8 +139,8 @@
   background: var(--settings-panel-background);
   background-clip: padding-box;
   box-shadow: var(--settings-panel-shadow);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: var(--settings-card-backdrop, none);
+  -webkit-backdrop-filter: var(--settings-card-backdrop, none);
 }
 
 /* Command approvals use a grid of smaller decision surfaces. Keep its outer

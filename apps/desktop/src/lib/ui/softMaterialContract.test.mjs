@@ -60,15 +60,16 @@ test("material prewarms before React mount and does not color companion canvases
   );
 });
 
-test("picker has native keyboard radios and glass strength is disabled, not discarded", () => {
+test("picker has native keyboard radios and independently remembered material strengths", () => {
   assert.match(picker, /<fieldset/);
   assert.match(picker, /type="radio"/);
   assert.match(picker, /checked=\{material === id\}/);
   assert.match(
     preferences,
-    /id="appearance-glass-intensity"\s+disabled=\{material === "soft"\}/,
+    /material === "soft" \? softFrostIntensity : glassIntensity/,
   );
-  assert.match(preferences, /prefs.appearance.glass.softDisabled/);
+  assert.doesNotMatch(preferences, /disabled=\{material === "soft"\}/);
+  assert.match(preferences, /prefs.appearance.frost.sub/);
 });
 
 test("material preserves approval composition, focus, reduced motion and contrast", () => {
@@ -84,7 +85,7 @@ test("material preserves approval composition, focus, reduced motion and contras
     css,
     /@media \(prefers-contrast: more\)\s*\{\s*html\[data-material="soft"\]\[data-theme\]/,
   );
-  assert.match(css, /--immersive-reference-backdrop: none/);
+  assert.match(css, /--immersive-reference-backdrop: var\(--soft-material-backdrop\)/);
   assert.doesNotMatch(css, /!important|--tone:|--accent:/);
   assert.match(
     layout,

@@ -7,8 +7,9 @@ html[data-material="soft"] {
     var(--soft-surface)
   );
   --soft-selection-width: 0.5px;
-  --material-inset-background: var(--soft-inset);
-  --material-inset-background-strong: var(--soft-surface);
+  --material-inset-background: var(--soft-material-background);
+  --material-inset-background-strong: var(--soft-material-background);
+  --settings-card-backdrop: var(--soft-material-backdrop);
   --seg-item-sheen-a: transparent;
   --seg-item-sheen-b: transparent;
   --seg-item-base: var(--soft-surface);
@@ -34,11 +35,7 @@ html[data-material="soft"]
     .settings-content-inline [role="tab"]
   ) {
   /* Resolve at each tone-bearing consumer so local themes and portals agree. */
-  --material-selected-background: color-mix(
-    in srgb,
-    var(--tone, var(--accent)) 10%,
-    var(--soft-surface)
-  );
+  --material-selected-background: var(--soft-material-background);
   --material-selected-border: color-mix(
     in srgb,
     var(--tone, var(--accent)) 32%,
@@ -49,9 +46,9 @@ html[data-material="soft"]
 }
 
 html[data-material="soft"] .chat-layout-with-right {
-  --chat-dock-surface-background: var(--soft-base);
+  --chat-dock-surface-background: var(--soft-material-background);
   --chat-dock-surface-shadow: none;
-  --chat-dock-surface-filter: none;
+  --chat-dock-surface-filter: var(--soft-material-backdrop);
 }
 
 html[data-material="soft"] .header-icon-btn:hover:not(:disabled, .is-active) {
@@ -84,7 +81,7 @@ html[data-material="soft"] .model-picker.is-open .model-picker-trigger {
 
 html[data-material="soft"]
   :is(.providers-list-item, .providers-key-block, .providers-fallback-block) {
-  background: var(--soft-inset);
+  background: var(--soft-material-background);
   border-color: var(--soft-control-edge);
   box-shadow: none;
 }
@@ -104,7 +101,7 @@ html[data-material="soft"] .header-icon-btn:active:not(:disabled) {
 }
 
 html[data-material="soft"] .select-menu {
-  --select-glass-fill: var(--soft-surface);
+  --select-glass-fill: var(--soft-material-background);
   --select-glass-fill-hover: var(--soft-hover);
   --select-glass-edge: var(--soft-control-edge);
   --select-glass-rim: inset 0 1px 0 var(--soft-highlight);
@@ -136,7 +133,7 @@ html[data-material="soft"]
   .user-message-editor-input,
   .app-dialog-input
 ) {
-  background: var(--soft-inset);
+  background: var(--soft-material-background);
   border-color: var(--soft-control-edge);
   box-shadow: none;
   backdrop-filter: none;
@@ -155,7 +152,7 @@ html[data-material="soft"]
     .loop-palette-search-wrap,
     .cron-sched-stepper
   ) {
-  background: var(--soft-inset);
+  background: var(--soft-material-background);
   border-color: var(--soft-control-edge);
   box-shadow: none;
   backdrop-filter: none;
