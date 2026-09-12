@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import PreferencesPanel from "../components/settings/PreferencesPanel";
 import { ChatMarkdown } from "../components/chat/ChatMarkdown";
@@ -8,18 +8,47 @@ import { LocaleProvider } from "../i18n/LocaleContext";
 import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import preferencesMeta from "./PreferencesPanel.stories";
 import sampleWallpaper from "../assets/generated/desktop-pet-concept.png";
+import { resolveWallpaperPresentation } from "../lib/ui/activeUiStyle";
 import "./soft-material-sample.css";
 
 function SoftMaterialSample() {
   const { mode, setMode } = useTheme();
   const [wallpaper, setWallpaper] = useState(false);
+  const [wallpaperBlur, setWallpaperBlur] = useState(0);
+  const wallpaperPrefs = {
+    ...preferencesMeta.args.wallpaper.prefs,
+    mode: wallpaper ? ("wallpaper" as const) : ("color" as const),
+    current: wallpaper
+      ? {
+          id: "soft-material-sample",
+          path: sampleWallpaper,
+          name: "示例壁纸",
+          source: "upload" as const,
+          width: 1536,
+          height: 1024,
+          createdAt: "2026-09-12T00:00:00Z",
+        }
+      : null,
+    blur: wallpaperBlur,
+    followSystemWallpaper: false,
+  };
+  const presentation = resolveWallpaperPresentation(null, wallpaperPrefs);
   return (
     <main
       className={`app-shell soft-material-sample-stage${wallpaper ? " has-wallpaper" : ""}`}
       data-tone="amber"
     >
       {wallpaper ? (
-        <div className="shell-wallpaper-layer" aria-hidden>
+        <div
+          className="shell-wallpaper-layer"
+          aria-hidden
+          style={
+            {
+              "--wallpaper-blur": presentation.blur,
+              "--wallpaper-shade": presentation.shade / 100,
+            } as CSSProperties
+          }
+        >
           <img src={sampleWallpaper} alt="" style={{ objectFit: "cover" }} />
           <span />
         </div>
@@ -76,6 +105,12 @@ function SoftMaterialSample() {
             {...preferencesMeta.args}
             mode={mode}
             onChange={setMode}
+            wallpaper={{
+              ...preferencesMeta.args.wallpaper,
+              prefs: wallpaperPrefs,
+              setMode: (mode) => setWallpaper(mode === "wallpaper"),
+              setBlur: setWallpaperBlur,
+            }}
           />
         </div>
       </div>

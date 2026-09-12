@@ -49,8 +49,12 @@ test("one range links opacity and blur without changing foreground opacity", () 
   );
 });
 
-test("frost persists independently of Glass and tolerates unavailable storage", () => {
-  const values = new Map([["astro-glass-intensity", "23"]]);
+test("frost persists independently of Glass and wallpaper and tolerates unavailable storage", () => {
+  const wallpaper = JSON.stringify({ blur: 7, shade: 34, mode: "wallpaper" });
+  const values = new Map([
+    ["astro-glass-intensity", "23"],
+    ["astro-wallpaper-prefs.v1", wallpaper],
+  ]);
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => {
@@ -61,6 +65,7 @@ test("frost persists independently of Glass and tolerates unavailable storage", 
   persistSoftFrostIntensity(81, storage);
   assert.equal(readStoredSoftFrostIntensity(storage), 81);
   assert.equal(values.get("astro-glass-intensity"), "23");
+  assert.equal(values.get("astro-wallpaper-prefs.v1"), wallpaper);
   assert.equal(
     readStoredSoftFrostIntensity({
       getItem() {

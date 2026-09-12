@@ -9,7 +9,7 @@ const [soft, controls, settings] = await Promise.all([
   read("../../styles/features/settings-material-unified.css"),
 ]);
 
-test("milky material preserves atmosphere colors and frosts the existing wallpaper shade", () => {
+test("milky material preserves atmosphere colors without frosting the wallpaper image or shade", () => {
   assert.doesNotMatch(soft, /--shell-bg:\s*var\(--soft-base\)/);
   assert.match(
     soft,
@@ -19,24 +19,20 @@ test("milky material preserves atmosphere colors and frosts the existing wallpap
     soft,
     /linear-gradient\(var\(--soft-shell-veil\), var\(--soft-shell-veil\)\)/,
   );
-  assert.match(
-    soft,
-    /\.shell-wallpaper-layer > span\s*\{[^}]*backdrop-filter: var\(--soft-material-backdrop\)/,
-  );
   assert.doesNotMatch(
     soft,
-    /\.shell-wallpaper-layer > img|--wallpaper-shade:|--wallpaper-blur:/,
+    /\.shell-wallpaper-layer|--wallpaper-shade:|--wallpaper-blur:/,
   );
 });
 
-test("panels, milk buttons and input surfaces have distinct thicknesses", () => {
+test("panels, milk buttons and input surfaces follow frost at distinct thicknesses", () => {
   assert.match(
     soft,
-    /--soft-control-background: color-mix\(\s*in srgb, var\(--soft-surface\) 94%, transparent/,
+    /--soft-control-background: color-mix\(\s*in srgb,\s*var\(--soft-surface\)\s+calc\(100% - \(100% - var\(--soft-frost-opacity, 79%\)\) \* 2 \/ 7\),\s*transparent/,
   );
   assert.match(
     soft,
-    /--soft-input-background: color-mix\(\s*in srgb, var\(--soft-surface\) 88%, transparent/,
+    /--soft-input-background: color-mix\(\s*in srgb,\s*var\(--soft-surface\)\s+calc\(100% - \(100% - var\(--soft-frost-opacity, 79%\)\) \* 4 \/ 7\),\s*transparent/,
   );
   assert.match(
     soft,

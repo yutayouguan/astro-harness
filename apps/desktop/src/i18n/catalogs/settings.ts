@@ -15,7 +15,7 @@ export const settingsMessages = {
     "prefs.appearance.surface.soft": "柔塑 Soft",
     "prefs.appearance.surface.softDesc": "乳白磨砂，柔和透色，细腻轻边缘",
     "prefs.appearance.frost.title": "毛玻璃强度",
-    "prefs.appearance.frost.sub": "调节透明度与模糊程度",
+    "prefs.appearance.frost.sub": "调节卡片、按钮等界面材质，不影响壁纸",
     "prefs.appearance.accent.title": "强调色",
     "prefs.appearance.accent.sub": "与壁纸分离，确保按钮和状态始终清晰。",
     "prefs.appearance.motion.title": "动效与图标",
@@ -368,7 +368,8 @@ export const settingsMessages = {
     "prefs.appearance.surface.softDesc":
       "Milky frost, softly diffused color and delicate edges",
     "prefs.appearance.frost.title": "Frost strength",
-    "prefs.appearance.frost.sub": "Adjust transparency and blur",
+    "prefs.appearance.frost.sub":
+      "Adjust cards, buttons and other UI surfaces, not the wallpaper",
     "prefs.appearance.accent.title": "Accent color",
     "prefs.appearance.accent.sub":
       "Keep controls and status colors clear over every wallpaper.",

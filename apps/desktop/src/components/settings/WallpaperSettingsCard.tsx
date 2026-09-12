@@ -583,6 +583,7 @@ export default function WallpaperSettingsCard({
                 type="range"
                 min="0"
                 max="12"
+                aria-label={t("prefs.wallpaper.blur")}
                 value={prefs.blur}
                 onChange={(event) =>
                   controller.setBlur(Number(event.target.value))

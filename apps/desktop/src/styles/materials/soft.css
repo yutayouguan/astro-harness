@@ -68,15 +68,25 @@ html[data-material="soft"] {
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   html[data-material="soft"] {
     --soft-material-background: color-mix(
-      in srgb, var(--soft-surface) var(--soft-frost-opacity, 79%), transparent
+      in srgb,
+      var(--soft-surface) var(--soft-frost-opacity, 79%),
+      transparent
     );
     --soft-material-backdrop: blur(var(--soft-frost-blur, 32px)) saturate(1.12);
-    /* Controls sit inside a frosted plane: denser milk, no second blur. */
+    /* Follow the same intensity while retaining denser nested surfaces:
+     * at the default 50, buttons are 94% opaque and inputs are 88% opaque.
+     * The owning plane supplies blur; never blur text or stack inner filters. */
     --soft-control-background: color-mix(
-      in srgb, var(--soft-surface) 94%, transparent
+      in srgb,
+      var(--soft-surface)
+        calc(100% - (100% - var(--soft-frost-opacity, 79%)) * 2 / 7),
+      transparent
     );
     --soft-input-background: color-mix(
-      in srgb, var(--soft-surface) 88%, transparent
+      in srgb,
+      var(--soft-surface)
+        calc(100% - (100% - var(--soft-frost-opacity, 79%)) * 4 / 7),
+      transparent
     );
   }
 }
@@ -116,11 +126,8 @@ html[data-material="soft"] .app-shell {
     var(--shell-bg, var(--soft-base));
 }
 
-html[data-material="soft"] .shell-wallpaper-layer > span {
-  /* The existing shade/fit/image settings still own the wallpaper itself. */
-  backdrop-filter: var(--soft-material-backdrop);
-  -webkit-backdrop-filter: var(--soft-material-backdrop);
-}
+/* Wallpaper image/overlay filters belong exclusively to wallpaper settings.
+ * Material frost is applied only to the interface surfaces below. */
 
 html[data-material="soft"] .shell-immersive-light-field {
   display: none;
