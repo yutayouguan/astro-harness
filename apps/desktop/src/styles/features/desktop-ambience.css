@@ -264,6 +264,11 @@
   align-items: center;
   gap: 8px;
 }
+.ambience-shuffle-row > select,
+.ambience-shuffle-row > button {
+  box-sizing: border-box;
+  height: 32px;
+}
 .ambience-shuffle-row select {
   min-width: 0;
   flex: 1;

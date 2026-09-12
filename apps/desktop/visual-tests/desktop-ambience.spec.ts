@@ -54,6 +54,25 @@ test("failed changes show feedback and preserve current selection", async ({ pag
 });
 
 for (const theme of ["light", "dark"]) {
+  for (const material of ["glass", "soft"]) {
+    test(`shuffle controls share height and baseline in ${theme} ${material}`, async ({ page }) => {
+      const { dialog } = await open(page, "default", theme);
+      await page.evaluate((value) => { document.documentElement.dataset.material = value; }, material);
+      const scope = dialog.getByRole("combobox", { name: "换一个的范围" });
+      const shuffle = dialog.getByRole("button", { name: "换一个", exact: true });
+      const checkHeight = async () => {
+        const a = await scope.boundingBox(), b = await shuffle.boundingBox();
+        expect(a).not.toBeNull(); expect(b).not.toBeNull();
+        expect(a!.height).toBeCloseTo(b!.height, 1);
+        expect(a!.y).toBeCloseTo(b!.y, 1);
+        expect(a!.height).toBeGreaterThanOrEqual(30);
+      };
+      await checkHeight();
+      await scope.selectOption("favorites");
+      await expect(shuffle).toBeDisabled();
+      await checkHeight();
+    });
+  }
   test(`layout ${theme} fits narrow window with reduced motion`, async ({ page }) => {
     await page.setViewportSize({ width: 480, height: 700 });
     await page.emulateMedia({ reducedMotion: "reduce" });
