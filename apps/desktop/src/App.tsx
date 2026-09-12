@@ -118,6 +118,8 @@ import { takeOnboardingStarterPrompt } from "./lib/ui/onboarding";
 import { providerIsReady } from "./lib/providers/providerReadiness";
 import { ModelSetupNotice } from "./components/onboarding/ModelSetupNotice";
 import InterfaceTour from "./components/onboarding/InterfaceTour";
+import { FirstMeetingNotice } from "./components/onboarding/FirstMeetingNotice";
+import { useFirstMeeting } from "./hooks/chat/useFirstMeeting";
 import DesktopPetVisibilityButton from "./components/desktop-pet/DesktopPetVisibilityButton";
 import "./styles/features/shell/layout/sidebar-footer-actions.css";
 import { interfaceTourCopy, requestInterfaceTour } from "./lib/ui/interfaceTour";
@@ -486,6 +488,17 @@ export default function App() {
       setInput(starterPrompt);
     });
   }, [setInput, startNewChat]);
+  const firstMeeting = useFirstMeeting({
+    locale,
+    providerReady: providerIsReady(activeProvider),
+    empty: nav === "chat" && !chat.sessionId && chat.messages.every(message => message.id === "welcome") && chat.attachments.length === 0,
+    input: chat.input,
+    busy: chat.streaming || chat.turnInFlight || chat.sessionPendingInterrupts.length > 0,
+    sessionId: chat.sessionId,
+    send,
+    setInput,
+    openSession: id => openSessionFromFilespace(id, null, true),
+  });
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],
@@ -1346,7 +1359,7 @@ export default function App() {
       data-sidebar-state={sidebar.sidebarVisible || interfaceTourActive ? "visible" : "collapsed"}
     >
       <InterfaceTour
-        available={nav === "chat" && !chat.streaming && !browserDockPresence.mounted}
+        available={nav === "chat" && !chat.streaming && !browserDockPresence.mounted && !firstMeeting.blockTour}
         onPrepare={() => { setNav("chat"); setBrowserDockOpen(false); }}
         onActiveChange={setInterfaceTourActive}
       />
@@ -2504,6 +2517,15 @@ export default function App() {
                         onConfigure={() => openSettingsTab("providers")}
                       />
                     )}
+                    {firstMeeting.visible && <FirstMeetingNotice
+                      locale={locale}
+                      busy={firstMeeting.busy}
+                      error={firstMeeting.error}
+                      started={firstMeeting.meeting?.status === "started"}
+                      canStart={Boolean(firstMeeting.meeting?.session_id) || (!chat.sessionId && !chat.input.trim() && chat.attachments.length === 0 && providerIsReady(activeProvider))}
+                      onStart={() => void firstMeeting.start()}
+                      onDefer={() => void firstMeeting.defer()}
+                    />}
                     <ChatView
                       projectId={activeProjectId}
                       sessionId={chat.sessionId}

@@ -194,6 +194,23 @@ pub struct OnboardingStateDto {
     pub updated_at: Option<String>,
     #[serde(default)]
     pub draft: OnboardingDraft,
+    /// Conversation handoff, not a claim that the user's profile is complete.
+    #[serde(default)]
+    pub first_meeting: Option<FirstMeetingState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FirstMeetingStatus {
+    Pending,
+    Deferred,
+    Started,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirstMeetingState {
+    pub status: FirstMeetingStatus,
+    pub session_id: Option<String>,
 }
 
 impl OnboardingStateDto {
@@ -206,6 +223,7 @@ impl OnboardingStateDto {
             inferred_existing_install: false,
             updated_at: None,
             draft: OnboardingDraft::default(),
+            first_meeting: None,
         }
     }
 }
@@ -276,6 +294,7 @@ async fn load_at(base: &Path) -> Result<OnboardingStateDto, String> {
             inferred_existing_install: true,
             updated_at: None,
             draft: OnboardingDraft::default(),
+            first_meeting: None,
         });
     }
 
@@ -411,9 +430,52 @@ fn complete_verified_at(
         return Err("ONBOARDING_WORKSPACE_UNAVAILABLE".into());
     }
     super::desktop_preferences::apply_pet_choice_at(base, state.draft.pet_enabled)?;
+    if !state.completed {
+        state.first_meeting = Some(FirstMeetingState {
+            status: FirstMeetingStatus::Pending,
+            session_id: None,
+        });
+    }
     state.completed = true;
     state.step = "complete".into();
     write_at(base, state)
+}
+
+/// Claim before submitting the first turn, so remounts/restarts never auto-submit twice.
+/// A crash after the claim leaves a resumable invitation, not another automatic request.
+fn resolve_first_meeting_at(base: &Path, session_id: Option<String>) -> Result<bool, String> {
+    if let Some(id) = &session_id {
+        uuid::Uuid::parse_str(id).map_err(|_| "无效的初次见面会话")?;
+    }
+    let _guard = STATE_LOCK.lock().map_err(|_| "初始化状态锁不可用")?;
+    let mut state = read_saved_at(base)?;
+    if !state.completed {
+        return Err(VERIFICATION_REQUIRED.into());
+    }
+    let Some(meeting) = &mut state.first_meeting else {
+        // Existing installs are not opted into a new onboarding conversation.
+        return Ok(false);
+    };
+    if meeting.status == FirstMeetingStatus::Started {
+        return Ok(false);
+    }
+    meeting.status = if session_id.is_some() {
+        FirstMeetingStatus::Started
+    } else {
+        FirstMeetingStatus::Deferred
+    };
+    meeting.session_id = session_id;
+    write_at(base, state)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn resolve_first_meeting(session_id: Option<String>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        resolve_first_meeting_at(&home::default_memory_dir(), session_id)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -570,6 +632,7 @@ mod tests {
                 inferred_existing_install: false,
                 updated_at: None,
                 draft: OnboardingDraft::default(),
+                first_meeting: None,
             },
         )
         .unwrap();
@@ -648,10 +711,75 @@ mod tests {
             inferred_existing_install: false,
             updated_at: None,
             draft: OnboardingDraft::default(),
+            first_meeting: None,
         });
         assert_eq!(state.step, "intro");
         assert!(state.should_show);
     }
+    #[test]
+    fn first_meeting_requires_completed_setup_and_preserves_legacy_installs() {
+        let root = tempfile::tempdir().unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        assert!(resolve_first_meeting_at(root.path(), Some(id.clone())).is_err());
+        let mut state = OnboardingStateDto::fresh();
+        state.completed = true;
+        state.step = "complete".into();
+        write_at(root.path(), state).unwrap();
+        assert!(!resolve_first_meeting_at(root.path(), Some(id)).unwrap());
+        assert!(read_saved_at(root.path()).unwrap().first_meeting.is_none());
+    }
+
+    #[test]
+    fn first_meeting_can_defer_then_claim_exactly_once_without_touching_profiles() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = home::agent_workspace_dir(root.path(), home::DEFAULT_AGENT_ID);
+        fs::create_dir_all(&workspace).unwrap();
+        for file in ["USER.md", "IDENTITY.md", "SOUL.md"] {
+            fs::write(workspace.join(file), "existing user content").unwrap();
+        }
+        let mut state = OnboardingStateDto::fresh();
+        state.completed = true;
+        state.first_meeting = Some(FirstMeetingState {
+            status: FirstMeetingStatus::Pending,
+            session_id: None,
+        });
+        write_at(root.path(), state).unwrap();
+        assert!(resolve_first_meeting_at(root.path(), None).unwrap());
+        assert_eq!(
+            read_saved_at(root.path())
+                .unwrap()
+                .first_meeting
+                .unwrap()
+                .status,
+            FirstMeetingStatus::Deferred
+        );
+        assert!(resolve_first_meeting_at(root.path(), Some("invalid/path".into())).is_err());
+        let id = uuid::Uuid::new_v4().to_string();
+        assert!(resolve_first_meeting_at(root.path(), Some(id.clone())).unwrap());
+        assert!(!resolve_first_meeting_at(root.path(), Some(id.clone())).unwrap());
+        assert!(
+            !resolve_first_meeting_at(root.path(), Some(uuid::Uuid::new_v4().to_string())).unwrap()
+        );
+        assert!(!resolve_first_meeting_at(root.path(), None).unwrap());
+        let saved = read_saved_at(root.path()).unwrap().first_meeting.unwrap();
+        assert_eq!(saved.status, FirstMeetingStatus::Started);
+        assert_eq!(saved.session_id.as_deref(), Some(id.as_str()));
+        for file in ["USER.md", "IDENTITY.md", "SOUL.md"] {
+            assert_eq!(
+                fs::read_to_string(workspace.join(file)).unwrap(),
+                "existing user content"
+            );
+        }
+    }
+
+    #[test]
+    fn old_onboarding_json_does_not_opt_into_first_meeting() {
+        let mut json = serde_json::to_value(OnboardingStateDto::fresh()).unwrap();
+        json.as_object_mut().unwrap().remove("first_meeting");
+        let state: OnboardingStateDto = serde_json::from_value(json).unwrap();
+        assert!(state.first_meeting.is_none());
+    }
+
     fn test_connection() -> ConnectionSnapshot {
         ConnectionSnapshot {
             id: "test".into(),

@@ -1,4 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const firstMeetingSkill = readFileSync(new URL("../../../crates/agent-skills/bundled/first-meeting/SKILL.md", import.meta.url), "utf8");
 
 test.setTimeout(60000);
 const RUNTIME_URL = "/iframe.html?id=app-onboarding-runtime--native-transport&viewMode=story";
@@ -19,8 +22,9 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
   await page.route("**/__onboarding_mock/models", route => route.fulfill({
     json: { models: [{ id: "qa-small" }, { id: "qa-alt" }, { id: "text-embedding-3-small" }], latency_ms: 1, source: "qa" },
   }));
-  await page.addInitScript(({ boot }) => {
+  await page.addInitScript(({ boot, firstMeetingSkill }) => {
     const w = window as any;
+    w.isTauri = true;
     const initialDraft = { agent_name: "Astro", provider_id: "", model: "", endpoint: "",
       workspace_path: "", permission_preset: "ask_for_approval" };
     const fresh = { version: 1, step: "intro", completed: false, should_show: true,
@@ -75,7 +79,8 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           }
           case "complete_onboarding": {
             if (args.verificationToken !== "qa-proof" || receipt !== snapshot() || w.__invalidateProof) throw Error("ONBOARDING_VERIFICATION_REQUIRED");
-            const state = { ...readState(), step: "complete", completed: true, should_show: false };
+            const state = { ...readState(), step: "complete", completed: true, should_show: false,
+              first_meeting: { status: "pending", session_id: null } };
             if (typeof state.draft.pet_enabled === "boolean") {
               const prefs = readPreferences();
               prefs.pet.enabled = state.draft.pet_enabled;
@@ -86,6 +91,19 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           case "get_providers_state":
             if (w.__failProviders || localStorage.getItem("qa.failProviders")) throw Error("network unavailable");
             return readProviders();
+          case "resolve_first_meeting": {
+            if (w.__failMeetingClaim) throw Error("state save failed");
+            const state = readState();
+            if (!state.completed || !state.first_meeting || state.first_meeting.status === "started") return false;
+            state.first_meeting = { status: args.sessionId ? "started" : "deferred", session_id: args.sessionId ?? null };
+            localStorage.setItem("qa.state", JSON.stringify(state));
+            return true;
+          }
+          case "list_installed_skills": return [{ id: "first-meeting", name: "first-meeting", enabled: true }];
+          case "get_skill_content":
+            if (w.__failMeetingSkill) throw Error("skill not installed");
+            return { content: firstMeetingSkill };
+          case "get_chat_history": return { items: [] };
           case "list_providers": return readProviders().providers;
           case "save_provider": {
             const state = readProviders();
@@ -157,7 +175,11 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
             });
           case "get_system_wallpaper": throw Error("No system wallpaper in QA");
           case "get_agent_tools": return [];
-          case "start_chat": throw Error("TEST FAILURE: no task should auto-send");
+          case "start_chat": {
+            if (!args.request?.content.includes("Please follow this skill (first-meeting)")) throw Error("TEST FAILURE: no task should auto-send");
+            localStorage.setItem("qa.meetingRequests", String(Number(localStorage.getItem("qa.meetingRequests") ?? 0) + 1));
+            return args.request.sessionId;
+          }
           default:
             if (cmd.startsWith("get_")) throw Error("Read unavailable in QA: " + cmd);
             if (cmd.startsWith("list_")) return [];
@@ -166,11 +188,11 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
         }
       },
     };
-  }, { boot });
+  }, { boot, firstMeetingSkill });
 }
 
-async function startProvider(page: Page) {
-  await page.goto(RUNTIME_URL);
+async function startProvider(page: Page, url = RUNTIME_URL) {
+  await page.goto(url);
   const skip = page.getByRole("button", { name: "跳过动画", exact: true });
   if (await skip.isVisible()) await skip.click();
   await expect(page.getByRole("heading", { name: "先让这里更像你的工作空间" })).toBeVisible({ timeout: 30000 });
@@ -305,6 +327,70 @@ test("verified setup prepares an editable App draft without sending", async ({ p
   expect(await page.evaluate(() => (window as any).__onboardingCalls.filter((x: any) => x.cmd === "start_chat"))).toEqual([]);
 });
 
+test("first meeting auto-starts once through real chat and survives reload without resending", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await finishVerified(page);
+  await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBe("1");
+  const submitted = await page.evaluate(() => (window as any).__onboardingCalls.find((call: any) => call.cmd === "start_chat").args.request);
+  expect(submitted.content).toContain("first-meeting");
+  expect(submitted.content).toContain("request_user_input_async");
+  expect(submitted.content).toContain("确认后才记住");
+  expect(submitted.useMemory).toBe(true);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).first_meeting)).toEqual({ status: "started", session_id: submitted.sessionId });
+  await page.reload();
+  await expect(page.locator(".app-shell")).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBe("1");
+});
+
+test("missing first-meeting skill does not claim or send, and can retry", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await finishVerified(page);
+  await page.evaluate(() => { (window as any).__failMeetingSkill = true; });
+  await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
+  await expect(page.locator(".first-meeting-notice")).toContainText("暂时没有开始");
+  expect(await page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBeNull();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).first_meeting.status)).toBe("pending");
+  await page.evaluate(() => { (window as any).__failMeetingSkill = false; });
+  await page.getByRole("button", { name: "认识一下", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBe("1");
+});
+
+test("StrictMode claims first meeting once; failed state writes never submit", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page, RUNTIME_URL.replace("--native-transport", "--strict-native-transport"));
+  await verifyProvider(page);
+  await finishVerified(page);
+  await page.evaluate(() => { (window as any).__failMeetingClaim = true; });
+  await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
+  await expect(page.locator(".first-meeting-notice")).toContainText("暂时没有开始");
+  expect(await page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBeNull();
+  await page.evaluate(() => { (window as any).__failMeetingClaim = false; });
+  await page.getByRole("button", { name: "认识一下", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBe("1");
+});
+
+test("first meeting defers without replacing a task draft or auto-sending after restart", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  await verifyProvider(page);
+  await finishVerified(page);
+  await page.getByRole("button", { name: "看看我的桌面 · 填入输入框", exact: true }).click();
+  const input = page.locator(".composer-input");
+  await expect(input).toHaveValue(/请看看我桌面的文件/);
+  await page.getByRole("button", { name: "先做任务", exact: true }).click();
+  await expect(page.locator(".first-meeting-notice")).toHaveCount(0);
+  await expect(input).toHaveValue(/请看看我桌面的文件/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).first_meeting.status)).toBe("deferred");
+  await page.reload();
+  await expect(page.locator(".app-shell")).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBeNull();
+});
+
 test("restart restores draft but requires model verification again", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);
@@ -333,7 +419,7 @@ test("restart restores draft but requires model verification again", async ({ pa
   await expect(page.getByRole("radio", { name: /自动处理常规操作/ })).toBeChecked();
   await page.getByRole("button", { name: "完成设置", exact: true }).click();
   await expect(page.getByText("Nova", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "空白开始", exact: true }).click();
+  await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible({ timeout: 30000 });
   expect(await page.evaluate(() => localStorage.getItem("astro.activeProjectId"))).toBe("qa-project");
 });

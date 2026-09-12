@@ -14,7 +14,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1024, height: 720
       console.log(JSON.stringify({ step, ...viewport, ...metrics }));
       expect(metrics.content - metrics.viewport).toBeLessThanOrEqual(2);
       expect(metrics.horizontal).toBeLessThanOrEqual(2);
-      await expect(page.getByRole("button", { name: step === "complete" ? "空白开始" : step === "workspace" ? "完成设置" : "继续", exact: true })).toBeInViewport();
+      await expect(page.getByRole("button", { name: step === "complete" ? "进入 Astro，认识一下" : step === "workspace" ? "完成设置" : "继续", exact: true })).toBeInViewport();
     });
   }
 }

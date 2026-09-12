@@ -24,6 +24,10 @@ export type OnboardingStateDto = {
   inferred_existing_install: boolean;
   updated_at: string | null;
   draft?: OnboardingDraft;
+  first_meeting?: {
+    status: "pending" | "deferred" | "started";
+    session_id: string | null;
+  } | null;
 };
 
 export function normalizeOnboardingStep(step: string): OnboardingStep {

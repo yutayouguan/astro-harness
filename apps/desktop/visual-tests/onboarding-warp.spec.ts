@@ -69,7 +69,7 @@ for (const reduced of [false, true]) {
     await input.fill("修改后的草稿");
     await expect(input).toHaveValue("修改后的草稿");
     await page.getByRole("button", { name: "重新体验" }).click();
-    await page.getByRole("button", { name: "空白开始", exact: true }).click();
+    await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
     await expect(page.locator(".onboarding-root")).toHaveCount(0);
     await expect(input).toHaveValue("");
   });
@@ -78,7 +78,7 @@ for (const reduced of [false, true]) {
 test("suppressed CSS animation cannot trap App entry", async ({ page }) => {
   await page.goto("/iframe.html?id=app-first-run-onboarding--enter-app&viewMode=story");
   await page.addStyleTag({ content: ".onboarding-warp { animation: none !important; }" });
-  await page.getByRole("button", { name: "空白开始", exact: true }).click();
+  await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
   await expect(page.locator(".onboarding-root")).toHaveCount(0, { timeout: 4000 });
   await expect(page.getByRole("textbox", { name: "聊天输入框（演示）" })).toBeEditable();
 });

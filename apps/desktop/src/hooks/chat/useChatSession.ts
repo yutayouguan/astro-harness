@@ -589,6 +589,8 @@ export function useChatSession({
         turnInFlightRef.current ||
         sessionPendingInterrupts.length > 0
       ) {
+        // An onboarding greeting is never a queued follow-up to a user's task.
+        if (opts?.beforeStart) return false;
         const text = (opts?.text ?? input).trim();
         const pending = opts?.attachments ?? attachments;
         if (!text && pending.length === 0) return;
@@ -684,7 +686,7 @@ export function useChatSession({
         if (opts?.attachments == null) setAttachments([]);
         return;
       }
-      await sendImmediate(opts);
+      return await sendImmediate(opts);
     },
     [
       streaming,

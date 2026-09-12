@@ -83,6 +83,9 @@ export interface SendOpts {
   interactionMode?: ChatInteractionMode;
   /** Agent 忙碌时的投递模式（queue / steer / interrupt） */
   sendMode?: "queue" | "steer" | "interrupt";
+  /** A first-run handoff must load its instructions before claiming/submitting. */
+  requiredSkill?: string;
+  beforeStart?: (sessionId: string) => Promise<boolean>;
 }
 
 interface SendComposerPort {
@@ -321,6 +324,7 @@ export function useSend(deps: UseSendDeps) {
       // resolve /skill and @mentions
       let displayText = text;
       let modelBody = text;
+      const sid = sessionId ?? crypto.randomUUID();
       sendStartLockRef.current = true;
       try {
         if (text && !resumeJson) {
@@ -343,6 +347,13 @@ export function useSend(deps: UseSendDeps) {
 
             if (resolved === null) {
               return false;
+            }
+
+            if (
+              opts?.requiredSkill &&
+              !resolved.loadedSkills.includes(opts.requiredSkill)
+            ) {
+              throw new Error(`Skill unavailable: ${opts.requiredSkill}`);
             }
 
             displayText = resolved.displayText || text;
@@ -374,8 +385,27 @@ export function useSend(deps: UseSendDeps) {
               );
             }
           } catch (e) {
+            if (opts?.requiredSkill) throw e;
             console.warn("resolveComposerTurn failed", e);
           }
+        }
+        if (opts?.beforeStart) {
+          // Never inject an automatic greeting into a task/draft opened while loading.
+          const current = depsRef.current;
+          if (
+            current.session.sessionId !== sessionId ||
+            current.composer.input !== input ||
+            current.composer.attachments !== attachments
+          )
+            return false;
+          if (!(await opts.beforeStart(sid))) return false;
+          const afterClaim = depsRef.current;
+          if (
+            afterClaim.session.sessionId !== sessionId ||
+            afterClaim.composer.input !== input ||
+            afterClaim.composer.attachments !== attachments
+          )
+            return false;
         }
       } finally {
         sendStartLockRef.current = false;
@@ -384,7 +414,6 @@ export function useSend(deps: UseSendDeps) {
       const isCreatingAgent = emptyMode === "agent" && !opts?.skipUserAppend;
       const userId = opts?.reuseUserId ?? `u-${Date.now()}`;
       const assistantId = `a-${Date.now()}`;
-      const sid = sessionId ?? crypto.randomUUID();
       setSessionId(sid);
 
       setMessages((prev) => {

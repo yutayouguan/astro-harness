@@ -1,3 +1,47 @@
+.first-meeting-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: calc(var(--chat-header-overlay-height, 50px) + 12px) 20px 0;
+  flex: none;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  color: var(--color-text);
+  background: var(--surface-panel-background);
+}
+
+.first-meeting-notice > svg {
+  flex: none;
+  color: var(--tone);
+}
+.first-meeting-notice-copy {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.first-meeting-notice-copy p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.first-meeting-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .first-meeting-notice {
+    flex-wrap: wrap;
+    margin-inline: 12px;
+  }
+  .first-meeting-notice-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .onboarding-root {
   position: fixed;
   z-index: 10000;

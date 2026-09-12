@@ -23,12 +23,14 @@ const BUNDLED_CREATIVE_MEDIA_MD: &str = include_str!("../bundled/creative-media/
 const BUNDLED_DESKTOP_PET_CREATOR_MD: &str =
     include_str!("../bundled/desktop-pet-creator/SKILL.md");
 const BUNDLED_UI_STYLE_DESIGNER_MD: &str = include_str!("../bundled/ui-style-designer/SKILL.md");
+const BUNDLED_FIRST_MEETING_MD: &str = include_str!("../bundled/first-meeting/SKILL.md");
 
 /// 内置 Skill 清单：`(目录名, SKILL.md 正文)`。
 pub const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ("aihot", BUNDLED_AIHOT_MD),
     ("creative-media", BUNDLED_CREATIVE_MEDIA_MD),
     ("desktop-pet-creator", BUNDLED_DESKTOP_PET_CREATOR_MD),
+    ("first-meeting", BUNDLED_FIRST_MEETING_MD),
     ("storyboard-video", BUNDLED_STORYBOARD_VIDEO_MD),
     ("ui-style-designer", BUNDLED_UI_STYLE_DESIGNER_MD),
 ];
@@ -179,6 +181,7 @@ mod tests {
         assert!(r1.installed.contains(&"aihot".to_string()));
         assert!(r1.installed.contains(&"creative-media".to_string()));
         assert!(r1.installed.contains(&"desktop-pet-creator".to_string()));
+        assert!(r1.installed.contains(&"first-meeting".to_string()));
         assert!(r1.installed.contains(&"storyboard-video".to_string()));
         assert!(r1.installed.contains(&"ui-style-designer".to_string()));
         assert!(dir.path().join("skills/aihot/SKILL.md").is_file());
@@ -223,8 +226,26 @@ mod tests {
         assert!(r2.skipped.contains(&"aihot".to_string()));
         assert!(r2.skipped.contains(&"creative-media".to_string()));
         assert!(r2.skipped.contains(&"desktop-pet-creator".to_string()));
+        assert!(r2.skipped.contains(&"first-meeting".to_string()));
         assert!(r2.skipped.contains(&"storyboard-video".to_string()));
         assert!(r2.skipped.contains(&"ui-style-designer".to_string()));
+    }
+
+    #[test]
+    fn first_meeting_metadata_uses_the_astro_runtime_contract() {
+        let metadata = crate::installed::parse_skill_frontmatter_full(BUNDLED_FIRST_MEETING_MD);
+        assert_eq!(metadata.name, "first-meeting");
+        assert!(!metadata.description.is_empty());
+        assert_eq!(
+            metadata.astro_tools,
+            vec!["request_user_input_async", "ask_user"]
+        );
+        assert_eq!(bundled_rev_in(BUNDLED_FIRST_MEETING_MD), 1);
+        let dir = tempdir().unwrap();
+        seed_bundled_into(dir.path());
+        let installed =
+            fs::read_to_string(dir.path().join("skills/first-meeting/SKILL.md")).unwrap();
+        assert_eq!(installed, BUNDLED_FIRST_MEETING_MD);
     }
 
     #[test]

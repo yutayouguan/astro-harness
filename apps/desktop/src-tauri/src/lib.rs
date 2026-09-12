@@ -322,6 +322,7 @@ pub fn run() {
             commands::onboarding::verify_onboarding_provider,
             commands::onboarding::save_onboarding_progress,
             commands::onboarding::complete_onboarding,
+            commands::onboarding::resolve_first_meeting,
             commands::onboarding::reset_onboarding_state,
             commands::chat::query_memory,
             // — agent —
