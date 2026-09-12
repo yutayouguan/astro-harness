@@ -340,13 +340,10 @@ export const zh = {
   "settings.sidebar.tab.evolution": "自进化",
 
   "environmentDependencies.title": "环境依赖",
-  "environmentDependencies.subtitle":
-    "检测 Astro 与本地智能体常用的命令行工具，并在缺失时提供受控安装。",
   "environmentDependencies.ready": "已就绪",
   "environmentDependencies.rescan": "重新检测",
   "environmentDependencies.scanning": "正在扫描本机环境…",
-  "environmentDependencies.note":
-    "检测同时覆盖应用 PATH、常见用户目录和登录 Shell。安装只会执行下方展示的官方白名单命令。",
+  "environmentDependencies.note": "只执行下方展示的官方白名单安装命令。",
   "environmentDependencies.installed": "已安装",
   "environmentDependencies.missing": "未安装",
   "environmentDependencies.version": "版本",
@@ -357,25 +354,16 @@ export const zh = {
   "environmentDependencies.install": "安装",
   "environmentDependencies.installing": "安装中…",
   "environmentDependencies.install.success": "{name} 已安装并通过检测。",
-  "environmentDependencies.install.restart":
-    "{name} 安装命令已完成；如果仍未识别，请重启 Astro 后复检。",
+  "environmentDependencies.install.restart": "{name} 安装命令已完成；仍未识别时请重启 Astro 后复检。",
   "environmentDependencies.install.failed": "{name} 安装失败：{error}",
-  "environmentDependencies.unavailable.npm":
-    "未检测到 npm；请先安装 Node.js，或按官网步骤手动安装。",
-  "environmentDependencies.unavailable.installer":
-    "未检测到支持的包管理器，请按官网步骤手动安装。",
-  "environmentDependencies.item.uv":
-    "极速 Python 包与项目管理器，也为 MCP 和技能提供 uvx 隔离运行环境。",
-  "environmentDependencies.item.rtk":
-    "面向智能体的命令输出压缩代理，可减少测试、构建与搜索输出噪音。",
-  "environmentDependencies.item.fd":
-    "简洁快速的文件查找工具，适合项目导航与批量文件发现。",
-  "environmentDependencies.item.ripgrep":
-    "高速递归文本搜索工具，Astro 与开发工作流使用命令名 rg。",
-  "environmentDependencies.item.bun":
-    "高性能 JavaScript 运行时、包管理器与脚本执行器。",
-  "environmentDependencies.item.larkCli":
-    "飞书开放平台命令行工具，用于文档、日历、消息、审批等集成。",
+  "environmentDependencies.unavailable.npm": "缺少 npm，请安装 Node.js 或按官网步骤安装。",
+  "environmentDependencies.unavailable.installer": "未检测到支持的包管理器，请按官网安装。",
+  "environmentDependencies.item.uv": "Python 包管理与 uvx 隔离运行环境",
+  "environmentDependencies.item.rtk": "压缩命令输出，减少测试、构建和搜索噪音",
+  "environmentDependencies.item.fd": "快速查找文件",
+  "environmentDependencies.item.ripgrep": "递归搜索文本，命令名 rg",
+  "environmentDependencies.item.bun": "JavaScript 运行时与包管理器",
+  "environmentDependencies.item.larkCli": "飞书文档、日历、消息和审批命令行工具",
   "environmentDependencies.item.fallback": "本地命令行环境依赖。",
 
   "modelMarket.refresh": "刷新",
@@ -428,13 +416,11 @@ export const zh = {
   "modelMarket.detail.modalities": "模态",
   "modelMarket.detail.selectHint": "从左侧列表选择一个模型",
   "modelMarket.runtime.title": "Astro 集成",
-  "modelMarket.runtime.embeddingAvailable":
-    "Astro 支持通过 OpenRouter 调用该嵌入模型。",
+  "modelMarket.runtime.embeddingAvailable": "通过 OpenRouter 调用。",
   "modelMarket.runtime.embeddingReady": "已配置且 OpenRouter 可用。",
   "modelMarket.runtime.embeddingNeedsProvider":
     "模型已配置；启用 OpenRouter 并配置 API Key 后可用。",
-  "modelMarket.runtime.rerankUnavailable":
-    "当前仅展示目录信息，Astro 尚未接入重排执行链。",
+  "modelMarket.runtime.rerankUnavailable": "仅供浏览，暂不支持执行重排。",
   "modelMarket.runtime.openRouterMissing": "请先添加 OpenRouter 提供商",
   "modelMarket.runtime.configure": "设为嵌入模型",
   "modelMarket.runtime.configured": "已设置",
@@ -508,10 +494,9 @@ export const zh = {
   "common.cancel": "取消",
 
   "aux.title": "辅助模型",
-  "aux.subtitle":
-    "为低成本或后台任务单独选择模型；不可用时会自动回退到当前主模型。",
+  "aux.subtitle": "为后台任务指定模型，不可用时回退主模型。",
   "aux.routesTitle": "任务路由",
-  "aux.routesSub": "默认跟随主模型，也可以为单个任务指定已启用供应商和模型。",
+  "aux.routesSub": "默认跟随主模型，可按任务单独设置。",
   "aux.refresh": "刷新",
   "aux.resetAll": "全部重置为主模型",
   "aux.loading": "加载中…",
@@ -522,8 +507,7 @@ export const zh = {
   "aux.inherits": "继承：{provider} / {model}",
   "aux.inheritsUnknown": "继承主模型（尚未选择主模型）",
   "aux.costSameAsPrimary": "与主模型相同，后台调用也会计费",
-  "aux.backgroundReviewHint":
-    "默认关闭；开启后每回合调用，可能产生额外费用（记忆设置中开关）",
+  "aux.backgroundReviewHint": "默认关闭；启用后每轮调用，可能额外收费。开关位于记忆设置。",
   "aux.usePrimary": "设为主模型",
   "aux.change": "更改",
   "aux.cancel": "取消",
@@ -534,8 +518,7 @@ export const zh = {
   "aux.titleGenerationDesc": "首轮回复后异步生成会话标题。",
   "aux.compaction": "上下文压缩",
   "aux.compactionDesc": "长对话压缩和摘要续聊时使用。",
-  "aux.compactionThresholdHint":
-    "触发阈值与字符预算请在「偏好设置 → 自动压缩」调整。",
+  "aux.compactionThresholdHint": "阈值和预算见「偏好设置 → 自动压缩」。",
   "aux.smartApproval": "智能审批",
   "aux.smartApprovalDesc": "判断高风险操作是否需要继续询问。",
   "aux.dreaming": "入梦",
@@ -543,8 +526,7 @@ export const zh = {
   "aux.backgroundReview": "记忆审查",
   "aux.backgroundReviewDesc": "回合后审查并建议写入 MEMORY/USER。",
   "aux.workflowAiPolish": "工作流 AI 辅助",
-  "aux.workflowAiPolishDesc":
-    "智能流程配置面板中 ✨ AI 生成/润色按钮使用的模型。",
+  "aux.workflowAiPolishDesc": "用于智能流程的 AI 生成与润色。",
 
   "evo.title": "离线进化",
   "evo.subtitle":
@@ -801,11 +783,8 @@ export const zh = {
   "browser.settings.save": "保存",
   "browser.settings.saving": "保存中…",
   "terminal.settings.mode.title": "执行模式",
-  "terminal.settings.mode.sub":
-    "决定手动终端在系统环境还是当前项目上下文中启动。",
   "terminal.settings.mode.system": "系统环境",
-  "terminal.settings.mode.systemDesc":
-    "从用户主目录启动，使用完整的系统 Shell 环境。",
+  "terminal.settings.mode.systemDesc": "从主目录启动，使用系统 Shell 环境",
   "terminal.settings.mode.project": "项目环境",
   "terminal.settings.mode.projectDesc":
     "从当前工作区启动，贴合项目命令与路径。",
@@ -818,13 +797,11 @@ export const zh = {
   "terminal.settings.font.preset": "字体预设",
   "terminal.settings.font.custom": "自定义字体栈",
   "terminal.settings.font.family": "字体族",
-  "terminal.settings.font.familyDesc":
-    "可直接输入已安装字体的 CSS font-family。",
+  "terminal.settings.font.familyDesc": "输入已安装字体的 CSS font-family",
   "terminal.settings.font.size": "字号",
   "terminal.settings.font.lineHeight": "行高",
   "terminal.settings.font.hint": "图标显示方框时，请安装并选择 MesloLGS NF 等 Nerd Font。",
   "terminal.settings.behavior.title": "光标与历史",
-  "terminal.settings.behavior.sub": "调整光标外观和终端回滚容量。",
   "terminal.settings.cursor.style": "光标样式",
   "terminal.settings.cursor.bar": "竖线",
   "terminal.settings.cursor.block": "方块",
@@ -905,8 +882,8 @@ export const zh = {
   "tools.loading.unknown": "能力未知：支持 tool_search 则按需加载，否则提前加载。",
   "tools.loading.disabled": "工具组未启用；加载策略不改变工具开关或 Skill 授权。",
   "tools.loading.codeMode": "CodeModeOnly：通过 exec 间接调用工具。",
-  "tools.loading.fixed": "此组含系统控制、隐藏或专用协议工具，加载策略不可调整。",
-  "tools.loading.unavailable": "加载策略尚未就绪；此设置仅在桌面应用中可编辑。",
+  "tools.loading.fixed": "系统或专用工具，加载策略固定。",
+  "tools.loading.unavailable": "加载设置尚未就绪，仅支持桌面端编辑。",
   "tools.loading.scope": "所有 Agent 共用，下一次模型请求生效；不改变运行中工具。实际加载仍受会话模型、Code Mode、工具开关和权限限制。",
   "tools.detail.registeredName": "内部注册名",
   "tools.detail.apiSchema": "后端 Schema",
@@ -2091,10 +2068,8 @@ export const zh = {
   "memory.pending.hint":
     "开启写入审批后，工具/入梦/回顾写入会先进此队列；批准后才写入 MEMORY/USER。",
   "memory.pending.emptyTitle": "暂无待审批写入",
-  "memory.pending.emptyHint":
-    "打开上方「写入审批」开关后，相关写入会出现在这里。",
-  "memory.pending.emptyHintOn":
-    "已开启写入审批；当工具、入梦或回顾产生写入时会出现在这里。",
+  "memory.pending.emptyHint": "开启上方「写入审批」后显示待审记忆。",
+  "memory.pending.emptyHintOn": "等待工具、入梦或回顾提交记忆写入。",
   "memory.pending.approve": "批准",
   "memory.pending.reject": "拒绝",
   "memory.pending.approved": "已批准并写入",
@@ -2130,8 +2105,7 @@ export const zh = {
   "memory.timeline.expertCount": "{count} 位专家",
   "memory.timeline.empty": "这个月还没有留下记录",
   "memory.enhanceDiary": "增强日记",
-  "memory.enhanceDiaryTip":
-    "开启后，Astro 会记住你对话中提到的偏好和习惯，提供更个性化的回复",
+  "memory.enhanceDiaryTip": "记住对话中的偏好和习惯",
   "memory.prevMonth": "上个月",
   "memory.nextMonth": "下个月",
   "memory.expertCategories": "专家分类",
@@ -2140,8 +2114,7 @@ export const zh = {
   "memory.pickExpertForDiaryAll": "日历已汇总全部专家的日记",
   "memory.pickExpertForMemory": "请选择一位专家，查看其长期记忆",
   "memory.pickExpertHint": "在顶部选择一位专家后即可开始",
-  "memory.pickExpertHintDiaryAll":
-    "在顶部选择专家，或点击有圆点的日期跳转到对应日记",
+  "memory.pickExpertHintDiaryAll": "选择专家，或点击圆点日期查看日记",
   "memory.diaryEmpty": "你的专家还没灵感写日记哦～ 去聊两句，给 TA 点灵感吧",
   "memory.diaryEmptyTitle": "你的专家还没灵感写日记哦～",
   "memory.diaryEmptySub": "去聊两句，给 TA 点灵感吧",
@@ -2155,7 +2128,7 @@ export const zh = {
   "memory.dream.enableTitle": "开启做梦功能，加强记忆提炼能力",
   "memory.dream.enableSub": "通过做梦可深度提炼日记，形成长期记忆",
   "memory.dream.enable": "开启做梦",
-  "memory.dream.enabledHint": "做梦已开启。有新日记时点「立即入梦」进行提炼。",
+  "memory.dream.enabledHint": "有新日记时，点击「立即入梦」。",
   "memory.dream.disable": "关闭做梦",
   "memory.dream.running": "正在为你整理记忆中…",
   "memory.dream.runningSub": "入梦整理日记，凝练专家专属记忆",
@@ -2451,7 +2424,7 @@ export const zh = {
   "skills.installedTitle": "已安装",
   "skills.installedSub":
     "已启用 {count} / 共 {total} 个技能（~/.astro/skills 与当前 Agent 工作区）",
-  "skills.installedEmpty": "暂未发现 Astro 技能，安装后会显示在这里",
+  "skills.installedEmpty": "暂无已安装技能",
   "skills.installedSearchEmpty": "未找到匹配的已安装技能",
   "skills.machineTitle": "本机安装",
   "skills.machineSub": "来自 Astro / Claude / Cursor 等本机目录",
@@ -2500,7 +2473,7 @@ export const zh = {
   "chat.toast.memoryUpdated": "记忆已更新（{n}）",
   "skills.refreshing": "刷新中…",
   "skills.storeTitle": "搜索与安装",
-  "skills.storeSub": "来自 SkillHub 的技能目录，支持一键安装",
+  "skills.storeSub": "SkillHub 技能目录",
   "skills.search": "搜索",
   "skills.searching": "搜索中…",
   "skills.searchPlaceholder": "搜索技能名称、来源…",
@@ -2584,7 +2557,7 @@ export const zh = {
   "skills.previewTab.assets": "资源",
   "skills.previewTab.other": "其他",
   "skills.previewLoading": "加载文件中…",
-  "skills.previewBinary": "该文件为二进制或不支持预览，可在外部打开。",
+  "skills.previewBinary": "不支持预览，请在外部打开。",
   "skills.previewOpenExternal": "在外部打开",
   "skills.previewTooLarge": "文件过大，无法在此预览，请在外部打开。",
   "skills.previewMode": "预览",
@@ -2610,7 +2583,6 @@ export const zh = {
   "providers.tabEvolution": "离线进化",
   "providers.listSub": "已启用 {count} / 共 {total} 个",
   "providers.detailTitle": "配置详情",
-  "providers.detailSub": "编辑端点、模型与 API Key",
   "providers.emptySelect": "← 从左侧选择一个提供商",
   "providers.add": "添加提供商",
   "providers.dragToReorder": "拖动排序",
@@ -2647,17 +2619,14 @@ export const zh = {
   "providers.visionModel": "视觉模型",
   "providers.mediaDefaultOption": "最新自动（{model}）",
   "providers.imageSceneAutoOption": "按场景自动（角色/补帧：Sunburst · 壁纸/普通：Flare）",
-  "providers.mediaHint":
-    "留空则自动使用最新模型；保存后对 Agent 媒体工具生效。",
+  "providers.mediaHint": "留空使用最新模型；保存后用于 Agent 媒体工具。",
   "providers.tabVoice": "语音",
-  "providers.voiceHint": "配置语音合成 (TTS) 和语音识别 (ASR) 模型。",
   "providers.asrModel": "语音识别模型 (ASR)",
-  "providers.asrModelHint": "由供应商 profile 预设，暂不支持自定义。",
+  "providers.asrModelHint": "由供应商预设，暂不可自定义。",
   "providers.tabEmbedding": "嵌入",
-  "providers.embeddingHint": "配置用于 RAG 和语义搜索的嵌入模型。",
+  "providers.embeddingHint": "用于 RAG 和语义搜索。",
   "providers.embeddingModel": "嵌入模型",
-  "providers.embeddingModelHint":
-    "用于向量化文本的模型，留空则使用供应商默认。",
+  "providers.embeddingModelHint": "留空使用供应商默认模型。",
   "providers.apiKey": "API Key",
   "providers.apiKeyHint":
     "优先读取系统环境变量；也可保存到系统密钥链（不会写入配置文件）",
@@ -3278,13 +3247,11 @@ export const en: Record<MessageKey, string> = {
   "settings.sidebar.tab.evolution": "Evolution",
 
   "environmentDependencies.title": "Environment dependencies",
-  "environmentDependencies.subtitle":
-    "Check the command-line tools commonly used by Astro and local agents, with controlled installation when missing.",
   "environmentDependencies.ready": "ready",
   "environmentDependencies.rescan": "Scan again",
   "environmentDependencies.scanning": "Scanning the local environment…",
   "environmentDependencies.note":
-    "Detection covers the app PATH, common user directories, and the login shell. Install only runs the official allowlisted command shown below.",
+    "Installation runs only the official allowlisted command shown below.",
   "environmentDependencies.installed": "Installed",
   "environmentDependencies.missing": "Missing",
   "environmentDependencies.version": "Version",
@@ -3297,24 +3264,21 @@ export const en: Record<MessageKey, string> = {
   "environmentDependencies.install.success":
     "{name} was installed and detected successfully.",
   "environmentDependencies.install.restart":
-    "The {name} installer completed. Restart Astro and scan again if it is still not detected.",
+    "{name} installer finished. If undetected, restart Astro and scan again.",
   "environmentDependencies.install.failed": "Could not install {name}: {error}",
   "environmentDependencies.unavailable.npm":
-    "npm was not found. Install Node.js first or follow the official manual steps.",
+    "npm is missing. Install Node.js or follow the official manual steps.",
   "environmentDependencies.unavailable.installer":
-    "No supported package manager was found. Follow the official manual steps.",
+    "No supported package manager. Follow the official manual steps.",
   "environmentDependencies.item.uv":
-    "A fast Python package and project manager that also provides isolated uvx runtimes for MCP servers and skills.",
+    "Python package management and isolated uvx runtimes",
   "environmentDependencies.item.rtk":
-    "An agent-oriented command output proxy that reduces noise from tests, builds, and searches.",
-  "environmentDependencies.item.fd":
-    "A simple, fast file finder for project navigation and bulk discovery.",
-  "environmentDependencies.item.ripgrep":
-    "A fast recursive text search tool used as rg across Astro and development workflows.",
-  "environmentDependencies.item.bun":
-    "A high-performance JavaScript runtime, package manager, and script runner.",
+    "Reduce output from tests, builds, and searches",
+  "environmentDependencies.item.fd": "Fast file search",
+  "environmentDependencies.item.ripgrep": "Recursive text search with rg",
+  "environmentDependencies.item.bun": "JavaScript runtime and package manager",
   "environmentDependencies.item.larkCli":
-    "The Lark developer CLI for Docs, Calendar, IM, Approval, and other integrations.",
+    "CLI for Lark docs, calendars, messages, and approvals",
   "environmentDependencies.item.fallback":
     "A local command-line environment dependency.",
 
@@ -3368,14 +3332,13 @@ export const en: Record<MessageKey, string> = {
   "modelMarket.detail.modalities": "Modalities",
   "modelMarket.detail.selectHint": "Select a model from the list",
   "modelMarket.runtime.title": "Astro integration",
-  "modelMarket.runtime.embeddingAvailable":
-    "Astro can use this embedding model through OpenRouter.",
+  "modelMarket.runtime.embeddingAvailable": "Available through OpenRouter.",
   "modelMarket.runtime.embeddingReady":
     "Configured and ready through OpenRouter.",
   "modelMarket.runtime.embeddingNeedsProvider":
     "Model saved. Enable OpenRouter and configure its API key to use it.",
   "modelMarket.runtime.rerankUnavailable":
-    "Catalog information only. Astro does not yet have a reranking execution path.",
+    "Catalog only; reranking is not supported yet.",
   "modelMarket.runtime.openRouterMissing": "Add an OpenRouter provider first",
   "modelMarket.runtime.configure": "Use for embeddings",
   "modelMarket.runtime.configured": "Configured",
@@ -3453,10 +3416,9 @@ export const en: Record<MessageKey, string> = {
 
   "aux.title": "Auxiliary Models",
   "aux.subtitle":
-    "Assign cheaper or background-specific models. If one is unavailable, Astro falls back to the current main model.",
+    "Assign background models; fall back to the main model if unavailable.",
   "aux.routesTitle": "Task routes",
-  "aux.routesSub":
-    "Each task follows the main model by default, or can use an enabled provider and model.",
+  "aux.routesSub": "Use the main model by default, or override per task.",
   "aux.refresh": "Refresh",
   "aux.resetAll": "Reset all to main model",
   "aux.loading": "Loading…",
@@ -3469,7 +3431,7 @@ export const en: Record<MessageKey, string> = {
   "aux.costSameAsPrimary":
     "Same as the main model — background calls still incur cost",
   "aux.backgroundReviewHint":
-    "Off by default; when enabled, runs every turn and may add cost (toggle in Memory settings)",
+    "Off by default; runs each turn and may add cost. Toggle in Memory settings.",
   "aux.usePrimary": "Use main model",
   "aux.change": "Change",
   "aux.cancel": "Cancel",
@@ -3483,7 +3445,7 @@ export const en: Record<MessageKey, string> = {
   "aux.compactionDesc":
     "Used when summarizing a long conversation and continuing in a new session.",
   "aux.compactionThresholdHint":
-    "Adjust trigger ratios and char budgets in Preferences → Automatic Compression.",
+    "Set thresholds and budgets in Preferences → Automatic Compression.",
   "aux.smartApproval": "Smart approval",
   "aux.smartApprovalDesc":
     "Decide whether risky operations should ask for confirmation.",
@@ -3494,8 +3456,7 @@ export const en: Record<MessageKey, string> = {
   "aux.backgroundReviewDesc":
     "Review each turn and suggest MEMORY/USER updates.",
   "aux.workflowAiPolish": "Workflow AI assist",
-  "aux.workflowAiPolishDesc":
-    "Model used by the ✨ AI generate/polish buttons in workflow config panels.",
+  "aux.workflowAiPolishDesc": "For AI generation and polishing in workflows.",
 
   "evo.title": "Offline evolution",
   "evo.subtitle":
@@ -3768,11 +3729,9 @@ export const en: Record<MessageKey, string> = {
   "browser.settings.save": "Save",
   "browser.settings.saving": "Saving…",
   "terminal.settings.mode.title": "Execution mode",
-  "terminal.settings.mode.sub":
-    "Choose whether manual terminals start in the system environment or the current project context.",
   "terminal.settings.mode.system": "System environment",
   "terminal.settings.mode.systemDesc":
-    "Starts from your home directory with the complete system shell environment.",
+    "Start in your home directory with the system shell",
   "terminal.settings.mode.project": "Project environment",
   "terminal.settings.mode.projectDesc":
     "Starts from the current workspace and stays aligned with project commands and paths.",
@@ -3785,14 +3744,11 @@ export const en: Record<MessageKey, string> = {
   "terminal.settings.font.preset": "Font preset",
   "terminal.settings.font.custom": "Custom font stack",
   "terminal.settings.font.family": "Font family",
-  "terminal.settings.font.familyDesc":
-    "Enter the CSS font-family of any installed font directly.",
+  "terminal.settings.font.familyDesc": "Enter an installed font's CSS font-family",
   "terminal.settings.font.size": "Font size",
   "terminal.settings.font.lineHeight": "Line height",
   "terminal.settings.font.hint": "If icons appear as boxes, install and select a Nerd Font such as MesloLGS NF.",
   "terminal.settings.behavior.title": "Cursor and history",
-  "terminal.settings.behavior.sub":
-    "Adjust cursor appearance and terminal scrollback.",
   "terminal.settings.cursor.style": "Cursor style",
   "terminal.settings.cursor.bar": "Bar",
   "terminal.settings.cursor.block": "Block",
@@ -3876,8 +3832,9 @@ export const en: Record<MessageKey, string> = {
   "tools.loading.unknown": "Capabilities unknown: use discovery if supported, otherwise load upfront.",
   "tools.loading.disabled": "Tool group disabled. Loading policy does not enable tools or grant Skill access.",
   "tools.loading.codeMode": "CodeModeOnly: call tools through exec.",
-  "tools.loading.fixed": "This group contains system controls, hidden tools, or specialized protocols with a fixed loading policy.",
-  "tools.loading.unavailable": "Loading preferences are not ready; editing is available in the desktop app only.",
+  "tools.loading.fixed": "System or specialized tools with a fixed loading policy.",
+  "tools.loading.unavailable":
+    "Loading settings are not ready. Editing requires the desktop app.",
   "tools.loading.scope": "Shared by all Agents; applies on the next model request, not running tools. Session models, Code Mode, enable switches, and permissions still apply.",
   "tools.detail.registeredName": "Registered name",
   "tools.detail.apiSchema": "Backend schema",
@@ -5121,9 +5078,9 @@ export const en: Record<MessageKey, string> = {
     "With write approval on, tool/dreaming/review writes land here first; approve to update MEMORY/USER.",
   "memory.pending.emptyTitle": "No pending writes",
   "memory.pending.emptyHint":
-    "Turn on “Write approval” above to queue MEMORY/USER writes here.",
+    "Enable “Write approval” above to queue memory updates.",
   "memory.pending.emptyHintOn":
-    "Write approval is on; tool, dreaming, or review writes will appear here.",
+    "Waiting for memory writes from tools, dreaming, or review.",
   "memory.pending.approve": "Approve",
   "memory.pending.reject": "Reject",
   "memory.pending.approved": "Approved and written",
@@ -5160,8 +5117,7 @@ export const en: Record<MessageKey, string> = {
   "memory.timeline.expertCount": "{count} experts",
   "memory.timeline.empty": "No memories recorded this month",
   "memory.enhanceDiary": "Enhance diary",
-  "memory.enhanceDiaryTip":
-    "When enabled, Astro remembers preferences and habits from your conversations for more personalized replies",
+  "memory.enhanceDiaryTip": "Remember preferences and habits from conversations",
   "memory.prevMonth": "Previous month",
   "memory.nextMonth": "Next month",
   "memory.expertCategories": "Experts",
@@ -5172,7 +5128,7 @@ export const en: Record<MessageKey, string> = {
   "memory.pickExpertForMemory": "Pick an expert to view long-term memory",
   "memory.pickExpertHint": "Choose an expert at the top to get started",
   "memory.pickExpertHintDiaryAll":
-    "Pick an expert at the top, or tap a dotted day to open that diary",
+    "Choose an expert or a dotted date to view diary entries",
   "memory.diaryEmpty":
     "This expert has no diary yet — chat a bit to give them inspiration",
   "memory.diaryEmptyTitle": "Your expert hasn't written a diary yet~",
@@ -5189,8 +5145,7 @@ export const en: Record<MessageKey, string> = {
   "memory.dream.enableSub":
     "Dreaming deeply refines diaries into long-term memory",
   "memory.dream.enable": "Enable dreaming",
-  "memory.dream.enabledHint":
-    "Dreaming is on. Tap “Dream now” when you have new diaries to distill.",
+  "memory.dream.enabledHint": "Click “Dream now” to distill new diaries.",
   "memory.dream.disable": "Turn off dreaming",
   "memory.dream.running": "Organizing memories for you…",
   "memory.dream.runningSub":
@@ -5503,8 +5458,7 @@ export const en: Record<MessageKey, string> = {
   "skills.installedTitle": "Installed",
   "skills.installedSub":
     "{count} enabled / {total} total (~/.astro/skills + current Agent workspace)",
-  "skills.installedEmpty":
-    "No Astro skills yet — install skills to see them here",
+  "skills.installedEmpty": "No installed skills",
   "skills.installedSearchEmpty": "No matching installed skills",
   "skills.machineTitle": "On this Mac",
   "skills.machineSub": "From Astro / Claude / Cursor and similar folders",
@@ -5553,7 +5507,7 @@ export const en: Record<MessageKey, string> = {
   "chat.toast.memoryUpdated": "Memory updated ({n})",
   "skills.refreshing": "Refreshing…",
   "skills.storeTitle": "Search & Install",
-  "skills.storeSub": "Skills from SkillHub with one-click install",
+  "skills.storeSub": "SkillHub skill catalog",
   "skills.search": "Search",
   "skills.searching": "Searching…",
   "skills.searchPlaceholder": "Search skill name or source…",
@@ -5642,8 +5596,7 @@ export const en: Record<MessageKey, string> = {
   "skills.previewTab.assets": "Assets",
   "skills.previewTab.other": "Other",
   "skills.previewLoading": "Loading file…",
-  "skills.previewBinary":
-    "Binary or unsupported for preview. Open externally instead.",
+  "skills.previewBinary": "Preview unavailable. Open externally.",
   "skills.previewOpenExternal": "Open externally",
   "skills.previewTooLarge":
     "File is too large to preview here. Open it externally.",
@@ -5669,7 +5622,6 @@ export const en: Record<MessageKey, string> = {
   "providers.tabEvolution": "Offline evolution",
   "providers.listSub": "{count} enabled / {total} total",
   "providers.detailTitle": "Configuration",
-  "providers.detailSub": "Edit endpoint, model, and API key",
   "providers.emptySelect": "← Select a provider on the left",
   "providers.add": "Add provider",
   "providers.dragToReorder": "Drag to reorder",
@@ -5707,19 +5659,14 @@ export const en: Record<MessageKey, string> = {
   "providers.mediaDefaultOption": "Latest auto ({model})",
   "providers.imageSceneAutoOption": "Auto by scene (character/motion: Sunburst · wallpaper/general: Flare)",
   "providers.mediaHint":
-    "Leave blank to auto-select the latest model. Changes apply to agent media tools after save.",
+    "Leave blank for the latest model. Save to apply to Agent media tools.",
   "providers.tabVoice": "Voice",
-  "providers.voiceHint":
-    "Configure Text-to-Speech (TTS) and Automatic Speech Recognition (ASR) models.",
   "providers.asrModel": "Speech Recognition (ASR)",
-  "providers.asrModelHint":
-    "Preset by provider profile; custom ASR models not yet supported.",
+  "providers.asrModelHint": "Provider preset; customization is not supported yet.",
   "providers.tabEmbedding": "Embedding",
-  "providers.embeddingHint":
-    "Configure embedding models for RAG and semantic search.",
+  "providers.embeddingHint": "For RAG and semantic search.",
   "providers.embeddingModel": "Embedding model",
-  "providers.embeddingModelHint":
-    "Model for text vectorization. Leave blank for provider default.",
+  "providers.embeddingModelHint": "Leave blank for the provider's default model.",
   "providers.apiKey": "API Key",
   "providers.apiKeyHint":
     "Reads system env vars first; you can also save to the keychain (not written to config files)",

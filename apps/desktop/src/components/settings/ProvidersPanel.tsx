@@ -1697,7 +1697,6 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
             <div className="providers-pane-head">
               <div className="providers-pane-head-text">
                 <h2>{t("providers.detailTitle")}</h2>
-                <p>{t("providers.detailSub")}</p>
               </div>
               {selected && draft && (
                 <div className="providers-pane-head-actions">
@@ -3177,9 +3176,6 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
 
                 {detailTab === "voice" && supportsVoice(selected) && (
                   <div className="providers-media-panel">
-                    <p className="providers-field-hint providers-media-hint">
-                      {t("providers.voiceHint")}
-                    </p>
                     <div className="providers-form-grid">
                       {selected.supports_tts ? (
                         <label className="providers-field providers-field-span">

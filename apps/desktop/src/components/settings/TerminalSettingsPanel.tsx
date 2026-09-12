@@ -54,9 +54,6 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                 <h2 className="prefs-card-title">
                   {t("terminal.settings.mode.title")}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("terminal.settings.mode.sub")}
-                </p>
               </div>
             </div>
             <div
@@ -229,9 +226,6 @@ export default function TerminalSettingsPanel({ tone = "twilight" }: Props) {
                 <h2 className="prefs-card-title">
                   {t("terminal.settings.behavior.title")}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("terminal.settings.behavior.sub")}
-                </p>
               </div>
               <button
                 type="button"

@@ -188,9 +188,6 @@ export default function EnvironmentDependenciesPanel({
                 <h2 className="prefs-card-title">
                   {t("environmentDependencies.title")}
                 </h2>
-                <p className="prefs-card-sub">
-                  {t("environmentDependencies.subtitle")}
-                </p>
               </div>
               <div
                 className="environment-dependencies-summary"

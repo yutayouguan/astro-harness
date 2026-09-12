@@ -47,6 +47,104 @@ const removedKeys = [
 ] as const;
 const read = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
 
+const panelCopyKeys = [
+  "environmentDependencies.item.uv",
+  "environmentDependencies.item.rtk",
+  "environmentDependencies.item.fd",
+  "environmentDependencies.item.ripgrep",
+  "environmentDependencies.item.bun",
+  "environmentDependencies.item.larkCli",
+  "environmentDependencies.install.restart",
+  "environmentDependencies.unavailable.npm",
+  "environmentDependencies.unavailable.installer",
+  "environmentDependencies.note",
+  "terminal.settings.mode.systemDesc",
+  "terminal.settings.font.familyDesc",
+  "providers.mediaHint",
+  "providers.asrModelHint",
+  "providers.embeddingHint",
+  "providers.embeddingModelHint",
+  "aux.workflowAiPolishDesc",
+  "aux.subtitle",
+  "aux.routesSub",
+  "aux.compactionThresholdHint",
+  "aux.backgroundReviewHint",
+  "memory.dream.enabledHint",
+  "memory.enhanceDiaryTip",
+  "memory.pickExpertHintDiaryAll",
+  "memory.pending.emptyHintOn",
+  "memory.pending.emptyHint",
+  "tools.loading.fixed",
+  "tools.loading.unavailable",
+  "skills.installedEmpty",
+  "skills.storeSub",
+  "skills.previewBinary",
+  "modelMarket.runtime.rerankUnavailable",
+  "modelMarket.runtime.embeddingAvailable",
+] as const;
+const panelRemovedKeys = [
+  "environmentDependencies.subtitle",
+  "terminal.settings.mode.sub",
+  "terminal.settings.behavior.sub",
+  "providers.detailSub",
+  "providers.voiceHint",
+] as const;
+
+test("secondary settings panels use short bilingual descriptions", () => {
+  for (const key of panelCopyKeys) {
+    assert.ok(zh[key].length > 0 && zh[key].length <= 42, key);
+    assert.ok(en[key].length > 0 && en[key].length <= 105, key);
+    const params = (text: string) =>
+      [...text.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]).sort();
+    assert.deepEqual(params(zh[key]), params(en[key]), key);
+  }
+  assert.match(zh["environmentDependencies.install.restart"], /\{name\}/);
+  assert.match(zh["environmentDependencies.install.restart"], /安装命令已完成/);
+});
+
+test("redundant panel subtitles are absent without removing controls", async () => {
+  const files = [
+    "EnvironmentDependenciesPanel.tsx",
+    "TerminalSettingsPanel.tsx",
+    "ProvidersPanel.tsx",
+  ];
+  const sources = await Promise.all(
+    files.map((file) => read("../../components/settings/" + file)),
+  );
+  for (const key of panelRemovedKeys) {
+    assert.equal(key in zh, false, key);
+    assert.equal(key in en, false, key);
+    for (const source of sources)
+      assert.equal(source.includes(key), false, key);
+  }
+  assert.match(sources[0], /t\("environmentDependencies.note"\)/);
+  assert.match(sources[1], /role="radiogroup"/);
+  assert.match(sources[2], /t\("providers.ttsModel"\)/);
+});
+
+test("short panel copy retains installation, sandbox, cost and overwrite boundaries", () => {
+  assert.match(zh["environmentDependencies.note"], /下方展示.*白名单安装命令/);
+  assert.match(
+    en["environmentDependencies.note"],
+    /allowlisted command shown below/,
+  );
+  assert.match(
+    zh["terminal.settings.mode.projectNote"],
+    /Agent 终端始终保持项目沙箱/,
+  );
+  assert.match(
+    zh["aux.backgroundReviewHint"],
+    /默认关闭.*每轮.*可能额外收费.*记忆设置/,
+  );
+  assert.match(
+    en["aux.backgroundReviewHint"],
+    /Off by default.*each turn.*cost.*Memory settings/,
+  );
+  assert.match(zh["skills.updateLocalChangesBody"], /更新会覆盖本地文件/);
+  assert.match(zh["memory.pending.hint"], /批准后才写入 MEMORY\/USER/);
+  assert.match(zh["modelMarket.runtime.rerankUnavailable"], /暂不支持/);
+});
+
 test("routine settings descriptions are concise in both languages", () => {
   for (const key of conciseKeys) {
     const chinese = settingsMessages.zh[key];
