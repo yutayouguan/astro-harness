@@ -40,6 +40,7 @@ export type InteractionSnapshot = {
   requests: PendingInteraction[];
 };
 export type InteractionState = {
+  expanded: boolean;
   uiRevision: number;
   connected: boolean;
   snapshot: InteractionSnapshot;
@@ -47,6 +48,7 @@ export type InteractionState = {
   retiredEpochs?: string[];
 };
 export const EMPTY_INTERACTIONS: InteractionState = {
+  expanded: false,
   uiRevision: 0,
   connected: false,
   snapshot: { epoch: "", revision: 0, tasks: [], requests: [] },

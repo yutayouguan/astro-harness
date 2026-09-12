@@ -1,10 +1,65 @@
 import { test, expect } from "@playwright/test";
+test("capsule morphs in place, reverses mid-flight and retains the same draft", async ({
+  page,
+}) => {
+  await page.goto("/iframe.html?id=desktop-pettasks--badge&viewMode=story");
+  const shell = page.locator(".pet-task-morph");
+  await expect(shell).toHaveCSS("width", "166px");
+  await page.evaluate(() => {
+    const samples: number[] = [];
+    (window as unknown as { morphSamples: number[] }).morphSamples = samples;
+    const sample = () => {
+      const el = document.querySelector(".pet-task-morph");
+      if (el) samples.push(el.getBoundingClientRect().width);
+      if (samples.length < 90) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await page.getByRole("button", { name: "待处理 2", exact: true }).click();
+  await expect(shell).toHaveCSS("width", "392px");
+  const intermediate = await page.evaluate(() =>
+    (window as unknown as { morphSamples: number[] }).morphSamples.filter(
+      (w) => w > 167 && w < 391,
+    ),
+  );
+  expect(intermediate.length).toBeGreaterThan(2);
+  await page.locator(".pet-task-row").filter({ hasText: "待回答" }).click();
+  await page
+    .getByRole("textbox", { name: "备注", exact: true })
+    .fill("变形时也不能丢失");
+  await page.getByRole("button", { name: "稍后处理", exact: true }).click();
+  await page
+    .getByRole("button", { name: "待处理 2", exact: true })
+    .click({ force: true });
+  expect((await shell.boundingBox())!.width).toBeGreaterThan(200);
+  await expect(shell).toHaveCSS("width", "392px");
+  await page.locator(".pet-task-row").filter({ hasText: "待回答" }).click();
+  await expect(
+    page.getByRole("textbox", { name: "备注", exact: true }),
+  ).toHaveValue("变形时也不能丢失");
+  await shell.screenshot({
+    path: test.info().outputPath("pet-morph-expanded.png"),
+  });
+  await page.getByRole("button", { name: "稍后处理", exact: true }).click();
+  await expect(shell).toHaveCSS("width", "166px");
+  await expect(shell).toHaveCSS("height", "38px");
+});
+test("reduced motion switches the shared glass surface without spatial animation", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/iframe.html?id=desktop-pettasks--badge&viewMode=story");
+  await page.getByRole("button", { name: "待处理 2", exact: true }).click();
+  await expect(page.locator(".pet-task-morph")).toHaveCSS("width", "392px");
+  await page.getByRole("button", { name: "稍后处理", exact: true }).click();
+  await expect(page.locator(".pet-task-morph")).toHaveCSS("width", "166px");
+});
 test("task glass has an opaque high-contrast fallback", async ({ page }) => {
   await page.emulateMedia({ contrast: "more" });
   await page.goto(
     "/iframe.html?id=desktop-pettasks--retry-question&viewMode=story&globals=theme:light",
   );
-  await expect(page.locator(".pet-task-popup")).toHaveCSS(
+  await expect(page.locator(".pet-task-morph")).toHaveCSS(
     "backdrop-filter",
     "none",
   );
@@ -15,15 +70,17 @@ for (const theme of ["light", "dark"]) {
       `/iframe.html?id=desktop-pettasks--badge&viewMode=story&globals=theme:${theme}`,
     );
     const badge = page.getByRole("button", { name: "待处理 2", exact: true });
-    await expect(badge).toHaveCSS("border-radius", "19px");
-    await expect(badge).toHaveCSS(
+    const shell = page.locator(".pet-task-morph");
+    await expect(shell).toHaveCSS("border-radius", "19px");
+    await expect(shell).toHaveCSS(
       "backdrop-filter",
       "blur(28px) saturate(1.5)",
     );
-    const bounds = await badge.boundingBox();
+    const bounds = await shell.boundingBox();
     expect(bounds?.width).toBe(166);
     expect(bounds?.height).toBe(38);
-    await badge.screenshot({
+    await expect(badge).toBeVisible();
+    await shell.screenshot({
       path: test.info().outputPath(`pet-badge-glass-${theme}.png`),
     });
   });
@@ -33,8 +90,8 @@ for (const theme of ["light", "dark"]) {
     await page.goto(
       `/iframe.html?id=desktop-pettasks--retry-question&viewMode=story&globals=theme:${theme}`,
     );
-    const popup = page.locator(".pet-task-popup");
-    await expect(popup).toHaveCSS("border-radius", "24px");
+    const popup = page.locator(".pet-task-morph");
+    await expect(popup).toHaveCSS("border-radius", "19px");
     await expect(popup).toHaveCSS(
       "backdrop-filter",
       "blur(28px) saturate(1.5)",

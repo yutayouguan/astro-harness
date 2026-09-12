@@ -1,14 +1,13 @@
 //! Separate native surfaces for tasks/controls; the pet's hit-test area never grows.
+use super::pet_task_motion::{Morph, Rect};
 use crate::infra::grpc::{default_grpc_address, endpoint_url};
 use proto::astro_service_client::AstroServiceClient;
 use std::{collections::HashSet, sync::Mutex};
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+#[cfg(not(target_os = "macos"))]
+use tauri::{PhysicalPosition, PhysicalSize};
 use types::pending_interaction::{InteractionResponse, InteractionSnapshot};
 
-const BADGE: &str = "pet-task-badge";
 const POPUP: &str = "pet-task-popup";
 const POPUP_WIDTH: f64 = 392.0;
 const POPUP_MAX_HEIGHT: f64 = 560.0;
@@ -19,6 +18,7 @@ static WINDOW_REFRESH: Mutex<()> = Mutex::new(());
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopInteractions {
+    pub expanded: bool,
     pub ui_revision: u64,
     pub connected: bool,
     pub snapshot: InteractionSnapshot,
@@ -39,11 +39,32 @@ struct State {
     last_position: Option<(i32, i32)>,
     auto_candidate: Option<(String, std::time::Instant)>,
     popup_height: Option<f64>,
+    reduced_motion: bool,
 }
 #[derive(Default)]
-pub struct PetTasks(Mutex<State>);
+pub struct PetTasks(Mutex<State>, Mutex<RenderState>);
+#[derive(Clone, Copy)]
+struct Geometry {
+    pet: (i32, i32, u32, u32),
+    area: (i32, i32, u32, u32),
+    scale: f64,
+}
+#[derive(Default)]
+struct RenderState {
+    geometry: Option<Geometry>,
+    checked: Option<std::time::Instant>,
+    tick: Option<std::time::Instant>,
+    motion: Morph,
+    visible: bool,
+    last_rect: Option<Rect>,
+    last_progress: Option<f64>,
+    animating: bool,
+    sequence: u64,
+    last_goal: Option<(bool, f64, bool)>,
+}
 fn dto(state: &State) -> DesktopInteractions {
     DesktopInteractions {
+        expanded: state.open,
         ui_revision: state.ui_revision,
         connected: state.connected,
         snapshot: state.snapshot.clone(),
@@ -58,7 +79,7 @@ fn publish(app: &AppHandle) {
         state.ui_revision = state.ui_revision.saturating_add(1);
         dto(&state)
     };
-    for label in ["main", BADGE, POPUP] {
+    for label in ["main", POPUP] {
         let _ = app.emit_to(label, "pending-interactions-changed", &value);
     }
 }
@@ -96,7 +117,8 @@ pub fn install(app: &AppHandle) {
     });
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(16));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last_error = None;
         loop {
             tick.tick().await;
@@ -155,15 +177,6 @@ impl State {
             self.suppress_popup();
         }
         self.last_position = Some(position);
-    }
-    fn surface_visibility(&self, pet_visible: bool) -> (bool, bool) {
-        let popup = pet_visible && self.open;
-        (
-            pet_visible
-                && !popup
-                && (!self.snapshot.tasks.is_empty() || !self.snapshot.requests.is_empty()),
-            popup,
-        )
     }
     fn apply_snapshot(
         &mut self,
@@ -236,10 +249,7 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> 
         WebviewUrl::App(format!("index.html?surface={label}").into()),
     )
     .title("Astro Tasks")
-    .inner_size(
-        if label == BADGE { 166.0 } else { POPUP_WIDTH },
-        if label == BADGE { 38.0 } else { 420.0 },
-    )
+    .inner_size(166.0, 38.0)
     .decorations(false)
     .transparent(true)
     .shadow(true)
@@ -255,7 +265,9 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> 
     #[cfg(target_os = "macos")]
     {
         let effect_window = window.clone();
-        let radius = if label == BADGE { 19.0 } else { 24.0 };
+        // A fixed shared radius is a capsule at 38px high, a rounded rectangle
+        // when expanded. The same native glass view survives the whole morph.
+        let radius = 19.0;
         // NSVisualEffectView must be installed on the main thread. CSS blur alone
         // cannot sample pixels from the desktop behind a transparent WebView.
         window.run_on_main_thread(move || {
@@ -318,31 +330,138 @@ fn place(
         height,
     )
 }
+fn morph_frames(g: Geometry, height: f64) -> (Rect, Rect, bool) {
+    let gap = (8.0 * g.scale) as i32;
+    let panel = Rect::from_tuple(place(
+        g.pet,
+        g.area,
+        ((POPUP_WIDTH * g.scale) as u32, (height * g.scale) as u32),
+        gap,
+    ));
+    let mut badge = Rect::from_tuple(place(
+        g.pet,
+        g.area,
+        ((166.0 * g.scale) as u32, (38.0 * g.scale) as u32),
+        gap,
+    ));
+    let left = panel.x < g.pet.0 as f64;
+    badge.x = if left {
+        panel.x + panel.width - badge.width
+    } else {
+        panel.x
+    };
+    (badge, panel, left)
+}
+
+// One NSWindow frame transaction avoids a resize followed by a visibly separate
+// reposition. Use Tauri's current top-left coordinates to recover AppKit's origin.
+fn apply_frame(window: &WebviewWindow, rect: Rect, scale: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let origin = window.outer_position().map_err(|e| e.to_string())?;
+        let current_scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let target = window.clone();
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        window
+            .run_on_main_thread(move || {
+                let result = (|| {
+                    let ptr = target.ns_window().map_err(|e| e.to_string())?;
+                    if ptr.is_null() {
+                        return Err("Task window is closed".to_string());
+                    }
+                    // SAFETY: Tauri owns this NSWindow and this closure runs on the
+                    // AppKit main thread. The handle is not retained outside it.
+                    let native = unsafe { &*(ptr as *const objc2_app_kit::NSWindow) };
+                    let mut frame = native.frame();
+                    let top = frame.origin.y + frame.size.height + origin.y as f64 / current_scale;
+                    frame.origin.x = rect.x / scale;
+                    frame.origin.y = top - (rect.y + rect.height) / scale;
+                    frame.size.width = rect.width / scale;
+                    frame.size.height = rect.height / scale;
+                    native.setFrame_display(frame, true);
+                    Ok(())
+                })();
+                let _ = tx.send(result);
+            })
+            .map_err(|e| e.to_string())?;
+        rx.recv_timeout(std::time::Duration::from_millis(250))
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = scale;
+        window
+            .set_size(PhysicalSize::new(
+                rect.width.round() as u32,
+                rect.height.round() as u32,
+            ))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(PhysicalPosition::new(
+                rect.x.round() as i32,
+                rect.y.round() as i32,
+            ))
+            .map_err(|e| e.to_string())
+    }
+}
 fn refresh_windows(app: &AppHandle) -> Result<(), String> {
     let Ok(_refresh) = WINDOW_REFRESH.try_lock() else {
         return Ok(());
     };
-    let Some(pet) = app.get_webview_window("desktop-pet") else {
-        app.state::<PetTasks>().0.lock().unwrap().suppress_popup();
-        for label in [BADGE, POPUP] {
-            if let Some(window) = app.get_webview_window(label) {
-                let _ = window.hide();
-                let _ = window.set_focusable(false);
+    let holder = app.state::<PetTasks>();
+    let mut render = holder.1.lock().unwrap();
+    let now = std::time::Instant::now();
+    let dt = render
+        .tick
+        .replace(now)
+        .map(|last| now.duration_since(last).as_secs_f64())
+        .unwrap_or(0.016);
+    // Native visibility/topology polling remains at 4Hz; only the frame driver
+    // runs at display cadence. No task content is published on animation ticks.
+    let polled = render
+        .checked
+        .is_none_or(|at| now.duration_since(at) >= std::time::Duration::from_millis(250));
+    if polled {
+        render.checked = Some(now);
+        let mut geometry = None;
+        let mut visible = false;
+        if let Some(pet) = app.get_webview_window("desktop-pet") {
+            visible = pet_visible(app);
+            if let (Ok(pos), Ok(size), Ok(Some(monitor))) = (
+                pet.outer_position(),
+                pet.outer_size(),
+                pet.current_monitor(),
+            ) {
+                let area = monitor.work_area();
+                geometry = Some(Geometry {
+                    pet: (pos.x, pos.y, size.width, size.height),
+                    area: (
+                        area.position.x,
+                        area.position.y,
+                        area.size.width,
+                        area.size.height,
+                    ),
+                    scale: monitor.scale_factor(),
+                });
             }
         }
-        return Ok(());
-    };
-    let position = pet.outer_position().map_err(|e| e.to_string())?;
-    let visible = pet_visible(app);
-    // Native getters may marshal to the main thread; never call them while
-    // holding state also acquired by synchronous WebView IPC on that thread.
-    let main_front = app
-        .get_webview_window("main")
-        .is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
-    let (badge_visible, popup_visible) = {
-        let holder = app.state::<PetTasks>();
+        visible &= geometry.is_some();
+        let main_front = app
+            .get_webview_window("main")
+            .is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
         let mut state = holder.0.lock().unwrap();
-        state.update_anchor(visible, (position.x, position.y));
+        let was_open = state.open;
+        if let Some(g) = geometry {
+            state.update_anchor(visible, (g.pet.0, g.pet.1));
+            if render
+                .geometry
+                .is_some_and(|old| old.pet != g.pet || old.area != g.area || old.scale != g.scale)
+            {
+                state.suppress_popup();
+            }
+        } else {
+            state.suppress_popup();
+        }
         if state
             .auto_candidate
             .as_ref()
@@ -357,82 +476,107 @@ fn refresh_windows(app: &AppHandle) -> Result<(), String> {
             {
                 state.selected = Some(key);
                 state.open = true;
-                drop(state);
-                publish(app);
-                state = holder.0.lock().unwrap();
             }
         }
-        state.surface_visibility(visible)
+        let changed = was_open != state.open;
+        drop(state);
+        if changed {
+            publish(app);
+        }
+        if !visible
+            || render.geometry.is_some_and(|old| {
+                geometry
+                    .is_none_or(|g| old.pet != g.pet || old.area != g.area || old.scale != g.scale)
+            })
+        {
+            render.last_rect = None;
+            render.motion = Morph::default();
+        }
+        render.visible = visible;
+        render.geometry = geometry;
+    }
+    let (expanded, height, reduced, has_tasks) = {
+        let state = holder.0.lock().unwrap();
+        (
+            state.open,
+            state.popup_height.unwrap_or(420.0),
+            state.reduced_motion,
+            !state.snapshot.tasks.is_empty() || !state.snapshot.requests.is_empty(),
+        )
     };
-    // Suppression must work even while a monitor is being unplugged.
-    for (label, show) in [(BADGE, badge_visible), (POPUP, popup_visible)] {
-        if !show {
-            if let Some(window) = app.get_webview_window(label) {
+    if !polled && !render.animating && render.last_goal == Some((expanded, height, reduced)) {
+        return Ok(());
+    }
+    let was_expanded = render.last_goal.is_some_and(|goal| goal.0);
+    render.last_goal = Some((expanded, height, reduced));
+    if !render.visible || render.geometry.is_none() {
+        if let Some(window) = app.get_webview_window(POPUP) {
+            if window.is_visible().unwrap_or(false) {
                 let _ = window.hide();
                 let _ = window.set_focusable(false);
             }
         }
-    }
-    if !badge_visible && !popup_visible {
         return Ok(());
     }
-    let Some(monitor) = pet.current_monitor().map_err(|e| e.to_string())? else {
-        app.state::<PetTasks>().0.lock().unwrap().suppress_popup();
-        for label in [BADGE, POPUP] {
-            if let Some(window) = app.get_webview_window(label) {
-                let _ = window.hide();
-                let _ = window.set_focusable(false);
-            }
+    let g = render.geometry.unwrap();
+    let (badge, panel, left) = morph_frames(g, height);
+    let window = ensure_window(app, POPUP)?;
+    if render.last_rect.is_none() {
+        render.motion.snap(badge, false);
+    }
+    render.animating =
+        render
+            .motion
+            .step(if expanded { panel } else { badge }, expanded, dt, reduced);
+    if !expanded && was_expanded {
+        let _ = window.set_focusable(false);
+    }
+    if !has_tasks && !expanded && !render.animating {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
         }
         return Ok(());
-    };
-    let area = monitor.work_area();
-    let size = pet.outer_size().map_err(|e| e.to_string())?;
-    let scale = monitor.scale_factor();
-    let popup_height = app
-        .state::<PetTasks>()
-        .0
-        .lock()
-        .unwrap()
-        .popup_height
-        .unwrap_or(420.0);
-    for (label, show) in [(BADGE, badge_visible), (POPUP, popup_visible)] {
-        if !show {
-            continue;
-        }
-        let window = ensure_window(app, label)?;
-        let wanted = if label == BADGE {
-            (166., 38.)
-        } else {
-            (POPUP_WIDTH, popup_height)
-        };
-        let (x, y, w, h) = place(
-            (position.x, position.y, size.width, size.height),
-            (
-                area.position.x,
-                area.position.y,
-                area.size.width,
-                area.size.height,
-            ),
-            ((wanted.0 * scale) as u32, (wanted.1 * scale) as u32),
-            (8. * scale) as i32,
-        );
-        if window.outer_position().ok() != Some(PhysicalPosition::new(x, y)) {
-            let _ = window.set_position(PhysicalPosition::new(x, y));
-        }
-        if window.inner_size().ok() != Some(PhysicalSize::new(w, h)) {
-            let _ = window.set_size(PhysicalSize::new(w, h));
-        }
-        if !window.is_visible().unwrap_or(false) {
-            window.set_focusable(false).map_err(|e| e.to_string())?;
-            window.show().map_err(|e| e.to_string())?;
-        }
+    }
+    let rect = render.motion.rect;
+    let rect_changed = render.last_rect != Some(rect);
+    if rect_changed {
+        apply_frame(&window, rect, g.scale)?;
+        render.last_rect = Some(rect);
+    }
+    if rect_changed
+        || render.last_progress != Some(render.motion.progress)
+        || !window.is_visible().unwrap_or(false)
+    {
+        let progress = render.motion.progress.clamp(0.0, 1.0);
+        render.sequence = render.sequence.saturating_add(1);
+        let _=window.emit("pet-task-morph-frame",serde_json::json!({"sequence":render.sequence,"progress":progress,"left":left,"width":rect.width/g.scale,"height":rect.height/g.scale,"contentWidth":panel.width/g.scale,"contentHeight":panel.height/g.scale}));
+        render.last_progress = Some(render.motion.progress);
+    }
+    if !window.is_visible().unwrap_or(false) {
+        window.set_focusable(false).map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 #[tauri::command]
 pub fn get_pending_interactions(app: AppHandle) -> DesktopInteractions {
     dto(&app.state::<PetTasks>().0.lock().unwrap())
+}
+#[tauri::command]
+pub async fn get_pet_task_morph_frame(app: AppHandle) -> serde_json::Value {
+    let holder = app.state::<PetTasks>();
+    let height = holder.0.lock().unwrap().popup_height.unwrap_or(420.0);
+    let render = holder.1.lock().unwrap();
+    let scale = render.geometry.map_or(1.0, |g| g.scale);
+    let panel = render
+        .geometry
+        .map(|g| morph_frames(g, height).1)
+        .unwrap_or(Rect {
+            width: 392.0,
+            height: 420.0,
+            ..Rect::default()
+        });
+    serde_json::json!({"sequence":render.sequence,"progress":render.motion.progress,"left":render.geometry.is_some_and(|g|render.motion.rect.x<g.pet.0 as f64),"width":render.motion.rect.width/scale,"height":render.motion.rect.height/scale,"contentWidth":panel.width/scale,"contentHeight":panel.height/scale})
 }
 #[tauri::command]
 pub async fn respond_pending_interaction(
@@ -491,15 +635,31 @@ pub async fn dismiss_pet_tasks(app: AppHandle) {
         let mut state = holder.0.lock().unwrap();
         state.suppress_popup();
     }
+    publish(&app);
     let _ = refresh_windows(&app);
 }
 #[tauri::command]
-pub async fn focus_pet_tasks(window: WebviewWindow) -> Result<(), String> {
+pub async fn focus_pet_tasks(window: WebviewWindow, app: AppHandle) -> Result<(), String> {
     if window.label() != POPUP {
         return Err("Only the interaction popup may request input focus".into());
     }
+    if !app.state::<PetTasks>().0.lock().unwrap().open {
+        return Err("Task popup is collapsed".into());
+    }
     window.set_focusable(true).map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())
+}
+#[tauri::command]
+pub fn set_pet_task_motion_preference(
+    window: WebviewWindow,
+    app: AppHandle,
+    reduced: bool,
+) -> Result<(), String> {
+    if window.label() != POPUP {
+        return Err("Only the task surface may set motion preference".into());
+    }
+    app.state::<PetTasks>().0.lock().unwrap().reduced_motion = reduced;
+    Ok(())
 }
 #[tauri::command]
 pub fn report_pending_interactions_visible(
@@ -545,6 +705,7 @@ pub async fn open_pet_task_session(
     };
     let _ = refresh_windows(&app);
     crate::ui::tray::show_main_window(&app);
+    publish(&app);
     app.emit_to("main", "pet-task-open-session", navigation)
         .map_err(|e| e.to_string())
 }
@@ -622,11 +783,10 @@ mod tests {
         assert!(state.auto_candidate.is_some());
         state.update_anchor(true, (11, 10));
         assert!(state.auto_candidate.is_none());
-        assert_eq!(state.surface_visibility(true), (true, false));
+        assert!(!state.open);
         state.open = true;
-        assert_eq!(state.surface_visibility(true), (false, true));
+        assert!(state.open);
         state.update_anchor(false, (11, 10));
-        assert_eq!(state.surface_visibility(false), (false, false));
         assert!(!state.open);
     }
     #[test]
@@ -638,6 +798,18 @@ mod tests {
         state.apply_snapshot(snapshot(2, &["snoozed"]), true, false);
         assert!(state.auto_candidate.is_none());
         assert!(!state.open);
+    }
+    #[test]
+    fn capsule_uses_the_panels_side_even_when_only_capsule_fits_on_the_right() {
+        let g = Geometry {
+            pet: (850, 500, 120, 136),
+            area: (0, 0, 1200, 900),
+            scale: 1.0,
+        };
+        let (badge, panel, left) = morph_frames(g, 420.0);
+        assert!(left);
+        assert_eq!(badge.x + badge.width, panel.x + panel.width);
+        assert!(panel.x + panel.width < 850.0);
     }
     #[test]
     fn task_popup_content_size_is_bounded_and_rejects_nonfinite_values() {

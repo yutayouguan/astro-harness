@@ -1,4 +1,5 @@
 /* Companion windows: one glass shell, quieter surfaces within it. */
+.pet-task-morph,
 .pet-task-popup,
 .pet-task-badge,
 .conversation-interactions {
@@ -15,7 +16,12 @@
   --pet-inset: rgba(255, 255, 255, 0.7);
 }
 html[data-theme="dark"]
-  :is(.pet-task-popup, .pet-task-badge, .conversation-interactions) {
+  :is(
+    .pet-task-morph,
+    .pet-task-popup,
+    .pet-task-badge,
+    .conversation-interactions
+  ) {
   --pet-glass: rgba(28, 33, 49, 0.78);
   --pet-card: rgba(255, 255, 255, 0.035);
   --pet-field: rgba(10, 14, 27, 0.4);
@@ -36,12 +42,9 @@ html[data-window-surface="pet-task"] #root {
   height: 100%;
   overflow: hidden;
   background: transparent !important;
-  border-radius: 24px;
-}
-html[data-window-surface="pet-task"]:has(.pet-task-badge),
-html[data-window-surface="pet-task"]:has(.pet-task-badge) :is(body, #root) {
   border-radius: 19px;
 }
+.pet-task-morph,
 .pet-task-popup,
 .pet-task-badge {
   box-sizing: border-box;
@@ -337,6 +340,80 @@ html[data-theme="dark"] .pet-interaction-card :is(input, select) {
   outline: 2px solid var(--pet-emphasis, var(--accent));
   outline-offset: 2px;
 }
+.pet-task-morph {
+  --pet-morph: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 19px;
+}
+.pet-task-morph.is-preview {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+.pet-task-collapsed {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: clamp(0, calc(1 - var(--pet-morph) * 3), 1);
+}
+.pet-task-morph[data-expanded="true"] .pet-task-collapsed {
+  pointer-events: none;
+}
+.pet-task-morph .pet-task-badge {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.pet-task-badge-copy {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 166px;
+  height: 38px;
+  white-space: nowrap;
+}
+.pet-task-badge-copy > svg:first-child {
+  color: var(--pet-emphasis);
+}
+.pet-task-badge-copy > svg:last-child {
+  opacity: 0.55;
+}
+.pet-task-morph .pet-task-popup {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: calc(var(--pet-content-width, 392px) - 2px);
+  height: auto;
+  max-height: calc(var(--pet-content-height, 560px) - 2px);
+  border: 0;
+  border-radius: 19px;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  opacity: clamp(0, calc((var(--pet-morph) - 0.25) * 1.333333), 1);
+  transform: translateY(calc(8px - var(--pet-morph) * 8px));
+}
+.pet-task-morph[data-grow="right"] :is(.pet-task-popup, .pet-task-badge-copy) {
+  right: auto;
+  left: 0;
+}
+.pet-task-morph[data-motion="still"] .pet-task-popup {
+  transform: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .pet-task-popup button,
   .pet-interaction-card button {
@@ -344,8 +421,7 @@ html[data-theme="dark"] .pet-interaction-card :is(input, select) {
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .pet-task-popup,
-  .pet-task-badge {
+  .pet-task-morph {
     background: var(--color-bg-base, #eef2f7);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

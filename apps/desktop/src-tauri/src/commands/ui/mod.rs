@@ -11,6 +11,7 @@ pub mod pet_generation;
 mod pet_placement;
 mod pet_platform;
 pub mod pet_scene;
+mod pet_task_motion;
 pub mod pet_tasks;
 pub mod ui_style;
 pub mod updater;

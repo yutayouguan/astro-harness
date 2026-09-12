@@ -282,6 +282,7 @@ dependencies = [
  "mcp",
  "memory",
  "objc",
+ "objc2-app-kit",
  "proto",
  "providers",
  "reqwest 0.12.28",

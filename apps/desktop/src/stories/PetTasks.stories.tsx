@@ -83,7 +83,7 @@ const question: PendingInteraction = {
 const meta = {
   title: "Desktop/PetTasks",
   component: PetTaskSurface,
-  args: { badge: false },
+  args: { preview: true },
   beforeEach: (context) => {
     let shouldFail = Boolean(context.parameters.failFirst);
     const activeQuestion = context.parameters.wizard
@@ -124,6 +124,7 @@ const meta = {
         }
       : question;
     let state: InteractionState = {
+      expanded: !context.parameters.collapsed,
       uiRevision: 1,
       connected: true,
       selected: context.parameters.list
@@ -155,16 +156,18 @@ const meta = {
       if (command === "open_pet_tasks") {
         state = {
           ...state,
+          expanded: true,
           selected: (payload as { requestKey: string | null }).requestKey,
         };
         receiveInteractionState(state);
         return null;
       }
-      if (
-        command === "focus_pet_tasks" ||
-        command === "dismiss_pet_tasks" ||
-        command === "open_pet_task_session"
-      )
+      if (command === "dismiss_pet_tasks") {
+        state = { ...state, expanded: false };
+        receiveInteractionState(state);
+        return null;
+      }
+      if (command === "focus_pet_tasks" || command === "open_pet_task_session")
         return null;
       if (command === "respond_pending_interaction") {
         if (shouldFail) {
@@ -202,7 +205,7 @@ const meta = {
     return clearMocks;
   },
   decorators: [
-    (Story, context) => (
+    (Story) => (
       <LocaleProvider>
         <div
           style={{
@@ -214,9 +217,9 @@ const meta = {
         >
           <div
             style={{
-              width: context.args.badge ? 166 : 392,
-              height: context.args.badge ? 38 : undefined,
-              maxHeight: 560,
+              position: "relative",
+              width: 392,
+              height: 560,
             }}
           >
             <Story />
@@ -231,8 +234,7 @@ type Story = StoryObj<typeof meta>;
 export const ApprovalAndQuestion: Story = {};
 export const TaskList: Story = { parameters: { list: true } };
 export const Badge: Story = {
-  args: { badge: true },
-  parameters: { list: true },
+  parameters: { list: true, collapsed: true },
 };
 export const RetryQuestion: Story = { parameters: { failFirst: true } };
 export const MultiStepQuestion: Story = {

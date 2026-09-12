@@ -35,8 +35,7 @@ installContextMenuGuard();
 const isDesktopPetWindow =
   new URLSearchParams(window.location.search).get("surface") === "desktop-pet";
 const taskSurface = new URLSearchParams(window.location.search).get("surface");
-const isPetTaskWindow =
-  taskSurface === "pet-task-badge" || taskSurface === "pet-task-popup";
+const isPetTaskWindow = taskSurface === "pet-task-popup";
 if (isPetTaskWindow) {
   document.documentElement.dataset.windowSurface = "pet-task";
   document.documentElement.style.colorScheme = "normal";
@@ -126,7 +125,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <DesktopPetSurface />
       ) : isPetTaskWindow ? (
         <LocaleProvider>
-          <PetTaskSurface badge={taskSurface === "pet-task-badge"} />
+          <PetTaskSurface />
         </LocaleProvider>
       ) : (
         <ThemeProvider>
