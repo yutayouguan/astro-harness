@@ -482,14 +482,24 @@ html[data-theme="dark"] .prefs-category-nav-item.is-active {
 }
 
 .prefs-category-stack--appearance > .prefs-card--appearance-material,
-.prefs-category-stack--appearance > .prefs-card--appearance-color {
+.prefs-category-stack--appearance > .prefs-card--appearance-motion {
   grid-column: auto;
 }
 
 .prefs-card--appearance-material,
-.prefs-card--appearance-color {
+.prefs-card--appearance-motion {
   min-width: 0;
   min-height: 236px;
+}
+
+/* This card now occupies half a row; keep each control within its own card. */
+.prefs-card--appearance-motion {
+  align-content: start;
+}
+
+.prefs-card--appearance-motion .morphicon-setting-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 .prefs-category-stack--appearance .prefs-card-title {
@@ -937,6 +947,11 @@ html[data-theme="dark"] .prefs-icon-badge {
   margin-top: 14px;
 }
 
+.wallpaper-color-editor {
+  margin-top: 14px;
+}
+
+.wallpaper-color-editor[hidden],
 .wallpaper-editor[hidden] {
   display: none;
 }
@@ -3696,7 +3711,7 @@ html[data-theme="dark"] .prefs-context-budget-ico {
   }
 
   .prefs-category-stack--appearance > .prefs-card--appearance-material,
-  .prefs-category-stack--appearance > .prefs-card--appearance-color {
+  .prefs-category-stack--appearance > .prefs-card--appearance-motion {
     grid-column: 1;
   }
 }

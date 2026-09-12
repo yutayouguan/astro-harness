@@ -10,6 +10,7 @@ import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { EMPTY_DESKTOP_PET_STATE } from "../lib/ui/desktopPetState";
 import { DEFAULT_PET_PREFERENCES } from "../lib/ui/petPreferences";
 import preferencesMeta from "./PreferencesPanel.stories";
+import { DEFAULT_SHELL_GRADIENT } from "../lib/ui/shellGradient";
 import portrait from "../assets/generated/desktop-pet-concept.png";
 
 function MaterialSettingsSample() {
@@ -22,6 +23,13 @@ function MaterialSettingsSample() {
     setSoftFrostIntensity,
   } = useTheme();
   const [page, setPage] = useState("dependencies");
+  const [backgroundMode, setBackgroundMode] = useState<"color" | "wallpaper">(
+    "color",
+  );
+  const [colorStyle, setColorStyle] = useState<
+    "unified" | "dynamic" | "colorful"
+  >("unified");
+  const [gradient, setGradient] = useState(DEFAULT_SHELL_GRADIENT);
   return (
     <main
       className="settings-content-inline"
@@ -72,6 +80,18 @@ function MaterialSettingsSample() {
           {...preferencesMeta.args}
           mode={mode}
           onChange={setMode}
+          colorStyle={colorStyle}
+          onColorStyleChange={setColorStyle}
+          gradient={gradient}
+          onGradientChange={setGradient}
+          wallpaper={{
+            ...preferencesMeta.args.wallpaper,
+            prefs: {
+              ...preferencesMeta.args.wallpaper.prefs,
+              mode: backgroundMode,
+            },
+            setMode: setBackgroundMode,
+          }}
         />
       ) : page === "pets" ? (
         <DesktopPetPanel active />

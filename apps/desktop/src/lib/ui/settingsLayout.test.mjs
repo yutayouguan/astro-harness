@@ -94,10 +94,10 @@ test("preference-backed tabs render independent glass cards", () => {
 test("appearance and conversation use responsive grouped layouts", () => {
   assert.match(preferences, /prefs-category-stack--appearance/);
   assert.match(preferences, /prefs-card--appearance-material/);
-  assert.match(preferences, /prefs-card--appearance-color/);
+  assert.match(preferences, /prefs-card--appearance-motion/);
   assert.match(preferences, /appearance-control-row/);
   assert.match(preferences, /prefs\.appearance\.material\.title/);
-  assert.match(preferences, /prefs\.appearance\.accent\.title/);
+  assert.match(preferences, /colorControls=\{/);
   assert.match(preferences, /prefs\.appearance\.motion\.title/);
   assert.doesNotMatch(preferences, /prefs-appearance-preview/);
   assert.match(preferences, /prefs-card--conversation-display/);

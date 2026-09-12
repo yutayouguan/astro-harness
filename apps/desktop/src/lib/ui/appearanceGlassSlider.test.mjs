@@ -22,7 +22,7 @@ const [preferences, styles, theme, intensityRuntime, immersiveLight, main] =
 test("glass intensity uses one accessible continuous 0-100 range", () => {
   const control = preferences.slice(
     preferences.indexOf('id="appearance-glass-intensity"'),
-    preferences.indexOf("prefs-card--appearance-color"),
+    preferences.indexOf("prefs-card--appearance-motion"),
   );
 
   assert.match(control, /type="range"/);

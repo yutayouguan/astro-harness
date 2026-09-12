@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -27,6 +27,7 @@ import {
 type Props = {
   controller: WallpaperController;
   tone: string;
+  colorControls?: ReactNode;
 };
 
 const STYLE_PROMPTS: Record<string, string> = {
@@ -78,7 +79,11 @@ function WallpaperPreview({
   );
 }
 
-export default function WallpaperSettingsCard({ controller, tone }: Props) {
+export default function WallpaperSettingsCard({
+  controller,
+  tone,
+  colorControls,
+}: Props) {
   const { t } = useI18n();
   const { resolved } = useTheme();
   const { prefs, busy, error } = controller;
@@ -327,7 +332,11 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
           </div>
         </div>
 
-        <div className="wallpaper-source-options" role="radiogroup">
+        <div
+          className="wallpaper-source-options"
+          role="radiogroup"
+          aria-label={t("prefs.wallpaper.title")}
+        >
           <button
             type="button"
             role="radio"
@@ -370,6 +379,10 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
             </span>
             <span className="theme-option-check" aria-hidden />
           </button>
+        </div>
+
+        <div className="wallpaper-color-editor" hidden={prefs.mode !== "color"}>
+          {colorControls}
         </div>
 
         <div className="wallpaper-editor" hidden={prefs.mode !== "wallpaper"}>

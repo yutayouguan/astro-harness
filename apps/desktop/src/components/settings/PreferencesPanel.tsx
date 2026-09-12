@@ -961,147 +961,7 @@ export default function PreferencesPanel({
             </div>
           </section>
 
-          <section className="prefs-card prefs-card--appearance-color">
-            <div className="prefs-card-head">
-              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <span className="appearance-card-symbol appearance-card-symbol--accent" />
-              </div>
-              <div>
-                <h2 className="prefs-card-title">
-                  {t("prefs.appearance.accent.title")}
-                </h2>
-                <p className="prefs-card-sub">
-                  {t("prefs.appearance.accent.sub")}
-                </p>
-              </div>
-            </div>
-
-            <div className="appearance-control-list">
-              <div className="appearance-control-row">
-                <div className="appearance-control-copy">
-                  <strong>{t("prefs.appearance.strategy.title")}</strong>
-                  <span>{t("prefs.appearance.strategy.sub")}</span>
-                </div>
-                <div
-                  className="appearance-segmented"
-                  role="radiogroup"
-                  aria-label={t("prefs.appearance.strategy.title")}
-                >
-                  {colorStyleOptions.map(({ id, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="radio"
-                      aria-checked={colorStyle === id}
-                      className={colorStyle === id ? "is-active" : ""}
-                      onClick={() => onColorStyleChange(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {colorStyle === "unified" ? (
-                <div className="appearance-control-row appearance-control-row--swatches">
-                  <div className="appearance-control-copy">
-                    <strong>{t("prefs.appearance.strategy.unified")}</strong>
-                    <span>{t("prefs.appearance.strategy.unifiedSub")}</span>
-                  </div>
-                  <div
-                    className="shell-color-presets"
-                    role="radiogroup"
-                    aria-label={t("prefs.colorStyle.presets")}
-                  >
-                    {SHELL_GRADIENT_PRESETS.map((preset) => {
-                      const g = gradientFromPreset(preset.id);
-                      const selected = gradient.id === preset.id;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          className={`shell-color-swatch ${selected ? "is-active" : ""}`}
-                          style={
-                            {
-                              "--swatch-bg": gradientSwatchBackground(g),
-                              "--swatch-ring": g.primary.color,
-                            } as CSSProperties
-                          }
-                          title={t(preset.labelKey)}
-                          aria-label={t(preset.labelKey)}
-                          onClick={() => onGradientChange(g)}
-                        >
-                          <span
-                            className="shell-color-swatch-core"
-                            aria-hidden
-                          />
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={gradient.id === "custom"}
-                      className={`shell-color-swatch shell-color-swatch--custom ${
-                        gradient.id === "custom" ? "is-active" : ""
-                      }`}
-                      style={
-                        {
-                          "--swatch-ring": gradient.primary.color,
-                        } as CSSProperties
-                      }
-                      title={t("prefs.colorStyle.custom")}
-                      aria-label={t("prefs.colorStyle.custom")}
-                      onClick={() => {
-                        onBeginCustomGradient();
-                        setGradientEditorOpen(true);
-                      }}
-                    >
-                      <span className="shell-color-swatch-core" aria-hidden>
-                        <span className="shell-color-swatch-plus">+</span>
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {colorStyle === "dynamic" ? (
-                <div className="appearance-control-row">
-                  <div className="appearance-control-copy">
-                    <strong>{t("prefs.appearance.strategy.dynamic")}</strong>
-                    <span>{t("prefs.appearance.strategy.dynamicSub")}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="shell-dynamic-reshuffle"
-                    data-tone={tone}
-                    onClick={onReshuffleDynamic}
-                  >
-                    <Dices width={16} height={16} aria-hidden />
-                    {t("prefs.colorStyle.reshuffle")}
-                  </button>
-                </div>
-              ) : null}
-
-              {colorStyle === "colorful" ? (
-                <div className="appearance-control-row">
-                  <div className="appearance-control-copy">
-                    <strong>{t("prefs.appearance.strategy.colorful")}</strong>
-                    <span>{t("prefs.appearance.strategy.colorfulSub")}</span>
-                  </div>
-                  <span className="appearance-auto-badge">
-                    {t("prefs.appearance.strategy.auto")}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          <WallpaperSettingsCard controller={wallpaper} tone={tone} />
-
-          <section className="prefs-card morphicon-settings-card">
+          <section className="prefs-card prefs-card--appearance-motion morphicon-settings-card">
             <div className="prefs-card-head">
               <button
                 type="button"
@@ -1209,6 +1069,134 @@ export default function PreferencesPanel({
               </div>
             </div>
           </section>
+
+          <WallpaperSettingsCard
+            controller={wallpaper}
+            tone={tone}
+            colorControls={
+              <div className="appearance-control-list">
+                <div className="appearance-control-row">
+                  <div className="appearance-control-copy">
+                    <strong>{t("prefs.appearance.strategy.title")}</strong>
+                    <span>{t("prefs.appearance.strategy.sub")}</span>
+                  </div>
+                  <div
+                    className="appearance-segmented"
+                    role="radiogroup"
+                    aria-label={t("prefs.appearance.strategy.title")}
+                  >
+                    {colorStyleOptions.map(({ id, label }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        role="radio"
+                        aria-checked={colorStyle === id}
+                        className={colorStyle === id ? "is-active" : ""}
+                        onClick={() => onColorStyleChange(id)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {colorStyle === "unified" ? (
+                  <div className="appearance-control-row appearance-control-row--swatches">
+                    <div className="appearance-control-copy">
+                      <strong>{t("prefs.appearance.strategy.unified")}</strong>
+                      <span>{t("prefs.appearance.strategy.unifiedSub")}</span>
+                    </div>
+                    <div
+                      className="shell-color-presets"
+                      role="radiogroup"
+                      aria-label={t("prefs.colorStyle.presets")}
+                    >
+                      {SHELL_GRADIENT_PRESETS.map((preset) => {
+                        const g = gradientFromPreset(preset.id);
+                        const selected = gradient.id === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            className={`shell-color-swatch ${selected ? "is-active" : ""}`}
+                            style={
+                              {
+                                "--swatch-bg": gradientSwatchBackground(g),
+                                "--swatch-ring": g.primary.color,
+                              } as CSSProperties
+                            }
+                            title={t(preset.labelKey)}
+                            aria-label={t(preset.labelKey)}
+                            onClick={() => onGradientChange(g)}
+                          >
+                            <span
+                              className="shell-color-swatch-core"
+                              aria-hidden
+                            />
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={gradient.id === "custom"}
+                        className={`shell-color-swatch shell-color-swatch--custom ${
+                          gradient.id === "custom" ? "is-active" : ""
+                        }`}
+                        style={
+                          {
+                            "--swatch-ring": gradient.primary.color,
+                          } as CSSProperties
+                        }
+                        title={t("prefs.colorStyle.custom")}
+                        aria-label={t("prefs.colorStyle.custom")}
+                        onClick={() => {
+                          onBeginCustomGradient();
+                          setGradientEditorOpen(true);
+                        }}
+                      >
+                        <span className="shell-color-swatch-core" aria-hidden>
+                          <span className="shell-color-swatch-plus">+</span>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {colorStyle === "dynamic" ? (
+                  <div className="appearance-control-row">
+                    <div className="appearance-control-copy">
+                      <strong>{t("prefs.appearance.strategy.dynamic")}</strong>
+                      <span>{t("prefs.appearance.strategy.dynamicSub")}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="shell-dynamic-reshuffle"
+                      data-tone={tone}
+                      onClick={onReshuffleDynamic}
+                    >
+                      <Dices width={16} height={16} aria-hidden />
+                      {t("prefs.colorStyle.reshuffle")}
+                    </button>
+                  </div>
+                ) : null}
+
+                {colorStyle === "colorful" ? (
+                  <div className="appearance-control-row">
+                    <div className="appearance-control-copy">
+                      <strong>{t("prefs.appearance.strategy.colorful")}</strong>
+                      <span>{t("prefs.appearance.strategy.colorfulSub")}</span>
+                    </div>
+                    <span className="appearance-auto-badge">
+                      {t("prefs.appearance.strategy.auto")}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            }
+          />
 
           <section className="prefs-card prefs-card--app-icon">
             <div className="prefs-card-head">
