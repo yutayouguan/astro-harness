@@ -26,13 +26,97 @@ impl ImageGenRequest {
     }
 }
 
-/// 按 provider 返回默认图片模型（表驱动）。
+pub const IMAGE_MODEL_CHARACTER: &str = "gpt-image-2.5-sunburst";
+pub const IMAGE_MODEL_GENERAL: &str = "gpt-image-2.5-flare";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ImageScene {
+    #[default]
+    Auto,
+    Character,
+    Animation,
+    Wallpaper,
+    General,
+}
+
+pub fn supports_scene_image_model(provider: &str) -> bool {
+    matches!(
+        crate::profile::resolve_or_openai_compat(provider).id,
+        "openai" | "azure"
+    )
+}
+
+/// Explicit models (including dated deployments) always win. Blank remains auto
+/// until the request's intent/reference inputs are known; never infer from prose.
+pub fn select_image_model(
+    provider: &str,
+    explicit: &str,
+    scene: ImageScene,
+    has_reference: bool,
+) -> String {
+    if !explicit.trim().is_empty() {
+        return explicit.trim().to_owned();
+    }
+    if supports_scene_image_model(provider) {
+        return match scene {
+            ImageScene::Character | ImageScene::Animation => IMAGE_MODEL_CHARACTER,
+            ImageScene::Auto if has_reference => IMAGE_MODEL_CHARACTER,
+            _ => IMAGE_MODEL_GENERAL,
+        }
+        .to_owned();
+    }
+    default_image_model(provider).to_owned()
+}
+
+/// 按 provider 返回普通生图默认模型（表驱动）。
 pub fn default_image_model(provider: &str) -> &'static str {
     let p = crate::profile::resolve_or_openai_compat(provider);
     if p.default_image_model.is_empty() {
-        "gpt-image-2"
+        IMAGE_MODEL_GENERAL
     } else {
         p.default_image_model
+    }
+}
+
+#[cfg(test)]
+mod scene_tests {
+    use super::*;
+    #[test]
+    fn image_scene_defaults_respect_intent_and_explicit_deployments() {
+        for provider in ["openai", "azure"] {
+            for scene in [ImageScene::Character, ImageScene::Animation] {
+                assert_eq!(
+                    select_image_model(provider, "", scene, false),
+                    IMAGE_MODEL_CHARACTER
+                );
+            }
+            for scene in [ImageScene::Wallpaper, ImageScene::General] {
+                assert_eq!(
+                    select_image_model(provider, "", scene, true),
+                    IMAGE_MODEL_GENERAL
+                );
+            }
+            assert_eq!(
+                select_image_model(provider, "", ImageScene::Auto, true),
+                IMAGE_MODEL_CHARACTER
+            );
+            assert_eq!(
+                select_image_model(provider, "", ImageScene::Auto, false),
+                IMAGE_MODEL_GENERAL
+            );
+            assert_eq!(
+                select_image_model(provider, " custom-deployment ", ImageScene::Character, true),
+                "custom-deployment"
+            );
+        }
+        assert_eq!(
+            select_image_model("google", "", ImageScene::Character, true),
+            default_image_model("google")
+        );
+        assert_eq!(
+            select_image_model("zhipu", "", ImageScene::Character, true),
+            default_image_model("zhipu")
+        );
     }
 }
 

@@ -11,7 +11,6 @@ use crate::compat::openai_compatible_base;
 use crate::types::media::{GeneratedImage, ImageGenConfig, ImageInput};
 use crate::types::ProviderConfig;
 
-const DEFAULT_IMAGE_MODEL: &str = "gpt-image-2";
 const DEFAULT_IMAGE_SIZE: &str = "1024x1024";
 const DEFAULT_OUTPUT_FORMAT: &str = "png";
 const DEFAULT_OUTPUT_COMPRESSION: u8 = 100;
@@ -107,13 +106,21 @@ async fn generate_image(
     if config.api_key.trim().is_empty() {
         anyhow::bail!("{provider_label} API Key 为空");
     }
-    let model = if !image_config.model.trim().is_empty() {
+    let explicit = if !image_config.model.trim().is_empty() {
         image_config.model.trim()
-    } else if config.model.trim().is_empty() {
-        DEFAULT_IMAGE_MODEL
     } else {
         config.model.trim()
     };
+    let selected_model = crate::image_gen::select_image_model(
+        match flavor {
+            ImageApiFlavor::OpenAiCompatible => "openai",
+            ImageApiFlavor::AzureFoundryV1 => "azure",
+        },
+        explicit,
+        image_config.scene,
+        !image_config.input_images.is_empty(),
+    );
+    let model = selected_model.as_str();
     let base = match flavor {
         ImageApiFlavor::OpenAiCompatible => openai_base(config),
         ImageApiFlavor::AzureFoundryV1 => {

@@ -42,6 +42,7 @@ pub struct Embedding {
 #[derive(Debug, Clone, Default)]
 pub struct ImageGenConfig {
     pub model: String,
+    pub scene: super::image_gen::ImageScene,
     pub aspect_ratio: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,

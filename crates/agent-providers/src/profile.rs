@@ -206,7 +206,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gpt-5.6-sol",
         embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::OpenAi),
-        default_image_model: "gpt-image-2",
+        default_image_model: "gpt-image-2.5-flare",
         default_vision_model: "gpt-4o",
         default_tts_model: "openai-tts-v3",
         default_video_model: "",
@@ -301,7 +301,7 @@ pub static PROFILES: &[ProviderProfile] = &[
         default_model: "gpt-5.6-sol",
         embedding_mode: Some(EmbeddingMode::OpenAiCompatible),
         image_mode: Some(ImageGenMode::AzureOpenAiV1),
-        default_image_model: "gpt-image-2",
+        default_image_model: "gpt-image-2.5-flare",
         default_vision_model: "",
         default_tts_model: "",
         default_video_model: "",
@@ -791,7 +791,7 @@ mod tests {
         assert!(p.supports_image_gen());
         assert!(p.supports_embedding());
         assert_eq!(p.image_mode, Some(ImageGenMode::AzureOpenAiV1));
-        assert_eq!(p.default_image_model, "gpt-image-2");
+        assert_eq!(p.default_image_model, "gpt-image-2.5-flare");
         assert_eq!(p.default_embedding_model, "text-embedding-3-small");
     }
 

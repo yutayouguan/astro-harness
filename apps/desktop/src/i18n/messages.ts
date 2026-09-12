@@ -2653,6 +2653,7 @@ export const zh = {
   "providers.musicModel": "音乐生成模型",
   "providers.visionModel": "视觉模型",
   "providers.mediaDefaultOption": "最新自动（{model}）",
+  "providers.imageSceneAutoOption": "按场景自动（角色/补帧：Sunburst · 壁纸/普通：Flare）",
   "providers.mediaHint":
     "留空则自动使用最新模型；保存后对 Agent 媒体工具生效。",
   "providers.tabVoice": "语音",
@@ -5718,6 +5719,7 @@ export const en: Record<MessageKey, string> = {
   "providers.musicModel": "Music generation model",
   "providers.visionModel": "Vision model",
   "providers.mediaDefaultOption": "Latest auto ({model})",
+  "providers.imageSceneAutoOption": "Auto by scene (character/motion: Sunburst · wallpaper/general: Flare)",
   "providers.mediaHint":
     "Leave blank to auto-select the latest model. Changes apply to agent media tools after save.",
   "providers.tabVoice": "Voice",

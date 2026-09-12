@@ -21,9 +21,34 @@ use crate::schema::schema_for_args;
 
 const MAX_VIDEO_BYTES: usize = 20 * 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ImagePurpose {
+    Character,
+    Animation,
+    Wallpaper,
+    General,
+}
+
+impl ImagePurpose {
+    fn scene(self) -> providers::image_gen::ImageScene {
+        use providers::image_gen::ImageScene;
+        match self {
+            Self::Character => ImageScene::Character,
+            Self::Animation => ImageScene::Animation,
+            Self::Wallpaper => ImageScene::Wallpaper,
+            Self::General => ImageScene::General,
+        }
+    }
+}
+
 /// `image_gen` 工具参数。
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ImageGenArgs {
+    /// 生图场景：character/animation保留角色特征；wallpaper/general用于背景或普通生图。
+    /// OpenAI/Azure自动模式据此选择模型；省略时参考图任务用sunburst，纯文本生图用flare。
+    #[serde(default)]
+    pub purpose: Option<ImagePurpose>,
     /// 详细图片提示词（必填）：主题、场景、构图、光线、材质、风格、氛围——不要简短概述。可直接传递思考草稿。
     pub prompt: String,
     /// 文件名短标题；默认 "Image"。
@@ -364,7 +389,7 @@ async fn generate_one_openai_compat(
             creds.provider
         );
     }
-    let config = ProviderConfig {
+    let mut config = ProviderConfig {
         api_key: creds.api_key.clone(),
         base_url: if creds.base_url.trim().is_empty() {
             None
@@ -384,11 +409,18 @@ async fn generate_one_openai_compat(
         .map(|path| load_provider_image_input(ctx, path))
         .collect::<anyhow::Result<Vec<_>>>()?;
     let options = ImageGenConfig {
+        scene: args.purpose.map(ImagePurpose::scene).unwrap_or_default(),
         width: Some(1024),
         height: Some(1024),
         input_images,
         ..ImageGenConfig::default()
     };
+    config.model = providers::image_gen::select_image_model(
+        &creds.provider,
+        &creds.model,
+        options.scene,
+        !options.input_images.is_empty(),
+    );
     let images = providers::dispatch::generate_image_with_options(
         &creds.provider,
         prompt,
@@ -404,7 +436,7 @@ async fn generate_one_openai_compat(
     let rel = save_generated_image(ctx, &img, args.title.as_deref())?;
     let out = format!(
         "图片已生成：{rel}\nprovider={}\nmodel={}\nhint: 可用作 video_gen 的 image / last_frame / reference_images（单路径可放进数组，工作区相对路径）",
-        creds.provider, creds.model
+        creds.provider, config.model
     );
     Ok(super::media_out::media_output(
         out,
@@ -571,8 +603,32 @@ mod arg_tests {
     use super::*;
 
     #[test]
+    fn image_purpose_is_typed_and_routes_without_prompt_guessing() {
+        for (purpose, expected) in [
+            ("character", providers::image_gen::IMAGE_MODEL_CHARACTER),
+            ("animation", providers::image_gen::IMAGE_MODEL_CHARACTER),
+            ("wallpaper", providers::image_gen::IMAGE_MODEL_GENERAL),
+            ("general", providers::image_gen::IMAGE_MODEL_GENERAL),
+        ] {
+            let args: ImageGenArgs =
+                serde_json::from_value(serde_json::json!({"prompt":"test", "purpose":purpose}))
+                    .unwrap();
+            let scene = args.purpose.unwrap().scene();
+            assert_eq!(
+                providers::image_gen::select_image_model("azure", "", scene, true),
+                expected
+            );
+        }
+        assert!(serde_json::from_value::<ImageGenArgs>(
+            serde_json::json!({"prompt":"test", "purpose":"unrecognized"})
+        )
+        .is_err());
+    }
+
+    #[test]
     fn rejects_lowercase_image_size() {
         let a = ImageGenArgs {
+            purpose: None,
             prompt: "x".into(),
             title: None,
             aspect_ratio: None,
@@ -591,6 +647,7 @@ mod arg_tests {
     #[test]
     fn rejects_image_search_without_google_search() {
         let a = ImageGenArgs {
+            purpose: None,
             prompt: "x".into(),
             title: None,
             aspect_ratio: None,
@@ -609,6 +666,7 @@ mod arg_tests {
     #[test]
     fn rejects_both_video_inputs() {
         let a = ImageGenArgs {
+            purpose: None,
             prompt: "x".into(),
             title: None,
             aspect_ratio: None,
@@ -627,6 +685,7 @@ mod arg_tests {
     #[test]
     fn accepts_valid_size_and_thinking() {
         let a = ImageGenArgs {
+            purpose: None,
             prompt: "x".into(),
             title: None,
             aspect_ratio: Some("1:1".into()),
@@ -645,6 +704,7 @@ mod arg_tests {
     #[test]
     fn normalize_lowercase_image_size() {
         let mut a = ImageGenArgs {
+            purpose: None,
             prompt: "cat".into(),
             title: None,
             aspect_ratio: None,
@@ -664,6 +724,7 @@ mod arg_tests {
 
     fn base_args() -> ImageGenArgs {
         ImageGenArgs {
+            purpose: None,
             prompt: "x".into(),
             title: None,
             aspect_ratio: None,

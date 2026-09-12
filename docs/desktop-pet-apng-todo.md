@@ -35,3 +35,19 @@ python3 -m unittest discover -s tools/desktop-pet -p test_export_apng.py
 ```
 
 生成尝试的提示词沿用 `output/imagegen/naitang-entry-20260912/kneading-entry.md`：6个分离全身姿态，首尾为当前中立/目标参考，中间4姿态只逐渐转正头部、降低下巴和放松眼睑，身体、脚、尾巴锚点不动，纯品红背景便于抠图。使用imagegen CLI，无输出图片可交付。
+
+## Sunburst续接（2026-09-12）
+
+- 用户指定默认改为Sunburst/Flare按场景选择，已实现[统一模型策略](image-generation-models.md)。不再默认使用gpt-image-2；固定配置仍优先，本机旧固定选项尚未切成自动。
+- 图片接口恢复了有效响应：同一编辑端点的JSON/HTTP1.1/multipart缺参数探针均返回HTTP400。随后使用独立`openai==2.54.0`环境和明确的`gpt-image-2.5-sunburst`调用已授权CLI，两组编辑成功（约55秒、49秒）。不将该组合结果当成单独SDK根因证明。
+- 原始输出：`output/imagegen/naitang-entry-20260912/kneading-entry-sunburst.png`、`grooming-entry-sunburst.png`；同目录`*-alpha.png`为抠图结果。没有覆盖原素材。
+- `tools/desktop-pet/prepare_entry.py`统一缩放与脚底锚点，仅采用生成图中间4姿态，首尾仍是原始已接受帧。两项测试覆盖原始首尾逐字节保留、脚底一致及拒绝覆盖源目录。
+- 候选预览：`output/qa/naitang-entry-sunburst/{kneading,grooming}/contact.png`、`entry.apng`、`review.json`。均保留`approved=false`，生成成功不自动通过质量验收。
+
+| Before | After / 当前候选 | Why |
+| --- | --- | --- |
+| 中立帧直接跳到动作入口，头部朝向突变 | 两组各补4个真实中间姿态，已做白/深底逐帧检查 | 已有渐进转头/低头变化，不是复制帧或淡化重影 |
+| 生成图中的首尾可能重新绘制角色 | 使用原始中立帧与原始动作目标作为候选首尾 | 不把相似图像冒充原始身份端点 |
+| 单次生成完成就有误应用风险 | 输出只进入候选目录并显式标记未批准 | 必须继续整段APNG衔接、出口、眨眼和所有动作的连续播放验收 |
+
+**Verdict：Block（整体替换暂不通过）。** 新入口已有可审查素材，但与原动作目标的毛发/体积连续性、完整出口和其它动作仍未完成原速/慢放验收。内置库升级与正式桌面替换继续待办；不能用API恢复或转换测试代替这些检查。

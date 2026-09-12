@@ -59,13 +59,13 @@ fn test_image_request_builder() {
 #[test]
 fn test_default_image_models() {
     assert_eq!(default_image_model("google"), "gemini-3.6-flash");
-    assert_eq!(default_image_model("openai"), "gpt-image-2");
-    assert_eq!(default_image_model("azure"), "gpt-image-2");
+    assert_eq!(default_image_model("openai"), "gpt-image-2.5-flare");
+    assert_eq!(default_image_model("azure"), "gpt-image-2.5-flare");
     let openai_req = ImageGenRequest::builder()
         .prompt("cat")
         .provider("openai")
         .build();
-    assert_eq!(openai_req.model, "gpt-image-2");
+    assert_eq!(openai_req.model, "gpt-image-2.5-flare");
 }
 
 #[test]

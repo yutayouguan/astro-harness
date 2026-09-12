@@ -13,7 +13,11 @@ pub use types::credentials::{ImageGenCreds, ImageGenParts, ImageGenTargets, Mode
 /// 使用 Provider 默认模型名构建 ImageGenTargets。
 pub fn image_gen_targets_from_parts(p: ImageGenParts<'_>) -> ImageGenTargets {
     ImageGenTargets::from_parts(p, |provider| {
-        providers::image_gen::default_image_model(provider).to_string()
+        if providers::image_gen::supports_scene_image_model(provider) {
+            String::new()
+        } else {
+            providers::image_gen::default_image_model(provider).to_string()
+        }
     })
 }
 
@@ -418,5 +422,35 @@ mod tests {
         assert_eq!(primary.music_model, "configured-music-model");
         let fallback = targets.fallback.as_ref().expect("fallback credentials");
         assert_eq!(fallback.music_model, "");
+    }
+
+    #[test]
+    fn image_parts_preserve_auto_until_the_tool_knows_its_scene() {
+        let mut parts = ImageGenParts {
+            provider: "azure",
+            model: "",
+            api_key: "test-key",
+            base_url: "test-base",
+            fb_provider: "openai",
+            fb_model: "",
+            fb_api_key: "test-key",
+            fb_base_url: "test-base",
+            video_model: "",
+            music_model: "",
+            tts_model: "",
+            vision_model: "",
+            fb_video_model: "",
+            fb_music_model: "",
+            fb_tts_model: "",
+            fb_vision_model: "",
+        };
+        let auto = image_gen_targets_from_parts(parts);
+        assert_eq!(auto.primary.unwrap().model, "");
+        assert_eq!(auto.fallback.unwrap().model, "");
+        parts.model = "chosen-deployment";
+        assert_eq!(
+            image_gen_targets_from_parts(parts).primary.unwrap().model,
+            "chosen-deployment"
+        );
     }
 }

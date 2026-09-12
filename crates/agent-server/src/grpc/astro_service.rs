@@ -2807,13 +2807,9 @@ impl AstroService for AstroServiceImpl {
                 return;
             }
 
-            let default_model = providers::image_gen::default_image_model(&provider_name);
             let config = ProviderConfig {
-                model: if model.is_empty() {
-                    default_model.to_string()
-                } else {
-                    model
-                },
+                // Preserve auto intent until dispatch has seen reference inputs.
+                model,
                 api_key: {
                     let from_req = api_key.trim().to_string();
                     if !from_req.is_empty() {

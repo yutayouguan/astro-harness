@@ -210,14 +210,14 @@ const MEDIA_MODEL_DEFAULTS: Record<
     vision: "gemini-3.5-flash",
   },
   openai: {
-    image: "gpt-image-2",
+    image: "gpt-image-2.5-flare",
     video: "",
     tts: "gpt-4o-mini-tts",
     music: "",
     vision: "gpt-4o",
   },
   azure: {
-    image: "gpt-image-2",
+    image: "gpt-image-2.5-flare",
     video: "",
     tts: "",
     music: "",
@@ -678,14 +678,17 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
           value: option.value,
           label:
             option.value === ""
-              ? t("providers.mediaDefaultOption", { model: option.modelId })
+              ? capability === "image_gen" &&
+                ["openai", "azure"].includes(selected?.kind ?? "")
+                ? t("providers.imageSceneAutoOption")
+                : t("providers.mediaDefaultOption", { model: option.modelId })
               : option.modelId,
           icon: option.value ? (
             <ModelBrandIcon modelId={option.modelId} />
           ) : undefined,
         }),
       ),
-    [models, t],
+    [models, t, selected?.kind],
   );
 
   useEffect(() => {

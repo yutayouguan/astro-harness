@@ -1378,14 +1378,38 @@ pub(crate) async fn generate_image_data_with_reference(
     height: i32,
     reference: Option<(&[u8], &str, &str)>,
 ) -> Result<GeneratedImageData, String> {
+    generate_image_data_for_scene(
+        prompt,
+        width,
+        height,
+        reference,
+        providers::image_gen::ImageScene::Auto,
+    )
+    .await
+}
+
+pub(crate) async fn generate_image_data_for_scene(
+    prompt: &str,
+    width: i32,
+    height: i32,
+    reference: Option<(&[u8], &str, &str)>,
+    scene: providers::image_gen::ImageScene,
+) -> Result<GeneratedImageData, String> {
     let targets = resolve_image_gen_targets()?;
     let mut errors: Vec<String> = Vec::new();
     for target in &targets {
+        let mut target = target.clone();
+        target.model = providers::image_gen::select_image_model(
+            &target.provider,
+            &target.model,
+            scene,
+            reference.is_some(),
+        );
         let (input_image, input_image_mime, input_image_name) = reference
             .map(|(data, mime, name)| (Some(data), Some(mime), Some(name)))
             .unwrap_or((None, None, None));
         match generate_image_via_grpc(
-            target,
+            &target,
             prompt,
             width,
             height,

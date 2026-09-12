@@ -347,9 +347,13 @@ pub async fn generate_image_with_options(
     let mut cfg = config.clone();
     if !options.model.trim().is_empty() {
         cfg.model = options.model.trim().to_string();
-    } else if cfg.model.trim().is_empty() && !profile.default_image_model.is_empty() {
-        cfg.model = profile.default_image_model.to_string();
     }
+    cfg.model = crate::image_gen::select_image_model(
+        provider,
+        &cfg.model,
+        options.scene,
+        !options.input_images.is_empty(),
+    );
     let client = shared_http_client();
     match mode {
         crate::profile::ImageGenMode::OpenAi => Ok(

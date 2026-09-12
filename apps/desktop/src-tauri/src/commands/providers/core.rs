@@ -981,7 +981,9 @@ fn to_dto(p: &ProviderConfig) -> ProviderConfigDto {
         backend_id: bid.to_string(),
         official_key_url: p.kind.official_key_url().map(str::to_string),
         fallback: p.fallback.clone(),
-        image_model: if p.image_model.is_empty() {
+        image_model: if p.image_model.is_empty()
+            && !providers::image_gen::supports_scene_image_model(&bid)
+        {
             profile.default_image_model.to_string()
         } else {
             p.image_model.clone()
@@ -1437,8 +1439,9 @@ fn default_image_model_for_kind(kind: &ProviderKind) -> Option<&'static str> {
     // 硬编码 fallback — 仅在缓存为空时使用
     match kind {
         ProviderKind::Google => Some("nano-banana-pro-preview"),
-        ProviderKind::Openai => Some("gpt-image-2"),
-        ProviderKind::Azure => Some("gpt-image-2"),
+        ProviderKind::Openai | ProviderKind::Azure => {
+            Some(providers::image_gen::IMAGE_MODEL_GENERAL)
+        }
         ProviderKind::Minimax => Some("image-01"),
         _ => None,
     }
@@ -1594,7 +1597,11 @@ pub fn resolve_image_gen_targets() -> Result<Vec<ImageGenTarget>, String> {
             };
             let target = ImageGenTarget {
                 provider: p.kind.backend_id().to_string(),
-                model: resolve_media_model(&p.image_model, default_image),
+                model: if providers::image_gen::supports_scene_image_model(p.kind.backend_id()) {
+                    p.image_model.trim().to_owned()
+                } else {
+                    resolve_media_model(&p.image_model, default_image)
+                },
                 api_key,
                 base_url: p.endpoint.clone(),
                 display_name: p.display_name.clone(),
@@ -2649,11 +2656,23 @@ mod tests {
     }
 
     #[test]
-    fn azure_image_model_defaults_to_gpt_image_2() {
+    fn azure_image_model_defaults_to_flare() {
         assert_eq!(
             default_image_model_for_kind(&ProviderKind::Azure),
-            Some("gpt-image-2")
+            Some("gpt-image-2.5-flare")
         );
+    }
+
+    #[test]
+    fn image_dto_keeps_auto_blank_and_preserves_manual_selection() {
+        for kind in [ProviderKind::Openai, ProviderKind::Azure] {
+            let mut provider = ProviderConfig::new_disabled(kind);
+            assert_eq!(to_dto(&provider).image_model, "");
+            provider.image_model = "my-sunburst-deployment".into();
+            assert_eq!(to_dto(&provider).image_model, "my-sunburst-deployment");
+        }
+        let google = ProviderConfig::new_disabled(ProviderKind::Google);
+        assert!(!to_dto(&google).image_model.is_empty());
     }
 
     #[test]

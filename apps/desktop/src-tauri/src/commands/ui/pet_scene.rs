@@ -164,11 +164,12 @@ pub async fn generate_pet_scene_wallpaper(
         };
     let prompt = wallpaper_prompt(&description, include_pet);
     let generated = generation
-        .run(crate::commands::chat::generate_image_data_with_reference(
+        .run(crate::commands::chat::generate_image_data_for_scene(
             &prompt,
             1536,
             1024,
             Some((&bytes, mime, "pet-reference.png")),
+            providers::image_gen::ImageScene::Wallpaper,
         ))
         .await?;
     generation.check()?;
