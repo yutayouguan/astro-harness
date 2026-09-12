@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ReactFlow,
@@ -1344,11 +1345,12 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
           </div>
           <div className="loop-editor-tool-group">
             <button
-              className={`loop-icon-btn${showAiAssistant ? " is-active" : ""}`}
+              className={`loop-icon-btn ai-action-button${showAiAssistant ? " is-active" : ""}`}
               title={t("loop.aiAssistant")}
+              aria-label={t("loop.aiAssistant")}
               onClick={() => toggleSidePanel("ai")}
             >
-              <LOOP_ICON_MAP.Sparkles size={16} />
+              <AIActionIcon size={16} />
             </button>
             <button
               className={`loop-icon-btn${showVarsPanel ? " is-active" : ""}`}

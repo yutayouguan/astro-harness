@@ -38,6 +38,7 @@ import { useEvolutionHistory } from "../../hooks/settings/useEvolutionHistory";
 import { useEvolutionAuto } from "../../hooks/settings/useEvolutionAuto";
 import { useSkillCurator } from "../../hooks/settings/useSkillCurator";
 import { useEvolutionSearchProgress } from "../../hooks/settings/useEvolutionSearchProgress";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import { useI18n } from "../../i18n/LocaleContext";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
@@ -1163,7 +1164,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
 
               <article className="aux-task-row evo-compact-row">
                 <div className="aux-task-icon">
-                  <Sparkles size={18} />
+                  <AIActionIcon size={18} variant="search" />
                 </div>
                 <div className="aux-task-main">
                   <div className="aux-task-titleline">
@@ -1288,7 +1289,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 onClick={() => void runEvolution().then(() => reloadHistory())}
                 disabled={running || !settings?.enabled}
               >
-                <Play size={15} />
+                <AIActionIcon size={15} />
                 {running ? t("evo.running") : t("evo.run")}
               </button>
               <button
@@ -1303,7 +1304,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                 disabled={running || !settings?.enabled}
                 title={t("evo.searchRunHint")}
               >
-                <Dna size={15} />
+                <AIActionIcon size={15} variant="search" />
                 {running && runMode === "search"
                   ? t("evo.runningSearch")
                   : t("evo.searchRun")}
@@ -2386,7 +2387,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                                 setSection("run");
                               }}
                             >
-                              <Dna size={15} />
+                              <AIActionIcon size={15} variant="search" />
                               {t("evo.curatorEvolve")}
                             </button>
                           </div>
@@ -2493,7 +2494,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                     dspyBusy || !dspySkill.trim() || !dspyStatus?.enabled
                   }
                 >
-                  <Dna size={15} />
+                  <AIActionIcon size={15} variant="search" />
                   {dspyBusy ? t("evo.running") : t("evo.dspyRun")}
                 </button>
               </div>

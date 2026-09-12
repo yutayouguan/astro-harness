@@ -128,3 +128,4 @@
 @import "./materials/soft.css" layer(overrides);
 @import "./materials/soft-controls.css" layer(overrides);
 @import "./materials/soft-focus.css" layer(overrides);
+@import "./components/ai-action-icon.css" layer(overrides);

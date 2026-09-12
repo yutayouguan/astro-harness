@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Variable, X, Sparkles, Loader2 } from "lucide-react";
+import { FolderOpen, Variable, X, Loader2 } from "lucide-react";
+import { AIActionIcon } from "../../icons/AIActionIcon";
 import { Eye as EyeData, EyeOff as EyeOffData } from "lucide";
 import { MorphToggleIcon } from "../../icons/MorphIcon";
 import type { UpstreamOutput, MediaType } from "./upstreamOutputs";
@@ -292,7 +293,7 @@ export function AiAssistField({
           {loading ? (
             <Loader2 size={13} className="loop-spin" />
           ) : (
-            <Sparkles size={13} />
+            <AIActionIcon size={13} />
           )}
           <span>{value.trim() ? "润色" : "AI 生成"}</span>
         </button>

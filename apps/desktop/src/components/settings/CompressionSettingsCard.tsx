@@ -1,4 +1,5 @@
 /** 偏好设置：上下文卫生（压缩阈值与保护参数）。 */
+import { AIActionIcon } from "../icons/AIActionIcon";
 import {
   useCallback,
   useEffect,
@@ -26,7 +27,6 @@ import {
   ShieldCheck,
   ShieldPlus,
   SlidersHorizontal,
-  Sparkles,
   TrendingDown,
   TriangleAlert,
   Wrench,
@@ -432,7 +432,7 @@ export default function CompressionSettingsCard({
           <>
             <label className="prefs-toggle-row prefs-context-enable">
               <span className="prefs-toggle-icon" aria-hidden>
-                <Sparkles size={15} strokeWidth={2.25} />
+                <AIActionIcon size={15} />
               </span>
               <span className="prefs-toggle-text">
                 <span className="prefs-toggle-label">

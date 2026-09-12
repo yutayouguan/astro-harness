@@ -3,14 +3,13 @@
 import { useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Sparkles,
   Send,
   X,
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Wand2,
 } from "lucide-react";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import { NODE_REGISTRY } from "./loopTypes";
 
 interface AiGenNode {
@@ -113,7 +112,7 @@ export default function LoopAiAssistant({
     <div className="loop-ai-assistant">
       {/* Header */}
       <div className="loop-ai-header">
-        <Sparkles size={16} />
+        <AIActionIcon size={16} />
         <span>AI 助手</span>
         <button
           className="loop-icon-btn"
@@ -129,7 +128,7 @@ export default function LoopAiAssistant({
         {messages.length === 0 && (
           <div className="loop-ai-welcome">
             <div className="loop-ai-welcome-icon">
-              <Wand2 size={24} />
+              <AIActionIcon size={24} />
             </div>
             <p className="loop-ai-welcome-title">描述你想创建的工作流</p>
             <p className="loop-ai-welcome-hint">
@@ -190,7 +189,7 @@ export default function LoopAiAssistant({
                       className="loop-btn loop-btn--primary loop-ai-apply-btn"
                       onClick={() => handleApply(msg.result!)}
                     >
-                      <Sparkles size={13} />
+                      <AIActionIcon size={13} />
                       <span>应用到画布</span>
                     </button>
                   </div>

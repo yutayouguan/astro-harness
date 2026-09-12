@@ -30,6 +30,7 @@ import { useActiveAgent } from "../../hooks/app/useActiveAgent";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import MotionSwitch from "../ui/MotionSwitch";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import AgentAvatar from "../agents/AgentAvatar";
 import { EmptyIllustration } from "../../illustrations";
 import type { AgentInfo } from "../../types/agent";
@@ -1237,6 +1238,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                   disabled={dreamRunning}
                   onClick={() => void enableDreaming()}
                 >
+                  <AIActionIcon size={16} />
                   {t("memory.dream.enable")}
                 </button>
               </section>
@@ -1284,6 +1286,7 @@ export default function MemoryPanel({ onClose, sessionId = null }: Props) {
                           : t("memory.dream.runNow")
                       }
                     >
+                      <AIActionIcon size={16} />
                       {dreamRunning
                         ? t("memory.dream.runningShort")
                         : t("memory.dream.runNow")}

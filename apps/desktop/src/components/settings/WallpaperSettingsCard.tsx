@@ -9,10 +9,10 @@ import {
   MonitorUp,
   Palette,
   Plus,
-  Sparkles,
   Upload,
   X,
 } from "lucide-react";
+import { AIActionIcon } from "../icons/AIActionIcon";
 
 import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import { useTheme } from "../../hooks/app/useTheme";
@@ -237,7 +237,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                     data-tone={tone}
                     aria-hidden
                   >
-                    <Sparkles size={20} />
+                    <AIActionIcon size={20} />
                   </span>
                   <div>
                     <h2 id="wallpaper-dialog-title">
@@ -302,7 +302,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                     disabled={!prompt.trim()}
                     onClick={() => void generate()}
                   >
-                    <Sparkles size={15} />
+                    <AIActionIcon size={15} />
                     {t("prefs.wallpaper.generateAndApply")}
                   </button>
                 </footer>
@@ -462,7 +462,7 @@ export default function WallpaperSettingsCard({ controller, tone }: Props) {
                 {busy === "generate" ? (
                   <Loader2 size={15} className="wallpaper-spinner" />
                 ) : (
-                  <Sparkles size={15} />
+                  <AIActionIcon size={15} />
                 )}
                 {t(
                   busy === "generate"

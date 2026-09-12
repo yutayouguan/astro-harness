@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { scenesForPet, type PetRecord } from "../../lib/ui/petLibrary";
 import type { PetScene } from "../../lib/ui/petScene";
@@ -319,6 +320,7 @@ export default function PetSceneLibrary({
               disabled={disabled || !description.trim()}
               onClick={() => void run(() => generate(selected.id))}
             >
+              <AIActionIcon size={16} />
               {zh ? "生成 / 重试壁纸" : "Generate / retry wallpaper"}
             </button>
           </div>

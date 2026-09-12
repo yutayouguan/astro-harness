@@ -1,0 +1,102 @@
+.ai-action-icon {
+  --ai-icon-cyan: #0088ba;
+  --ai-icon-blue: #5969d7;
+  --ai-icon-purple: #a058c9;
+  --ai-icon-pink: #c95996;
+  --ai-icon-plate: #f7f8fa;
+  --ai-icon-edge: rgba(255, 255, 255, 0.95);
+
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+html[data-theme="dark"] .ai-action-icon {
+  --ai-icon-cyan: #50c5ed;
+  --ai-icon-blue: #8d9bff;
+  --ai-icon-purple: #c990f0;
+  --ai-icon-pink: #f29bc8;
+  --ai-icon-plate: #2a2e35;
+  --ai-icon-edge: rgba(255, 255, 255, 0.18);
+}
+
+.ai-icon-stop-cyan {
+  stop-color: var(--ai-icon-cyan);
+}
+.ai-icon-stop-blue {
+  stop-color: var(--ai-icon-blue);
+}
+.ai-icon-stop-purple {
+  stop-color: var(--ai-icon-purple);
+}
+.ai-icon-stop-pink {
+  stop-color: var(--ai-icon-pink);
+}
+.ai-icon-plate {
+  fill: var(--ai-icon-plate);
+  stroke: var(--ai-icon-edge);
+  stroke-width: 0.8;
+}
+
+.ai-action-icon .ai-icon-fill {
+  stroke: none;
+}
+
+.mem-cta > .ai-action-icon {
+  margin-inline-end: 6px;
+}
+
+/* A small neutral disc keeps the multicolor glyph legible on filled CTAs,
+ * without enlarging the icon's layout box or recoloring the button. */
+:is(
+  .wallpaper-primary-button,
+  .desktop-pet-generate,
+  .loop-btn--primary,
+  .mem-cta,
+  .aux-action:not(.aux-action-ghost)
+) > svg.ai-action-icon {
+  background: var(--ai-icon-plate);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--ai-icon-plate);
+}
+
+/* Only explicitly marked icon-only AI launchers receive the circular pedestal. */
+.ai-action-button {
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--soft-surface, var(--surface-panel-background));
+  border: 1px solid var(--soft-edge, var(--glass-edge));
+  box-shadow: var(--soft-control-shadow, var(--header-chip-shadow));
+}
+
+.ai-action-button:hover:not(:disabled) {
+  background: var(--soft-hover, var(--surface-panel-hover));
+}
+
+.ai-action-button.is-active {
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--accent)) 12%,
+    var(--soft-surface, var(--surface-panel-background))
+  );
+  border-color: var(--tone, var(--accent));
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  html[data-theme] .ai-action-icon,
+  .ai-action-icon {
+    --ai-icon-plate: Canvas;
+    color: CanvasText;
+  }
+  .ai-action-icon .ai-icon-stroke {
+    stroke: currentColor;
+  }
+  .ai-action-icon .ai-icon-fill {
+    fill: currentColor;
+  }
+  .ai-action-icon .ai-icon-plate {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+}

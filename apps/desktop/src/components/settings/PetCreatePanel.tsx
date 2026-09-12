@@ -2,9 +2,9 @@ import {
   FolderInput,
   ImagePlus,
   Loader2,
-  Sparkles,
   Upload,
 } from "lucide-react";
+import { AIActionIcon } from "../icons/AIActionIcon";
 import { invoke } from "@tauri-apps/api/core";
 import { useId, useRef, useState } from "react";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
@@ -403,7 +403,7 @@ export default function PetCreatePanel({
               {phase === "generate" || phase === "wallpaper" ? (
                 <Loader2 className="desktop-pet-spinner" size={17} />
               ) : (
-                <Sparkles size={17} />
+                <AIActionIcon size={17} />
               )}
               {phase === "wallpaper"
                 ? zh
