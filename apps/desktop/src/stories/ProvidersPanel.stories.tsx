@@ -29,7 +29,7 @@ const provider = (
 const meta = {
   title: "Settings/ProvidersPanel",
   component: ProvidersPanel,
-  beforeEach: (context) => {
+  beforeEach: (context: { id: string }) => {
     let state: ProvidersStateDto = {
       providers: [
         provider(

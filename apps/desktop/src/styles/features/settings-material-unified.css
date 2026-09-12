@@ -27,34 +27,35 @@
   );
   --settings-divider: color-mix(in srgb, var(--ink) 8%, transparent);
   --settings-inset-border: color-mix(in srgb, var(--ink) 10%, transparent);
-  --settings-inset-background: color-mix(
-    in srgb,
-    var(--surface-panel-background) 68%,
-    transparent
+  --settings-inset-background: var(
+    --material-inset-background,
+    color-mix(in srgb, var(--surface-panel-background) 68%, transparent)
   );
-  --settings-inset-background-strong: color-mix(
-    in srgb,
-    var(--surface-panel-background) 84%,
-    transparent
+  --settings-inset-background-strong: var(
+    --material-inset-background-strong,
+    color-mix(in srgb, var(--surface-panel-background) 84%, transparent)
   );
   --settings-inset-hover: color-mix(
     in srgb,
     var(--tone-soft) 24%,
     var(--settings-inset-background-strong)
   );
-  --settings-selected-border: color-mix(
-    in srgb,
-    var(--tone) 34%,
-    var(--settings-inset-border)
+  --settings-selected-border: var(
+    --material-selected-border,
+    color-mix(in srgb, var(--tone) 34%, var(--settings-inset-border))
   );
-  --settings-selected-background: color-mix(
-    in srgb,
-    var(--tone-soft) 58%,
-    var(--surface-panel-background)
+  --settings-selected-background: var(
+    --material-selected-background,
+    color-mix(in srgb, var(--tone-soft) 58%, var(--surface-panel-background))
   );
   --settings-inset-shadow: var(
     --material-inset-shadow,
     inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent)
+  );
+  --settings-selected-shadow: var(
+    --material-selected-shadow,
+    inset 0 0 0 1px color-mix(in srgb, var(--tone) 13%, transparent),
+    var(--settings-inset-shadow)
   );
 }
 
@@ -282,9 +283,7 @@
 ) {
   border-color: var(--settings-selected-border);
   background: var(--settings-selected-background);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tone) 13%, transparent),
-    var(--settings-inset-shadow);
+  box-shadow: var(--settings-selected-shadow);
 }
 
 .prefs-page.is-embedded .morphicon-selection-indicator {
