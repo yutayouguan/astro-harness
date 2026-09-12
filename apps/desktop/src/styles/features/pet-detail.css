@@ -176,8 +176,11 @@
   color: var(--color-text-secondary);
 }
 .pet-library.pet-detail-view .pet-motion-settings {
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  width: 100%;
+  max-width: 960px;
+  box-sizing: border-box;
+  gap: 16px;
   padding: 0;
   min-width: 0;
   background: transparent;
@@ -188,10 +191,10 @@
 .pet-library.pet-detail-view .pet-motion-preview {
   min-width: 0;
   box-sizing: border-box;
-  padding: 18px;
+  padding: 14px;
   background: var(--color-bg-subtle);
   border: 1px solid var(--color-border);
-  gap: 14px;
+  gap: 10px;
 }
 .pet-library.pet-detail-view .pet-motion-preview header {
   width: 100%;
@@ -202,15 +205,24 @@
 }
 .pet-library.pet-detail-view .pet-motion-preview header p {
   margin: 5px 0 0;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.5;
   color: var(--color-text-secondary);
 }
 .pet-library.pet-detail-view .pet-motion-portrait {
-  width: min(100%, 180px);
+  width: min(100%, 144px);
 }
 .pet-library.pet-detail-view .pet-motion-preview .pet-scene-actions {
   margin: 0;
   gap: 6px;
+}
+.pet-library.pet-detail-view .pet-motion-preview .pet-scene-actions button {
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 18px;
 }
 .pet-library.pet-detail-view .pet-motion-preview button[aria-pressed="true"] {
   border-color: var(--accent);
@@ -219,19 +231,32 @@
 .pet-library.pet-detail-view .pet-motion-preferences {
   min-width: 0;
   box-sizing: border-box;
-  padding: 18px;
+  padding: 16px;
   background: var(--pet-material-surface, var(--settings-inset-background));
   border: 1px solid var(--pet-material-border, var(--settings-inset-border));
   border-radius: 14px;
-  gap: 12px;
+  gap: 8px;
+}
+.pet-library.pet-detail-view .pet-motion-preferences .desktop-pet-card-head h3 {
+  font-size: 14px;
+}
+.pet-library.pet-detail-view .pet-motion-preferences .desktop-pet-card-head p,
+.pet-library.pet-detail-view .pet-motion-preferences > .desktop-pet-model {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.pet-library.pet-detail-view .pet-motion-preferences > .desktop-pet-model {
+  margin: 0;
 }
 .pet-library.pet-detail-view .pet-defaults-editor {
   min-width: 0;
   gap: 0;
 }
 .pet-library.pet-detail-view .desktop-pet-size-row {
-  padding: 14px 0;
-  grid-template-columns: auto minmax(100px, 1fr) 50px;
+  padding: 8px 0;
+  grid-template-columns: auto minmax(0, 1fr) 40px;
+  gap: 8px;
+  font-size: 12px;
 }
 .pet-library.pet-detail-view .desktop-pet-size-row input {
   min-width: 0;
@@ -241,16 +266,16 @@
   margin: 0 0 4px;
   min-width: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
 }
 .pet-library.pet-detail-view .pet-detail-preference-row,
 .pet-library.pet-detail-view .pet-detail-interval {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  gap: 12px;
   align-items: center;
-  padding: 13px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--settings-divider, var(--color-border));
 }
 .pet-library.pet-detail-view .pet-detail-preference-row label {
@@ -259,23 +284,41 @@
 .pet-library.pet-detail-view .pet-detail-preference-row strong,
 .pet-library.pet-detail-view .pet-detail-interval strong {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-text);
 }
 .pet-library.pet-detail-view .pet-detail-preference-row small,
 .pet-library.pet-detail-view .pet-detail-interval small {
   display: block;
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--color-text-secondary);
 }
 .pet-library.pet-detail-view .pet-detail-interval select {
-  height: 34px;
-  width: 100px;
+  height: 28px;
+  width: 90px;
+  padding: 3px 8px;
   box-sizing: border-box;
-  font-size: 13px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+.pet-library.pet-detail-view .pet-detail-preference-row .prefs-switch {
+  width: 38px;
+  height: 24px;
+}
+.pet-library.pet-detail-view .pet-detail-preference-row .prefs-switch-thumb {
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+}
+.pet-library.pet-detail-view
+  .pet-detail-preference-row
+  .prefs-switch[aria-checked="true"]
+  .prefs-switch-thumb {
+  transform: translateX(14px);
 }
 .pet-library.pet-detail-view .pet-detail-placement {
   display: flex;
@@ -283,18 +326,20 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 0;
+  padding: 8px 0;
 }
 .pet-library.pet-detail-view .pet-detail-placement p {
   margin: 0;
+  font-size: 11px;
   line-height: 1.5;
 }
 .pet-library.pet-detail-view .pet-detail-clear-position {
+  min-height: 28px;
   padding: 4px 0;
   border: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -304,22 +349,23 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-top: 12px;
+  gap: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--settings-divider, var(--color-border));
 }
 .pet-library.pet-detail-view .pet-detail-save-row span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-secondary);
 }
 .pet-library.pet-detail-view .pet-detail-save-row button {
-  min-height: 36px;
-  padding: 6px 14px;
+  min-height: 28px;
+  padding: 4px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 9px;
+  border-radius: 7px;
   background: color-mix(in srgb, var(--accent) 12%, var(--color-bg-subtle));
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -343,9 +389,6 @@
   .pet-library.pet-detail-view .pet-detail-actions {
     grid-column: 1 / -1;
     justify-content: flex-end;
-  }
-  .pet-library.pet-detail-view .pet-motion-portrait {
-    width: 150px;
   }
   .pet-library.pet-detail-view .pet-detail-name-editor label {
     flex-basis: 100%;
