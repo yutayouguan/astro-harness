@@ -4,8 +4,26 @@ import {
   acceptRoamingFrame,
   roamingInterval,
   supportsPetRoaming,
+  withGroundPlacement,
   type PetRoamingFrame,
 } from "./petRoaming.ts";
+import { DEFAULT_PET_PREFERENCES } from "./petPreferences.ts";
+
+test("ground placement is saved into the draft without replacing other unsaved preferences", () => {
+  const draft = { scale: 0.2, behavior: { ...DEFAULT_PET_PREFERENCES, activityIntervalSecs: 90, quietMode: true } };
+  const position = { monitor: "second", monitorX: -1000, monitorY: 0, x: 0.6, y: 1 };
+  const placed = { ...DEFAULT_PET_PREFERENCES, position, roamingEnabled: true };
+  const result = withGroundPlacement(draft, placed);
+  assert.equal(result.scale, 0.2);
+  assert.equal(result.behavior.activityIntervalSecs, 90);
+  assert.equal(result.behavior.quietMode, true);
+  assert.equal(result.behavior.roamingEnabled, true);
+  assert.deepEqual(result.behavior.position, position);
+  assert.notEqual(result.behavior.position, position);
+  assert.equal(draft.behavior.position, null);
+  assert.throws(() => withGroundPlacement(draft, undefined));
+  assert.throws(() => withGroundPlacement(draft, { ...placed, roamingEnabled: false }));
+});
 
 test("late native frames cannot revive a cancelled walk or reverse its phase", () => {
   const active: PetRoamingFrame = {

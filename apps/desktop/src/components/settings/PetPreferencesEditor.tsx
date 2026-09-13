@@ -2,8 +2,10 @@ import { useEffect, useId, useState } from "react";
 import {
   DESKTOP_PET_SCALE,
   petScalePercent,
+  type DesktopPetState,
 } from "../../lib/ui/desktopPetState";
 import type { PetDefaults } from "../../lib/ui/petLibrary";
+import { withGroundPlacement } from "../../lib/ui/petRoaming";
 
 export default function PetPreferencesEditor({
   value,
@@ -22,7 +24,7 @@ export default function PetPreferencesEditor({
   liveScale?: number;
   onApplyScale?: (scale: number) => Promise<unknown>;
   roamingSupported?: boolean;
-  onPlaceOnGround?: () => Promise<unknown>;
+  onPlaceOnGround?: () => Promise<DesktopPetState>;
 }) {
   const [draft, setDraft] = useState(value);
   const fieldId = useId();
@@ -202,12 +204,7 @@ export default function PetPreferencesEditor({
             setSaving(true);
             setSaveError("");
             void onPlaceOnGround()
-              .then(() =>
-                change({
-                  ...draft,
-                  behavior: { ...draft.behavior, roamingEnabled: true },
-                }),
-              )
+              .then((state) => change(withGroundPlacement(draft, state.preferences)))
               .catch((error) => setSaveError(String(error)))
               .finally(() => setSaving(false));
           }}

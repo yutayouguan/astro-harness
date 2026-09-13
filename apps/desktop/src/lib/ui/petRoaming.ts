@@ -1,4 +1,21 @@
 import type { PetMotionClip, PetMotionClips } from "./petMotionClip";
+import type { PetDefaults } from "./petLibrary";
+import type { PetPreferences } from "./petPreferences";
+
+/** Capture only the confirmed ground anchor; preserve other unsaved defaults. */
+export function withGroundPlacement(draft: PetDefaults, preferences: PetPreferences | undefined): PetDefaults {
+  if (!preferences?.position || !preferences.roamingEnabled) {
+    throw new Error("未能确认底部位置，请重试 / Ground placement was not confirmed");
+  }
+  return {
+    ...draft,
+    behavior: {
+      ...draft.behavior,
+      position: { ...preferences.position },
+      roamingEnabled: true,
+    },
+  };
+}
 export type PetRoamingFrame = {
   generation: number;
   active: boolean;
