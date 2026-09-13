@@ -506,7 +506,7 @@
 .ambience-wallpaper-display .ambience-strength {
   gap: 6px;
 }
-.ambience-wallpaper-range {
+.ambience-range {
   appearance: none;
   -webkit-appearance: none;
   height: 28px;
@@ -517,7 +517,7 @@
   touch-action: pan-y;
   --range-track: color-mix(in srgb, var(--ink) 12%, transparent);
 }
-.ambience-wallpaper-range::-webkit-slider-runnable-track {
+.ambience-range::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
   background: linear-gradient(
@@ -526,7 +526,7 @@
     var(--range-track) var(--range-progress)
   );
 }
-.ambience-wallpaper-range::-moz-range-track {
+.ambience-range::-moz-range-track {
   height: 6px;
   border-radius: 999px;
   background: linear-gradient(
@@ -535,7 +535,7 @@
     var(--range-track) var(--range-progress)
   );
 }
-.ambience-wallpaper-range::-webkit-slider-thumb {
+.ambience-range::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
   box-sizing: border-box;
@@ -547,7 +547,7 @@
   background: var(--soft-surface, var(--color-bg-raised));
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
 }
-.ambience-wallpaper-range::-moz-range-thumb {
+.ambience-range::-moz-range-thumb {
   box-sizing: border-box;
   width: 18px;
   height: 18px;
@@ -564,16 +564,16 @@
   line-height: 1.4;
 }
 @media (forced-colors: active) {
-  .ambience-wallpaper-range {
+  .ambience-range {
     forced-color-adjust: auto;
     --tone: Highlight;
     --range-track: GrayText;
   }
-  .ambience-wallpaper-range::-webkit-slider-thumb {
+  .ambience-range::-webkit-slider-thumb {
     border-color: ButtonText;
     background: ButtonFace;
   }
-  .ambience-wallpaper-range::-moz-range-thumb {
+  .ambience-range::-moz-range-thumb {
     border-color: ButtonText;
     background: ButtonFace;
   }

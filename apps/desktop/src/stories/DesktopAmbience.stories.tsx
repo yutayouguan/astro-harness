@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import DesktopAmbienceButton from "../components/ui/DesktopAmbienceButton";
@@ -30,6 +30,15 @@ import atlas from "../assets/pets/naitang/spritesheet.webp";
 import "../styles/features/shell/layout/sidebar-footer-actions.css";
 
 function Harness() {
+  const [appliedScale, setAppliedScale] = useState(
+    EMPTY_DESKTOP_PET_STATE.scale,
+  );
+  useEffect(() => {
+    const receive = (event: Event) =>
+      setAppliedScale((event as CustomEvent<number>).detail);
+    window.addEventListener("ambience-fixture-scale", receive);
+    return () => window.removeEventListener("ambience-fixture-scale", receive);
+  }, []);
   const { resolved } = useTheme();
   const [managed, setManaged] = useState("");
   const wallpaper = useWallpaper();
@@ -97,6 +106,10 @@ function Harness() {
         <>
           <h2>桌面氛围</h2>
           <p>测试环境 · 所有操作均为本地模拟，不调用模型。</p>
+          <p>
+            模拟原生大小：
+            <output data-testid="native-pet-scale">{appliedScale}</output>
+          </p>
           <output data-testid="manage-target">{managed}</output>
           {managed ? (
             <button type="button" onClick={() => setManaged("")}>
@@ -239,10 +252,15 @@ const meta = {
         return structuredClone(state);
       if (command === "get_pet_scenes") return structuredClone(scenes);
       if (command === "set_desktop_pet_scale") {
+        if (context.name === "Slow Scale")
+          await new Promise((resolve) => setTimeout(resolve, 180));
         if (context.name === "Failure") throw new Error("测试：大小调整失败");
         if (args.petId !== state.activePetId)
           throw new Error("Current pet changed");
         state = { ...state, scale: args.scale, revision: state.revision + 1 };
+        window.dispatchEvent(
+          new CustomEvent("ambience-fixture-scale", { detail: state.scale }),
+        );
         return structuredClone(state);
       }
       if (command === "get_active_ui_style") return structuredClone(style);
@@ -356,3 +374,4 @@ export const Failure: Story = {};
 export const LongLabels: Story = {};
 export const NoPet: Story = {};
 export const SlowSave: Story = {};
+export const SlowScale: Story = {};

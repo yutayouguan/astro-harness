@@ -26,19 +26,22 @@ test("size undo rejects another pet or an externally changed size", () => {
   assert.deepEqual(session.getSnapshot().undo, undo);
 });
 
-test("pet range shares native bounds and commits at gesture boundaries, not each tick", async () => {
+test("pet range streams input updates without stealing native thumb dragging", async () => {
   const source = await read("../../components/ui/AmbiencePetScaleControl.tsx");
   for (const field of ["min", "max", "step"])
     assert.ok(source.includes(field + "={DESKTOP_PET_SCALE." + field + "}"));
   assert.match(source, /aria-valuetext=\{petScalePercent\(draft\)/);
   assert.match(
     source,
-    /onChange=\{[^}]*changeDraft\(Number\(event.currentTarget.value\)\)/,
+    /onChange=\{[^}]*change\(Number\(event.currentTarget.value\)\)/,
   );
-  assert.match(source, /onPointerUp=\{\(\) => void commit\(\)\}/);
-  assert.match(source, /onBlur=\{\(\) => void commit\(\)\}/);
-  assert.match(source, /setPointerCapture/);
-  assert.match(source, /pending.current/);
+  assert.match(source, /queue.enqueue\(\{ petId, scale: value, gestureId \}\)/);
+  assert.doesNotMatch(
+    source,
+    /setPointerCapture|onPointerUp=|disabled \|\| saving/,
+  );
+  assert.match(source, /window.addEventListener\("pointerup", finish\)/);
+  assert.match(source, /disabled=\{!petId \|\| \(disabled && !saving\)\}/);
 });
 
 test("slider targets the active desktop pet and a keyed remount discards another pet's draft", async () => {

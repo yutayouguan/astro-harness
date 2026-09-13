@@ -1,5 +1,28 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("pet size changes natively before mouse release and one undo restores the gesture", async ({ page }) => {
+  const { dialog } = await open(page, "slow-scale");
+  await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const slider = dialog.getByRole("slider", { name: "桌宠大小", exact: true });
+  await slider.scrollIntoViewIfNeeded();
+  const box = (await slider.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width - 9, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, y, { steps: 6 });
+  const intermediate = await slider.inputValue();
+  expect(Number(intermediate)).toBeLessThan(0.3);
+  await expect(page.getByTestId("native-pet-scale")).toHaveText(intermediate);
+  await expect(slider).toBeEnabled();
+  await page.mouse.move(box.x + 9, y, { steps: 8 });
+  await expect(slider).toHaveValue("0.15");
+  await page.mouse.up();
+  await expect(page.getByTestId("native-pet-scale")).toHaveText("0.15");
+  await dialog.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(slider).toHaveValue("0.3");
+  await expect(page.getByTestId("native-pet-scale")).toHaveText("0.3");
+});
+
 test("wallpaper slider drags across intermediate values and stays interactive during save", async ({ page }) => {
   const { dialog } = await open(page, "slow-save");
   await dialog.getByText("显示调整", { exact: true }).click();
@@ -109,7 +132,7 @@ test("tab positions stay stable, pet tiles align and actions remain outside the 
   expect(box!.height).toBeLessThanOrEqual(480 * 0.75 + 1);
 });
 
-test("pet size targets the current pet, persists on release and supports undo", async ({ page }) => {
+test("pet size targets the current pet, updates live and supports undo", async ({ page }) => {
   const { dialog } = await open(page);
   await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
   const slider = dialog.getByRole("slider", { name: "桌宠大小", exact: true });

@@ -163,7 +163,7 @@ export default function AmbienceWallpaperDisplay({
                 <output>{text}</output>
               </span>
               <input
-                className="ambience-wallpaper-range"
+                className="ambience-range"
                 style={
                   {
                     "--range-progress":

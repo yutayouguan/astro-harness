@@ -10,6 +10,10 @@ import {
 } from "../../lib/ui/ambienceSession";
 import { useTheme } from "./useTheme";
 import {
+  petScaleGestureUndo,
+  type PetScaleGesture,
+} from "../../lib/ui/livePetScale";
+import {
   wallpaperDisplayValue,
   type WallpaperDisplay,
 } from "../../lib/ui/wallpaperDisplay";
@@ -73,6 +77,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const appearanceLive = useRef(appearance);
   appearanceLive.current = appearance;
   const appearanceGesture = useRef<AppearanceUndoSnapshot | null>(null);
+  const petScaleGesture = useRef<PetScaleGesture | null>(null);
   const pet = useDesktopPetState(open);
   const shufflePrefs = useAmbienceShufflePrefs();
   const [scenes, setScenes] = useState<PetScene[]>([]);
@@ -433,7 +438,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
         await p.activeStyle.refresh();
       });
     });
-  const setPetScale = (petId: string, scale: number) =>
+  const setPetScale = (petId: string, scale: number, gestureId: string) =>
     guard(async () => {
       const current = await invoke<DesktopPetState>("get_desktop_pet_state");
       pet.accept(current);
@@ -446,12 +451,19 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
           petId,
           scale,
         });
-        setUndo({
-          kind: "pet-scale",
-          petId,
-          before: current.scale,
-          expected: next.scale,
-        });
+        if (next.activePetId !== petId)
+          throw new Error("当前桌宠已切换，请重试");
+        const previous = petScaleGesture.current;
+        const checkpoint = petScaleGestureUndo(
+          previous?.undo === ambienceSession.getSnapshot().undo
+            ? previous
+            : null,
+          { petId, scale, gestureId },
+          current,
+          next.scale,
+        );
+        petScaleGesture.current = checkpoint;
+        setUndo(checkpoint.undo);
       } catch (cause) {
         // The native resize can fail after persistence; display its actual value.
         try {
