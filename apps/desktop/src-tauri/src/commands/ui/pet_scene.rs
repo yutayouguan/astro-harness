@@ -147,7 +147,15 @@ pub async fn generate_pet_scene_wallpaper(
         let frame = reader.decode().map_err(|e| e.to_string())?.crop_imm(
             0,
             0,
-            types::DESKTOP_PET_V2_CELL_WIDTH,
+            if scene.pet.sprite_version_number == Some(3) {
+                scene
+                    .pet
+                    .motion_clips
+                    .get("idle")
+                    .map_or(types::DESKTOP_PET_V2_CELL_WIDTH, |clip| clip.frame_width)
+            } else {
+                types::DESKTOP_PET_V2_CELL_WIDTH
+            },
             types::DESKTOP_PET_V2_CELL_HEIGHT,
         );
         let mut png = Cursor::new(Vec::new());

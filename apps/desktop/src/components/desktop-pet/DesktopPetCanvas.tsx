@@ -36,13 +36,28 @@ export type DesktopPetCanvasProps = {
   className?: string;
   label?: string;
   reducedMotion?: boolean;
+  paused?: boolean;
+  onMotionEnd?: () => void;
+  externalElapsedMs?: number;
+  startAtMs?: number;
+  onReady?: () => void;
+  onLoadError?: () => void;
   clip?: "grooming";
 };
 
 export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
+  const displayed = useRef(props);
+  if (!props.paused || displayed.current.src !== props.src) displayed.current = props;
+  const held = props.paused ? {
+    ...props, state: displayed.current.state, motionName: displayed.current.motionName,
+    motionClips: displayed.current.motionClips, lookAngle: displayed.current.lookAngle,
+    clip: displayed.current.clip,
+    externalElapsedMs: displayed.current.externalElapsedMs,
+    startAtMs: displayed.current.startAtMs,
+  } : props;
   return /\.apng(?:[?#]|$)/i.test(props.src)
-    ? <DesktopPetApngCanvas {...props} />
-    : <LegacyDesktopPetCanvas {...props} />;
+    ? <DesktopPetApngCanvas {...held} />
+    : <LegacyDesktopPetCanvas {...held} />;
 }
 
 function LegacyDesktopPetCanvas({

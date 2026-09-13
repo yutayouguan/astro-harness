@@ -1,6 +1,13 @@
 import parseAPNG from "apng-js";
+import { motionSequence, type PetMotionClip } from "./petMotionClip.ts";
 
-export type PetApng = { frames: HTMLCanvasElement[]; durations: number[] };
+export type PetApng = {
+  frames: HTMLCanvasElement[];
+  durations: number[];
+  frameCount: number;
+  width: number;
+  height: number;
+};
 
 /** Check bounds before handing untrusted chunks to the third-party parser. */
 export function inspectPetApng(bytes: ArrayBuffer) {
@@ -29,8 +36,8 @@ export function inspectPetApng(bytes: ArrayBuffer) {
       if (offset !== 8 || size !== 13) throw new Error("Invalid PNG header");
       width = view.getUint32(offset + 8);
       height = view.getUint32(offset + 12);
-      if (width !== 192 || height !== 208)
-        throw new Error("Pet APNG must be 192x208");
+      if (![192, 256].includes(width) || height !== 208)
+        throw new Error("Pet APNG must use a 192/256x208 canvas");
     } else if (type === 0x6163544c) {
       if (size !== 8 || frames || controls)
         throw new Error("Invalid animation control");
@@ -69,29 +76,51 @@ export function apngFrameAt(
   durations: readonly number[],
   elapsed: number,
   repeat: boolean,
+  clip?: PetMotionClip,
+  holdBody = false,
 ) {
-  const total = durations.reduce((sum, time) => sum + time, 0);
+  if (holdBody && clip) {
+    const entry = durations.slice(0, clip.loopStart).reduce((sum, time) => sum + time, 0);
+    const body = durations.slice(clip.loopStart, clip.loopEnd).reduce((sum, time) => sum + time, 0);
+    let cursor = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
+    const indices = cursor < entry
+      ? Array.from({ length: clip.loopStart }, (_, index) => index)
+      : Array.from({ length: clip.loopEnd - clip.loopStart }, (_, index) => index + clip.loopStart);
+    if (cursor >= entry) cursor = (cursor - entry) % body;
+    for (const index of indices) {
+      if (cursor < durations[index]) return { index, done: false, waitMs: durations[index] - cursor };
+      cursor -= durations[index];
+    }
+  }
+  const sequence = clip
+    ? motionSequence(clip)
+    : durations.map((_, index) => index);
+  const total = sequence.reduce((sum, index) => sum + durations[index], 0);
   let cursor = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
   if (repeat) cursor %= total;
-  for (let i = 0; i < durations.length; i++) {
-    if (cursor < durations[i]) return { index: i, done: false };
-    cursor -= durations[i];
+  for (const index of sequence) {
+    if (cursor < durations[index]) return { index, done: false, waitMs: durations[index] - cursor };
+    cursor -= durations[index];
   }
-  return { index: durations.length - 1, done: true };
+  return { index: sequence[sequence.length - 1], done: true, waitMs: Infinity };
 }
 
-export async function decodePetApng(bytes: ArrayBuffer): Promise<PetApng> {
+export async function decodePetApng(
+  bytes: ArrayBuffer,
+  poster = false,
+): Promise<PetApng> {
   inspectPetApng(bytes);
   const animation = parseAPNG(bytes);
   if (animation instanceof Error) throw animation;
-  await animation.createImages();
+  const selected = poster ? animation.frames.slice(0, 1) : animation.frames;
+  await Promise.all(selected.map((frame) => frame.createImage()));
   const canvas = document.createElement("canvas");
   canvas.width = animation.width;
   canvas.height = animation.height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("Canvas unavailable");
   const frames: HTMLCanvasElement[] = [];
-  for (const frame of animation.frames) {
+  for (const frame of selected) {
     const previous =
       frame.disposeOp === 2
         ? context.getImageData(0, 0, canvas.width, canvas.height)
@@ -110,5 +139,11 @@ export async function decodePetApng(bytes: ArrayBuffer): Promise<PetApng> {
       context.clearRect(frame.left, frame.top, frame.width, frame.height);
     else if (previous) context.putImageData(previous, 0, 0);
   }
-  return { frames, durations: animation.frames.map((frame) => frame.delay) };
+  return {
+    frames,
+    durations: animation.frames.map((frame) => frame.delay),
+    frameCount: animation.frames.length,
+    width: animation.width,
+    height: animation.height,
+  };
 }

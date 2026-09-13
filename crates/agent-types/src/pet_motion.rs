@@ -4,6 +4,13 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct PetLocomotion {
+    /// Horizontal distance in source-canvas pixels per complete loop cycle.
+    pub stride_px: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct PetMotionClip {
     pub path: String,
     pub frame_width: u32,
@@ -16,6 +23,8 @@ pub struct PetMotionClip {
     /// Explicit opt-in: use the main atlas's neutral pose at entry/exit.
     #[serde(default)]
     pub neutral_bookends: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locomotion: Option<PetLocomotion>,
 }
 
 impl PetMotionClip {
@@ -33,17 +42,20 @@ impl PetMotionClip {
             "Motion grid dimensions out of bounds"
         );
         let apng = self.path.ends_with(".apng");
+        if let Some(motion) = &self.locomotion {
+            anyhow::ensure!(
+                apng && (4..=384).contains(&motion.stride_px),
+                "Invalid APNG walk stride"
+            );
+        }
         if apng {
             anyhow::ensure!(
                 self.columns == 1
-                    && self.frame_width == 192
+                    && matches!(self.frame_width, 192 | 256)
                     && self.frame_height == 208
                     && self.durations_ms.len() >= 2
-                    && !self.neutral_bookends
-                    && self.loop_start == 0
-                    && self.loop_end == self.durations_ms.len()
-                    && self.loop_repeats == 1,
-                "APNG requires baked 192x208 frames and timing"
+                    && !self.neutral_bookends,
+                "APNG requires explicit 192/256x208 frames and timing"
             );
         }
         anyhow::ensure!(
@@ -104,7 +116,10 @@ pub fn validate_motion_clips(clips: &PetMotionClips) -> anyhow::Result<()> {
         );
         clip.validate()?;
         let (width, height) = clip.dimensions();
-        pixels += u64::from(width) * u64::from(height);
+        // Legacy grids preload together; APNG uses a separately bounded leased cache.
+        if !clip.path.ends_with(".apng") {
+            pixels += u64::from(width) * u64::from(height);
+        }
         anyhow::ensure!(
             pixels <= 16 * 1024 * 1024,
             "Motion clips exceed decoded-memory budget"
@@ -128,6 +143,7 @@ mod tests {
             loop_end: 12,
             loop_repeats: 3,
             neutral_bookends: false,
+            locomotion: None,
         };
         clip.validate().unwrap();
         assert_eq!(clip.dimensions(), (768, 832));
@@ -151,6 +167,7 @@ mod tests {
             loop_end: 1,
             loop_repeats: 1,
             neutral_bookends: false,
+            locomotion: None,
         };
         clip.validate().unwrap();
         let clips = [("kneading".into(), clip.clone()), ("grooming".into(), clip)].into();

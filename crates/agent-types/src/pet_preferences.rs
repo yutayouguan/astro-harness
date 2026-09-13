@@ -20,6 +20,7 @@ pub struct PetPreferences {
     pub position_locked: bool,
     pub snap_to_edge: bool,
     pub quiet_mode: bool,
+    pub roaming_enabled: bool,
     pub hide_in_fullscreen: bool,
     pub presentation_mode: bool,
     pub activity_interval_secs: u32,
@@ -32,6 +33,7 @@ impl Default for PetPreferences {
             position_locked: false,
             snap_to_edge: true,
             quiet_mode: false,
+            roaming_enabled: false,
             hide_in_fullscreen: true,
             presentation_mode: false,
             activity_interval_secs: 45,
@@ -67,6 +69,7 @@ pub struct PetPreferencesPatch {
     pub position_locked: Option<bool>,
     pub snap_to_edge: Option<bool>,
     pub quiet_mode: Option<bool>,
+    pub roaming_enabled: Option<bool>,
     pub hide_in_fullscreen: Option<bool>,
     pub presentation_mode: Option<bool>,
     pub activity_interval_secs: Option<u32>,
@@ -81,6 +84,9 @@ impl PetPreferencesPatch {
         }
         if let Some(v) = self.quiet_mode {
             target.quiet_mode = v;
+        }
+        if let Some(v) = self.roaming_enabled {
+            target.roaming_enabled = v;
         }
         if let Some(v) = self.hide_in_fullscreen {
             target.hide_in_fullscreen = v;

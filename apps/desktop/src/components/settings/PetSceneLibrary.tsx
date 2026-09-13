@@ -16,6 +16,7 @@ import {
 } from "../../lib/ui/wallpaper";
 import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import PetPreferencesEditor from "./PetPreferencesEditor";
+import { supportsPetRoaming } from "../../lib/ui/petRoaming";
 import PetMoreMenu from "./PetMoreMenu";
 
 export default function PetSceneLibrary({
@@ -354,6 +355,7 @@ export default function PetSceneLibrary({
           {selected.preferences ? (
             <PetPreferencesEditor
               value={selected.preferences}
+              roamingSupported={supportsPetRoaming(selected.pet.motionClips)}
               zh={zh}
               disabled={disabled}
               onSave={(preferences) =>

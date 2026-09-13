@@ -12,6 +12,7 @@ import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
 import { SelectMenu } from "../ui/SelectMenu";
 import PetPreferencesEditor from "./PetPreferencesEditor";
+import { supportsPetRoaming } from "../../lib/ui/petRoaming";
 import PetMoreMenu from "./PetMoreMenu";
 import PetSceneLibrary from "./PetSceneLibrary";
 import "../../styles/features/pet-detail.css";
@@ -608,6 +609,9 @@ export default function PetLibraryPanel({
               </p>
               <PetPreferencesEditor
                 value={pet.defaults}
+                roamingSupported={supportsPetRoaming(pet.identity.motionClips)}
+                onPlaceOnGround={state.activePetId === pet.id && state.enabled
+                  ? () => mutate("place_desktop_pet_on_ground", { petId: pet.id }) : undefined}
                 zh={zh}
                 disabled={disabled}
                 liveScale={

@@ -43,6 +43,10 @@ struct State {
 }
 #[derive(Default)]
 pub struct PetTasks(Mutex<State>, Mutex<RenderState>);
+pub(super) fn blocks_roaming(app: &AppHandle) -> bool {
+    let Some(tasks) = app.try_state::<PetTasks>() else { return true; };
+    tasks.0.lock().map_or(true, |state| !state.connected || state.open || !state.snapshot.tasks.is_empty() || !state.snapshot.requests.is_empty())
+}
 #[derive(Clone, Copy)]
 struct Geometry {
     pet: (i32, i32, u32, u32),

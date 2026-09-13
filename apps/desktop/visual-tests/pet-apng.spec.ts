@@ -24,6 +24,12 @@ test("APNG actions decode on both engines, stay transparent and respect reduced 
   await expect.poll(async () => (await signature()).visible).toBeGreaterThan(1000);
   const before = await signature();
   await expect.poll(async () => (await signature()).hash).not.toBe(before.hash);
+  await page.getByLabel("暂停动画").check();
+  const paused = await signature();
+  await page.waitForTimeout(350);
+  expect(await signature()).toEqual(paused);
+  await page.getByLabel("暂停动画").uncheck();
+  await expect.poll(async () => (await signature()).hash).not.toBe(paused.hash);
   await page.getByLabel("减少动态").check();
   await expect.poll(async () => (await signature()).visible).toBeGreaterThan(1000);
   const still = await signature();

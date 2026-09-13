@@ -12,6 +12,8 @@ export default function PetPreferencesEditor({
   onSave,
   liveScale,
   onApplyScale,
+  roamingSupported = false,
+  onPlaceOnGround,
 }: {
   value: PetDefaults;
   zh: boolean;
@@ -19,6 +21,8 @@ export default function PetPreferencesEditor({
   onSave: (value: PetDefaults) => Promise<unknown>;
   liveScale?: number;
   onApplyScale?: (scale: number) => Promise<unknown>;
+  roamingSupported?: boolean;
+  onPlaceOnGround?: () => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState(value);
   const fieldId = useId();
@@ -147,6 +151,17 @@ export default function PetPreferencesEditor({
               ? "保留待机与眨眼，暂停自动大动作。"
               : "Keep idle and blinking; pause automatic activity.",
           ],
+          [
+            "roamingEnabled",
+            zh ? "底部自主漫游" : "Roam along the bottom",
+            roamingSupported
+              ? zh
+                ? "默认关闭；仅沿当前屏幕底边行走，锁定、安静或交互时暂停。"
+                : "Off by default. Walk along this screen's bottom; pause while locked, quiet or interacting."
+              : zh
+                ? "此宠物尚未提供可用的 APNG 步态数据。"
+                : "This pet does not provide APNG walking metadata yet.",
+          ],
         ] as const
       ).map(([key, label, hint]) => (
         <div className="pet-detail-preference-row" key={key}>
@@ -162,7 +177,9 @@ export default function PetPreferencesEditor({
             aria-label={label}
             aria-describedby={`${fieldId}-${key}-hint`}
             aria-checked={draft.behavior[key]}
-            disabled={unavailable}
+            disabled={
+              unavailable || (key === "roamingEnabled" && !roamingSupported)
+            }
             onClick={() =>
               change({
                 ...draft,
@@ -174,6 +191,30 @@ export default function PetPreferencesEditor({
           </button>
         </div>
       ))}
+      {onPlaceOnGround && (
+        <button
+          type="button"
+          className="pet-detail-clear-position"
+          disabled={
+            unavailable || !roamingSupported || draft.behavior.positionLocked
+          }
+          onClick={() => {
+            setSaving(true);
+            setSaveError("");
+            void onPlaceOnGround()
+              .then(() =>
+                change({
+                  ...draft,
+                  behavior: { ...draft.behavior, roamingEnabled: true },
+                }),
+              )
+              .catch((error) => setSaveError(String(error)))
+              .finally(() => setSaving(false));
+          }}
+        >
+          {zh ? "放到底部并开启漫游" : "Place at bottom and enable roaming"}
+        </button>
+      )}
       <label className="desktop-pet-preference-row pet-detail-interval">
         <span>
           <strong>{zh ? "自动动作间隔" : "Activity interval"}</strong>

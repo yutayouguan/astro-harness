@@ -14,6 +14,7 @@ function Preview() {
   const [pet, setPet] = useState("naitang");
   const [action, setAction] = useState("idle");
   const [reduced, setReduced] = useState(false);
+  const [paused, setPaused] = useState(false);
   const source = pet === "naitang" ? naitang : pudding;
   const clips: PetMotionClips = Object.fromEntries(
     Object.entries(source).map(([name, spec]) => [
@@ -62,6 +63,14 @@ function Preview() {
       <label>
         <input
           type="checkbox"
+          checked={paused}
+          onChange={(e) => setPaused(e.target.checked)}
+        />
+        暂停动画
+      </label>
+      <label>
+        <input
+          type="checkbox"
           checked={reduced}
           onChange={(e) => setReduced(e.target.checked)}
         />
@@ -77,6 +86,7 @@ function Preview() {
               motionName={action}
               repeatMotion
               reducedMotion={reduced}
+              paused={paused}
               label={`${pet} APNG ${background}`}
             />
           </div>

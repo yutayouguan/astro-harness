@@ -440,14 +440,25 @@ fn remove_uniform_edge_background(bytes: &[u8]) -> Result<Vec<u8>, String> {
     tools::builtin::desktop_pet::normalize_pet_image(bytes).map_err(|error| error.to_string())
 }
 
-fn window_size(scale: f64) -> LogicalSize<f64> {
+pub(super) fn window_size(scale: f64) -> LogicalSize<f64> {
     LogicalSize::new(BASE_WINDOW_WIDTH * scale, BASE_WINDOW_HEIGHT * scale)
+}
+pub(super) fn window_size_for(state: &DesktopPetStateDto) -> LogicalSize<f64> {
+    let mut size = window_size(state.scale);
+    if state.sprite_version_number == Some(3) {
+        let width = state
+            .motion_clips
+            .get("idle")
+            .map_or(192, |clip| clip.frame_width);
+        size.width *= f64::from(width) / 192.0;
+    }
+    size
 }
 
 static LAST_PLACEMENT: Mutex<Option<String>> = Mutex::new(None);
 static MANUAL_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn pet_screens<R: Runtime>(app: &AppHandle<R>) -> Vec<super::pet_placement::Screen> {
+pub(super) fn pet_screens<R: Runtime>(app: &AppHandle<R>) -> Vec<super::pet_placement::Screen> {
     let primary = app.primary_monitor().ok().flatten();
     app.available_monitors()
         .unwrap_or_default()
@@ -477,8 +488,13 @@ fn apply_position<R: Runtime>(
 ) -> Result<(), String> {
     let screens = pet_screens(app);
     let key = format!(
-        "{:?}:{:?}:{}",
-        screens, state.preferences.position, state.scale
+        "{:?}:{:?}:{}:{:?}:{:?}:{:?}",
+        screens,
+        state.preferences.position,
+        state.scale,
+        state.active_pet_id,
+        state.active_scene_id,
+        state.motion_clips.get("idle").map(|clip| clip.frame_width)
     );
     let mut applied = LAST_PLACEMENT
         .lock()
@@ -486,7 +502,7 @@ fn apply_position<R: Runtime>(
     if !force && applied.as_ref() == Some(&key) {
         return Ok(());
     }
-    let size = window_size(state.scale);
+    let size = window_size_for(state);
     if let Some((x, y)) = super::pet_placement::target(
         state.preferences.position.as_ref(),
         &screens,
@@ -522,6 +538,7 @@ fn desired_visibility(state: &DesktopPetStateDto, fullscreen: bool, manual: bool
         && !(state.preferences.hide_in_fullscreen && fullscreen && !manual)
 }
 fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> Result<(), String> {
+    super::pet_roaming::state_changed(state);
     let fullscreen = state.enabled && state.preferences.hide_in_fullscreen && fullscreen_now(app);
     if !fullscreen {
         MANUAL_VISIBLE.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -552,11 +569,11 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
                 .map_err(|e| e.to_string())?;
         }
         let size = window.inner_size().map_err(|e| e.to_string())?;
-        let wanted = window_size(state.scale)
+        let wanted = window_size_for(state)
             .to_physical::<u32>(window.scale_factor().map_err(|e| e.to_string())?);
         if size != wanted {
             window
-                .set_size(window_size(state.scale))
+                .set_size(window_size_for(state))
                 .map_err(|e| e.to_string())?;
         }
         apply_position(app, &window, state, false)?;
@@ -582,10 +599,7 @@ fn ensure_window<R: Runtime>(app: &AppHandle<R>, state: &DesktopPetStateDto) -> 
         WebviewUrl::App("index.html?surface=desktop-pet".into()),
     )
     .title("Astro Desktop Pet")
-    .inner_size(
-        window_size(state.scale).width,
-        window_size(state.scale).height,
-    )
+    .inner_size(window_size_for(state).width, window_size_for(state).height)
     .resizable(false)
     .decorations(false)
     .transparent(true)
@@ -638,6 +652,11 @@ pub(super) fn present_committed_state(
 pub fn restore_window<R: Runtime>(app: &AppHandle<R>) {
     if let Err(error) = super::builtin_pet::upgrade_at(&home::default_memory_dir()) {
         tracing::warn!(%error, "upgrade built-in pet motion failed; keeping existing pet");
+    }
+    if let Err(error) =
+        super::builtin_pet_apng::upgrade(&home::default_memory_dir(), &pet_screens(app))
+    {
+        tracing::warn!(%error, "APNG upgrade stopped; keeping existing pets");
     }
     let state = match load_state() {
         Ok(state) => state,
@@ -704,9 +723,19 @@ pub fn install_change_bridge(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn get_desktop_pet_state() -> Result<DesktopPetStateDto, String> {
-    super::builtin_pet::ensure_library(&home::default_memory_dir()).map_err(|e| e.to_string())?;
-    load_state()
+pub async fn get_desktop_pet_state(app: AppHandle) -> Result<DesktopPetStateDto, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        super::builtin_pet::ensure_library(&home::default_memory_dir())
+            .map_err(|e| e.to_string())?;
+        if let Err(error) =
+            super::builtin_pet_apng::upgrade(&home::default_memory_dir(), &pet_screens(&app))
+        {
+            tracing::warn!(%error, "APNG upgrade stopped; returning the unchanged pet library");
+        }
+        load_state()
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -766,6 +795,7 @@ pub fn begin_desktop_pet_drag(window: WebviewWindow) -> Result<(), String> {
     if load_state()?.preferences.position_locked {
         return Ok(());
     }
+    super::pet_roaming::manual_drag(window.app_handle());
     window.start_dragging().map_err(|e| e.to_string())
 }
 
@@ -778,6 +808,9 @@ pub async fn settle_desktop_pet_position(
         return Err("Only the pet may save its position".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
+        if super::pet_roaming::suppress_settle() {
+            return Ok(true);
+        }
         if super::pet_platform::primary_button_down() {
             return Ok(false);
         }
@@ -791,7 +824,7 @@ pub async fn settle_desktop_pet_position(
         }
         let p = window.outer_position().map_err(|e| e.to_string())?;
         let size = window.outer_size().map_err(|e| e.to_string())?;
-        let logical_size = window_size(state.scale);
+        let logical_size = window_size_for(&state);
         let Some(position) = super::pet_placement::capture_changed_position(
             (p.x, p.y),
             (size.width, size.height),
@@ -1051,6 +1084,21 @@ pub fn open_desktop_pet_main(app: AppHandle, settings: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wider_apng_canvas_preserves_pet_pixel_scale_and_height() {
+        let mut state = DesktopPetStateDto::default();
+        let legacy = window_size(state.scale);
+        state.sprite_version_number = Some(3);
+        let clips: types::pet_motion::PetMotionClips = serde_json::from_str(include_str!(
+            "../../../../src/assets/pets/naitang/apng/motion-clips.json"
+        ))
+        .unwrap();
+        state.motion_clips = clips;
+        let wide = window_size_for(&state);
+        assert!((legacy.width / 192.0 - wide.width / 256.0).abs() < 0.0001);
+        assert_eq!(legacy.height, wide.height);
+    }
 
     #[test]
     fn apng_pet_import_export_roundtrip_preserves_all_actions_without_applying() {
@@ -1331,6 +1379,7 @@ mod tests {
             loop_end: 13,
             loop_repeats: 3,
             neutral_bookends: false,
+            locomotion: None,
         };
         let mut manifest = types::DesktopPetManifest {
             id: "cat".into(),

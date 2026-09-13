@@ -13,6 +13,7 @@ import {
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation";
 import DesktopPetCanvas from "./DesktopPetCanvas";
+import { usePetRoaming } from "../../hooks/app/usePetRoaming";
 import { usePetHitTesting } from "./usePetHitTesting";
 import { motionDuration } from "../../lib/ui/petMotionClip";
 import {
@@ -45,6 +46,7 @@ type PetActivityPayload = {
 
 export default function DesktopPetSurface() {
   const { state, error, mutate } = useDesktopPetState();
+  const petStateRef = useRef(state); petStateRef.current = state;
   const preferences = state.preferences ?? DEFAULT_PET_PREFERENCES;
   const [windowVisible, setWindowVisible] = useState(true);
   useEffect(() => {
@@ -225,6 +227,11 @@ export default function DesktopPetSurface() {
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const runtimeRef = useRef(emptyPetRuntime());
+  const [hovering, setHovering] = useState(false);
+  const roaming = usePetRoaming(state, () => !state.enabled || !windowVisible || state.animationPaused || reducedMotion
+    || preferences.quietMode || preferences.positionLocked || preferences.presentationMode
+    || activity !== "idle" || dragState !== null || leisure !== null || hovering || menuOpening.current);
+  const roamingRef = useRef(roaming); roamingRef.current = roaming;
   const transientTimerRef = useRef<number | null>(null);
   const dragTimerRef = useRef<number | null>(null);
   const visiblePetRef = useRef<{ enabled: boolean; path: string | null }>({
@@ -254,7 +261,7 @@ export default function DesktopPetSurface() {
     transientTimerRef.current = window.setTimeout(() => {
       transientTimerRef.current = null;
       setActivity(resolvePetRuntime(runtimeRef.current, Date.now()));
-    }, 700);
+    }, state.spriteVersionNumber === 3 && state.motionClips?.waving ? motionDuration(state.motionClips.waving) : 700);
   }, [state.enabled, state.petPath, state.spriteVersionNumber]);
 
   useEffect(() => {
@@ -316,6 +323,10 @@ export default function DesktopPetSurface() {
               Date.now(),
             );
             if (next === runtimeRef.current) return;
+            const activeClip = payload.state && petStateRef.current.motionClips?.[payload.state];
+            if (next.transient && activeClip && petStateRef.current.spriteVersionNumber === 3) {
+              next.transient = { ...next.transient, until: Date.now() + motionDuration(activeClip) };
+            }
             runtimeRef.current = next;
             publish();
           },
@@ -368,6 +379,7 @@ export default function DesktopPetSurface() {
     void getCurrentWindow()
       .onMoved(({ payload }) => {
         if (disposed) return;
+        if (roamingRef.current.suppressMoved.current) { previousX = payload.x; return; }
         const dx = previousX == null ? 0 : payload.x - previousX;
         previousX = payload.x;
         if (dx !== 0 && !reducedMotion)
@@ -397,10 +409,10 @@ export default function DesktopPetSurface() {
     spriteVersionNumber: state.spriteVersionNumber,
     groomingPath: state.groomingPath,
     hasMotionClips: availableActions.length > 0,
-    paused: state.animationPaused,
+    paused: state.spriteVersionNumber === 3 ? false : state.animationPaused,
     reducedMotion,
     activity,
-    dragging: dragState != null,
+    dragging: dragState != null || roaming.frame !== null,
     // Manual menu actions remain available in quiet mode; only auto-play stops.
     quietMode: false,
   });
@@ -411,11 +423,13 @@ export default function DesktopPetSurface() {
         ? legacyPetLeisureDuration(leisure)
         : 0;
   useEffect(() => {
+    if (state.spriteVersionNumber === 3 && state.animationPaused) return;
     if (!leisureAllowed || (leisure && !availableActions.includes(leisure))) {
       setLeisure(null);
       return;
     }
     if (leisure) {
+      if (state.spriteVersionNumber === 3) return; // APNG reports actual completion, excluding pause time.
       const timer = window.setTimeout(() => setLeisure(null), leisureDuration);
       return () => window.clearTimeout(timer);
     }
@@ -437,15 +451,17 @@ export default function DesktopPetSurface() {
     leisureDuration,
     preferences.activityIntervalSecs,
     preferences.quietMode,
+    state.animationPaused,
+    state.spriteVersionNumber,
   ]);
   const playedLeisure =
-    leisureAllowed && leisure && availableActions.includes(leisure)
+    (leisureAllowed || (state.spriteVersionNumber === 3 && state.animationPaused)) && leisure && availableActions.includes(leisure)
       ? leisure
       : null;
   const groomingSrc =
     playedLeisure === "grooming" ? resolveMediaSrc(state.groomingPath) : null;
   const renderedState: DesktopPetAnimationState =
-    preferences.quietMode && !playedLeisure
+    (preferences.quietMode && !playedLeisure) || (state.spriteVersionNumber === 3 && dragState !== null)
       ? "idle"
       : playedLeisure === "kneading"
         ? "running"
@@ -471,12 +487,13 @@ export default function DesktopPetSurface() {
         role="group"
         data-position-locked={preferences.positionLocked}
         aria-label="桌面宠物，右键打开菜单；键盘操作请使用主窗口桌宠设置"
+        onPointerEnter={() => { setHovering(true); roaming.stop(); }}
         onContextMenu={(event) => {
           event.preventDefault();
-          void showMenu();
+          void roaming.stop().then(() => showMenu());
         }}
         onPointerMove={(event) => {
-          if (leisure && !preferences.quietMode) setLeisure(null);
+          if (leisure && !preferences.quietMode && !state.animationPaused) setLeisure(null);
           if (
             reducedMotion ||
             preferences.quietMode ||
@@ -494,10 +511,11 @@ export default function DesktopPetSurface() {
           }
           setLookAngle(((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360);
         }}
-        onPointerLeave={() => setLookAngle(null)}
+        onPointerLeave={() => { setLookAngle(null); setHovering(false); }}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           if (preferences.positionLocked) return;
+          roaming.beginDrag();
           setLeisure(null);
           void invoke("begin_desktop_pet_drag").catch(() => setDragState(null));
         }}
@@ -507,17 +525,23 @@ export default function DesktopPetSurface() {
           <DesktopPetCanvas
             src={petSrc}
             groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
-            motionClips={state.motionClips}
+            motionClips={roaming.frame?.clip && roaming.frame.clipName ? { ...state.motionClips, [roaming.frame.clipName]: roaming.frame.clip } : state.motionClips}
             motionName={
-              playedLeisure && state.motionClips?.[playedLeisure]
+              roaming.frame?.clipName ?? (playedLeisure && state.motionClips?.[playedLeisure]
                 ? playedLeisure
-                : undefined
+                : undefined)
             }
             state={groomingSrc ? "idle" : renderedState}
             clip={groomingSrc ? "grooming" : undefined}
             lookAngle={lookAngle}
+            paused={state.animationPaused || !windowVisible}
+            externalElapsedMs={roaming.frame?.active ? roaming.frame.elapsedMs : undefined}
+            startAtMs={roaming.frame?.returning ? roaming.frame.elapsedMs : 0}
+            onReady={() => { if (roaming.frame?.active) void invoke("ready_desktop_pet_roaming", { generation: roaming.frame.generation }).catch(() => {}); }}
+            onLoadError={() => { void roaming.stop(); }}
+            onMotionEnd={() => { if (roaming.frame?.returning) roaming.finishReturn(); else setLeisure(null); }}
             reducedMotion={
-              reducedMotion || state.animationPaused || !windowVisible
+              reducedMotion || (state.spriteVersionNumber !== 3 && (state.animationPaused || !windowVisible))
             }
             className="desktop-pet-character desktop-pet-character--canvas"
             label={state.displayName || "Animated desktop pet"}

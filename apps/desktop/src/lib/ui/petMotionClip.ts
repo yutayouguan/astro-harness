@@ -8,6 +8,7 @@ export type PetMotionClip = {
   loopEnd: number;
   loopRepeats: number;
   neutralBookends?: boolean;
+  locomotion?: { stridePx: number };
 };
 export type PetMotionClips = Record<string, PetMotionClip>;
 

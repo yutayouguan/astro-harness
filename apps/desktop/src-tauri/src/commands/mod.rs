@@ -52,6 +52,7 @@ pub(crate) use ui::icon;
 pub(crate) use ui::onboarding;
 pub(crate) use ui::pet_generation;
 pub(crate) use ui::pet_scene;
+pub(crate) use ui::pet_roaming;
 pub(crate) use ui::ui_style;
 pub(crate) use ui::updater;
 pub(crate) use ui::wallpaper;

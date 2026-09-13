@@ -10,6 +10,7 @@ export type PetPreferences = {
   positionLocked: boolean;
   snapToEdge: boolean;
   quietMode: boolean;
+  roamingEnabled: boolean;
   hideInFullscreen: boolean;
   presentationMode: boolean;
   activityIntervalSecs: number;
@@ -19,6 +20,7 @@ export const DEFAULT_PET_PREFERENCES: PetPreferences = {
   positionLocked: false,
   snapToEdge: true,
   quietMode: false,
+  roamingEnabled: false,
   hideInFullscreen: true,
   presentationMode: false,
   activityIntervalSecs: 45,

@@ -55,13 +55,25 @@ test("APNG sampler uses embedded durations and holds final pose on completion", 
   assert.deepEqual(apngFrameAt([180, 90, 200], 180, false), {
     index: 1,
     done: false,
+    waitMs: 90,
   });
   assert.deepEqual(apngFrameAt([180, 90, 200], 470, false), {
     index: 2,
     done: true,
+    waitMs: Infinity,
   });
   assert.deepEqual(apngFrameAt([180, 90, 200], 470, true), {
     index: 0,
     done: false,
+    waitMs: 180,
   });
+});
+
+test("APNG repeats only the body phase, preserving entry and exit", () => {
+  const clip = { path: "test.apng", frameWidth: 192, frameHeight: 208, columns: 1,
+    durationsMs: [100, 100, 100, 100], loopStart: 1, loopEnd: 3, loopRepeats: 3 };
+  const indices = Array.from({ length: 8 }, (_, i) => apngFrameAt(clip.durationsMs, i * 100, false, clip).index);
+  assert.deepEqual(indices, [0, 1, 2, 1, 2, 1, 2, 3]);
+  assert.deepEqual(apngFrameAt(clip.durationsMs, 800, false, clip), { index: 3, done: true, waitMs: Infinity });
+  assert.deepEqual(Array.from({ length: 8 }, (_, i) => apngFrameAt(clip.durationsMs, i * 100, false, clip, true).index), [0, 1, 2, 1, 2, 1, 2, 1]);
 });

@@ -22,17 +22,25 @@ ROWS = {
 }
 
 
-def write_apng(path, frames, durations):
+def write_apng(path, frames, durations, loop_start=0, loop_end=None, repeats=1):
     if len(frames) != len(durations) or not frames:
         raise ValueError("Frame/timing mismatch")
+    if frames[0].size not in ((192, 208), (256, 208)) or any(frame.size != frames[0].size for frame in frames):
+        raise ValueError("APNG frames must share a supported canvas")
+    loop_end = len(frames) if loop_end is None else loop_end
+    if not 0 <= loop_start < loop_end <= len(frames) or not 1 <= repeats <= 8:
+        raise ValueError("Invalid loop bounds")
     # Coalesce only byte-identical neighboring frames; preserve total duration.
-    unique, times = [], []
-    for frame, duration in zip(frames, durations):
+    unique, times, mapping = [], [], []
+    for index, (frame, duration) in enumerate(zip(frames, durations)):
         if unique and frame.tobytes() == unique[-1].tobytes():
+            if index in (loop_start, loop_end):
+                raise ValueError("Identical frames cross a loop boundary; repair timing explicitly")
             times[-1] += duration
         else:
             unique.append(frame)
             times.append(duration)
+        mapping.append(len(unique) - 1)
     # All action files are genuinely animated PNGs, even a stationary pose bank.
     if len(unique) < 2:
         raise ValueError("Action has no changing frames")
@@ -48,8 +56,9 @@ def write_apng(path, frames, durations):
                 raise ValueError(f"APNG pixel roundtrip failed at frame {i}")
             if abs(result.info["duration"] - times[i]) > 0.01:
                 raise ValueError("APNG timing roundtrip failed")
-    return dict(path=path.name, frameWidth=192, frameHeight=208, columns=1,
-                durationsMs=times, loopStart=0, loopEnd=len(times), loopRepeats=1,
+    return dict(path=path.name, frameWidth=frames[0].width, frameHeight=frames[0].height, columns=1,
+                durationsMs=times, loopStart=mapping[loop_start],
+                loopEnd=mapping[loop_end] if loop_end < len(mapping) else len(times), loopRepeats=repeats,
                 neutralBookends=False)
 
 
@@ -61,23 +70,28 @@ def export_pet(source, output):
     atlas = Image.open(source / "spritesheet.webp").convert("RGBA")
     cell = lambda row, col: atlas.crop((col * 192, row * 208, (col + 1) * 192, (row + 1) * 208))
     neutral = cell(0, 0)
+    def pad(frame):
+        canvas = Image.new("RGBA", (256, 208))
+        canvas.paste(frame, (32, 0))
+        return canvas
     clips = {}
     for name, (row, durations) in ROWS.items():
         indices = [0, 1, 0] if name == "idle" else range(len(durations))
-        frames = [cell(row, column) for column in indices]
+        frames = [pad(cell(row, column)) for column in indices]
         clips[name] = write_apng(output / f"{name}.apng", frames, durations)
     # This is a seekable 16-pose bank, not a free-running look-around action.
     clips["look"] = write_apng(output / "look.apng",
-                               [cell(9 + i // 8, i % 8) for i in range(16)], [100] * 16)
+                               [pad(cell(9 + i // 8, i % 8)) for i in range(16)], [100] * 16)
     specs = json.loads((source / "motion-clips.json").read_text())
     for name, spec in specs.items():
         asset = source / spec["path"]
         if name == "tail-wag" and not asset.exists():
             asset = source / "tail-wag.webp"  # shipped install filename differs
         frames = effective_frames(Image.open(asset).convert("RGBA"), spec, neutral)
-        sequence = motion_sequence(spec)
-        clips[name] = write_apng(output / f"{name}.apng", [frames[i] for i in sequence],
-                                 [spec["durationsMs"][i] for i in sequence])
+        clips[name] = write_apng(output / f"{name}.apng", [pad(frame) for frame in frames], spec["durationsMs"],
+                                 spec["loopStart"], spec["loopEnd"], spec["loopRepeats"])
+        if sum(clips[name]["durationsMs"][i] for i in motion_sequence(clips[name])) != sum(spec["durationsMs"][i] for i in motion_sequence(spec)):
+            raise ValueError("Action duration changed during APNG export")
     (output / "motion-clips.json").write_text(json.dumps(clips, indent=2) + "\n")
     name = "奶糖" if source.name == "naitang" else "布丁"
     manifest = dict(id=f"{source.name}-apng", displayName=name,

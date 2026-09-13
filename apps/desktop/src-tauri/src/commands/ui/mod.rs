@@ -1,5 +1,6 @@
 pub mod browser;
 mod builtin_pet;
+mod builtin_pet_apng;
 mod pet_apng;
 pub mod desktop_ambience;
 pub mod desktop_pet;
@@ -9,6 +10,8 @@ pub mod interface_tour;
 pub mod onboarding;
 pub mod pet_generation;
 mod pet_placement;
+pub mod pet_roaming;
+mod pet_roaming_plan;
 mod pet_platform;
 pub mod pet_scene;
 mod pet_task_motion;

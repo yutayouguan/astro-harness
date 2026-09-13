@@ -25,6 +25,20 @@ class ApngExportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 write_apng(path, [image, image], [100, 200])
 
+    def test_keeps_loop_indices_without_encoding_repeated_cycles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            frames = []
+            for i in range(5):
+                frame = Image.new("RGBA", (192, 208))
+                frame.putpixel((50 + i, 100), (255, 100, 40, 255))
+                frames.append(frame)
+            spec = write_apng(Path(directory) / "test.apng", frames, [100] * 5, 1, 4, 3)
+            self.assertEqual((spec["loopStart"], spec["loopEnd"], spec["loopRepeats"]), (1, 4, 3))
+            with Image.open(Path(directory) / "test.apng") as image:
+                self.assertEqual(image.n_frames, 5)
+            with self.assertRaises(ValueError):
+                write_apng(Path(directory) / "invalid.apng", [frames[0], frames[0], frames[1]], [100] * 3, 1, 2, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

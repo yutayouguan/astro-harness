@@ -9,24 +9,23 @@ pub(super) fn validate(
     clip.validate().map_err(|e| e.to_string())?;
     if bytes.len() > 16 * 1024 * 1024
         || clip.columns != 1
-        || clip.frame_width != 192
+        || !matches!(clip.frame_width, 192 | 256)
         || clip.frame_height != 208
         || clip.neutral_bookends
-        || clip.loop_start != 0
-        || clip.loop_end != clip.durations_ms.len()
-        || clip.loop_repeats != 1
     {
-        return Err("APNG需要192×208独立帧；时序与循环必须烘焙在文件中".into());
+        return Err("APNG需要192/256×208独立帧；单帧时长必须与文件一致".into());
     }
     let mut decoder =
         image::codecs::png::PngDecoder::new(Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut limits = image::Limits::default();
-    limits.max_image_width = Some(192);
+    limits.max_image_width = Some(256);
     limits.max_image_height = Some(208);
     limits.max_alloc = Some(16 * 1024 * 1024);
     decoder.set_limits(limits).map_err(|e| e.to_string())?;
-    if decoder.dimensions() != (192, 208) || !decoder.is_apng().map_err(|e| e.to_string())? {
-        return Err("需要真正的192×208 APNG，不能将静态PNG改后缀".into());
+    if decoder.dimensions() != (clip.frame_width, clip.frame_height)
+        || !decoder.is_apng().map_err(|e| e.to_string())?
+    {
+        return Err("需要尺寸与清单匹配的真正APNG，不能将静态PNG改后缀".into());
     }
     let mut count = 0;
     for frame in decoder.apng().map_err(|e| e.to_string())?.into_frames() {

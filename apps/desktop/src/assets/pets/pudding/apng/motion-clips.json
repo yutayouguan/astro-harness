@@ -1,7 +1,7 @@
 {
   "idle": {
     "path": "idle.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -16,7 +16,7 @@
   },
   "running-right": {
     "path": "running-right.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -36,7 +36,7 @@
   },
   "running-left": {
     "path": "running-left.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -56,7 +56,7 @@
   },
   "waving": {
     "path": "waving.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -72,7 +72,7 @@
   },
   "jumping": {
     "path": "jumping.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -89,7 +89,7 @@
   },
   "failed": {
     "path": "failed.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -109,7 +109,7 @@
   },
   "waiting": {
     "path": "waiting.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -127,7 +127,7 @@
   },
   "running": {
     "path": "running.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -145,7 +145,7 @@
   },
   "review": {
     "path": "review.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -163,7 +163,7 @@
   },
   "look": {
     "path": "look.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -191,7 +191,7 @@
   },
   "tail-wag": {
     "path": "tail-wag.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -243,48 +243,16 @@
       40,
       40,
       40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
-      40,
       220
     ],
-    "loopStart": 0,
-    "loopEnd": 81,
-    "loopRepeats": 1,
+    "loopStart": 8,
+    "loopEnd": 40,
+    "loopRepeats": 2,
     "neutralBookends": false
   },
   "head-tilt": {
     "path": "head-tilt.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -313,14 +281,14 @@
       120,
       220
     ],
-    "loopStart": 0,
-    "loopEnd": 24,
+    "loopStart": 1,
+    "loopEnd": 23,
     "loopRepeats": 1,
     "neutralBookends": false
   },
   "stretch": {
     "path": "stretch.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -349,14 +317,14 @@
       140,
       200
     ],
-    "loopStart": 0,
-    "loopEnd": 24,
+    "loopStart": 6,
+    "loopEnd": 16,
     "loopRepeats": 1,
     "neutralBookends": false
   },
   "nap": {
     "path": "nap.apng",
-    "frameWidth": 192,
+    "frameWidth": 256,
     "frameHeight": 208,
     "columns": 1,
     "durationsMs": [
@@ -381,23 +349,11 @@
       200,
       200,
       200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
-      200,
       200
     ],
-    "loopStart": 0,
-    "loopEnd": 34,
-    "loopRepeats": 1,
+    "loopStart": 8,
+    "loopEnd": 14,
+    "loopRepeats": 3,
     "neutralBookends": false
   }
 }

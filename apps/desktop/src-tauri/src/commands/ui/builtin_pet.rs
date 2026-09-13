@@ -65,6 +65,70 @@ const PUDDING: BuiltinPetSpec = BuiltinPetSpec {
 };
 const BUILTIN_PETS: &[BuiltinPetSpec] = &[NAITANG, PUDDING];
 
+pub(super) fn is_original_identity(
+    base: &Path,
+    identity: &types::pet_scene::PetIdentity,
+    id: &str,
+) -> bool {
+    let Some(spec) = BUILTIN_PETS.iter().find(|spec| spec.id == id) else {
+        return false;
+    };
+    let root = types::desktop_pet_root(base);
+    let directories = std::iter::once(spec.directory).chain(spec.legacy_directory);
+    let same_file = |path: &Path, expected: &[u8]| {
+        types::pet_scene::managed_file(base, path)
+            .and_then(|path| types::desktop_pet::read_limited_pet_file(&path, 50 * 1024 * 1024))
+            .is_ok_and(|bytes| bytes == expected)
+    };
+    for name in directories {
+        let directory = root.join(name);
+        if Path::new(&identity.pet_path) != directory.join("spritesheet.webp")
+            || !same_file(Path::new(&identity.pet_path), spec.atlas)
+        {
+            continue;
+        }
+        if identity.sprite_version_number != Some(2) {
+            return false;
+        }
+        match (identity.grooming_path.as_deref(), spec.grooming) {
+            (Some(path), Some(bytes))
+                if Path::new(path) == directory.join("grooming.webp")
+                    && same_file(Path::new(path), bytes) => {}
+            (None, None) => {}
+            (None, Some(_)) if Some(name) == spec.legacy_directory => {}
+            _ => return false,
+        }
+        if Some(name) == spec.legacy_directory && identity.motion_clips.is_empty() {
+            return true;
+        }
+        let Ok(mut expected) =
+            serde_json::from_str::<types::pet_motion::PetMotionClips>(spec.motion_spec)
+        else {
+            return false;
+        };
+        for clip in expected.values_mut() {
+            clip.path = directory.join(&clip.path).to_string_lossy().into_owned();
+        }
+        let mut before_bookends = expected.clone();
+        for clip in before_bookends.values_mut() {
+            clip.neutral_bookends = false;
+        }
+        if identity.motion_clips != expected && identity.motion_clips != before_bookends {
+            return false;
+        }
+        return identity.motion_clips.values().all(|clip| {
+            let filename = Path::new(&clip.path)
+                .file_name()
+                .and_then(|name| name.to_str());
+            spec.assets
+                .iter()
+                .find(|(name, _)| Some(*name) == filename)
+                .is_some_and(|(_, bytes)| same_file(Path::new(&clip.path), bytes))
+        });
+    }
+    false
+}
+
 fn existing_builtin<'a>(
     base: &Path,
     state: &'a types::DesktopPetState,
@@ -156,12 +220,25 @@ pub(super) fn install_into_state(
     base: &Path,
     state: &mut types::DesktopPetState,
 ) -> anyhow::Result<()> {
+    install_into_state_with_format(base, state, true)
+}
+fn install_into_state_with_format(
+    base: &Path,
+    state: &mut types::DesktopPetState,
+    use_apng: bool,
+) -> anyhow::Result<()> {
     let previous = existing_builtin(base, state, &NAITANG).cloned();
     let id = previous
         .as_ref()
         .map(|p| p.id.clone())
         .unwrap_or_else(|| NAITANG.id.into());
     let mut record = install_record(base, &NAITANG, id.clone())?;
+    if use_apng {
+        if let Some(mut identity) = super::builtin_pet_apng::published_identity(base, NAITANG.id)? {
+            identity.pet_id = id.clone();
+            record.identity = identity;
+        }
+    }
     if let Some(previous) = previous {
         record.defaults = previous.defaults;
     }
@@ -235,6 +312,7 @@ fn old_pudding_tail(base: &Path) -> types::pet_motion::PetMotionClip {
         loop_end: 34,
         loop_repeats: 1,
         neutral_bookends: true,
+        locomotion: None,
     }
 }
 
@@ -348,7 +426,7 @@ pub(super) fn upgrade_at(base: &Path) -> anyhow::Result<()> {
             return Ok(());
         }
         let previous = state.clone();
-        install_into_state(base, state)?;
+        install_into_state_with_format(base, state, false)?;
         state.animation_paused = previous.animation_paused;
         state.follow_wallpaper = previous.follow_wallpaper;
         state.display_name = previous.display_name;
@@ -570,7 +648,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(selected.active_pet_id.as_deref(), Some("builtin-pudding"));
-        assert_eq!(selected.scale, types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE);
+        assert_eq!(
+            selected.scale,
+            types::desktop_pet::DESKTOP_PET_DEFAULT_SCALE
+        );
         assert!(selected.preferences.presentation_mode);
         assert_eq!(selected.motion_clips.len(), 4);
         let cat = types::pet_library::apply_pet(root.path(), "builtin-naitang").unwrap();
