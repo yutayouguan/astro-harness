@@ -65,6 +65,26 @@ const PUDDING: BuiltinPetSpec = BuiltinPetSpec {
 };
 const BUILTIN_PETS: &[BuiltinPetSpec] = &[NAITANG, PUDDING];
 
+// Installed tail-v2 before its two alpha=1 edge pixels were trimmed. Verified
+// against the shipped raster: only (45,1020) and (46,1020) differ, alpha 1→0.
+// Recognize this exact file only, never use a fuzzy pixel/hash comparison.
+const PUDDING_TAIL_PRE_TRIM_SHA256: &str =
+    "7fefaa6520264a803d7c0b0b11a1a46252d17a82ffa8b63466da194260db9467";
+
+/// Locate candidate legacy artwork without assuming a canonical library ID.
+/// Bytes and clip metadata must still pass `is_original_identity` before use.
+pub(super) fn package_at_original_path(base: &Path, path: &str) -> Option<&'static str> {
+    let root = types::desktop_pet_root(base);
+    BUILTIN_PETS
+        .iter()
+        .find(|spec| {
+            std::iter::once(spec.directory)
+                .chain(spec.legacy_directory)
+                .any(|directory| Path::new(path) == root.join(directory).join("spritesheet.webp"))
+        })
+        .map(|spec| spec.id)
+}
+
 pub(super) fn is_original_identity(
     base: &Path,
     identity: &types::pet_scene::PetIdentity,
@@ -78,7 +98,15 @@ pub(super) fn is_original_identity(
     let same_file = |path: &Path, expected: &[u8]| {
         types::pet_scene::managed_file(base, path)
             .and_then(|path| types::desktop_pet::read_limited_pet_file(&path, 50 * 1024 * 1024))
-            .is_ok_and(|bytes| bytes == expected)
+            .is_ok_and(|bytes| {
+                bytes == expected
+                    || (spec.id == PUDDING.id
+                        && expected == PUDDING_TAIL
+                        && path
+                            .file_name()
+                            .is_some_and(|name| name == "tail-wag-v2.webp")
+                        && format!("{:x}", Sha256::digest(&bytes)) == PUDDING_TAIL_PRE_TRIM_SHA256)
+            })
     };
     for name in directories {
         let directory = root.join(name);

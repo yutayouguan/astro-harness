@@ -299,23 +299,31 @@ fn remap_position(
 }
 fn upgrade_unchecked(base: &Path, screens: &[Screen]) -> anyhow::Result<()> {
     let current = types::read_desktop_pet_state(base)?;
-    let old_ids: Vec<_> = PACKAGES
-        .iter()
-        .filter(|package| {
-            current
-                .pets
-                .iter()
-                .any(|pet| pet.id == package.id && pet.identity.sprite_version_number != Some(3))
-        })
-        .map(|p| p.id)
-        .collect();
-    if old_ids.is_empty() {
+    let candidates = |state: &types::DesktopPetState| {
+        state
+            .pets
+            .iter()
+            .filter(|pet| pet.identity.sprite_version_number != Some(3))
+            .filter_map(|pet| {
+                let package_id =
+                    super::builtin_pet::package_at_original_path(base, &pet.identity.pet_path);
+                PACKAGES
+                    .iter()
+                    .find(|package| {
+                        package.id == pet.id || (pet.builtin && Some(package.id) == package_id)
+                    })
+                    .map(|package| (pet.id.clone(), package))
+            })
+            .collect::<Vec<_>>()
+    };
+    if candidates(&current).is_empty() {
         return Ok(());
     }
     types::update_desktop_pet_state(base, |state| {
         // Re-evaluate every old identity under the one shared writer transaction.
-        for package in PACKAGES.iter().filter(|p| old_ids.contains(&p.id)) {
-            let Some(pet) = state.pets.iter().find(|pet| pet.id == package.id) else {
+        let targets = candidates(state);
+        for (id, package) in &targets {
+            let Some(pet) = state.pets.iter().find(|pet| &pet.id == id) else {
                 anyhow::bail!("Builtin changed during upgrade");
             };
             if pet.identity.sprite_version_number == Some(3) {
@@ -326,11 +334,7 @@ fn upgrade_unchecked(base: &Path, screens: &[Screen]) -> anyhow::Result<()> {
                     && super::builtin_pet::is_original_identity(base, &pet.identity, package.id),
                 "Builtin contains customized art; migration stopped"
             );
-            for scene in state
-                .scenes
-                .iter()
-                .filter(|scene| scene.pet.pet_id == package.id)
-            {
+            for scene in state.scenes.iter().filter(|scene| &scene.pet.pet_id == id) {
                 anyhow::ensure!(
                     super::builtin_pet::is_original_identity(base, &scene.pet, package.id),
                     "Scene contains customized pet art; migration stopped"
@@ -338,14 +342,8 @@ fn upgrade_unchecked(base: &Path, screens: &[Screen]) -> anyhow::Result<()> {
             }
         }
         let mut installed = Vec::new();
-        for package in PACKAGES.iter().filter(|p| old_ids.contains(&p.id)) {
-            if state
-                .pets
-                .iter()
-                .any(|pet| pet.id == package.id && pet.identity.sprite_version_number != Some(3))
-            {
-                installed.push((package.id, install(base, package)?));
-            }
+        for (id, package) in &targets {
+            installed.push((id.clone(), package.id, install(base, package)?));
         }
         if installed.is_empty() {
             return Ok(());
@@ -367,13 +365,13 @@ fn upgrade_unchecked(base: &Path, screens: &[Screen]) -> anyhow::Result<()> {
         } else {
             types::pet_scene::atomic_write(&backup, &bytes)?;
         }
-        for (id, identity) in installed {
-            if state.active_pet_id.as_deref() == Some(id) {
+        for (id, package_id, identity) in installed {
+            if state.active_pet_id.as_deref() == Some(id.as_str()) {
                 anyhow::ensure!(
                     super::builtin_pet::is_original_identity(
                         base,
                         &PetIdentity::from_state(state)?,
-                        id
+                        package_id
                     ),
                     "Current pet has customized art"
                 );
@@ -467,6 +465,58 @@ mod tests {
         fs::write(&before.pets[1].identity.pet_path, b"customized").unwrap();
         assert!(upgrade_unchecked(root.path(), &[]).is_err());
         assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), before);
+    }
+    #[test]
+    fn historical_pet_ids_keep_all_scenes_and_current_selection() {
+        for active_id in ["companion-historical-cat", "builtin-pudding"] {
+            let root = tempfile::tempdir().unwrap();
+            super::super::builtin_pet::ensure_library(root.path()).unwrap();
+            types::update_desktop_pet_state(root.path(), |state| {
+                let cat = state
+                    .pets
+                    .iter_mut()
+                    .find(|pet| pet.id == "builtin-naitang")
+                    .unwrap();
+                cat.id = "companion-historical-cat".into();
+                cat.identity.pet_id = cat.id.clone();
+                Ok(())
+            })
+            .unwrap();
+            for id in ["companion-historical-cat", "builtin-pudding"] {
+                for name in ["Afternoon", "Moonlit", "Woodland"] {
+                    types::pet_library::edit_library(
+                        root.path(),
+                        types::pet_library::PetLibraryEdit::AddScene {
+                            pet_id: id.into(),
+                            name: name.into(),
+                        },
+                    )
+                    .unwrap();
+                }
+            }
+            types::pet_library::apply_pet(root.path(), active_id).unwrap();
+            let before = types::read_desktop_pet_state(root.path()).unwrap();
+            upgrade_unchecked(root.path(), &[]).unwrap();
+            let after = types::read_desktop_pet_state(root.path()).unwrap();
+            assert_eq!(after.active_pet_id.as_deref(), Some(active_id));
+            assert_eq!(after.sprite_version_number, Some(3));
+            assert_eq!(after.pets.len(), 2);
+            assert_eq!(after.scenes.len(), 6);
+            for (previous, next) in before.pets.iter().zip(&after.pets) {
+                assert_eq!(previous.id, next.id);
+                assert_eq!(previous.identity.pet_id, next.identity.pet_id);
+                assert_eq!(previous.defaults, next.defaults);
+                assert_eq!(next.identity.sprite_version_number, Some(3));
+            }
+            for (previous, next) in before.scenes.iter().zip(&after.scenes) {
+                assert_eq!(previous.id, next.id);
+                assert_eq!(previous.pet.pet_id, next.pet.pet_id);
+                assert_eq!(previous.preferences, next.preferences);
+                assert_eq!(next.pet.sprite_version_number, Some(3));
+            }
+            upgrade_unchecked(root.path(), &[]).unwrap();
+            assert_eq!(types::read_desktop_pet_state(root.path()).unwrap(), after);
+        }
     }
     #[test]
     fn conflicting_backup_does_not_publish_or_overwrite() {
