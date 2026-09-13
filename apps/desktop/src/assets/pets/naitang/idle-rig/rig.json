@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "pet": "naitang",
+  "width": 192,
+  "height": 208,
+  "headCut": 116,
+  "fingerprint": "314feb52eab753d1d6ef11950a9a3013ee60904309bd2788eb120348459b693c",
+  "tailPivot": [
+    78,
+    190
+  ],
+  "tailDegrees": 2,
+  "eyes": [
+    {
+      "x": 92,
+      "y": 69,
+      "rx": 11,
+      "ry": 12
+    },
+    {
+      "x": 123,
+      "y": 58,
+      "rx": 10,
+      "ry": 12
+    }
+  ],
+  "ears": [
+    [
+      58,
+      49,
+      10,
+      12
+    ],
+    [
+      126,
+      20,
+      10,
+      13
+    ]
+  ]
+}

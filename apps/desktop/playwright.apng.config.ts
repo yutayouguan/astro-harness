@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./visual-tests",
-  testMatch: "pet-apng.spec.ts",
+  testMatch: ["pet-apng.spec.ts", "pet-idle-rig.spec.ts"],
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:6323",

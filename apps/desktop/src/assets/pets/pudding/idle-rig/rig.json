@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "pet": "pudding",
+  "width": 192,
+  "height": 208,
+  "headCut": 96,
+  "fingerprint": "dafd28d73c7c2280507d0e07d02a31b00c11f2f016736a9022c0c14f5808dbca",
+  "tailPivot": [
+    57,
+    173
+  ],
+  "tailDegrees": 7,
+  "eyes": [
+    {
+      "x": 91,
+      "y": 52,
+      "rx": 8,
+      "ry": 9
+    },
+    {
+      "x": 123,
+      "y": 44,
+      "rx": 8,
+      "ry": 9
+    }
+  ],
+  "ears": [
+    [
+      61,
+      63,
+      10,
+      19
+    ],
+    [
+      148,
+      51,
+      8,
+      17
+    ]
+  ]
+}

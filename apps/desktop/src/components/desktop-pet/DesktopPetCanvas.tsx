@@ -7,6 +7,8 @@ import {
 } from "react";
 import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
 import DesktopPetApngCanvas from "./DesktopPetApngCanvas";
+import DesktopPetIdleRigCanvas from "./DesktopPetIdleRigCanvas";
+import { usesIdleRig } from "../../lib/ui/petIdleRigMotion";
 import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
 import {
   motionFrame,
@@ -55,9 +57,11 @@ export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
     externalElapsedMs: displayed.current.externalElapsedMs,
     startAtMs: displayed.current.startAtMs,
   } : props;
-  return /\.apng(?:[?#]|$)/i.test(props.src)
+  const playback = /\.apng(?:[?#]|$)/i.test(props.src)
     ? <DesktopPetApngCanvas {...held} />
     : <LegacyDesktopPetCanvas {...held} />;
+  return usesIdleRig(held.state, held.motionName, held.clip, held.externalElapsedMs)
+    ? <DesktopPetIdleRigCanvas {...held} fallback={playback} /> : playback;
 }
 
 function LegacyDesktopPetCanvas({
