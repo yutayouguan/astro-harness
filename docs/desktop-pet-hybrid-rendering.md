@@ -30,3 +30,10 @@ uv run --offline --no-project --with pillow python tools/desktop-pet/build_idle_
 Storybook：`Desktop/PetHybrid`。白/黑背景截图位于 `output/qa/hybrid-idle-{naitang,pudding}-{chromium,webkit}.png`。
 
 正式APNG整包发布仍受 `apng-release.json` 审核门控制。不能因为混合待机已实现而将未通过的步态标为可发布。
+
+## 后续修复
+
+- 混合播放器与APNG/旧图集播放器之间新增按原图来源隔离的帧保留：解码下一动作时继续显示上一帧，不以空canvas过渡；跨宠物不复用。保留帧不会发出原生漫游ready确认，仍要等新动作真实首帧绘制。
+- 延迟APNG请求600ms的回归测试连续采样15个浏览器帧，没有空白帧。Chromium/WebKit共6项播放器用例通过。
+- 奶糖踩奶改为校准原图的局部前爪形变，49帧、32帧主体循环。脸、身体和尾巴保持固定，首尾与待机一致；白/黑底关键帧已检查，正式全套应用仍未放行。
+- 舔爪改为模型局部编辑加固定原图合成，19帧、10帧主体循环；身体不再按每帧包围盒缩放。已保留约188KiB局部源图、提示词和精确复现测试。此处新增一次已授权图片模型请求，不影响前述分层待机素材的离线来源。
