@@ -1,5 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("wallpaper slider drags across intermediate values and stays interactive during save", async ({ page }) => {
+  const { dialog } = await open(page, "slow-save");
+  await dialog.getByText("显示调整", { exact: true }).click();
+  const slider = dialog.getByRole("slider", { name: "内容保护", exact: true });
+  await slider.scrollIntoViewIfNeeded();
+  const box = (await slider.boundingBox())!;
+  const x = box.x + 9 + (box.width - 18) * 18 / 55;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.55, y, { steps: 8 });
+  const mid = Number(await slider.inputValue());
+  expect(mid).toBeGreaterThan(18);
+  await page.mouse.move(box.x + box.width * 0.8, y, { steps: 8 });
+  const last = Number(await slider.inputValue());
+  expect(last).toBeGreaterThan(mid);
+  await page.mouse.up();
+  await expect(slider).toBeEnabled();
+  await expect(slider).toBeFocused();
+  await expect(dialog.locator(".ambience-wallpaper-display")).toHaveAttribute("aria-busy", "false");
+  await expect(slider).toHaveValue(String(last));
+  await dialog.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(slider).toHaveValue("18");
+});
+
 test("wallpaper display settings preserve the scene and can be undone", async ({ page }) => {
   const { dialog } = await open(page);
   await dialog.getByText("显示调整", { exact: true }).click();

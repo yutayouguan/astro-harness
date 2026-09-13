@@ -77,6 +77,11 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
   const shufflePrefs = useAmbienceShufflePrefs();
   const [scenes, setScenes] = useState<PetScene[]>([]);
   const [loadingScenes, setLoadingScenes] = useState(false);
+  const sceneListKey = JSON.stringify([
+    pet.state.scenes,
+    pet.state.favoriteSceneIds,
+    pet.state.activeSceneId,
+  ]);
   const { busy, undo } = useSyncExternalStore(
     ambienceSession.subscribe,
     ambienceSession.getSnapshot,
@@ -110,7 +115,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
     return () => {
       disposed = true;
     };
-  }, [open, pet.state.revision]);
+  }, [open, sceneListKey]);
 
   const key = (p: AmbienceProps) =>
     `${ambiencePreferenceKey(p.wallpaper.prefs)}|${JSON.stringify(p.colors)}`;
@@ -175,7 +180,8 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       }
       if (edit) [next, colors] = edit(next, colors);
       p.wallpaper.replacePrefs(next);
-      p.restoreColors(colors);
+      if (JSON.stringify(colors) !== JSON.stringify(p.colors))
+        p.restoreColors(colors);
       setUndo({
         kind: "native",
         ...before,
@@ -183,6 +189,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
         expected: `${ambiencePreferenceKey(next)}|${JSON.stringify(colors)}`,
       });
       await p.activeStyle.refresh();
+      if (request.kind === "wallpaper_display") return;
       // Refresh the list immediately too; native events can be delivered before the command returns.
       try {
         const updated = await invoke<PetScene[]>("get_pet_scenes");

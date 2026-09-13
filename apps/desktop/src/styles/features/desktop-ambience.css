@@ -501,7 +501,82 @@
   margin-bottom: 8px;
 }
 .ambience-wallpaper-display .ambience-strength + .ambience-strength {
-  margin-top: 12px;
+  margin-top: 16px;
+}
+.ambience-wallpaper-display .ambience-strength {
+  gap: 6px;
+}
+.ambience-wallpaper-range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  touch-action: pan-y;
+  --range-track: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.ambience-wallpaper-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--tone) var(--range-progress),
+    var(--range-track) var(--range-progress)
+  );
+}
+.ambience-wallpaper-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--tone) var(--range-progress),
+    var(--range-track) var(--range-progress)
+  );
+}
+.ambience-wallpaper-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--soft-surface, var(--color-bg-raised));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+.ambience-wallpaper-range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--soft-surface, var(--color-bg-raised));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+.ambience-wallpaper-display ~ .ambience-check {
+  min-height: 30px;
+  margin-top: 4px;
+  padding-block: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (forced-colors: active) {
+  .ambience-wallpaper-range {
+    forced-color-adjust: auto;
+    --tone: Highlight;
+    --range-track: GrayText;
+  }
+  .ambience-wallpaper-range::-webkit-slider-thumb {
+    border-color: ButtonText;
+    background: ButtonFace;
+  }
+  .ambience-wallpaper-range::-moz-range-thumb {
+    border-color: ButtonText;
+    background: ButtonFace;
+  }
 }
 .ambience-save-options summary {
   cursor: pointer;

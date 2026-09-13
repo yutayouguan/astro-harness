@@ -247,6 +247,8 @@ const meta = {
       }
       if (command === "get_active_ui_style") return structuredClone(style);
       if (command === "apply_desktop_ambience") {
+        if (context.name === "Slow Save")
+          await new Promise((resolve) => setTimeout(resolve, 350));
         if (context.name === "Failure")
           throw new Error("测试：切换失败，原外观未改变");
         undo = structuredClone({ state, style });
@@ -353,3 +355,4 @@ export const Empty: Story = {};
 export const Failure: Story = {};
 export const LongLabels: Story = {};
 export const NoPet: Story = {};
+export const SlowSave: Story = {};

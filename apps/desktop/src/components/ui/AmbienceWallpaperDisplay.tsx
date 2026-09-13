@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import type { WallpaperDisplay } from "../../lib/ui/wallpaperDisplay";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  createWallpaperDisplaySaver,
+  type WallpaperDisplay,
+} from "../../lib/ui/wallpaperDisplay";
 
 export default function AmbienceWallpaperDisplay({
   path,
@@ -20,46 +23,89 @@ export default function AmbienceWallpaperDisplay({
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const current = useRef(value);
-  current.current = value;
-  const pending = useRef(false);
+  const gesture = useRef<{ field: "shade" | "blur"; pointerId: number } | null>(
+    null,
+  );
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
   const [saving, setSaving] = useState(false);
   const mounted = useRef(true);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const [saver] = useState(() =>
+    createWallpaperDisplaySaver({
+      current: () => current.current,
+      commit: (patch) =>
+        mounted.current && pathRef.current
+          ? commitRef.current(pathRef.current, patch)
+          : Promise.resolve(false),
+      applied: (patch) => {
+        current.current = { ...current.current, ...patch };
+      },
+      rejected: () => {
+        if (mounted.current) update(current.current);
+      },
+      busy: (busy) => {
+        if (mounted.current) setSaving(busy);
+      },
+    }),
+  );
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      saver.clearPending();
     };
   }, []);
   useEffect(() => {
-    draftRef.current = current.current;
-    setDraft(current.current);
+    current.current = value;
+    if (!saver.isSaving() && !gesture.current) {
+      draftRef.current = value;
+      setDraft(value);
+    }
   }, [value.fit, value.shade, value.blur]);
   function update(patch: Partial<WallpaperDisplay>) {
     draftRef.current = { ...draftRef.current, ...patch };
     setDraft(draftRef.current);
   }
-  async function commit<K extends keyof WallpaperDisplay>(
+  function commit<K extends keyof WallpaperDisplay>(
     field: K,
     next: WallpaperDisplay[K],
   ) {
-    if (!path || disabled || pending.current || next === current.current[field])
-      return;
-    pending.current = true;
-    setSaving(true);
-    try {
-      const ok = await onCommit(path, { [field]: next });
-      if (!ok && mounted.current) update(current.current);
-    } catch {
-      if (mounted.current) update(current.current);
-    } finally {
-      pending.current = false;
-      if (mounted.current) setSaving(false);
-    }
+    if (!path || (disabled && !saver.isSaving())) return;
+    return saver.enqueue({ [field]: next });
   }
+  const finishPointer = useRef<(event: PointerEvent) => void>(() => {});
+  finishPointer.current = (event) => {
+    const active = gesture.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    gesture.current = null;
+    if (event.type === "pointercancel") update(current.current);
+    else void commit(active.field, draftRef.current[active.field]);
+  };
+  useEffect(() => {
+    // Native range owns thumb dragging. Capturing on the host breaks WebKit's
+    // internal thumb; listen for release outside the track instead.
+    const finish = (event: PointerEvent) => finishPointer.current(event);
+    const cancel = () => {
+      if (gesture.current) {
+        gesture.current = null;
+        update(current.current);
+      }
+    };
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    window.addEventListener("blur", cancel);
+    return () => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("blur", cancel);
+    };
+  }, []);
   return (
-    <details className="ambience-wallpaper-display">
+    <details className="ambience-wallpaper-display" aria-busy={saving}>
       <summary>{zh ? "显示调整" : "Display adjustments"}</summary>
-      <fieldset disabled={disabled || saving || !path}>
+      <fieldset disabled={!path || (disabled && !saving)}>
         <legend className="sr-only">
           {zh ? "壁纸显示" : "Wallpaper display"}
         </legend>
@@ -117,6 +163,14 @@ export default function AmbienceWallpaperDisplay({
                 <output>{text}</output>
               </span>
               <input
+                className="ambience-wallpaper-range"
+                style={
+                  {
+                    "--range-progress":
+                      (draft[field] / (field === "shade" ? 55 : 12)) * 100 +
+                      "%",
+                  } as CSSProperties
+                }
                 type="range"
                 min={0}
                 max={field === "shade" ? 55 : 12}
@@ -127,11 +181,10 @@ export default function AmbienceWallpaperDisplay({
                 onChange={(e) =>
                   update({ [field]: Number(e.currentTarget.value) })
                 }
-                onPointerDown={(e) =>
-                  e.currentTarget.setPointerCapture(e.pointerId)
-                }
-                onPointerUp={() => void commit(field, draftRef.current[field])}
-                onPointerCancel={() => update(current.current)}
+                onPointerDown={(event) => {
+                  if (event.isPrimary && event.button === 0)
+                    gesture.current = { field, pointerId: event.pointerId };
+                }}
                 onKeyUp={(e) => {
                   if (
                     [
@@ -147,7 +200,10 @@ export default function AmbienceWallpaperDisplay({
                   )
                     void commit(field, draftRef.current[field]);
                 }}
-                onBlur={() => void commit(field, draftRef.current[field])}
+                onBlur={() => {
+                  if (!gesture.current)
+                    void commit(field, draftRef.current[field]);
+                }}
               />
             </label>
           );

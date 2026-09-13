@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { readMorphiconPrefs } from "../../lib/ui/morphiconPrefs";
+import { applyUiStyleTokenDiff } from "../../lib/ui/uiStyleTokenDiff";
 import {
   tokensForResolvedTheme,
   type ActiveUiStyle,
@@ -33,6 +34,8 @@ function restoreIconPreferences(root: HTMLElement) {
 
 export function useActiveUiStyle() {
   const [style, setStyle] = useState<ActiveUiStyle | null>(null);
+  const styleRef = useRef(style);
+  styleRef.current = style;
   const [error, setError] = useState<string | null>(null);
   const appliedTokensRef = useRef<string[]>([]);
   const refreshSequence = useRef(0);
@@ -95,32 +98,35 @@ export function useActiveUiStyle() {
     };
   }, [refresh]);
 
+  const apply = useCallback(() => {
+    const root = document.documentElement;
+    const style = styleRef.current;
+    const theme = root.dataset.theme === "light" ? "light" : "dark";
+    const tokens = tokensForResolvedTheme(style, theme);
+    appliedTokensRef.current = applyUiStyleTokenDiff(
+      root.style,
+      appliedTokensRef.current,
+      tokens,
+    );
+    if (style) {
+      root.dataset.userUiStyle = style.id;
+    } else {
+      delete root.dataset.userUiStyle;
+    }
+    const iconPrefs = readMorphiconPrefs();
+    const motion = style?.icons.motion ?? iconPrefs.spring;
+    if (root.dataset.iconMotion !== motion) root.dataset.iconMotion = motion;
+    const stroke = String(style?.icons.strokeWidth ?? iconPrefs.strokeWidth);
+    if (root.style.getPropertyValue("--app-icon-stroke-width") !== stroke)
+      root.style.setProperty("--app-icon-stroke-width", stroke);
+  }, []);
+
+  useLayoutEffect(() => {
+    apply();
+  }, [style, apply]);
+
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const apply = () => {
-      for (const token of appliedTokensRef.current) {
-        root.style.removeProperty(token);
-      }
-      const theme = root.dataset.theme === "light" ? "light" : "dark";
-      const tokens = tokensForResolvedTheme(style, theme);
-      appliedTokensRef.current = Object.keys(tokens);
-      for (const [token, value] of Object.entries(tokens)) {
-        root.style.setProperty(token, value);
-      }
-      if (style) {
-        root.dataset.userUiStyle = style.id;
-      } else {
-        delete root.dataset.userUiStyle;
-      }
-      const iconPrefs = readMorphiconPrefs();
-      root.dataset.iconMotion = style?.icons.motion ?? iconPrefs.spring;
-      root.style.setProperty(
-        "--app-icon-stroke-width",
-        String(style?.icons.strokeWidth ?? iconPrefs.strokeWidth),
-      );
-    };
-
-    apply();
     const observer = new MutationObserver((records) => {
       if (records.some((record) => record.attributeName === "data-theme")) {
         apply();
@@ -139,7 +145,7 @@ export function useActiveUiStyle() {
       delete root.dataset.userUiStyle;
       restoreIconPreferences(root);
     };
-  }, [style]);
+  }, [apply]);
 
   return { style, error, refresh, reset };
 }
