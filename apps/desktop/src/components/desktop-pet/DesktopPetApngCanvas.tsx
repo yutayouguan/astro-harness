@@ -9,6 +9,7 @@ import {
   stablePetGazeFrame,
 } from "../../lib/ui/desktopPetMotion";
 import type { DesktopPetCanvasProps } from "./DesktopPetCanvas";
+import { usePetFrameHandoff } from "./usePetFrameHandoff";
 
 /** Decode once per action, paint deterministic frames. No autonomous <img> clock:
  * pause/reduced motion and alpha hit testing must observe the exact same frame. */
@@ -27,6 +28,7 @@ export default function DesktopPetApngCanvas(props: DesktopPetCanvasProps) {
     label = "Animated desktop pet",
   } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  usePetFrameHandoff(canvasRef, src, props.restoreFrame, props.retainFrame);
   const targetAngle = useRef(lookAngle);
   targetAngle.current = lookAngle;
   const pausedRef = useRef(paused);
@@ -70,13 +72,7 @@ export default function DesktopPetApngCanvas(props: DesktopPetCanvasProps) {
     redraw.current?.();
   }, [paused, lookAngle, props.externalElapsedMs]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    context?.setTransform(1, 0, 0, 1, 0, 0);
-    if (canvas) context?.clearRect(0, 0, canvas.width, canvas.height);
-  }, [src]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!onScreen || !documentVisible) return;
     let disposed = false,
       request = 0;
@@ -160,6 +156,7 @@ export default function DesktopPetApngCanvas(props: DesktopPetCanvasProps) {
             decoded.height,
           );
           painted = sampled.index;
+          canvas.dataset.petFrameReady = "true";
           if (!ready) { ready = true; onReady.current?.(); }
         }
         if (

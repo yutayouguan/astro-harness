@@ -9,6 +9,7 @@ import { loadPetAtlas } from "../../lib/ui/desktopPetAtlas";
 import DesktopPetApngCanvas from "./DesktopPetApngCanvas";
 import DesktopPetIdleRigCanvas from "./DesktopPetIdleRigCanvas";
 import { usesIdleRig } from "../../lib/ui/petIdleRigMotion";
+import { usePetFrameHandoff } from "./usePetFrameHandoff";
 import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
 import {
   motionFrame,
@@ -44,10 +45,14 @@ export type DesktopPetCanvasProps = {
   startAtMs?: number;
   onReady?: () => void;
   onLoadError?: () => void;
+  /** Internal renderer handoff; never used as an animation-ready signal. */
+  restoreFrame?: () => HTMLCanvasElement | null;
+  retainFrame?: (canvas: HTMLCanvasElement) => void;
   clip?: "grooming";
 };
 
 export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
+  const retainedFrame = useRef<{ source: string; canvas: HTMLCanvasElement } | null>(null);
   const displayed = useRef(props);
   if (!props.paused || displayed.current.src !== props.src) displayed.current = props;
   const held = props.paused ? {
@@ -57,11 +62,23 @@ export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
     externalElapsedMs: displayed.current.externalElapsedMs,
     startAtMs: displayed.current.startAtMs,
   } : props;
+  const rendered = {
+    ...held,
+    restoreFrame: () => retainedFrame.current?.source === props.src ? retainedFrame.current.canvas : null,
+    retainFrame: (canvas: HTMLCanvasElement) => {
+      const copy = document.createElement("canvas");
+      copy.width = canvas.width; copy.height = canvas.height;
+      const context = copy.getContext("2d");
+      if (!context) return;
+      context.drawImage(canvas, 0, 0);
+      retainedFrame.current = { source: props.src, canvas: copy };
+    },
+  };
   const playback = /\.apng(?:[?#]|$)/i.test(props.src)
-    ? <DesktopPetApngCanvas {...held} />
-    : <LegacyDesktopPetCanvas {...held} />;
+    ? <DesktopPetApngCanvas {...rendered} />
+    : <LegacyDesktopPetCanvas {...rendered} />;
   return usesIdleRig(held.state, held.motionName, held.clip, held.externalElapsedMs)
-    ? <DesktopPetIdleRigCanvas {...held} fallback={playback} /> : playback;
+    ? <DesktopPetIdleRigCanvas {...rendered} fallback={playback} /> : playback;
 }
 
 function LegacyDesktopPetCanvas({
@@ -75,9 +92,12 @@ function LegacyDesktopPetCanvas({
   className,
   label = "Animated desktop pet",
   reducedMotion = false,
+  restoreFrame,
+  retainFrame,
   clip,
 }: DesktopPetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  usePetFrameHandoff(canvasRef, src, restoreFrame, retainFrame);
   const images = useRef<Record<string, HTMLImageElement>>({});
   const motionRef = useRef(motionClips);
   motionRef.current = motionClips;
@@ -245,6 +265,7 @@ function LegacyDesktopPetCanvas({
         context.globalAlpha = 1;
         context.globalCompositeOperation = "source-over";
         lastPaint.current = key;
+        canvas.dataset.petFrameReady = "true";
         if (amount >= 1) transition.current = null;
       }
       if (
@@ -272,12 +293,6 @@ function LegacyDesktopPetCanvas({
     transition.current = null;
     if (frameRequest.current) window.cancelAnimationFrame(frameRequest.current);
     frameRequest.current = 0;
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      context?.setTransform(1, 0, 0, 1, 0, 0);
-      context?.clearRect(0, 0, canvas.width, canvas.height);
-    }
     const stops = [
       {
         key: "main",

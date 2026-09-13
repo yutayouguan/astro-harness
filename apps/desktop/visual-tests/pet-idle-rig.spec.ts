@@ -1,5 +1,30 @@
 import { expect, test } from "@playwright/test";
 
+test("switching from layered idle holds its painted frame while APNG decodes", async ({ page }) => {
+  await page.goto("/iframe.html?id=desktop-pethybrid--layers&viewMode=story");
+  const canvas = page.locator("canvas").first();
+  await expect(canvas).toHaveAttribute("data-pet-renderer", "layered-idle");
+  await page.route(/\/kneading\.apng(?:\?|$)/, async (route) => {
+    if (route.request().resourceType() === "fetch") await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  await page.getByLabel("动作", { exact: true }).selectOption("kneading");
+  await expect(canvas).not.toHaveAttribute("data-pet-renderer", "layered-idle");
+  const samples = await canvas.evaluate(async (node: HTMLCanvasElement) => {
+    const counts: number[] = [];
+    for (let frame = 0; frame < 15; frame++) {
+      await new Promise(requestAnimationFrame);
+      const bytes = node.getContext("2d")!.getImageData(0, 0, node.width, node.height).data;
+      let opaque = 0;
+      for (let at = 3; at < bytes.length; at += 4) if (bytes[at]) opaque++;
+      counts.push(opaque);
+    }
+    return counts;
+  });
+  expect(Math.min(...samples)).toBeGreaterThan(1000);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 test("hybrid idle uses matched layers, freezes in place and yields to APNG", async ({ page }) => {
   await page.goto("/iframe.html?id=desktop-pethybrid--layers&viewMode=story");
   for (const pet of ["naitang", "pudding"]) {

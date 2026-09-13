@@ -87,6 +87,7 @@ export default function DesktopPetIdleRigCanvas(
     canvas.height = Math.round(208 * initialRatio);
     context.setTransform(initialRatio, 0, 0, initialRatio, 0, 0);
     context.drawImage(images.neutral, (width - 192) / 2, 0);
+    canvas.dataset.petFrameReady = "true";
     ready = true;
     current.current.onReady?.();
     function draw(now: number) {
@@ -246,6 +247,7 @@ export default function DesktopPetIdleRigCanvas(
     document.addEventListener("visibilitychange", visibilityChanged);
     window.addEventListener("resize", wake);
     return () => {
+      if (canvas.dataset.petFrameReady === "true") props.retainFrame?.(canvas);
       disposed = true;
       observer.disconnect();
       clearTimeout(timer);
