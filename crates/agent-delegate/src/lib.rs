@@ -236,7 +236,12 @@ impl WorktreeManager {
         if clean_only && is_worktree_dirty(&checkout) {
             return Ok(false);
         }
-        remove_worktree(&source_root, &checkout);
+        let mut remove_args = vec![OsStr::new("worktree"), OsStr::new("remove")];
+        if !clean_only {
+            remove_args.push(OsStr::new("--force"));
+        }
+        remove_args.push(checkout.as_os_str());
+        git_output(&source_root, false, remove_args)?;
         let _ = fs::remove_file(manifest_path);
         remove_empty_bucket(&checkout);
         Ok(true)
@@ -515,16 +520,12 @@ fn cleanup_worktree(source_root: &Path, root: &Path, clean_only: bool) {
         }
         return;
     }
-    let _ = git_output(
-        source_root,
-        false,
-        [
-            OsStr::new("worktree"),
-            OsStr::new("remove"),
-            OsStr::new("--force"),
-            root.as_os_str(),
-        ],
-    );
+    let mut args = vec![OsStr::new("worktree"), OsStr::new("remove")];
+    if !clean_only {
+        args.push(OsStr::new("--force"));
+    }
+    args.push(root.as_os_str());
+    let _ = git_output(source_root, false, args);
     remove_empty_bucket(root);
 }
 
