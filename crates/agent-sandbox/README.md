@@ -6,7 +6,7 @@ Agent 派生进程的 OS 级平台沙箱入口：基于三级权限模型生成�
 
 - 封装 `SandboxPolicy`：三级权限模型（ReadOnly / WorkspaceWrite / DangerFullAccess）、可写根目录列表、网络访问策略
 - 提供 `SandboxRunner`：探测平台后端可用性，包装 `tokio::process::Command` 和 `std::process::Command` 注入沙箱策略
-- macOS Seatbelt SBPL 配置文件生成：参数化路径传递、regex 保护元数据（`.git`/`.agents`/`.astro`/`.codex`）
+- macOS Seatbelt SBPL 配置文件生成：参数化路径、regex 元数据保护，以及在所有 PTY allow 之后追加精确 `TIOCSTI` deny
 - Linux Bubblewrap 后端：用户/PID/IPC/网络命名空间隔离、只读根挂载、元数据只读保护
 - Windows Job Object 后端（v1）：进程隔离、代理环境变量注入
 - 沙箱拒绝检测：`is_likely_sandbox_denied()` 保守分类器，支持 Codex 重试升级决策
@@ -67,6 +67,7 @@ macOS Seatbelt SBPL 特性：
 - 参数化路径 `-DWRITABLE_ROOT_N=<path>` + `(subpath (param "WRITABLE_ROOT_N"))`
 - Regex 元数据保护 `(deny file-write* (regex #"/.git(/|$)"))` 四目录
 - 网络策略：端口级精确放行（managed）或 `(allow network*)`（unmanaged）
+- PTY 仅放行正常终端 ioctl，最终规则拒绝 `TIOCSTI` 向父终端注入输入
 
 Linux Bubblewrap 特性：
 - `--ro-bind / /` 全局只读 + `--bind` 可写工作区
@@ -83,6 +84,7 @@ Linux Bubblewrap 特性：
 5. **托管网络精确放行**：`with_managed_network` 仅允许指定 loopback 端口，其余网络访问被拒绝
 6. **审计日志不可变**：append-only JSONL，只追加不修改，8MB 自动轮转（最多 3 个归档）
 7. **策略哈希稳定性**：`profile_hash_material` 不含文件路径，确保不同机器上相同策略产生相同哈希
+8. **终端输入隔离**：macOS profile 的最终 `TIOCSTI` deny 必须位于所有 `file-ioctl` allow 之后
 
 ## 测试
 
@@ -93,5 +95,6 @@ cargo test -p sandbox
 # macOS Seatbelt 实际隔离测试（需 macOS 环境）
 cargo test -p sandbox seatbelt_enforces_workspace_write_boundary
 cargo test -p sandbox seatbelt_keeps_workspace_metadata_read_only
+cargo test -p sandbox --test macos_tiocsti -- --nocapture
 cargo test -p sandbox -- --nocapture
 ```

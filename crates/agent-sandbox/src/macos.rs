@@ -148,6 +148,11 @@ pub fn seatbelt_profile(policy: &SandboxPolicy) -> String {
         profile.push_str("(allow network*)\n");
     }
 
+    // Keep this deny after every shared allowance. A sandboxed child inherits the
+    // caller's controlling terminal and must not queue input for the unsandboxed
+    // shell that resumes after the child exits.
+    profile.push_str("(deny file-ioctl (ioctl-command TIOCSTI))\n");
+
     profile
 }
 
@@ -190,6 +195,14 @@ mod tests {
 
         assert!(profile.contains("(allow file-ioctl (regex #\"^/dev/ttys[0-9A-Za-z]+$\"))"));
         assert!(!profile.contains("(allow file-ioctl)"));
+        let allow = profile.rfind("(allow file-ioctl").unwrap();
+        let deny = profile
+            .rfind("(deny file-ioctl (ioctl-command TIOCSTI))")
+            .unwrap();
+        assert!(
+            deny > allow,
+            "TIOCSTI deny must override every PTY allowance"
+        );
     }
 
     #[test]
