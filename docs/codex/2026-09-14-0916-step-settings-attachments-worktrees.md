@@ -5,6 +5,7 @@
 - 执行时间：2026-09-14 09:16 CST（Asia/Shanghai）。
 - Codex 仓库：`/Users/iswm/CodeRope/codex`，分支 `main`。
 - 拉取结果：工作树原本干净，`git pull --ff-only` 成功 fast-forward；拉取后与 `origin/main` 同步且工作树干净。
+- CodeGraph：Astro 使用既有索引；Codex 初查时尚未初始化，收到明确指示后执行 `codegraph init`，索引 5,126 个文件、158,172 个节点、582,074 条边，并用 `codegraph explore` 复核 Step settings、thread attachments、worktree 与 credential/tool metadata 链路。
 - 精确范围：`956aa3f6372ffd73a0df639beff356b3b664b858..3abbf9fe2c6b6910e9de61f6a0c5bb468f74b5c8`。
 - 增量规模：462 个提交、2,289 个文件、`+199,475/-54,506`。
 - Astro 对照分支：`feature/diagnostics-ui-redesign`。报告写入前存在 13 个已跟踪改动与 12 个未跟踪路径，均为其他任务内容；本次只新增并提交本报告。
@@ -123,7 +124,7 @@ Windows MXC 进入真实 command execution；direct tool-call metadata 与输出
 
 ## 未覆盖范围 / 失败项
 
-- 未逐行审计 2,289 个文件；先遍历全部 462 个提交标题和 Git 统计，再对 runtime/provider/tools/MCP/security/protocol/persistence/subagent/worktree/UI 的高信号提交检查 diff 与当前源码。
+- 未逐行审计 2,289 个文件；先遍历全部 462 个提交标题和 Git 统计，再用两个仓库的 CodeGraph 与定向源码检查 runtime/provider/tools/MCP/security/protocol/persistence/subagent/worktree/UI 高信号链路。
 - 未运行 Codex 或 Astro 测试：本任务只写报告，未修改实现；结论来自 Git diff、CodeGraph、当前源码与已有测试文件。
 - 未在 Windows、Secure Enclave、voice/GStreamer 或远端 daemon 环境执行真实运行验证。
 - Codex 拉取输出很大，命令完成且退出码为 0；之后已重新核验 HEAD、`FETCH_HEAD` 与工作树状态。
