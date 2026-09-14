@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 const [panel, hook, storage, cleanup, css] = await Promise.all([
@@ -65,4 +66,85 @@ test("layout uses bounded scrolling and no animated keyboard tabs", () => {
   assert.match(css, /@container \(max-width: 850px\)/);
   assert.match(css, /prefers-reduced-transparency: reduce/);
   assert.match(css, /prefers-contrast: more/);
+});
+
+test("diagnostic surfaces use shared material instead of an almost opaque base fill", () => {
+  assert.match(
+    css,
+    /--diagnostics-reading-surface: var\(--settings-panel-background, var\(--surface-panel-background\)\)/,
+  );
+  assert.match(
+    css,
+    /--diagnostics-reading-backdrop: var\(--settings-panel-backdrop, var\(--backdrop-glass\)\)/,
+  );
+  assert.match(
+    css,
+    /-webkit-backdrop-filter: var\(--diagnostics-reading-backdrop\)/,
+  );
+  assert.doesNotMatch(css, /var\(--color-bg-base\) 94%/);
+  assert.match(
+    css,
+    /prefers-reduced-transparency: reduce[\s\S]*--diagnostics-reading-backdrop: none/,
+  );
+});
+
+test("short hosts scroll instead of squeezing chrome or the log reader", () => {
+  assert.match(css, /\.diagnostics-workspace \{[^}]*overflow: auto/);
+  assert.match(
+    css,
+    /:not\(\.diagnostics-log-panel, \.diagnostics-storage-panel\) \{ flex-shrink: 0/,
+  );
+  assert.match(
+    css,
+    /\.diagnostics-log-panel \{[^}]*grid-template-rows: auto minmax\(240px, 1fr\) auto;[^}]*min-height: min-content/,
+  );
+  assert.match(panel, /className="diagnostics-log-controls"/);
+  assert.doesNotMatch(css, /@media \(max-height: 580px\)/);
+  const file = ts.createSourceFile(
+    "DiagnosticsPanel.tsx",
+    panel,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let logPanel;
+  const visit = (node) => {
+    if (
+      ts.isJsxElement(node) &&
+      node.openingElement.attributes.properties.some(
+        (attribute) =>
+          ts.isJsxAttribute(attribute) &&
+          attribute.name.getText(file) === "className" &&
+          attribute.initializer &&
+          ts.isStringLiteral(attribute.initializer) &&
+          attribute.initializer.text === "diagnostics-log-panel",
+      )
+    )
+      logPanel = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(logPanel);
+  const children = logPanel.children.filter(ts.isJsxElement);
+  assert.deepEqual(
+    children.map((child) => child.openingElement.tagName.getText(file)),
+    ["div", "div", "footer"],
+  );
+  assert.ok(
+    children[0].getText(file).includes('className="diagnostics-log-controls"'),
+  );
+});
+
+test("filters and search have separate rows with an explicit advanced control", () => {
+  assert.match(
+    css,
+    /\.diagnostics-filters \{[^}]*grid-template-columns: repeat\(4,/,
+  );
+  assert.match(css, /\.diagnostics-query-tools \{ grid-column: 1 \/ -1/);
+  assert.match(
+    css,
+    /@container \(max-width: 640px\)[\s\S]*\.diagnostics-filters \{ grid-template-columns: repeat\(2,/,
+  );
+  assert.match(panel, /className="diagnostics-query-tools"/);
+  assert.match(panel, /<span>\{t\("prefs.diag.advanced.show"\)\}<\/span>/);
 });

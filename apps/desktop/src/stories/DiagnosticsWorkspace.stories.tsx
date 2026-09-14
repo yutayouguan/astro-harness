@@ -9,7 +9,13 @@ import preferencesMeta from "./PreferencesPanel.stories";
 import storageMeta from "./StorageDiagnostics.stories";
 import type { AgentLogLine } from "../lib/settings/diagnosticsModel";
 
-function Preview() {
+function Preview({
+  hostWidth,
+  hostHeight,
+}: {
+  hostWidth?: number;
+  hostHeight?: number;
+}) {
   const { mode, setMode, material, setMaterial } = useTheme();
   const [active, setActive] = useState(true);
   useEffect(() => {
@@ -20,12 +26,21 @@ function Preview() {
     <main
       className="app-shell settings-content-inline"
       data-tone="orange"
-      style={{ padding: 20 }}
+      style={{
+        padding: 20,
+        color: "var(--ink)",
+        width: hostWidth,
+        height: hostHeight,
+        right: hostWidth ? "auto" : undefined,
+        bottom: hostHeight ? "auto" : undefined,
+      }}
     >
       <nav
         aria-label="诊断测试样板"
         style={{
           display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
           gap: 12,
           paddingBottom: 12,
           flexShrink: 0,
@@ -179,3 +194,5 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Workbench: Story = {};
+export const ShortHost: Story = { args: { hostWidth: 620, hostHeight: 440 } };
+export const NarrowHost: Story = { args: { hostWidth: 380, hostHeight: 640 } };

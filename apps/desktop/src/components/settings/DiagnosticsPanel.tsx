@@ -273,199 +273,213 @@ export default function DiagnosticsPanel({
         aria-label={t("prefs.diag.title")}
         hidden={tab !== "logs"}
       >
-        <div className="diagnostics-filters">
-          <Filter label={t("prefs.diag.scope")}>
-            <SelectMenu
-              value={d.scope}
-              aria-label={t("prefs.diag.scope")}
-              onChange={(value) => d.setScope(value as LogScope)}
-              options={[
-                ...(d.hasSession
-                  ? [{ value: "current", label: t("prefs.diag.scope.current") }]
-                  : []),
-                { value: "all", label: t("prefs.diag.scope.all") },
-              ]}
-            />
-          </Filter>
-          <Filter label={t("prefs.diag.time")}>
-            <SelectMenu
-              value={d.timeRange}
-              aria-label={t("prefs.diag.time")}
-              onChange={(value) => {
-                d.setTimeRange(value as DiagnosticLogTimeRange);
-                if (value === "custom") {
-                  d.setLiveLogs(false);
-                  d.setShowAdvanced(true);
-                }
-              }}
-              options={(
-                ["15m", "1h", "24h", "7d", "all", "custom"] as const
-              ).map((value) => ({
-                value,
-                label: t(`prefs.diag.time.${value}`),
-              }))}
-            />
-          </Filter>
-          <Filter label={t("prefs.diag.source")}>
-            <SelectMenu
-              value={d.source}
-              aria-label={t("prefs.diag.source")}
-              onChange={(value) => d.setSource(value as LogSourceFilter)}
-              options={(["both", "agent", "errors"] as const).map((value) => ({
-                value,
-                label: t(`prefs.diag.source.${value}`),
-              }))}
-            />
-          </Filter>
-          <Filter label={t("prefs.diag.level")}>
-            <SelectMenu
-              value={d.level}
-              aria-label={t("prefs.diag.level")}
-              onChange={(value) => d.setLevel(value as LogLevelFilter)}
-              options={(["all", "issues"] as const).map((value) => ({
-                value,
-                label: t(`prefs.diag.level.${value}`),
-              }))}
-            />
-          </Filter>
-          <label className="diagnostics-search" data-input-surface>
-            <Search size={15} aria-hidden />
-            <input
-              type="search"
-              aria-label={t("prefs.diag.search")}
-              placeholder={t("prefs.diag.search.ph")}
-              value={d.logSearch}
-              onChange={(event) => d.setLogSearch(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="diagnostics-icon-button"
-            aria-label={t("prefs.diag.advanced.show")}
-            title={t("prefs.diag.advanced.show")}
-            aria-expanded={d.showAdvanced}
-            data-active={advancedCount > 0 || undefined}
-            aria-description={
-              advancedCount
-                ? locale === "zh"
-                  ? `已设置 ${advancedCount} 项筛选`
-                  : `${advancedCount} active filters`
-                : undefined
-            }
-            aria-controls={`${id}-advanced`}
-            onClick={() => d.setShowAdvanced(!d.showAdvanced)}
-          >
-            <SlidersHorizontal size={17} />
-            {advancedCount > 0 && (
-              <span className="diagnostics-filter-count" aria-hidden>
-                {advancedCount}
-              </span>
-            )}
-          </button>
-        </div>
-        {d.showAdvanced && (
-          <div id={`${id}-advanced`} className="diagnostics-advanced">
-            <Filter label={t("prefs.diag.lines")}>
+        <div className="diagnostics-log-controls">
+          <div className="diagnostics-filters">
+            <Filter label={t("prefs.diag.scope")}>
               <SelectMenu
-                value={String(d.lines)}
-                aria-label={t("prefs.diag.lines")}
-                onChange={(value) => d.setLines(Number(value))}
-                options={LINE_PRESETS.map((count) => ({
-                  value: String(count),
-                  label: String(count),
+                value={d.scope}
+                aria-label={t("prefs.diag.scope")}
+                onChange={(value) => d.setScope(value as LogScope)}
+                options={[
+                  ...(d.hasSession
+                    ? [
+                        {
+                          value: "current",
+                          label: t("prefs.diag.scope.current"),
+                        },
+                      ]
+                    : []),
+                  { value: "all", label: t("prefs.diag.scope.all") },
+                ]}
+              />
+            </Filter>
+            <Filter label={t("prefs.diag.time")}>
+              <SelectMenu
+                value={d.timeRange}
+                aria-label={t("prefs.diag.time")}
+                onChange={(value) => {
+                  d.setTimeRange(value as DiagnosticLogTimeRange);
+                  if (value === "custom") {
+                    d.setLiveLogs(false);
+                    d.setShowAdvanced(true);
+                  }
+                }}
+                options={(
+                  ["15m", "1h", "24h", "7d", "all", "custom"] as const
+                ).map((value) => ({
+                  value,
+                  label: t(`prefs.diag.time.${value}`),
                 }))}
               />
             </Filter>
-            <label>
-              {t("prefs.diag.session")}
-              <input
-                className="prefs-diag-input"
-                value={d.manualSession}
-                placeholder={t("prefs.diag.session.ph")}
-                onChange={(event) => d.setManualSession(event.target.value)}
-                spellCheck={false}
-                autoComplete="off"
+            <Filter label={t("prefs.diag.source")}>
+              <SelectMenu
+                value={d.source}
+                aria-label={t("prefs.diag.source")}
+                onChange={(value) => d.setSource(value as LogSourceFilter)}
+                options={(["both", "agent", "errors"] as const).map(
+                  (value) => ({
+                    value,
+                    label: t(`prefs.diag.source.${value}`),
+                  }),
+                )}
               />
-            </label>
-            <label>
-              {t("prefs.diag.turn")}
-              <input
-                className="prefs-diag-input"
-                value={d.turnId}
-                placeholder={t("prefs.diag.turn.ph")}
-                onChange={(event) => d.setTurnId(event.target.value)}
-                spellCheck={false}
-                autoComplete="off"
+            </Filter>
+            <Filter label={t("prefs.diag.level")}>
+              <SelectMenu
+                value={d.level}
+                aria-label={t("prefs.diag.level")}
+                onChange={(value) => d.setLevel(value as LogLevelFilter)}
+                options={(["all", "issues"] as const).map((value) => ({
+                  value,
+                  label: t(`prefs.diag.level.${value}`),
+                }))}
               />
-            </label>
-            {d.timeRange === "custom" && (
-              <>
-                <label>
-                  {t("prefs.diag.time.start")}
-                  <input
-                    className="prefs-diag-input"
-                    type="datetime-local"
-                    value={d.customSince}
-                    onChange={(event) => d.setCustomSince(event.target.value)}
-                  />
-                </label>
-                <label>
-                  {t("prefs.diag.time.end")}
-                  <input
-                    className="prefs-diag-input"
-                    type="datetime-local"
-                    value={d.customUntil}
-                    onChange={(event) => d.setCustomUntil(event.target.value)}
-                  />
-                </label>
-              </>
-            )}
+            </Filter>
+            <div className="diagnostics-query-tools">
+              <label className="diagnostics-search" data-input-surface>
+                <Search size={15} aria-hidden />
+                <input
+                  type="search"
+                  aria-label={t("prefs.diag.search")}
+                  placeholder={t("prefs.diag.search.ph")}
+                  value={d.logSearch}
+                  onChange={(event) => d.setLogSearch(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="diagnostics-icon-button"
+                aria-label={t("prefs.diag.advanced.show")}
+                title={t("prefs.diag.advanced.show")}
+                aria-expanded={d.showAdvanced}
+                data-active={advancedCount > 0 || undefined}
+                aria-description={
+                  advancedCount
+                    ? locale === "zh"
+                      ? `已设置 ${advancedCount} 项筛选`
+                      : `${advancedCount} active filters`
+                    : undefined
+                }
+                aria-controls={`${id}-advanced`}
+                onClick={() => d.setShowAdvanced(!d.showAdvanced)}
+              >
+                <SlidersHorizontal size={17} />
+                <span>{t("prefs.diag.advanced.show")}</span>
+                {advancedCount > 0 && (
+                  <span className="diagnostics-filter-count" aria-hidden>
+                    {advancedCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-        )}
-        <div className="diagnostics-log-toolbar">
-          <span role="status" aria-live={d.liveLogs ? "off" : "polite"}>
-            {t("prefs.diag.results", {
-              shown: String(d.visibleLogRows.length),
-              total: String(d.rows.length),
-            })}
-          </span>
-          <div>
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              disabled={d.busy}
-              onClick={() => void d.refreshLogs()}
-              title={t("prefs.diag.refresh")}
-            >
-              <RefreshCw size={13} aria-hidden />
-              {t("prefs.diag.refresh")}
-            </button>
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              aria-pressed={d.liveLogs}
-              onClick={() => {
-                const next = !d.liveLogs;
-                d.setLiveLogs(next);
-                if (next && d.timeRange === "custom") d.setTimeRange("1h");
-              }}
-            >
-              {d.liveLogs ? (
-                <Pause size={13} aria-hidden />
-              ) : (
-                <Play size={13} aria-hidden />
+          {d.showAdvanced && (
+            <div id={`${id}-advanced`} className="diagnostics-advanced">
+              <Filter label={t("prefs.diag.lines")}>
+                <SelectMenu
+                  value={String(d.lines)}
+                  aria-label={t("prefs.diag.lines")}
+                  onChange={(value) => d.setLines(Number(value))}
+                  options={LINE_PRESETS.map((count) => ({
+                    value: String(count),
+                    label: String(count),
+                  }))}
+                />
+              </Filter>
+              <label>
+                {t("prefs.diag.session")}
+                <input
+                  className="prefs-diag-input"
+                  value={d.manualSession}
+                  placeholder={t("prefs.diag.session.ph")}
+                  onChange={(event) => d.setManualSession(event.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                {t("prefs.diag.turn")}
+                <input
+                  className="prefs-diag-input"
+                  value={d.turnId}
+                  placeholder={t("prefs.diag.turn.ph")}
+                  onChange={(event) => d.setTurnId(event.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              {d.timeRange === "custom" && (
+                <>
+                  <label>
+                    {t("prefs.diag.time.start")}
+                    <input
+                      className="prefs-diag-input"
+                      type="datetime-local"
+                      value={d.customSince}
+                      onChange={(event) => d.setCustomSince(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    {t("prefs.diag.time.end")}
+                    <input
+                      className="prefs-diag-input"
+                      type="datetime-local"
+                      value={d.customUntil}
+                      onChange={(event) => d.setCustomUntil(event.target.value)}
+                    />
+                  </label>
+                </>
               )}
-              {d.liveLogs ? copy.pause : copy.follow}
-            </button>
-            <button
-              type="button"
-              className="prefs-diag-btn"
-              disabled={!d.visibleLogRows.length}
-              onClick={() => void d.copyLogs()}
-            >
-              <Copy size={13} aria-hidden />
-              {t(d.logsCopied ? "prefs.diag.copied" : "prefs.diag.copyVisible")}
-            </button>
+            </div>
+          )}
+          <div className="diagnostics-log-toolbar">
+            <span role="status" aria-live={d.liveLogs ? "off" : "polite"}>
+              {t("prefs.diag.results", {
+                shown: String(d.visibleLogRows.length),
+                total: String(d.rows.length),
+              })}
+            </span>
+            <div>
+              <button
+                type="button"
+                className="prefs-diag-btn"
+                disabled={d.busy}
+                onClick={() => void d.refreshLogs()}
+                title={t("prefs.diag.refresh")}
+              >
+                <RefreshCw size={13} aria-hidden />
+                {t("prefs.diag.refresh")}
+              </button>
+              <button
+                type="button"
+                className="prefs-diag-btn"
+                aria-pressed={d.liveLogs}
+                onClick={() => {
+                  const next = !d.liveLogs;
+                  d.setLiveLogs(next);
+                  if (next && d.timeRange === "custom") d.setTimeRange("1h");
+                }}
+              >
+                {d.liveLogs ? (
+                  <Pause size={13} aria-hidden />
+                ) : (
+                  <Play size={13} aria-hidden />
+                )}
+                {d.liveLogs ? copy.pause : copy.follow}
+              </button>
+              <button
+                type="button"
+                className="prefs-diag-btn"
+                disabled={!d.visibleLogRows.length}
+                onClick={() => void d.copyLogs()}
+              >
+                <Copy size={13} aria-hidden />
+                {t(
+                  d.logsCopied ? "prefs.diag.copied" : "prefs.diag.copyVisible",
+                )}
+              </button>
+            </div>
           </div>
         </div>
         <div
