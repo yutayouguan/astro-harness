@@ -97,21 +97,32 @@
 }
 
 .shell-wallpaper-layer > img {
+  --wallpaper-render-blur: var(--wallpaper-live-blur, var(--wallpaper-blur, 0));
   position: absolute;
-  inset: calc(var(--wallpaper-blur, 0) * -1px);
-  width: calc(100% + var(--wallpaper-blur, 0) * 2px);
-  height: calc(100% + var(--wallpaper-blur, 0) * 2px);
-  filter: blur(calc(var(--wallpaper-blur, 0) * 1px));
+  inset: calc(var(--wallpaper-render-blur) * -1px);
+  width: calc(100% + var(--wallpaper-render-blur) * 2px);
+  height: calc(100% + var(--wallpaper-render-blur) * 2px);
+  filter: blur(calc(var(--wallpaper-render-blur) * 1px));
 }
 
 .shell-wallpaper-layer > span {
   position: absolute;
   inset: 0;
-  background: rgba(244, 246, 252, var(--wallpaper-shade, 0.34));
+  background: rgba(
+    244,
+    246,
+    252,
+    var(--wallpaper-live-shade, var(--wallpaper-shade, 0.34))
+  );
 }
 
 html[data-theme="dark"] .shell-wallpaper-layer > span {
-  background: rgba(5, 7, 14, var(--wallpaper-shade, 0.34));
+  background: rgba(
+    5,
+    7,
+    14,
+    var(--wallpaper-live-shade, var(--wallpaper-shade, 0.34))
+  );
 }
 
 /* 灵动色彩：主聊天页右下角的即时换色入口。 */

@@ -54,6 +54,17 @@ test("snapshot identity stays stable until a change for useSyncExternalStore", (
   assert.notEqual(first, session.getSnapshot());
 });
 
+test("live resize stays mutually exclusive without being mistaken for a gallery change", () => {
+  const session = createAmbienceSession();
+  assert.equal(session.begin("pet-scale"), true);
+  assert.equal(session.getSnapshot().operation, "pet-scale");
+  assert.equal(session.begin(), false);
+  session.finish();
+  assert.equal(session.getSnapshot().operation, null);
+  assert.equal(session.begin(), true);
+  assert.equal(session.getSnapshot().operation, "change");
+});
+
 const appearance: AmbienceAppearance = {
   material: "soft",
   mode: "auto",

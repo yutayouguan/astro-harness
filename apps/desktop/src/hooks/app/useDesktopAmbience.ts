@@ -7,6 +7,7 @@ import {
   canUndoPetScale,
   type AmbienceAppearance,
   type AppearanceUndoSnapshot,
+  type AmbienceOperation,
 } from "../../lib/ui/ambienceSession";
 import { useTheme } from "./useTheme";
 import {
@@ -87,7 +88,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
     pet.state.favoriteSceneIds,
     pet.state.activeSceneId,
   ]);
-  const { busy, undo } = useSyncExternalStore(
+  const { busy, operation, undo } = useSyncExternalStore(
     ambienceSession.subscribe,
     ambienceSession.getSnapshot,
     ambienceSession.getSnapshot,
@@ -124,8 +125,11 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
 
   const key = (p: AmbienceProps) =>
     `${ambiencePreferenceKey(p.wallpaper.prefs)}|${JSON.stringify(p.colors)}`;
-  const guard = async (operation: () => Promise<void>) => {
-    if (!ambienceSession.begin()) return false;
+  const guard = async (
+    operation: () => Promise<void>,
+    kind: AmbienceOperation = "change",
+  ) => {
+    if (!ambienceSession.begin(kind)) return false;
     setError("");
     try {
       await operation();
@@ -473,7 +477,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
         }
         throw cause;
       }
-    });
+    }, "pet-scale");
   const saveAs = (name: string) =>
     guard(async () => {
       const p = live.current;
@@ -545,6 +549,7 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
     }
   };
   return {
+    livePetScale: busy && operation === "pet-scale",
     appearance,
     setPetScale,
     changeAppearance,

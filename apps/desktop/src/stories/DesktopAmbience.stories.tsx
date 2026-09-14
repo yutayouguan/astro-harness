@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import DesktopAmbienceButton from "../components/ui/DesktopAmbienceButton";
@@ -14,7 +14,6 @@ import { dynamicGradientForTab } from "../lib/ui/dynamicGradient";
 import { resolveMediaSrc } from "../lib/media/resolveMediaSrc";
 import {
   DEFAULT_WALLPAPER_PREFS,
-  wallpaperBackgroundSize,
   WALLPAPER_STORAGE_KEY,
 } from "../lib/ui/wallpaper";
 import {
@@ -72,35 +71,29 @@ function Harness() {
       >
         {backgroundSrc && (
           <div
+            className="shell-wallpaper-layer"
             aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              overflow: "hidden",
-              pointerEvents: "none",
-              zIndex: -1,
-            }}
+            style={
+              {
+                position: "absolute",
+                inset: 0,
+                overflow: "hidden",
+                pointerEvents: "none",
+                zIndex: -1,
+                "--wallpaper-blur": current.blur,
+                "--wallpaper-shade": current.shade / 100,
+              } as CSSProperties
+            }
           >
-            <div
+            <img
               data-testid="wallpaper-display-preview"
+              src={backgroundSrc}
+              alt=""
               style={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage: "url(" + JSON.stringify(backgroundSrc) + ")",
-                backgroundPosition: "center",
-                backgroundRepeat: "no-repeat",
-                backgroundSize: wallpaperBackgroundSize(current.fit),
-                filter: "blur(" + current.blur + "px)",
+                objectFit: current.fit === "stretch" ? "fill" : current.fit,
               }}
             />
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: resolved === "dark" ? "#0d1420" : "#f7f8fa",
-                opacity: current.shade / 100,
-              }}
-            />
+            <span />
           </div>
         )}
         <>

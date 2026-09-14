@@ -74,6 +74,12 @@
   opacity: 0.45;
   cursor: default;
 }
+/* Resize requests still lock conflicting actions, but do not pulse the gallery. */
+.desktop-ambience[data-live-pet-scale="true"]
+.ambience-tile[data-has-image="true"]:disabled,
+.desktop-ambience[data-live-pet-scale="true"] .ambience-star:disabled {
+  opacity: 1;
+}
 .desktop-ambience button:focus-visible,
 .desktop-ambience input:focus-visible,
 .desktop-ambience summary:focus-visible {

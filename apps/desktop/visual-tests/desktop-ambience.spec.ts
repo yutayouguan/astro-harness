@@ -12,6 +12,8 @@ test("pet size changes natively before mouse release and one undo restores the g
   await page.mouse.move(box.x + box.width * 0.6, y, { steps: 6 });
   const intermediate = await slider.inputValue();
   expect(Number(intermediate)).toBeLessThan(0.3);
+  await expect(dialog).toHaveAttribute("data-live-pet-scale", "true");
+  await expect(dialog.locator('.ambience-scene-tile[data-has-image="true"]').first()).toHaveCSS("opacity", "1");
   await expect(page.getByTestId("native-pet-scale")).toHaveText(intermediate);
   await expect(slider).toBeEnabled();
   await page.mouse.move(box.x + 9, y, { steps: 8 });
@@ -36,6 +38,9 @@ test("wallpaper slider drags across intermediate values and stays interactive du
   await page.mouse.move(box.x + box.width * 0.55, y, { steps: 8 });
   const mid = Number(await slider.inputValue());
   expect(mid).toBeGreaterThan(18);
+  const layer = page.locator(".shell-wallpaper-layer");
+  await expect.poll(() => layer.evaluate(element => element.style.getPropertyValue("--wallpaper-live-shade"))).toBe(String(mid / 100));
+  await expect.poll(() => layer.evaluate(element => element.style.getPropertyValue("--wallpaper-shade"))).toBe("0.18");
   await page.mouse.move(box.x + box.width * 0.8, y, { steps: 8 });
   const last = Number(await slider.inputValue());
   expect(last).toBeGreaterThan(mid);
@@ -44,6 +49,7 @@ test("wallpaper slider drags across intermediate values and stays interactive du
   await expect(slider).toBeFocused();
   await expect(dialog.locator(".ambience-wallpaper-display")).toHaveAttribute("aria-busy", "false");
   await expect(slider).toHaveValue(String(last));
+  await expect.poll(() => layer.evaluate(element => element.style.getPropertyValue("--wallpaper-live-shade"))).toBe("");
   await dialog.getByRole("button", { name: "撤销", exact: true }).click();
   await expect(slider).toHaveValue("18");
 });
@@ -52,7 +58,7 @@ test("wallpaper display settings preserve the scene and can be undone", async ({
   const { dialog } = await open(page);
   await dialog.getByText("显示调整", { exact: true }).click();
   await dialog.getByRole("button", { name: "适应", exact: true }).click();
-  await expect(page.getByTestId("wallpaper-display-preview")).toHaveCSS("background-size", "contain");
+  await expect(page.getByTestId("wallpaper-display-preview")).toHaveCSS("object-fit", "contain");
   const shade = dialog.getByRole("slider", { name: "内容保护", exact: true });
   await shade.press("End");
   await expect(shade).toHaveValue("55");

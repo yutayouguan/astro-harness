@@ -196,6 +196,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
         trapFocus
         aria-label={tr("桌面氛围", "Desktop ambience")}
         className="desktop-ambience"
+        data-live-pet-scale={state.livePetScale || undefined}
       >
         <header className="ambience-header">
           <div className="ambience-heading">
@@ -490,6 +491,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                         <button
                           type="button"
                           className="ambience-tile"
+                          data-has-image="true"
                           title={asset.name}
                           aria-pressed={
                             hasWallpaper && current.current?.path === asset.path
@@ -677,6 +679,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                     type="button"
                     key={item.id}
                     className="ambience-tile ambience-scene-tile"
+                    data-has-image={Boolean(item.wallpaperPath)}
                     title={item.name}
                     disabled={state.busy || !item.wallpaperPath}
                     aria-pressed={scene?.id === item.id && !adjusted}

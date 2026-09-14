@@ -56,11 +56,16 @@ type Undo =
   | AmbienceUndoSnapshot
   | AppearanceUndoSnapshot
   | PetScaleUndoSnapshot;
-type Snapshot = { busy: boolean; undo: Undo | null };
+export type AmbienceOperation = "change" | "pet-scale";
+type Snapshot = {
+  busy: boolean;
+  operation: AmbienceOperation | null;
+  undo: Undo | null;
+};
 
 /** WebView-session state, not persistent settings. Navigation must not discard native undo. */
 export function createAmbienceSession() {
-  let snapshot: Snapshot = { busy: false, undo: null };
+  let snapshot: Snapshot = { busy: false, operation: null, undo: null };
   const listeners = new Set<() => void>();
   const publish = (next: Snapshot) => {
     snapshot = next;
@@ -74,12 +79,12 @@ export function createAmbienceSession() {
         listeners.delete(listener);
       };
     },
-    begin: () => {
+    begin: (operation: AmbienceOperation = "change") => {
       if (snapshot.busy) return false;
-      publish({ ...snapshot, busy: true });
+      publish({ ...snapshot, busy: true, operation });
       return true;
     },
-    finish: () => publish({ ...snapshot, busy: false }),
+    finish: () => publish({ ...snapshot, busy: false, operation: null }),
     setUndo: (undo: Undo | null) => publish({ ...snapshot, undo }),
   };
 }

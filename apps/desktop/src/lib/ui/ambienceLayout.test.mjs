@@ -64,3 +64,16 @@ test("long tile names use two aligned lines and preserve full hover labels", () 
   assert.match(panel, /title=\{item.name\}/);
   assert.match(panel, /title=\{pet.displayName/);
 });
+
+test("live pet resizing keeps available gallery tiles visually stable while still disabled", () => {
+  assert.match(
+    panel,
+    /data-live-pet-scale=\{state.livePetScale \|\| undefined\}/,
+  );
+  assert.match(panel, /data-has-image=\{Boolean\(item.wallpaperPath\)\}/);
+  assert.match(panel, /disabled=\{state.busy \|\| !item.wallpaperPath\}/);
+  assert.match(
+    css,
+    /\[data-live-pet-scale="true"\][\s\S]*?\[data-has-image="true"\]:disabled,[^}]*opacity: 1/,
+  );
+});

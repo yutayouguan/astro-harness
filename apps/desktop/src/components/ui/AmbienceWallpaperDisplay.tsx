@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useWallpaperLivePreview } from "../../hooks/ui/useWallpaperLivePreview";
 import {
   createWallpaperDisplaySaver,
   type WallpaperDisplay,
@@ -20,6 +21,7 @@ export default function AmbienceWallpaperDisplay({
     patch: Partial<WallpaperDisplay>,
   ) => Promise<boolean>;
 }) {
+  const preview = useWallpaperLivePreview();
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const current = useRef(value);
@@ -43,10 +45,12 @@ export default function AmbienceWallpaperDisplay({
         current.current = { ...current.current, ...patch };
       },
       rejected: () => {
-        if (mounted.current) update(current.current);
+        preview.cancel();
+        if (mounted.current) update(current.current, false);
       },
       busy: (busy) => {
         if (mounted.current) setSaving(busy);
+        if (!busy && !gesture.current) preview.settle();
       },
     }),
   );
@@ -64,15 +68,25 @@ export default function AmbienceWallpaperDisplay({
       setDraft(value);
     }
   }, [value.fit, value.shade, value.blur]);
-  function update(patch: Partial<WallpaperDisplay>) {
+  function update(patch: Partial<WallpaperDisplay>, showPreview = true) {
     draftRef.current = { ...draftRef.current, ...patch };
     setDraft(draftRef.current);
+    if (
+      showPreview &&
+      path &&
+      (patch.shade !== undefined || patch.blur !== undefined)
+    )
+      preview.show(path, patch);
   }
   function commit<K extends keyof WallpaperDisplay>(
     field: K,
     next: WallpaperDisplay[K],
   ) {
-    if (!path || (disabled && !saver.isSaving())) return;
+    if (!path || (disabled && !saver.isSaving())) {
+      preview.cancel();
+      update(current.current, false);
+      return;
+    }
     return saver.enqueue({ [field]: next });
   }
   const finishPointer = useRef<(event: PointerEvent) => void>(() => {});
@@ -80,8 +94,10 @@ export default function AmbienceWallpaperDisplay({
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
     gesture.current = null;
-    if (event.type === "pointercancel") update(current.current);
-    else void commit(active.field, draftRef.current[active.field]);
+    if (event.type === "pointercancel") {
+      preview.cancel();
+      update(current.current, false);
+    } else void commit(active.field, draftRef.current[active.field]);
   };
   useEffect(() => {
     // Native range owns thumb dragging. Capturing on the host breaks WebKit's
@@ -90,7 +106,8 @@ export default function AmbienceWallpaperDisplay({
     const cancel = () => {
       if (gesture.current) {
         gesture.current = null;
-        update(current.current);
+        preview.cancel();
+        update(current.current, false);
       }
     };
     window.addEventListener("pointerup", finish);
