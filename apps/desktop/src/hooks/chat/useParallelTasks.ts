@@ -413,13 +413,17 @@ export function useParallelTasks(deps: Deps) {
           path: string;
           branch?: string | null;
           headSha: string;
-        } | null>("prepare_task_worktree");
+          ownerSessionId?: string | null;
+          dirty: boolean;
+        } | null>("prepare_task_worktree", { sessionId });
         if (prepared?.path) {
           worktree = {
             id: prepared.id,
             path: prepared.path,
             branch: prepared.branch,
             headSha: prepared.headSha,
+            ownerSessionId: prepared.ownerSessionId,
+            dirty: prepared.dirty,
           };
         }
       } catch (e) {

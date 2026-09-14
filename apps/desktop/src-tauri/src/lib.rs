@@ -331,6 +331,7 @@ pub fn run() {
             commands::chat::query_memory,
             // — agent —
             commands::agent::prepare_task_worktree,
+            commands::agent::list_task_worktrees,
             commands::agent::cleanup_task_worktree,
             commands::agent::get_config,
             commands::agent::list_agents,

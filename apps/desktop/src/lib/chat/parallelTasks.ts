@@ -17,6 +17,8 @@ export type ParallelWorktreeInfo = {
   path: string;
   branch?: string | null;
   headSha: string;
+  ownerSessionId?: string | null;
+  dirty?: boolean;
 };
 
 export type ParallelChatTask = {

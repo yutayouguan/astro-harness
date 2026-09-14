@@ -34,7 +34,6 @@ export const zh = {
   "project.unsavedSwitch": "当前项目还有未保存文件，切换项目会丢弃这些修改。",
   "project.fileUnsavedClose": "“{name}”尚未保存，关闭后将丢弃修改。",
   "project.filesUnsavedCloseAll": "仍有未保存文件，关闭全部文件会丢弃修改。",
-  "project.worktreeComingSoon": "永久工作树功能仍在开发中",
 
   "about.tagline": "本地 AI 桌面工作站",
   "about.version": "版本 {v}",
@@ -2922,7 +2921,6 @@ export const en: Record<MessageKey, string> = {
     "“{name}” has not been saved. Closing it will discard your changes.",
   "project.filesUnsavedCloseAll":
     "Some files have not been saved. Closing all files will discard those changes.",
-  "project.worktreeComingSoon": "Permanent worktrees are still in development",
 
   "about.tagline": "Local AI desktop workstation",
   "about.version": "Version {v}",

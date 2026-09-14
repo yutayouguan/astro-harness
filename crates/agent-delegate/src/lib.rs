@@ -25,6 +25,7 @@ pub struct CreateWorktree {
     pub source_cwd: PathBuf,
     pub base: Option<String>,
     pub branch: Option<String>,
+    pub owner_session_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -36,7 +37,22 @@ pub struct ManagedWorktree {
     pub source_cwd: PathBuf,
     pub head_sha: String,
     pub branch: Option<String>,
+    pub owner_session_id: Option<String>,
     clean_only: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedWorktreeInfo {
+    pub id: String,
+    pub root: PathBuf,
+    pub cwd: PathBuf,
+    pub source_root: PathBuf,
+    pub source_cwd: PathBuf,
+    pub head_sha: String,
+    pub branch: Option<String>,
+    pub owner_session_id: Option<String>,
+    pub dirty: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,6 +64,8 @@ struct WorktreeManifest {
     source_cwd: PathBuf,
     head_sha: String,
     branch: Option<String>,
+    #[serde(default)]
+    owner_session_id: Option<String>,
 }
 
 impl ManagedWorktree {
@@ -165,6 +183,12 @@ impl WorktreeManager {
             source_cwd,
             head_sha,
             branch,
+            owner_session_id: request
+                .owner_session_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|owner| !owner.is_empty())
+                .map(str::to_string),
             clean_only: true,
         };
         if let Err(error) = write_manifest(&managed) {
@@ -205,6 +229,10 @@ impl WorktreeManager {
             source_root == manifest.source_root,
             "managed worktree source root mismatch"
         );
+        anyhow::ensure!(
+            registered_worktree_roots(&source_root)?.contains(&checkout),
+            "managed worktree is not registered in its source repository"
+        );
         if clean_only && is_worktree_dirty(&checkout) {
             return Ok(false);
         }
@@ -212,6 +240,83 @@ impl WorktreeManager {
         let _ = fs::remove_file(manifest_path);
         remove_empty_bucket(&checkout);
         Ok(true)
+    }
+
+    /// List only valid, currently registered Astro-managed worktrees for one repository.
+    pub fn list(&self, source_cwd: &Path) -> anyhow::Result<Vec<ManagedWorktreeInfo>> {
+        if !self.settings.root.exists() {
+            return Ok(Vec::new());
+        }
+        let managed_root = fs::canonicalize(&self.settings.root).with_context(|| {
+            format!(
+                "cannot resolve managed worktree root {}",
+                self.settings.root.display()
+            )
+        })?;
+        let source_cwd = fs::canonicalize(source_cwd)
+            .with_context(|| format!("cannot resolve {}", source_cwd.display()))?;
+        let source_root = repository_root(&source_cwd)?;
+        let registered = registered_worktree_roots(&source_root)?;
+        let mut worktrees = Vec::new();
+
+        for entry in fs::read_dir(&managed_root)? {
+            let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if !valid_worktree_id(&id) || !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let bucket = fs::canonicalize(entry.path())?;
+            let manifest_path = bucket.join(MANIFEST_FILE);
+            if !fs::symlink_metadata(&manifest_path).is_ok_and(|meta| meta.file_type().is_file()) {
+                continue;
+            }
+            let manifest: WorktreeManifest = match fs::read(&manifest_path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            {
+                Some(manifest) => manifest,
+                None => continue,
+            };
+            if manifest.id != id {
+                continue;
+            }
+            let Ok(checkout) = fs::canonicalize(&manifest.root) else {
+                continue;
+            };
+            if checkout.parent() != Some(bucket.as_path()) || !registered.contains(&checkout) {
+                continue;
+            }
+            let Ok(manifest_source_root) = fs::canonicalize(&manifest.source_root) else {
+                continue;
+            };
+            let Ok(manifest_source_cwd) = fs::canonicalize(&manifest.source_cwd) else {
+                continue;
+            };
+            if manifest_source_root != source_root
+                || !manifest_source_cwd.starts_with(&source_root)
+                || !safe_worktree_cwd(&checkout, &manifest.cwd)
+            {
+                continue;
+            }
+            let Ok(head_sha) = git_stdout(&checkout, false, ["rev-parse", "HEAD"]) else {
+                continue;
+            };
+            let branch =
+                git_stdout(&checkout, false, ["symbolic-ref", "-q", "--short", "HEAD"]).ok();
+            worktrees.push(ManagedWorktreeInfo {
+                id,
+                root: checkout.clone(),
+                cwd: manifest.cwd,
+                source_root: manifest_source_root,
+                source_cwd: manifest_source_cwd,
+                head_sha,
+                branch,
+                owner_session_id: manifest.owner_session_id,
+                dirty: is_worktree_dirty(&checkout),
+            });
+        }
+        worktrees.sort_by(|left, right| left.root.cmp(&right.root));
+        Ok(worktrees)
     }
 }
 
@@ -385,6 +490,7 @@ fn write_manifest(worktree: &ManagedWorktree) -> anyhow::Result<()> {
         source_cwd: worktree.source_cwd.clone(),
         head_sha: worktree.head_sha.clone(),
         branch: worktree.branch.clone(),
+        owner_session_id: worktree.owner_session_id.clone(),
     };
     let path = worktree
         .root
@@ -433,9 +539,28 @@ fn remove_empty_bucket(checkout: &Path) {
 }
 
 fn is_worktree_dirty(path: &Path) -> bool {
-    git_stdout(path, false, ["status", "--porcelain"])
+    git_stdout(path, false, ["status", "--porcelain", "--ignored=matching"])
         .map(|output| !output.is_empty())
         .unwrap_or(true)
+}
+
+fn registered_worktree_roots(source_root: &Path) -> anyhow::Result<BTreeSet<PathBuf>> {
+    let output = git_output(
+        source_root,
+        false,
+        ["worktree", "list", "--porcelain", "-z"],
+    )?;
+    let mut roots = BTreeSet::new();
+    for field in output.stdout.split(|byte| *byte == 0) {
+        let Some(path) = field.strip_prefix(b"worktree ") else {
+            continue;
+        };
+        let path = std::str::from_utf8(path).context("worktree path is not valid UTF-8")?;
+        if let Ok(path) = fs::canonicalize(path) {
+            roots.insert(path);
+        }
+    }
+    Ok(roots)
 }
 
 fn copy_worktreeinclude(repo: &Path, worktree: &Path) -> anyhow::Result<()> {
@@ -553,6 +678,7 @@ mod tests {
             source_cwd: nested,
             base: None,
             branch: None,
+            owner_session_id: None,
         })
         .unwrap();
 
@@ -584,6 +710,7 @@ mod tests {
             source_cwd: repo.path().to_path_buf(),
             base: Some(first.clone()),
             branch: None,
+            owner_session_id: None,
         })
         .unwrap();
 
@@ -593,6 +720,31 @@ mod tests {
             "hello"
         );
         managed.cleanup();
+    }
+
+    #[test]
+    fn list_returns_only_registered_manifests_with_owner() {
+        let repo = tempfile::tempdir().unwrap();
+        init_git_repo(repo.path());
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
+        let managed = manager
+            .create(&CreateWorktree {
+                source_cwd: repo.path().to_path_buf(),
+                base: None,
+                branch: None,
+                owner_session_id: Some("session-1".into()),
+            })
+            .unwrap();
+
+        let listed = manager.list(repo.path()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, managed.id);
+        assert_eq!(listed[0].owner_session_id.as_deref(), Some("session-1"));
+        assert!(!listed[0].dirty);
+        assert!(manager.cleanup(&managed.id, true).unwrap());
     }
 
     #[test]
@@ -640,6 +792,7 @@ mod tests {
                 source_cwd: repo.path().to_path_buf(),
                 base: None,
                 branch: None,
+                owner_session_id: None,
             })
             .unwrap();
         let checkout = managed.root.clone();
@@ -670,6 +823,7 @@ mod tests {
                 source_cwd: repo.path().to_path_buf(),
                 base: None,
                 branch: None,
+                owner_session_id: None,
             })
             .unwrap();
         assert_eq!(
@@ -688,6 +842,41 @@ mod tests {
     }
 
     #[test]
+    fn ignored_files_are_kept_for_recovery() {
+        let repo = tempfile::tempdir().unwrap();
+        init_git_repo(repo.path());
+        fs::write(repo.path().join(".gitignore"), ".secret\n").unwrap();
+        assert!(Command::new("git")
+            .args(["add", ".gitignore"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .args(["commit", "-m", "ignore secret"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap()
+            .success());
+        let storage = tempfile::tempdir().unwrap();
+        let manager = WorktreeManager::new(WorktreeSettings {
+            root: storage.path().to_path_buf(),
+        });
+        let managed = manager
+            .create(&CreateWorktree {
+                source_cwd: repo.path().to_path_buf(),
+                base: None,
+                branch: None,
+                owner_session_id: None,
+            })
+            .unwrap();
+        fs::write(managed.root.join(".secret"), "keep").unwrap();
+
+        assert!(!manager.cleanup(&managed.id, true).unwrap());
+        assert!(managed.root.exists());
+    }
+
+    #[test]
     fn explicit_branch_mode_creates_the_requested_branch() {
         let repo = tempfile::tempdir().unwrap();
         init_git_repo(repo.path());
@@ -700,6 +889,7 @@ mod tests {
                 source_cwd: repo.path().to_path_buf(),
                 base: None,
                 branch: Some("codex/explicit-worktree".into()),
+                owner_session_id: None,
             })
             .unwrap();
 

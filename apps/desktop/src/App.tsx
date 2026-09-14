@@ -24,6 +24,7 @@ import ChatReviewPanel from "./components/chat/ChatReviewPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
 import ConversationTitle from "./components/chat/ConversationTitle";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
+import WorktreeManagerDialog from "./components/chat/WorktreeManagerDialog";
 import ProjectEditDialog from "./components/chat/ProjectEditDialog";
 import ProjectFolderIcon from "./components/chat/ProjectFolderIcon";
 import SidebarSessionList from "./components/chat/SidebarSessionList";
@@ -279,6 +280,7 @@ export default function App() {
     x: number;
     y: number;
   } | null>(null);
+  const [worktreeProject, setWorktreeProject] = useState<ProjectDto | null>(null);
   const [projectDialog, setProjectDialog] = useState<
     { mode: "create" } | { mode: "edit"; project: ProjectDto } | null
   >(null);
@@ -2834,7 +2836,8 @@ export default function App() {
               const proj = projects.find((p) => p.id === projectMenu.id);
               if (proj) setProjectDialog({ mode: "edit", project: proj });
             } else if (action === "worktree") {
-              showTransientToast(t("project.worktreeComingSoon"));
+              const project = projects.find((p) => p.id === projectMenu.id);
+              if (project?.roots[0]) setWorktreeProject(project);
             } else if (action === "archive") {
               void invoke<import("./types").RecentSessionDto[]>(
                 "list_sessions",
@@ -2859,6 +2862,13 @@ export default function App() {
           onClose={() => setProjectMenu(null)}
         />
       )}
+      {worktreeProject?.roots[0] ? (
+        <WorktreeManagerDialog
+          projectName={worktreeProject.name}
+          projectRoot={worktreeProject.roots[0]}
+          onClose={() => setWorktreeProject(null)}
+        />
+      ) : null}
       {toastHost}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ProjectEditDialog

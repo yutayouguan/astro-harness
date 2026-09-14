@@ -292,6 +292,63 @@ body:has(.app-dialog-backdrop:not(.is-closing)) .app-shell {
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.worktree-manager-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.worktree-manager-body {
+  display: grid;
+  gap: 12px;
+}
+
+.worktree-manager-toolbar,
+.worktree-manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.worktree-manager-toolbar > span,
+.worktree-manager-item span,
+.worktree-manager-item small {
+  display: block;
+  overflow: hidden;
+  color: var(--ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-manager-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 440px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.worktree-manager-item {
+  padding: 10px 12px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.worktree-manager-item > div {
+  min-width: 0;
+}
+
+.worktree-manager-item strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.worktree-manager-error {
+  color: var(--danger, #ef4444);
+}
+
 body:has(.app-dialog-backdrop.is-closing) .app-shell {
   transform: none;
   transition: transform 0.12s ease-out;

@@ -34,7 +34,7 @@ const ITEMS: Array<{
     Icon: FolderOpen,
     separator: true,
   },
-  { id: "worktree", label: "创建永久工作树", Icon: GitBranch },
+  { id: "worktree", label: "管理工作树", Icon: GitBranch },
   { id: "archive", label: "归档聊天", Icon: Archive, separator: true },
   { id: "remove", label: "移除项目", Icon: X },
 ];

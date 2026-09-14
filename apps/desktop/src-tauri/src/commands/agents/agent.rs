@@ -43,6 +43,8 @@ pub struct TaskWorktreeDto {
     pub path: String,
     pub branch: Option<String>,
     pub head_sha: String,
+    pub owner_session_id: Option<String>,
+    pub dirty: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +223,9 @@ pub async fn write_daily_memory(
 
 /// 独立任务：若能解析到 git root 则创建隔离 worktree；否则返回 `None`（降级共工作区）。
 #[tauri::command]
-pub fn prepare_task_worktree() -> Result<Option<TaskWorktreeDto>, String> {
+pub fn prepare_task_worktree(
+    session_id: Option<String>,
+) -> Result<Option<TaskWorktreeDto>, String> {
     let Some(root) = agent::git_worktree::resolve_project_root(None) else {
         return Ok(None);
     };
@@ -236,12 +240,15 @@ pub fn prepare_task_worktree() -> Result<Option<TaskWorktreeDto>, String> {
         source_cwd: repo,
         base: None,
         branch: None,
+        owner_session_id: session_id,
     }) {
         Ok(handle) => Ok(Some(TaskWorktreeDto {
             id: handle.id.clone(),
             path: handle.path().to_string_lossy().into_owned(),
             branch: handle.branch.clone(),
             head_sha: handle.head_sha.clone(),
+            owner_session_id: handle.owner_session_id.clone(),
+            dirty: false,
         })),
         Err(e) => {
             tracing::warn!(error = %e, "prepare_task_worktree failed; continuing without");
@@ -252,13 +259,44 @@ pub fn prepare_task_worktree() -> Result<Option<TaskWorktreeDto>, String> {
 
 /// 清理任务 worktree；脏树按 clean_only 保留。
 #[tauri::command]
-pub fn cleanup_task_worktree(worktree_id: String) -> Result<(), String> {
+pub fn cleanup_task_worktree(worktree_id: String) -> Result<bool, String> {
     let manager =
         agent::git_worktree::WorktreeManager::new(agent::git_worktree::WorktreeSettings {
             root: home::default_memory_dir().join("worktrees"),
         });
     manager
         .cleanup(worktree_id.trim(), true)
-        .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+/// 列出当前项目中已登记且仍可验证的 Astro worktree。
+#[tauri::command]
+pub fn list_task_worktrees(project_root: Option<String>) -> Result<Vec<TaskWorktreeDto>, String> {
+    let root = project_root
+        .as_deref()
+        .map(std::path::Path::new)
+        .and_then(|path| agent::git_worktree::resolve_project_root(Some(path)))
+        .or_else(|| agent::git_worktree::resolve_project_root(None));
+    let Some(root) = root else {
+        return Ok(Vec::new());
+    };
+    let manager =
+        agent::git_worktree::WorktreeManager::new(agent::git_worktree::WorktreeSettings {
+            root: home::default_memory_dir().join("worktrees"),
+        });
+    manager
+        .list(&root)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|worktree| {
+            Ok(TaskWorktreeDto {
+                id: worktree.id,
+                path: worktree.root.to_string_lossy().into_owned(),
+                branch: worktree.branch,
+                head_sha: worktree.head_sha,
+                owner_session_id: worktree.owner_session_id,
+                dirty: worktree.dirty,
+            })
+        })
+        .collect()
 }
