@@ -2,9 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageDraw
 
-from paint_action_frames import COUNT, GRID, SIZE, clean_ground_residue, composite, mask_for, neutral_from, origin, registered_cell
+from export_apng import read_apng_frames, write_apng
+from paint_action_frames import COUNT, GRID, SIZE, clean_ground_residue, composite, export_previews, gif_delays, mask_for, neutral_from, origin, registered_cell
 
 
 class PaintedActionTests(unittest.TestCase):
@@ -68,6 +69,39 @@ class PaintedActionTests(unittest.TestCase):
         sheet.paste(shifted, (4, 48-4))
         _, metrics = registered_cell(sheet, 0, neutral)
         self.assertEqual((metrics["dx"], metrics["dy"]), (2, -2))
+
+    def test_preview_uses_encoded_frame_order_after_coalescing(self):
+        red = Image.new("RGBA", (256, 208))
+        blue = red.copy()
+        ImageDraw.Draw(red).rectangle((40, 40, 70, 70), fill="red")
+        ImageDraw.Draw(blue).rectangle((40, 40, 70, 70), fill="blue")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            frames = [red, red, blue, red]
+            spec = write_apng(root / "test.apng", frames, [100, 80, 90, 200])
+            with self.assertRaisesRegex(ValueError, "encoded APNG"):
+                export_previews(frames, spec, root / "invalid", "test")
+            self.assertFalse((root / "invalid").exists())
+            decoded = read_apng_frames(root / "test.apng", spec)
+            export_previews(decoded, spec, root, "test")
+            with Image.open(root / "test-preview.gif") as gif:
+                self.assertEqual(gif.n_frames, 3)
+                colors, times = [], []
+                for i in range(3):
+                    gif.seek(i)
+                    colors.append(gif.convert("RGB").getpixel((100, 100)))
+                    times.append(gif.info["duration"])
+                self.assertEqual(colors, [(255, 0, 0), (0, 0, 255), (255, 0, 0)])
+                self.assertEqual(times, [180, 90, 200])
+
+    def test_gif_tick_rounding_does_not_accumulate_playback_speed_error(self):
+        durations = [42] * 100
+        for speed in (1, 3):
+            rounded = gif_delays(durations, speed)
+            self.assertEqual(sum(rounded), sum(durations)*speed)
+            for count in range(1, len(durations)+1):
+                self.assertLessEqual(abs(sum(rounded[:count])-sum(durations[:count])*speed), 5)
+        self.assertEqual(gif_delays([80, 90, 320]), [80, 90, 320])
 
 
 if __name__ == "__main__":

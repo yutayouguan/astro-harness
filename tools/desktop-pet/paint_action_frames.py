@@ -14,7 +14,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from audit_motion import frame_metrics, motion_sequence
 from bake_naitang_kneading import FINGERPRINT, articulate, lift_pair, smooth
 from build_idle_rig import opaque_fingerprint
-from export_apng import write_apng
+from export_apng import read_apng_frames, write_apng
 from prepare_grooming_layers import PAW_MASK
 
 SIZE = (192, 208)
@@ -178,7 +178,25 @@ def prepare_paw(source, target_sheet, output):
     mask.save(output / "edit-mask.png")
 
 
+def gif_delays(durations, speed=1):
+    """GIF has 10ms ticks: round the cumulative clock, not every frame.
+
+    For example, repeated 42ms frames must not all become 40ms and steadily
+    speed up. APNG remains the exact timing source; GIF is only an approximation.
+    """
+    elapsed = encoded_elapsed = 0
+    result = []
+    for duration in durations:
+        elapsed += duration * speed
+        next_elapsed = ((elapsed + 5) // 10) * 10
+        result.append(next_elapsed - encoded_elapsed)
+        encoded_elapsed = next_elapsed
+    return result
+
+
 def export_previews(frames, spec, output, name):
+    if len(frames) != len(spec["durationsMs"]):
+        raise ValueError("Preview frames must match the encoded APNG timing")
     output.mkdir(parents=True, exist_ok=True)
     rows = (len(frames)+5)//6
     for bg_name, color in (("white", "white"), ("black", "#171923"), ("checker", "#c8ccd3")):
@@ -192,7 +210,7 @@ def export_previews(frames, spec, output, name):
         for i, frame in enumerate(frames):
             x, y = i%6*256, i//6*232
             contact.paste(frame, (x, y), frame)
-            ImageDraw.Draw(contact).text((x+4, y+211), str(i), fill="white" if bg_name=="black" else "black")
+            ImageDraw.Draw(contact).text((x+4, y+211), f"{i}: {spec['durationsMs'][i]}ms", fill="white" if bg_name=="black" else "black")
         contact.save(output / f"{name}-{bg_name}.png")
     sequence = motion_sequence(spec)
     previews = []
@@ -202,10 +220,10 @@ def export_previews(frames, spec, output, name):
         previews.append(bg.resize((512, 416), Image.Resampling.LANCZOS))
     for suffix, speed in (("preview", 1), ("slow", 3)):
         previews[0].save(output / f"{name}-{suffix}.gif", save_all=True, append_images=previews[1:],
-                         duration=[spec["durationsMs"][i]*speed for i in sequence], loop=0, disposal=2)
+                         duration=gif_delays([spec["durationsMs"][i] for i in sequence], speed), loop=0, disposal=2)
 
 
-def compose(directory, painted_path, entry_path=None, paw_path=None):
+def compose(directory, painted_path, entry_path=None, paw_path=None, output=None):
     meta = json.loads((directory / "source.json").read_text())
     action = meta["action"]
     neutral = neutral_from(directory / "neutral.png")
@@ -280,18 +298,32 @@ def compose(directory, painted_path, entry_path=None, paw_path=None):
         if not box or box[0] == 0 or box[1] == 0 or box[2] == 256 or box[3] == 208:
             raise ValueError(f"Clipped/empty frame {i}")
         frames.append(padded)
-    target = directory / "candidate"
-    target.mkdir(exist_ok=True)
+    target = output if output is not None else directory / "candidate"
+    target.mkdir(parents=True, exist_ok=output is None)
     times = [80 if action=="kneading" else 90]*len(frames)
     times[0], times[-1] = 240, 320
     # A full action once until loop seams have been visually accepted.
     spec = write_apng(target / f"{action}.apng", frames, times)
     (target / "clip.json").write_text(json.dumps(spec, indent=2) + "\n")
+    source_groups = []
+    for i, source in enumerate(source_order):
+        if i and frames[i].tobytes() == frames[i-1].tobytes():
+            source_groups[-1].append(source)
+        else:
+            source_groups.append([source])
+    source_frame_count = len(frames)
+    frames = read_apng_frames(target / spec["path"], spec)
+    if len(source_groups) != len(frames):
+        raise ValueError("Encoded APNG provenance differs from source groups")
     export_previews(frames, spec, target, action)
     metrics = [frame_metrics(frame) for frame in frames]
     sequence = motion_sequence(spec)
     (target / "review.json").write_text(json.dumps({
         "approved": False, "installed": False, "sourceCells": source_order, "registration": registration,
+        "sourceFrameCount": source_frame_count, "encodedFrameCount": len(frames),
+        "encodedSourceCells": source_groups, "previewSource": "decoded-apng",
+        "inputHashes": {role: hashlib.sha256(path.read_bytes()).hexdigest()
+                        for role, path in (("painted", painted_path), ("entry", entry_path), ("paw", paw_path)) if path},
         "uniqueFrames": len({frame.tobytes() for frame in frames}), "protectedPixelsExact": True,
         "neutralEndpointsExact": frames[0].tobytes()==frames[-1].tobytes(),
         "baselineRange": max(m["baseline"] for m in metrics)-min(m["baseline"] for m in metrics),
@@ -321,6 +353,7 @@ if __name__ == "__main__":
     assemble.add_argument("painted", type=Path)
     assemble.add_argument("--entry", type=Path)
     assemble.add_argument("--paw", type=Path)
+    assemble.add_argument("--output", type=Path, help="Use a new review directory; existing targets are rejected")
     args = p.parse_args()
     if args.command == "prepare":
         prepare(args.source, args.output, args.action, args.grooming)
@@ -329,4 +362,4 @@ if __name__ == "__main__":
     elif args.command == "prepare-paw":
         prepare_paw(args.source, args.target, args.output)
     else:
-        compose(args.directory, args.painted, args.entry, args.paw)
+        compose(args.directory, args.painted, args.entry, args.paw, args.output)

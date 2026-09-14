@@ -5,6 +5,8 @@ Source WebP assets remain untouched as the reproducible source archive.
 """
 import argparse
 import json
+import os
+import tempfile
 from pathlib import Path
 from PIL import Image
 from audit_motion import effective_frames, motion_sequence
@@ -22,14 +24,46 @@ ROWS = {
 }
 
 
+def _validate_timing(durations, start, end, repeats):
+    if not durations or any(type(t) is not int or not 20 <= t <= 10000 for t in durations):
+        raise ValueError("APNG frame durations must be integer milliseconds in 20..10000")
+    if any(type(v) is not int for v in (start, end, repeats)) or not (0 <= start < end <= len(durations) and 1 <= repeats <= 8):
+        raise ValueError("Invalid loop bounds")
+    if sum(durations) + (repeats-1)*sum(durations[start:end]) > 60000:
+        raise ValueError("APNG action exceeds 60 seconds")
+
+
+def read_apng_frames(path, spec):
+    """Decode the serialized playback source, not the pre-coalescing inputs."""
+    path = Path(path)
+    if path.stat().st_size > 16*1024*1024:
+        raise ValueError("APNG exceeds 16 MiB")
+    _validate_timing(spec["durationsMs"], spec["loopStart"], spec["loopEnd"], spec["loopRepeats"])
+    size = spec["frameWidth"], spec["frameHeight"]
+    if size not in ((192, 208), (256, 208)) or spec["columns"] != 1 or spec.get("neutralBookends"):
+        raise ValueError("Unsupported APNG layout")
+    frames = []
+    with Image.open(path) as image:
+        if image.format != "PNG" or image.size != size or not 2 <= image.n_frames <= 128 or image.n_frames != len(spec["durationsMs"]):
+            raise ValueError("APNG frame count or geometry differs from manifest")
+        for i, duration in enumerate(spec["durationsMs"]):
+            image.seek(i)
+            if abs(image.info["duration"]-duration) > .01:
+                raise ValueError("APNG timing differs from manifest")
+            frames.append(image.convert("RGBA"))
+    return frames
+
+
 def write_apng(path, frames, durations, loop_start=0, loop_end=None, repeats=1):
+    path = Path(path)
     if len(frames) != len(durations) or not frames:
         raise ValueError("Frame/timing mismatch")
     if frames[0].size not in ((192, 208), (256, 208)) or any(frame.size != frames[0].size for frame in frames):
         raise ValueError("APNG frames must share a supported canvas")
+    if any(frame.mode != "RGBA" for frame in frames):
+        raise ValueError("APNG source frames must be RGBA")
     loop_end = len(frames) if loop_end is None else loop_end
-    if not 0 <= loop_start < loop_end <= len(frames) or not 1 <= repeats <= 8:
-        raise ValueError("Invalid loop bounds")
+    _validate_timing(durations, loop_start, loop_end, repeats)
     # Coalesce only byte-identical neighboring frames; preserve total duration.
     unique, times, mapping = [], [], []
     for index, (frame, duration) in enumerate(zip(frames, durations)):
@@ -44,22 +78,27 @@ def write_apng(path, frames, durations, loop_start=0, loop_end=None, repeats=1):
     # All action files are genuinely animated PNGs, even a stationary pose bank.
     if len(unique) < 2:
         raise ValueError("Action has no changing frames")
-    unique[0].save(path, format="PNG", save_all=True, append_images=unique[1:],
-                   duration=times, loop=0, disposal=0, blend=0, optimize=False)
-    # Verify full RGBA and timing after decoding; detect Pillow frame coalescing.
-    with Image.open(path) as result:
-        if result.n_frames != len(unique):
-            raise ValueError("Encoder changed frame count")
-        for i, expected in enumerate(unique):
-            result.seek(i)
-            if result.convert("RGBA").tobytes() != expected.tobytes():
-                raise ValueError(f"APNG pixel roundtrip failed at frame {i}")
-            if abs(result.info["duration"] - times[i]) > 0.01:
-                raise ValueError("APNG timing roundtrip failed")
-    return dict(path=path.name, frameWidth=frames[0].width, frameHeight=frames[0].height, columns=1,
+    if len(unique) > 128:
+        raise ValueError("APNG exceeds 128 encoded frames")
+    spec = dict(path=path.name, frameWidth=frames[0].width, frameHeight=frames[0].height, columns=1,
                 durationsMs=times, loopStart=mapping[loop_start],
                 loopEnd=mapping[loop_end] if loop_end < len(mapping) else len(times), loopRepeats=repeats,
                 neutralBookends=False)
+    _validate_timing(times, spec["loopStart"], spec["loopEnd"], repeats)
+    # Only replace an existing candidate once the temporary file round-trips.
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}-", suffix=".tmp", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        unique[0].save(temporary, format="PNG", save_all=True, append_images=unique[1:],
+                       duration=times, loop=0, disposal=0, blend=0, optimize=False)
+        decoded = read_apng_frames(temporary, spec)
+        for i, (actual, expected) in enumerate(zip(decoded, unique)):
+            if actual.tobytes() != expected.tobytes():
+                raise ValueError(f"APNG pixel roundtrip failed at frame {i}")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return spec
 
 
 def export_pet(source, output):
