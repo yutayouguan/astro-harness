@@ -647,6 +647,27 @@ pub(crate) async fn run_turn(
             turn = step_context.turn.turn(),
             "step context captured"
         );
+        let step_provider_settings = step_context
+            .provider_settings()
+            .expect("active turn Step must capture provider settings");
+
+        // 完整设置更新只在 Step 捕获边界发布；飞行中的请求与随后执行的工具
+        // 继续共享这一个不可变 generation。
+        if step_provider_settings.generation != settings_generation {
+            settings_generation = step_provider_settings.generation;
+            streamer = match responses_override.clone() {
+                Some(f) => ProviderStreamer::with_responses_override(
+                    step_provider_settings.targets.clone(),
+                    step_provider_settings.base_config.clone(),
+                    f,
+                ),
+                None => ProviderStreamer::new(
+                    step_provider_settings.targets.clone(),
+                    step_provider_settings.base_config.clone(),
+                ),
+            };
+        }
+
         let history = step_context.history.clone();
         let prompt_context = step_context.prompt_context.clone();
         let sampling_prompt = super::provider::build_prompt(&prompt, &step_context);
@@ -660,21 +681,6 @@ pub(crate) async fn run_turn(
             sampling_prompt.tools.as_ref(),
         )
         .await;
-
-        // 飞行中的请求保留原快照；完整的设置更新在下一次 provider 请求前原子发布。
-        if let Some(settings) = turn_context.provider_settings() {
-            if settings.generation != settings_generation {
-                settings_generation = settings.generation;
-                streamer = match responses_override.clone() {
-                    Some(f) => ProviderStreamer::with_responses_override(
-                        settings.targets,
-                        settings.base_config,
-                        f,
-                    ),
-                    None => ProviderStreamer::new(settings.targets, settings.base_config),
-                };
-            }
-        }
 
         let sampling = {
             let mut stream_retries: usize = 0;

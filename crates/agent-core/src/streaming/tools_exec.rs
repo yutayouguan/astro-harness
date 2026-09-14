@@ -2763,6 +2763,7 @@ mod tests {
         session.bind_turn_context(Arc::clone(&turn)).await;
         let step = Arc::new(StepContext::new(
             Arc::clone(&turn),
+            turn.provider_settings().map(Arc::new),
             Vec::new(),
             Vec::new(),
             Arc::new(router),

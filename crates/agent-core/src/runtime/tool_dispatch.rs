@@ -160,7 +160,7 @@ impl AgentLoop {
             .map(|snapshot| snapshot.skill_configs().to_vec())
             .unwrap_or(skill_config_overrides);
         let mut service_tier = step_context
-            .and_then(|step| step.turn.provider_settings())
+            .and_then(StepContext::provider_settings)
             .and_then(|settings| {
                 settings
                     .base_config

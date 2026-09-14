@@ -1026,6 +1026,7 @@ impl Session {
                 ))
             })
         };
+        let provider_settings = turn_context.provider_settings().map(Arc::new);
         let interaction_mode = turn_context.mode();
         let requested_tool_mode = self
             .lock_state()
@@ -1055,6 +1056,7 @@ impl Session {
         };
         let step_context = Arc::new(StepContext::new(
             turn_context,
+            provider_settings,
             history,
             prompt_context,
             tool_router,
@@ -1399,6 +1401,61 @@ mod tests {
         );
         assert!(!first.routes_tool("web_search"));
         assert!(!first.routes_tool("exec_command"));
+    }
+
+    #[tokio::test]
+    async fn capture_step_context_pins_provider_settings_generation() {
+        let dir = TempDir::new().unwrap();
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "step-provider-settings".into())
+            .await
+            .unwrap();
+        session.set_current_turn_id("turn-provider-settings").await;
+        let turn = session
+            .lock_state()
+            .current_turn_context
+            .clone()
+            .expect("turn context");
+        turn.initialize_provider_settings(
+            vec![types::ModelTarget {
+                provider_id: "provider".into(),
+                backend_id: "openai".into(),
+                model: "old-model".into(),
+                api_key: "secret".into(),
+                base_url: String::new(),
+            }],
+            providers::ProviderConfig {
+                model: "old-model".into(),
+                additional_params: serde_json::json!({"service_tier":"priority"}),
+                ..Default::default()
+            },
+        );
+
+        let first = session.capture_step_context().await.unwrap();
+        assert_eq!(
+            turn.apply_settings_update(agent_protocol::TurnSettingsUpdate {
+                model: Some("new-model".into()),
+                service_tier: Some(Some("flex".into())),
+                ..Default::default()
+            }),
+            agent_protocol::TurnSettingsOutcome::Applied
+        );
+        let second = session.capture_step_context().await.unwrap();
+
+        let first_settings = first.provider_settings().unwrap();
+        let second_settings = second.provider_settings().unwrap();
+        assert_eq!(first_settings.generation, 0);
+        assert_eq!(first_settings.targets[0].model, "old-model");
+        assert_eq!(
+            first_settings.base_config.additional_params["service_tier"],
+            "priority"
+        );
+        assert_eq!(second_settings.generation, 1);
+        assert_eq!(second_settings.targets[0].model, "new-model");
+        assert_eq!(
+            second_settings.base_config.additional_params["service_tier"],
+            "flex"
+        );
     }
 
     fn visible_tool_names(step: &StepContext) -> Vec<String> {
