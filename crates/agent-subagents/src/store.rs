@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use agent_db::sqlx::{self, Row};
-use agent_db::SqlitePool;
+use agent_db::{AstroDb, DbSpec, SqlitePool};
 use anyhow::{bail, Context};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -831,36 +830,11 @@ fn source_turn_id(event: &RunnerEvent) -> Option<&str> {
 }
 
 async fn open_pool(path: &Path) -> anyhow::Result<SqlitePool> {
-    use agent_db::sqlx::sqlite::{
-        SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions,
-        SqliteSynchronous,
-    };
-    use agent_db::sqlx::ConnectOptions;
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let opts = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
-        .auto_vacuum(SqliteAutoVacuum::Incremental)
-        .busy_timeout(Duration::from_secs(5))
-        .pragma("foreign_keys", "1")
-        .log_statements(tracing::log::LevelFilter::Debug)
-        .log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_secs(1));
-
-    // Open the small pool eagerly. Lazily creating another SQLite connection
-    // while a lifecycle write is active can race the per-connection WAL setup
-    // and surface as SQLITE_BUSY even though the actual transaction is short.
-    let pool = SqlitePoolOptions::new()
-        .min_connections(4)
-        .max_connections(4)
-        .acquire_timeout(Duration::from_secs(10))
-        .connect_with(opts)
-        .await?;
-    Ok(pool)
+    const SPEC: DbSpec = DbSpec::new("subagents", "subagents-v2.db").with_max_connections(4);
+    // File-level PRAGMAs belong to the shared once-per-path initializer, not
+    // connection options: replacement connections must not contend with writers.
+    let db = AstroDb::new(path.parent().unwrap_or(Path::new(".")));
+    Ok(db.open_pool_at_path(&SPEC, path).await?)
 }
 
 fn now() -> String {
@@ -869,8 +843,81 @@ fn now() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::{AgentPath, AgentStatusV2, RunnerEvent, ThreadReservation};
+
+    #[tokio::test]
+    async fn pool_open_does_not_wait_for_an_active_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("custom-agent-graph.db");
+        let store = AgentGraphStore::open(path.clone()).await.unwrap();
+        store.ensure_root_thread("root-thread").await.unwrap();
+        let writer = store.pool().begin_with("BEGIN IMMEDIATE").await.unwrap();
+
+        // WAL permits readers while a writer holds its transaction. Opening
+        // their connections must not replay file-level, write-locking PRAGMAs.
+        let opened = tokio::time::timeout(Duration::from_secs(2), async {
+            let reader = AgentGraphStore::open(path.clone()).await?;
+            let roots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_threads")
+                .fetch_one(reader.pool())
+                .await?;
+            Ok::<_, anyhow::Error>((reader, roots))
+        })
+        .await;
+        writer.rollback().await.unwrap();
+        let (reader, roots) = opened
+            .expect("opening a reader pool must not wait for the writer")
+            .unwrap();
+        assert_eq!(reader.path(), path);
+        assert!(!dir.path().join("subagents-v2.db").exists());
+        assert_eq!(roots, 1);
+        reader.pool().close().await;
+        store.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn replacement_connection_can_read_while_a_writer_is_active() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subagents-v2.db");
+        let store = AgentGraphStore::open(path).await.unwrap();
+        store.ensure_root_thread("root-thread").await.unwrap();
+        let pool = store.pool();
+        let mut held = Vec::new();
+        for _ in 0..4 {
+            held.push(pool.acquire().await.unwrap());
+        }
+        // Force a physical replacement, regardless of eager/lazy pool setup.
+        held.pop().unwrap().close().await.unwrap();
+        sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut *held[0])
+            .await
+            .unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), async {
+            let mut reader = pool.acquire().await?;
+            let roots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_threads")
+                .fetch_one(&mut *reader)
+                .await?;
+            let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+                .fetch_one(&mut *reader)
+                .await?;
+            Ok::<_, sqlx::Error>((roots, foreign_keys))
+        })
+        .await;
+        sqlx::query("ROLLBACK")
+            .execute(&mut *held[0])
+            .await
+            .unwrap();
+        drop(held);
+        pool.close().await;
+        assert_eq!(
+            result
+                .expect("replacement reader must not wait for the writer")
+                .unwrap(),
+            (1, 1)
+        );
+    }
 
     fn reservation(id: &str, path: &str) -> ThreadReservation {
         ThreadReservation {

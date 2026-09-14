@@ -196,6 +196,12 @@ Cron 和 Subagent 使用 `BackgroundAdapter`；普通聊天使用 `ForegroundAda
 - 邮箱消息（`MailboxMessage`）
 - 运行时描述符（`AgentRuntimeDescriptorV2`）
 
+连接池统一由 `agent-db::AstroDb::open_pool_at_path` 创建，保留调用者指定的
+数据库路径和最多 4 条连接。WAL 与空库的 incremental auto-vacuum 由共享层按
+规范路径在进程内成功初始化一次；不得在每条连接的选项中重复设置文件级 PRAGMA，
+也不得靠预建连接或提高 slow-acquire 告警阈值规避写锁竞争。连接扩容、重建及
+同文件的新池应能在已有写事务期间读取 WAL 快照；实际写事务仍遵守 SQLite 单写者约束。
+
 每个子 Agent 的 Session 消息存储在独立的 `SessionStore`（`state.db`）中，通过 `session_id` 关联。
 
 ---
