@@ -37,3 +37,5 @@
 建议先保留高模作为外观来源，补齐侧背面细节；再制作适合变形的控制网格，整理四肢、眼睑/眼球和嘴部，绑定骨骼并测试眨眼、转头、摇尾。通过后再做踩奶、舔爪和四足行走。若采用高模预渲染APNG，桌面运行时不需要实时加载这两份高模。
 
 导入工具为 `tools/desktop-pet/inspect_hunyuan_models.py`。通过MCP运行时显式传入 `__file__` 与独立 `REVIEW_OUTPUT`，先备份当前Blender项目，再分别调用 `import_model`、`studio`、`render`、`save_copy`。已存在的专属导入场景拒绝覆盖。
+
+后续材质副本与验证结果见 [Hunyuan宠物材质工作副本](desktop-pet-hunyuan-materials.md)。原始导入场景保持不变。
