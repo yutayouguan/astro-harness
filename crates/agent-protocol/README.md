@@ -11,12 +11,17 @@ Agent runtime 的稳定控制、事件、item 与原生模型历史协议。本 
 | `items.rs` | `TurnItem` | UI/客户端稳定完成项 |
 | `response_item.rs` | `ResponseItem`、`ContentItem` | Agent 与 Responses API 的 canonical history |
 | `control.rs` | approval、settings、review、协作 DTO | typed 控制请求与响应 |
+| `thread_attachment.rs` | `ThreadAttachment`、分页与 mutation DTO | 线程级有界 JSON 状态 |
 
 ## `ResponseItem`
 
 `ResponseItem` 直接表达 message、reasoning、local shell、function/custom/tool-search call 及 output。它保留 item id、call id、namespace、phase 和内部 metadata，使 Agent history 可以跨 sampling、rollout 与进程重启保持协议身份。`qualified_tool_name()` 只为索引/展示派生点号形式，不改写原生字段。
 
 它不是通用 `Message` 的序列化包装。Agent 请求、SQLite 和 rollout 直接使用 `Vec<ResponseItem>`；Desktop 也返回原生 item，UI 只在渲染边界生成 `ConversationEntry`。
+
+工具结果的 host-only metadata 保存在 output item 的
+`internal_chat_message_metadata_passthrough.astro_tool_result_metadata_v1`。它有独立字节上限，
+由 Provider wire encoder 整体剥离，不得拼入模型可见 `output`。
 
 ## `Op`
 

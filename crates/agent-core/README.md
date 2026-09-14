@@ -4,7 +4,7 @@
 
 Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> StepContext` 驱动 Responses-only 多轮执行、工具调用、typed hooks、持久化与恢复。
 
-工具链与 Codex 的 Step-scoped tool plan 对齐：`CoreToolRuntime / ToolExecutor -> ToolRegistry -> build_tool_router / finalize_tool_router -> ToolRouter { registry, model_visible_specs } -> StepContext { tool_router } -> build_prompt() -> Prompt.tools -> ResponsesRequest -> ResponseItem -> ToolRouter::build_tool_call() -> ToolRegistry::dispatch`。
+工具链与 Codex 的 Step-scoped tool plan 对齐：`CoreToolRuntime / ToolExecutor -> ToolRegistry -> build_tool_router / finalize_tool_router -> ToolRouter { registry, model_visible_specs } -> StepContext { provider_settings, tool_router } -> build_prompt() -> Prompt.tools -> ResponsesRequest -> ResponseItem -> ToolRouter::build_tool_call() -> ToolRegistry::dispatch`。一次 Step 捕获的 provider/model/service-tier generation 同时约束 sampling 与随后工具执行，live settings 更新只影响下一 Step。
 
 ## 核心职责
 
@@ -17,6 +17,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 - 管理工具结果压缩（原文保留，压缩视图给 provider）
 - HITL 闸门、中断状态机、schema 校验、smart approval 审批
 - 冻结 turn-scoped `ExtensionSnapshot`，reconcile 只把新快照排到下一 turn
+- 冻结 step-scoped provider settings，使模型请求、工具上下文与 service tier 不混用不同 generation
 - 恢复 durable Thread settings 与 `TokenUsageRecord` 累计/checkpoint
 - Cron 定时任务执行、子 Agent 委派、记忆回顾、标题生成等辅助执行域
 
@@ -59,7 +60,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | `runtime/turn_budget.rs` | `TurnState` — turn_id、轮次/深度计数、`MaxDepthError` |
 | `runtime/turn_lifecycle.rs` | 轮次生命周期 — `begin_user_turn` / `run_turn` / `prepare_llm_context` |
 | `runtime/turn_context.rs` | `TurnContext` — 单轮上下文快照 |
-| `runtime/step_context.rs` | `StepContext` — 单步（工具调用）上下文 |
+| `runtime/step_context.rs` | `StepContext` — 单次 sampling 的 provider settings、历史与工具路由快照 |
 | `runtime/compression_state.rs` | `CompressionState` — mid-run 摘要、compact 建议、召回上下文 |
 | `runtime/context_maintenance.rs` | 上下文维护 — `maintain_tool_context` / `provider_history` |
 | `runtime/recording.rs` | `ResponseItem` 记录 — `record_assistant_*` / `record_tool_result_*` |

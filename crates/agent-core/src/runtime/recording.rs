@@ -8,6 +8,14 @@ use session::ConversationStore;
 
 use super::AgentLoop;
 
+#[derive(Default)]
+pub(crate) struct ToolResultRecord<'a> {
+    pub(crate) media: &'a [types::MediaAsset],
+    pub(crate) file_changes: &'a [types::ToolFileChange],
+    pub(crate) status: Option<&'a ToolStatus>,
+    pub(crate) metadata: Option<&'a types::ToolResultMetadata>,
+}
+
 impl AgentLoop {
     pub(crate) async fn persist_response_items(
         &self,
@@ -319,10 +327,7 @@ impl AgentLoop {
             tool_call_id,
             tool_name.as_ref(),
             content,
-            &[],
-            &[],
-            None,
-            None,
+            ToolResultRecord::default(),
         )
         .await
     }
@@ -332,23 +337,20 @@ impl AgentLoop {
         tool_call_id: Option<&str>,
         tool_name: Option<&types::ToolName>,
         content: &str,
-        additional_media: &[types::MediaAsset],
-        file_changes: &[types::ToolFileChange],
-        tool_status: Option<&ToolStatus>,
-        tool_result_metadata: Option<&types::ToolResultMetadata>,
+        record: ToolResultRecord<'_>,
     ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
         let (_, mut media) = types::extract_tool_media(content);
-        for asset in additional_media {
+        for asset in record.media {
             if !media.contains(asset) {
                 media.push(asset.clone());
             }
         }
         let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
         let metadata = (!media.is_empty()
-            || !file_changes.is_empty()
-            || tool_status.is_some()
-            || tool_result_metadata.is_some())
+            || !record.file_changes.is_empty()
+            || record.status.is_some()
+            || record.metadata.is_some())
         .then(|| {
             let mut metadata = serde_json::Map::new();
             if !media.is_empty() {
@@ -357,19 +359,19 @@ impl AgentLoop {
                     serde_json::to_value(&media).unwrap_or_default(),
                 );
             }
-            if let Some(status) = tool_status {
+            if let Some(status) = record.status {
                 metadata.insert(
                     "astro_tool_status".into(),
                     serde_json::to_value(status).unwrap_or_default(),
                 );
             }
-            if !file_changes.is_empty() {
+            if !record.file_changes.is_empty() {
                 metadata.insert(
                     "astro_file_changes_v1".into(),
-                    serde_json::to_value(file_changes).unwrap_or_default(),
+                    serde_json::to_value(record.file_changes).unwrap_or_default(),
                 );
             }
-            if let Some(tool_result_metadata) = tool_result_metadata {
+            if let Some(tool_result_metadata) = record.metadata {
                 metadata.insert(
                     "astro_tool_result_metadata_v1".into(),
                     tool_result_metadata.stored_value(),

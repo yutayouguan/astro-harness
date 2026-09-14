@@ -95,6 +95,7 @@ mod history_control;
 pub mod live_interactions;
 pub(crate) mod model_ctx;
 mod recording;
+pub(crate) use recording::ToolResultRecord;
 mod response_journal;
 mod session;
 pub(crate) mod session_io;
@@ -3179,10 +3180,10 @@ mod tests {
                 Some("call-native-namespace"),
                 Some(&tool_name),
                 output.text(),
-                &[],
-                &[],
-                None,
-                output.metadata(),
+                recording::ToolResultRecord {
+                    metadata: output.metadata(),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();

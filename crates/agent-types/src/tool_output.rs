@@ -136,9 +136,13 @@ impl ToolOutput {
     }
 
     pub fn with_metadata(self, value: serde_json::Value) -> Self {
-        Self::WithMetadata {
-            output: Box::new(self),
-            metadata: ToolResultMetadata::capture(value),
+        let metadata = ToolResultMetadata::capture(value);
+        match self {
+            Self::WithMetadata { output, .. } => Self::WithMetadata { output, metadata },
+            output => Self::WithMetadata {
+                output: Box::new(output),
+                metadata,
+            },
         }
     }
 
@@ -156,6 +160,8 @@ impl ToolOutput {
         }
     }
 
+    /// Consume the model-visible text/media projection. Host-only metadata is
+    /// intentionally not exposed to nested runtimes such as Code Mode.
     pub fn into_parts(self) -> (String, Vec<MediaAsset>) {
         match self {
             Self::Text(s) => (s, Vec::new()),
@@ -316,6 +322,14 @@ mod tests {
         assert_eq!(
             oversized.metadata().unwrap().stored_value(),
             serde_json::Value::String("omitted_due_to_size_limit".into())
+        );
+
+        let replaced = ToolOutput::from("ok")
+            .with_metadata(serde_json::json!({"version":1}))
+            .with_metadata(serde_json::json!({"version":2}));
+        assert_eq!(
+            replaced.metadata().unwrap().stored_value(),
+            serde_json::json!({"version":2})
         );
     }
 }

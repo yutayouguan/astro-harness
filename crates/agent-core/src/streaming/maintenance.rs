@@ -369,10 +369,12 @@ pub(super) async fn record_tool_outcomes(
                     Some(&call.id),
                     Some(&tool_name),
                     &result_for_history,
-                    &tool_media,
-                    &tool_file_changes,
-                    Some(&tool_status),
-                    result.metadata(),
+                    crate::runtime::ToolResultRecord {
+                        media: &tool_media,
+                        file_changes: &tool_file_changes,
+                        status: Some(&tool_status),
+                        metadata: result.metadata(),
+                    },
                 )
                 .await
         };

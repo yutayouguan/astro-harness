@@ -27,7 +27,7 @@ Harness = Loop + Context + Tools + Safety + Recovery + Observability + Environme
 | `SessionTask` | Session | 可取消的一类会话任务抽象 |
 | `RegularTask` | active turn | 准备 prompt，执行常规 Reason/Act/Observe 循环 |
 | `TurnContext` | task | turn identity、交互模式、输入准入与事件归属 |
-| `StepContext` | sampling step | 本 step 的工具 schema、wire route、配置和执行快照 |
+| `StepContext` | sampling step | 本 step 的 provider settings generation、工具 schema、wire route、配置和执行快照 |
 | `ToolRouter` | step | 将 wire name 解析为已注册 handler/MCP，保持 namespace 边界 |
 | `RolloutRecorder` | Session runtime I/O | append-only 写入、flush、shutdown 和恢复事实源 |
 
@@ -108,7 +108,7 @@ schema 是三个边界，不应重新拼成一段无类型字符串，也不应�
 
 ## 6. Provider step
 
-每次 Provider sampling 使用当前 `ModelTarget` 和 `StepContext`。Fallback 只在尚未对用户产生可见输出的安全边界切换目标，避免将两个 Provider 的半段回答拼在同一 turn 中。
+每次 Provider sampling 使用 `StepContext.provider_settings` 中冻结的 `ModelTarget`、`ProviderConfig` 与 generation。live model/reasoning/service-tier 更新只在下一次 Step 捕获时生效；当前 response 产生的工具调用继续使用同一份设置。Fallback 只在尚未对用户产生可见输出的安全边界切换目标，避免将两个 Provider 的半段回答拼在同一 turn 中。
 
 Provider 返回的 text、reasoning、usage 和 tool deltas 被规范化为统一 `StreamChunk`，但必须在请求和历史层保留 Provider 原生语义，尤其是 Responses API 的 custom/tool_search call-output pair。
 
@@ -125,7 +125,7 @@ Provider 返回的 text、reasoning、usage 和 tool deltas 被规范化为统�
 
 ### 7.2 执行快照
 
-`StepContext` 持有 `ToolRouter`，后者同时保存 model-visible tools（`model_routes`）和全量 routable tools（`routes`）。
+`StepContext` 同时持有 provider settings snapshot 与 `ToolRouter`，后者保存 model-visible tools（`model_routes`）和全量 routable tools（`routes`）。
 
 - 模型发起的工具调用必须通过 `ToolRouter::model_can_call()`；
 - 热重载工具和 MCP 不能改变已生成调用的执行边界。
@@ -144,6 +144,8 @@ raw output
 ```
 
 `content` 保留原文；`compressed_content` 只是 Provider 视图。
+工具可附带最大 16 KiB 的 host-only result metadata；超限时只保留
+`omitted_due_to_size_limit` 标记。metadata 随 matching output item 持久化，但不会进入模型请求。
 
 ## 8. Code Mode runtime 与模型投影
 
