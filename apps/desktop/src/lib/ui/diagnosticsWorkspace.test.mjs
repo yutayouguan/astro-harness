@@ -88,6 +88,34 @@ test("diagnostic surfaces use shared material instead of an almost opaque base f
   );
 });
 
+test("status items are separated cards, not a shared glass strip", () => {
+  const container = css.match(/\.diagnostics-status-strip \{([^}]+)\}/)?.[1];
+  const card = css.match(/\.diagnostics-status-item \{([^}]+)\}/)?.[1];
+  assert.ok(container);
+  assert.ok(card);
+  assert.match(container, /gap: 12px/);
+  for (const rule of [
+    "border: 0",
+    "background: transparent",
+    "box-shadow: none",
+    "backdrop-filter: none",
+  ]) {
+    assert.ok(container.includes(rule), rule);
+  }
+  assert.match(card, /border: 0\.5px solid var\(--settings-panel-border/);
+  assert.match(card, /border-radius: 14px/);
+  assert.match(card, /background: var\(--diagnostics-reading-surface\)/);
+  assert.match(
+    css,
+    /\.diagnostics-status-item, \.diagnostics-status-detail, \.diagnostics-log-panel \{[^}]*backdrop-filter: var\(--diagnostics-reading-backdrop\)/,
+  );
+  assert.doesNotMatch(css, /\.diagnostics-status-item\s*(?:\+|:nth-child)/);
+  assert.match(
+    css,
+    /prefers-contrast: more\) \{[^}]*\}[\s\S]*\.diagnostics-status-item, \.diagnostics-log-panel \{ border: 1px solid currentColor/,
+  );
+});
+
 test("short hosts scroll instead of squeezing chrome or the log reader", () => {
   assert.match(css, /\.diagnostics-workspace \{[^}]*overflow: auto/);
   assert.match(

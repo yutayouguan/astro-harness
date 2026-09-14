@@ -34,7 +34,7 @@
 .diagnostics-workspace [hidden] { display: none; }
 /* Chrome keeps its natural height; a short host scrolls instead of crushing it. */
 .diagnostics-workspace > :not(.diagnostics-log-panel, .diagnostics-storage-panel) { flex-shrink: 0; }
-.diagnostics-status-strip, .diagnostics-status-detail, .diagnostics-log-panel {
+.diagnostics-status-item, .diagnostics-status-detail, .diagnostics-log-panel {
   backdrop-filter: var(--diagnostics-reading-backdrop);
   -webkit-backdrop-filter: var(--diagnostics-reading-backdrop);
   box-shadow: var(--settings-panel-shadow, var(--shadow-card));
@@ -50,9 +50,13 @@
 .diagnostics-status-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 0.5px solid var(--settings-panel-border, var(--color-border));
-  border-radius: 14px;
-  background: var(--settings-panel-background, var(--surface-panel-background));
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .diagnostics-status-item {
   display: grid;
@@ -62,23 +66,22 @@
   row-gap: 5px;
   min-width: 0;
   padding: 14px 16px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
+  border: 0.5px solid var(--settings-panel-border, var(--color-border));
+  border-radius: 14px;
+  background: var(--diagnostics-reading-surface);
   color: var(--ink-mute);
   font: inherit;
   font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
-.diagnostics-status-item + .diagnostics-status-item { border-left: 0.5px solid var(--diagnostics-divider); }
 .diagnostics-status-item > svg { grid-row: 1 / 3; }
 .diagnostics-status-item strong { grid-column: 2; color: var(--ink); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .diagnostics-status-item[data-status="healthy"] > svg { color: var(--color-success, #20855f); }
 .diagnostics-status-item[data-status="warning"] > svg { color: var(--tone-orange, #b7791f); }
 .diagnostics-status-item[data-status="error"] > svg { color: var(--color-danger, #c5525d); }
 .diagnostics-status-item[data-status="configured"] > svg { color: var(--tone); }
-.diagnostics-status-item[aria-expanded="true"], .diagnostics-status-item:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.diagnostics-status-item[aria-expanded="true"], .diagnostics-status-item:hover:not(:disabled) { border-color: color-mix(in srgb, var(--tone) 45%, var(--settings-panel-border, var(--color-border))); }
 .diagnostics-status-detail {
   display: flex;
   align-items: flex-start;
@@ -164,8 +167,6 @@
 }
 @container (max-width: 640px) {
   .diagnostics-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .diagnostics-status-item:nth-child(3) { border-left: 0; }
-  .diagnostics-status-item:nth-child(n+3) { border-top: 0.5px solid var(--diagnostics-divider); }
   .diagnostics-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container (max-width: 560px) {
@@ -183,5 +184,5 @@
 }
 @media (prefers-contrast: more) {
   .diagnostics-workspace { --diagnostics-divider: currentColor; }
-  .diagnostics-status-strip, .diagnostics-log-panel { border: 1px solid currentColor; }
+  .diagnostics-status-item, .diagnostics-log-panel { border: 1px solid currentColor; }
 }
