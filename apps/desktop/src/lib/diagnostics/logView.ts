@@ -1,5 +1,25 @@
+import type { AgentLogLine } from "../settings/diagnosticsModel.ts";
+
+/** Match a selected snapshot after live refresh replaces the row objects. */
+export function sameDiagnosticLog(
+  a: AgentLogLine | null,
+  b: AgentLogLine,
+): boolean {
+  return (
+    a != null &&
+    a.source === b.source &&
+    a.timestamp === b.timestamp &&
+    a.raw === b.raw
+  );
+}
+
 export type DiagnosticLogTimeRange =
-  "15m" | "1h" | "24h" | "7d" | "all" | "custom";
+  | "15m"
+  | "1h"
+  | "24h"
+  | "7d"
+  | "all"
+  | "custom";
 
 const RANGE_MS: Partial<Record<DiagnosticLogTimeRange, number>> = {
   "15m": 15 * 60 * 1_000,

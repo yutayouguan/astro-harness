@@ -1,4 +1,20 @@
 .storage-diagnostics .prefs-card-head { gap: 12px; }
+.storage-diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-bottom: 16px; border-bottom: 0.5px solid var(--color-border); }
+.storage-diagnostics-summary > div { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.storage-diagnostics-summary span, .storage-diagnostics-summary small { color: var(--ink-mute); font-size: 11px; }
+.storage-diagnostics-summary strong { font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+.storage-diagnostics-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.storage-diagnostics-section { min-width: 0; }
+.storage-diagnostics-section h3 { margin: 0 0 14px; font-size: 13px; font-weight: 650; }
+.storage-diagnostics-section h4 { margin: 14px 0 4px; font-size: 12px; }
+.storage-diagnostics-path-value { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: 4px; }
+.storage-diagnostics-path-value code { flex: 1; min-width: 0; }
+.storage-diagnostics-path-value button { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-mute); cursor: pointer; }
+.storage-diagnostics-maintenance { border-top: 0.5px solid var(--color-border); padding-top: 16px; }
+.storage-diagnostics-maintenance details + details { border-top: 0.5px solid var(--color-border); margin-top: 8px; padding-top: 8px; }
+.storage-diagnostics-section .storage-diagnostics-domains { grid-template-columns: 1fr; }
+@media (max-width: 850px) { .storage-diagnostics-columns { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .storage-diagnostics-summary { grid-template-columns: 1fr; gap: 12px; } }
 .storage-diagnostics .prefs-diag-card-heading { flex: 1; }
 .storage-diagnostics-body { display: grid; gap: 14px; padding: 0 18px 18px; min-width: 0; font-size: 12px; }
 .storage-diagnostics-body p { margin: 5px 0 0; line-height: 1.6; color: var(--ink-secondary, var(--ink)); }

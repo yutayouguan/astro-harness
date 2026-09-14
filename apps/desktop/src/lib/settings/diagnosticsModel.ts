@@ -47,7 +47,7 @@ export type DiagnosticStatusCardModel = {
   label: string;
   value: string;
   detail: string;
-  state: "healthy" | "warning" | "error" | "unknown";
+  state: "healthy" | "configured" | "warning" | "error" | "unknown";
 };
 
 export function diagnosticLogLevel(raw: string): DiagnosticLogLevel {
@@ -96,26 +96,37 @@ export function buildDiagnosticStatusCards(
     {
       id: "provider",
       label: t("prefs.diag.status.provider"),
-      value: `${status.providerEnabled}/${status.providerTotal}`,
+      value: status.providerError
+        ? t("prefs.diag.status.unavailable")
+        : t("prefs.diag.status.providerEnabled", {
+            count: String(status.providerEnabled),
+            total: String(status.providerTotal),
+          }),
       detail: status.providerError
         ? t("prefs.diag.status.unavailable")
         : status.activeProviderName || status.activeProviderId
-          ? t("prefs.diag.status.providerDetail", {
+          ? t("prefs.diag.status.providerConfigured", {
               provider:
                 status.activeProviderName ?? status.activeProviderId ?? "",
             })
           : t("prefs.diag.status.noneActive"),
       state: status.providerError
         ? "error"
-        : status.providerEnabled === status.providerTotal &&
-            status.providerTotal > 0
-          ? "healthy"
+        : status.providerEnabled > 0
+          ? "configured"
           : "warning",
     },
     {
       id: "mcp",
       label: t("prefs.diag.status.mcp"),
-      value: `${status.mcpConnected}/${status.mcpTotal}`,
+      value: status.mcpError
+        ? t("prefs.diag.status.unavailable")
+        : status.mcpTotal === 0
+          ? t("prefs.diag.status.notConfigured")
+          : t("prefs.diag.status.mcpConnected", {
+              count: String(status.mcpConnected),
+              total: String(status.mcpTotal),
+            }),
       detail: status.mcpError
         ? t("prefs.diag.status.unavailable")
         : status.mcpTotal === 0
@@ -140,11 +151,16 @@ export function buildDiagnosticStatusCards(
     {
       id: "database",
       label: t("prefs.diag.status.database"),
-      value: status.databaseJournalMode,
+      value: t(
+        status.databaseHealthy
+          ? "prefs.diag.status.databaseReadable"
+          : "prefs.diag.status.unavailable",
+      ),
       detail:
         status.databaseHealthy && status.databaseSchemaVersion != null
-          ? t("prefs.diag.status.databaseDetail", {
+          ? t("prefs.diag.status.databaseInspection", {
               version: String(status.databaseSchemaVersion),
+              mode: status.databaseJournalMode,
             })
           : t("prefs.diag.status.unavailable"),
       state: status.databaseHealthy ? "healthy" : "error",

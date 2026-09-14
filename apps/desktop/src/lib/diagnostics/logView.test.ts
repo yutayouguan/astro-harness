@@ -1,3 +1,4 @@
+import { sameDiagnosticLog } from "./logView.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -30,5 +31,23 @@ test("diagnostic messages render escaped line breaks as readable text", () => {
   assert.equal(
     presentDiagnosticMessage("query=one\\nnext=two\\tvalue"),
     "query=one\nnext=two  value",
+  );
+});
+
+test("selected log identity survives fresh row objects but not changed events", () => {
+  const row = {
+    source: "agent",
+    timestamp: "2026-09-14T02:00:00Z",
+    level: "INFO",
+    message: "Ready",
+    raw: "INFO Ready",
+  };
+  assert.equal(sameDiagnosticLog(row, { ...row }), true);
+  assert.equal(sameDiagnosticLog(null, row), false);
+  assert.equal(sameDiagnosticLog(row, { ...row, raw: "INFO Updated" }), false);
+  assert.equal(sameDiagnosticLog(row, { ...row, source: "errors" }), false);
+  assert.equal(
+    sameDiagnosticLog(row, { ...row, timestamp: "2026-09-14T02:00:01Z" }),
+    false,
   );
 });

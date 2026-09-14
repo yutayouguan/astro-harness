@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { loadNativeManifest, parseNativeArgs } from "./lib/native-config-acceptance.mjs";
+import { loadNativeManifest, nativeQaProfile, parseNativeArgs } from "./lib/native-config-acceptance.mjs";
 
 test("native onboarding is explicit and cannot reset a resumed profile", () => {
 	assert.deepEqual(parseNativeArgs([]), { onboarding: false });
@@ -18,6 +18,8 @@ test("native onboarding is explicit and cannot reset a resumed profile", () => {
 	assert.deepEqual(parseNativeArgs(["--resume", "qa.json"]), { onboarding: false, resume: "qa.json" });
 	assert.throws(() => parseNativeArgs(["--onboarding", "--resume", "qa.json"]));
 	assert.throws(() => parseNativeArgs(["--resume"]));
+	assert.deepEqual(parseNativeArgs(["--pet"]), { onboarding: false, purpose: "pet" });
+	assert.throws(() => parseNativeArgs(["--pet", "--onboarding"]));
 });
 
 test("resume rejects an unbound executable", async (t) => {
@@ -29,12 +31,13 @@ test("resume rejects an unbound executable", async (t) => {
 	await assert.rejects(loadNativeManifest(file), /expected isolated data root/);
 });
 
-async function fixture(t) {
+async function fixture(t, purpose) {
 	const root = await realpath(
 		await mkdtemp(join(tmpdir(), "astro-config-native-")),
 	);
 	t.after(() => rm(root, { recursive: true, force: true }));
-	const app = join(root, "Astro Config QA.app");
+	const profile = nativeQaProfile(purpose);
+	const app = join(root, `${profile.appName}.app`);
 	const astroRoot = join(root, "home");
 	await mkdir(join(app, "Contents/MacOS"), { recursive: true });
 	await mkdir(astroRoot);
@@ -47,7 +50,8 @@ async function fixture(t) {
 		"astro-config-native-v1\n",
 	);
 	const data = {
-		identifier: `com.astroagent.configqa.${basename(root).split("-").at(-1).toLowerCase()}`,
+		identifier: `${profile.prefix}.${basename(root).split("-").at(-1).toLowerCase()}`,
+		...(purpose ? { purpose } : {}),
 		app,
 		astroRoot,
 		log: join(root, "native.log"),
@@ -61,6 +65,15 @@ async function fixture(t) {
 test("resume accepts its own marked QA directory", async (t) => {
 	const { root, file, data } = await fixture(t);
 	assert.deepEqual(await loadNativeManifest(file), { ...data, scratch: root });
+});
+
+test("pet acceptance resumes only its separately identified bundle", async (t) => {
+	const { root, file, data } = await fixture(t, "pet");
+	assert.deepEqual(await loadNativeManifest(file), { ...data, scratch: root });
+	for (const purpose of ["config", "../pet", "production", null]) {
+		await writeFile(file, JSON.stringify({ ...data, purpose }));
+		await assert.rejects(loadNativeManifest(file));
+	}
 });
 
 test("resume rejects external URLs and identity changes", async (t) => {

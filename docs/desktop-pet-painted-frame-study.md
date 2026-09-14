@@ -64,7 +64,7 @@ python -m unittest discover -s tools/desktop-pet -p test_paint_blink_sample.py
 - [x] 踩奶／舔爪绘制、补帧、裁剪、局部透明合成与候选打包。
 - [x] 新工具13项定向测试通过；覆盖透明边缘、保护区、配准、错误形象、APNG时长及伪静态PNG。
 - [x] 桌宠素材工具完整45项测试通过；`cargo test -p types pet_motion --lib` 的2项测试通过。
-- [ ] 更新与当前APNG协议一致的独立验收构建。
+- [x] 更新与当前APNG协议一致的独立验收构建（2026-09-14，见下方续验）。
 - [ ] 原生正常／慢速播放、单击、拖动、透明穿透、尺寸／焦点验收。
 - [ ] 其他继承动作与新动作组合检查；整体通过后再统一应用到正式桌面。
 
@@ -81,3 +81,28 @@ python tools/desktop-pet/package_painted_study.py apps/desktop/src/assets/pets/n
 ```
 
 Python 环境需要 Pillow 与 NumPy；本轮使用 Codex bundled Python。原始图片和候选包保留为本地生成物；本轮 Git 提交只包含合成／打包工具、测试和记录，不发布未验收素材。
+
+## 新版原生验收续接（2026-09-14）
+
+复用 `tools/verify-config-native.mjs` 的 marker-guarded 隔离构建，而非重启旧的 Motion QA 二进制。构建后脚本恢复普通开发二进制；不导入正式配置、凭证、宠物库或场景。
+
+通用配置验收窗口被其他操作连续切换页面，因此增加明确的 `--pet` 入口：独立 `Astro Pet QA.app` / `com.astroagent.petqa.<随机后缀>`，恢复清单保留 `purpose=pet`。只允许固定 config/pet 两种类型，不能改成正式应用 ID 或任意路径；原有配置验收命令及清单仍可用。
+
+- 构建成功：桌宠专用 debug 二进制2分38秒，普通开发构建恢复26.98秒。
+- 桌宠专用清单：`/var/folders/0s/06ngl19n2rqfjmyngm2tgcgh0000gn/T/astro-config-native-5puajl/manifest.json`。
+- App：同目录 `Astro Pet QA.app`，ID `com.astroagent.petqa.5puajl`；独立数据根为同目录 `home`；前端使用私有端口54297，不占用1420。
+- 默认通用配置 QA 清单另存于 `astro-config-native-fs1hNj/manifest.json`，已被其他操作使用，不把它当作桌宠验收结果或擅自关闭。
+- 通过 CUA 在桌宠专用 App 中单击进入偏好设置、桌宠、创建页面。点击导入按钮时 Mac 锁屏；没有继续 GUI 操作或绕过锁屏。
+- 7项启动／清单恢复测试通过，包括 pet/config 隔离、拒绝伪造用途／正式 ID、根目录、符号链接和外部 URL。
+- 当前 Rust APNG 校验2项测试通过，新增回归明确验证多于19帧的独立APNG不受旧图集4096高度限制。
+- 完整真实候选通过当前 Rust `import_animated_pet_at` 的显式测试：全部12动作在临时目录中导入、复制后字节与时长不变、状态回读一致；`enabled=false`、没有活动宠物或桌面图片，证明导入不自动应用。
+
+重跑真实导入器测试（只写新的临时测试目录，不操作原生UI或真实用户资料）：
+
+```sh
+ASTRO_PET_QA_MANIFEST='/Users/iswm/Desktop/04-知识库/Rust/code/astro/output/imagegen/naitang-painted-actions-20260913/qa-package/pet.json' cargo test -p astro-agent imports_external_apng_candidate_without_applying --lib -- --ignored --nocapture
+```
+
+新建验收环境用 `node tools/verify-config-native.mjs --pet`；既有启动进程退出后可用 `--resume <上述manifest.json>` 恢复，无需重编译。已有进程仍运行时直接使用该 App，不重复启动私有Vite端口。
+
+**当前结论**：旧构建拒绝APNG的阻碍已解决；完整候选的真实导入链通过。不是原生播放验收完成。请在解锁且桌宠专用窗口空闲时继续导入、预览、应用到隔离桌面，再检查焦点、拖动、透明穿透、尺寸和组合动作。正式桌宠及 `apng-release.json` 仍未改动。

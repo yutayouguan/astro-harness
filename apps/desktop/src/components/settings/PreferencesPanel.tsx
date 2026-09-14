@@ -15,7 +15,6 @@ import {
   Play,
   Plug,
   RefreshCw,
-  Search,
   ScrollText,
   Sparkles,
   Webhook,
@@ -30,7 +29,7 @@ import {
   getVersion,
 } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
-import StorageDiagnostics from "./StorageDiagnostics";
+import DiagnosticsPanel from "./DiagnosticsPanel";
 import { DesktopPreferenceSwitch } from "./DesktopPreferenceSwitch";
 import { listen } from "@tauri-apps/api/event";
 import { motion, useReducedMotion } from "framer-motion";
@@ -77,42 +76,11 @@ import {
   INTERFACE_SCALE_MAX,
   INTERFACE_SCALE_MIN,
 } from "../../lib/ui/interfaceScale";
-import {
-  formatDiagnosticTimestamp,
-  presentDiagnosticMessage,
-} from "../../lib/diagnostics/logView";
-import {
-  diagnosticLogLevel,
-  type DiagnosticLogTimeRange,
-  type LogSourceFilter,
-  useDiagnosticsSettings,
-} from "../../hooks/settings/useDiagnosticsSettings";
 import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconChat, IconAtom, IconZap } from "../icons/NavIcons";
-import { SelectMenu } from "../ui/SelectMenu";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
 import WallpaperSettingsCard from "./WallpaperSettingsCard";
-
-function DiagnosticStatusCard({
-  label,
-  value,
-  detail,
-  state,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  state: "healthy" | "warning" | "error" | "unknown";
-}) {
-  return (
-    <div className="prefs-diag-status-card" data-status={state}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small title={detail}>{detail}</small>
-    </div>
-  );
-}
 
 type AppUpdateInfo = {
   configured: boolean;
@@ -207,9 +175,6 @@ const ABOUT_COPY = {
     onboardingAction: "Run again",
   },
 } as const;
-
-/** 行数预设 */
-const LINE_PRESETS = [50, 100, 200, 500] as const;
 
 export type PreferenceCategory =
   | "general"
@@ -552,54 +517,6 @@ export default function PreferencesPanel({
     }
   };
 
-  const {
-    hasSession,
-    scope,
-    setScope,
-    level,
-    setLevel,
-    lines,
-    setLines,
-    source,
-    setSource,
-    timeRange,
-    setTimeRange,
-    customSince,
-    setCustomSince,
-    customUntil,
-    setCustomUntil,
-    liveLogs,
-    setLiveLogs,
-    manualSession,
-    setManualSession,
-    turnId,
-    setTurnId,
-    showAdvanced,
-    setShowAdvanced,
-    logSearch,
-    setLogSearch,
-    logsCopied,
-    rows,
-    visibleLogRows,
-    diagnosticCards,
-    diagnosticsStatusBusy,
-    exportingDiagnostics,
-    diagnosticsExportPath,
-    busy,
-    errorMsg,
-    queried,
-    logsUpdatedAt,
-    logListRef,
-    refreshLogs,
-    refreshDiagnosticsStatus,
-    copyLogs,
-    exportDiagnostics,
-  } = useDiagnosticsSettings({
-    active: activeCategory === "diagnostics",
-    activeSessionId,
-    t,
-  });
-
   const themeOptions: {
     id: ThemeMode;
     label: string;
@@ -790,7 +707,7 @@ export default function PreferencesPanel({
 
   return (
     <div
-      className={`prefs-page ${section ? "is-embedded" : ""}`}
+className={`prefs-page ${section ? "is-embedded" : ""}${activeCategory === "diagnostics" ? " prefs-page--diagnostics" : ""}`}
       data-tone={tone}
     >
       <nav
@@ -1435,427 +1352,14 @@ export default function PreferencesPanel({
           className="prefs-category-stack prefs-category-stack--diagnostics"
           hidden={activeCategory !== "diagnostics"}
         >
-          <div className="prefs-diag-page-head">
-            <p>{t("prefs.diag.pageSub")}</p>
-            <div className="prefs-diag-page-actions">
-              <button
-                type="button"
-                className="prefs-diag-live"
-                data-active={liveLogs || undefined}
-                aria-pressed={liveLogs}
-                onClick={() => {
-                  const next = !liveLogs;
-                  setLiveLogs(next);
-                  if (next && timeRange === "custom") setTimeRange("1h");
-                }}
-              >
-                <span aria-hidden />
-                {t(
-                  liveLogs
-                    ? "prefs.diag.live.active"
-                    : "prefs.diag.live.paused",
-                )}
-              </button>
-              <button
-                type="button"
-                className="prefs-diag-btn"
-                disabled={busy || diagnosticsStatusBusy}
-                onClick={() =>
-                  void Promise.all([refreshLogs(), refreshDiagnosticsStatus()])
-                }
-              >
-                <RefreshCw
-                  size={13}
-                  strokeWidth={2.25}
-                  className={busy || diagnosticsStatusBusy ? "spin" : undefined}
-                  aria-hidden
-                />
-                {busy || diagnosticsStatusBusy
-                  ? t("prefs.diag.loading")
-                  : t("prefs.diag.refresh")}
-              </button>
-            </div>
-          </div>
-
-          <div className="prefs-diag-status-grid">
-            {diagnosticCards.map((card) => (
-              <DiagnosticStatusCard key={card.id} {...card} />
-            ))}
-          </div>
-
-          <StorageDiagnostics
+          <DiagnosticsPanel
             active={activeCategory === "diagnostics"}
+            activeSessionId={activeSessionId}
             references={[
               wallpaper.prefs.current?.path,
               ...wallpaper.prefs.recent.map((asset) => asset.path),
             ].filter((path): path is string => !!path)}
           />
-
-          <section className="prefs-card prefs-card--diagnostics">
-            <div className="prefs-card-head">
-              <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-                <ScrollText width={22} height={22} />
-              </div>
-              <div className="prefs-diag-card-heading">
-                <h2 className="prefs-card-title">{t("prefs.diag.title")}</h2>
-                <p className="prefs-card-sub">{t("prefs.diag.sub")}</p>
-              </div>
-              <button
-                type="button"
-                className="prefs-diag-btn"
-                data-tone={tone}
-                disabled={busy || visibleLogRows.length === 0}
-                onClick={() => void copyLogs()}
-              >
-                {t(logsCopied ? "prefs.diag.copied" : "prefs.diag.copyVisible")}
-              </button>
-            </div>
-
-            <div className="prefs-diag-form">
-              <div className="prefs-diag-filter-grid">
-                <div className="prefs-diag-group">
-                  <span className="prefs-diag-group-label">
-                    {t("prefs.diag.scope")}
-                  </span>
-                  <div
-                    className="prefs-chip-row"
-                    role="radiogroup"
-                    aria-label={t("prefs.diag.scope")}
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={scope === "current"}
-                      className={`prefs-chip ${scope === "current" ? "active" : ""}`}
-                      data-tone={tone}
-                      disabled={!hasSession}
-                      title={
-                        hasSession
-                          ? undefined
-                          : t("prefs.diag.scope.currentNone")
-                      }
-                      onClick={() => setScope("current")}
-                    >
-                      {t("prefs.diag.scope.current")}
-                    </button>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={scope === "all"}
-                      className={`prefs-chip ${scope === "all" ? "active" : ""}`}
-                      data-tone={tone}
-                      onClick={() => setScope("all")}
-                    >
-                      {t("prefs.diag.scope.all")}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="prefs-diag-group">
-                  <span className="prefs-diag-group-label">
-                    {t("prefs.diag.time")}
-                  </span>
-                  <SelectMenu
-                    className="prefs-diag-select"
-                    value={timeRange}
-                    aria-label={t("prefs.diag.time")}
-                    onChange={(value) => {
-                      const next = value as DiagnosticLogTimeRange;
-                      setTimeRange(next);
-                      if (next === "custom") {
-                        setLiveLogs(false);
-                        setShowAdvanced(true);
-                      }
-                    }}
-                    options={[
-                      { value: "15m", label: t("prefs.diag.time.15m") },
-                      { value: "1h", label: t("prefs.diag.time.1h") },
-                      { value: "24h", label: t("prefs.diag.time.24h") },
-                      { value: "7d", label: t("prefs.diag.time.7d") },
-                      { value: "all", label: t("prefs.diag.time.all") },
-                      {
-                        value: "custom",
-                        label: t("prefs.diag.time.custom"),
-                      },
-                    ]}
-                  />
-                </div>
-
-                <div className="prefs-diag-group">
-                  <span className="prefs-diag-group-label">
-                    {t("prefs.diag.source")}
-                  </span>
-                  <SelectMenu
-                    className="prefs-diag-select"
-                    value={source}
-                    aria-label={t("prefs.diag.source")}
-                    onChange={(value) => setSource(value as LogSourceFilter)}
-                    options={[
-                      { value: "both", label: t("prefs.diag.source.both") },
-                      { value: "agent", label: t("prefs.diag.source.agent") },
-                      {
-                        value: "errors",
-                        label: t("prefs.diag.source.errors"),
-                      },
-                    ]}
-                  />
-                </div>
-
-                <div className="prefs-diag-group">
-                  <span className="prefs-diag-group-label">
-                    {t("prefs.diag.level")}
-                  </span>
-                  <div
-                    className="prefs-chip-row"
-                    role="radiogroup"
-                    aria-label={t("prefs.diag.level")}
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={level === "all"}
-                      className={`prefs-chip ${level === "all" ? "active" : ""}`}
-                      data-tone={tone}
-                      onClick={() => setLevel("all")}
-                    >
-                      {t("prefs.diag.level.all")}
-                    </button>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={level === "issues"}
-                      className={`prefs-chip ${level === "issues" ? "active" : ""}`}
-                      data-tone={tone}
-                      onClick={() => setLevel("issues")}
-                    >
-                      {t("prefs.diag.level.issues")}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="prefs-diag-group">
-                  <span className="prefs-diag-group-label">
-                    {t("prefs.diag.lines")}
-                  </span>
-                  <div
-                    className="prefs-chip-row"
-                    role="radiogroup"
-                    aria-label={t("prefs.diag.lines")}
-                  >
-                    {LINE_PRESETS.map((count) => (
-                      <button
-                        key={count}
-                        type="button"
-                        role="radio"
-                        aria-checked={lines === count}
-                        className={`prefs-chip ${lines === count ? "active" : ""}`}
-                        data-tone={tone}
-                        onClick={() => setLines(count)}
-                      >
-                        {count}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="prefs-diag-toolbar">
-                <label className="prefs-diag-search">
-                  <Search size={14} strokeWidth={2.2} aria-hidden />
-                  <input
-                    type="search"
-                    aria-label={t("prefs.diag.search")}
-                    value={logSearch}
-                    placeholder={t("prefs.diag.search.ph")}
-                    onChange={(event) => setLogSearch(event.target.value)}
-                  />
-                </label>
-                <div className="prefs-diag-actions">
-                  <button
-                    type="button"
-                    className="prefs-diag-link"
-                    onClick={() => setShowAdvanced((value) => !value)}
-                    aria-expanded={showAdvanced}
-                  >
-                    {showAdvanced
-                      ? t("prefs.diag.advanced.hide")
-                      : t("prefs.diag.advanced.show")}
-                  </button>
-                </div>
-              </div>
-
-              {showAdvanced && (
-                <div className="prefs-diag-advanced">
-                  {timeRange === "custom" ? (
-                    <>
-                      <label className="prefs-diag-row">
-                        <span className="prefs-diag-label">
-                          {t("prefs.diag.time.start")}
-                        </span>
-                        <input
-                          className="prefs-diag-input"
-                          type="datetime-local"
-                          value={customSince}
-                          onChange={(event) =>
-                            setCustomSince(event.target.value)
-                          }
-                        />
-                      </label>
-                      <label className="prefs-diag-row">
-                        <span className="prefs-diag-label">
-                          {t("prefs.diag.time.end")}
-                        </span>
-                        <input
-                          className="prefs-diag-input"
-                          type="datetime-local"
-                          value={customUntil}
-                          onChange={(event) =>
-                            setCustomUntil(event.target.value)
-                          }
-                        />
-                      </label>
-                    </>
-                  ) : null}
-                  <label className="prefs-diag-row">
-                    <span className="prefs-diag-label">
-                      {t("prefs.diag.session")}
-                    </span>
-                    <input
-                      className="prefs-diag-input"
-                      type="text"
-                      value={manualSession}
-                      placeholder={t("prefs.diag.session.ph")}
-                      onChange={(event) => setManualSession(event.target.value)}
-                      spellCheck={false}
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className="prefs-diag-row">
-                    <span className="prefs-diag-label">
-                      {t("prefs.diag.turn")}
-                    </span>
-                    <input
-                      className="prefs-diag-input"
-                      type="text"
-                      value={turnId}
-                      placeholder={t("prefs.diag.turn.ph")}
-                      onChange={(event) => setTurnId(event.target.value)}
-                      spellCheck={false}
-                      autoComplete="off"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {errorMsg && (
-                <p className="prefs-diag-error" role="alert">
-                  {errorMsg}
-                </p>
-              )}
-              {queried && !errorMsg && rows.length === 0 && (
-                <p className="prefs-diag-empty">{t("prefs.diag.empty")}</p>
-              )}
-              {queried &&
-                !errorMsg &&
-                rows.length > 0 &&
-                visibleLogRows.length === 0 && (
-                  <p className="prefs-diag-empty">
-                    {t("prefs.diag.emptySearch")}
-                  </p>
-                )}
-              {visibleLogRows.length > 0 && (
-                <div className="prefs-diag-results">
-                  <div
-                    className="prefs-diag-results-head"
-                    role="status"
-                    aria-live={liveLogs ? "off" : "polite"}
-                  >
-                    <span>
-                      {t("prefs.diag.results", {
-                        shown: String(visibleLogRows.length),
-                        total: String(rows.length),
-                      })}
-                    </span>
-                    <span className="prefs-diag-results-meta">
-                      {logsUpdatedAt
-                        ? t("prefs.diag.updated", {
-                            time: formatDiagnosticTimestamp(
-                              logsUpdatedAt,
-                              locale,
-                            ),
-                          })
-                        : t("prefs.diag.newestFirst")}
-                      {liveLogs ? (
-                        <i aria-label={t("prefs.diag.live.active")} />
-                      ) : null}
-                    </span>
-                  </div>
-                  <ul
-                    ref={logListRef}
-                    className="prefs-diag-log prefs-diag-log-list"
-                  >
-                    {visibleLogRows.map((row, index) => {
-                      const severity = diagnosticLogLevel(row.level);
-                      return (
-                        <li
-                          key={row.timestamp + "-" + row.source + "-" + index}
-                          className={"prefs-diag-log-row is-" + severity}
-                        >
-                          <div className="prefs-diag-log-meta">
-                            <time dateTime={row.timestamp}>
-                              {formatDiagnosticTimestamp(row.timestamp, locale)}
-                            </time>
-                            <span className="prefs-diag-log-badges">
-                              <span
-                                className={"prefs-diag-source is-" + row.source}
-                              >
-                                {row.source}
-                              </span>
-                              <span className="prefs-diag-level">
-                                {row.level}
-                              </span>
-                            </span>
-                          </div>
-                          <code>{presentDiagnosticMessage(row.message)}</code>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="prefs-card prefs-diag-export-card">
-            <div className="prefs-icon-badge" data-tone={tone} aria-hidden>
-              <Download size={20} />
-            </div>
-            <div className="prefs-diag-export-copy">
-              <h2 className="prefs-card-title">
-                {t("prefs.diag.export.title")}
-              </h2>
-              <p className="prefs-card-sub">{t("prefs.diag.export.sub")}</p>
-              {diagnosticsExportPath ? (
-                <small>
-                  {t("prefs.diag.export.done", {
-                    path: diagnosticsExportPath,
-                  })}
-                </small>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="prefs-diag-btn primary"
-              disabled={exportingDiagnostics}
-              onClick={() => void exportDiagnostics()}
-            >
-              {t(
-                exportingDiagnostics
-                  ? "prefs.diag.export.exporting"
-                  : "prefs.diag.export.action",
-              )}
-            </button>
-          </section>
         </div>
 
         <div

@@ -128,6 +128,11 @@ export function storageBytes(bytes: number): string {
 
 export const storageCopy = {
   zh: {
+    configuration: "配置与路径",
+    findingsCount: "项提示",
+    maintenance: "清理与保留",
+    partialLabel: "部分扫描",
+    scanned: "已扫描",
     title: "存储与配置",
     sub: "检查与预览只读 · 移动文件需单独确认",
     refresh: "检查存储",
@@ -231,6 +236,11 @@ export const storageCopy = {
     },
   },
   en: {
+    configuration: "Configuration & paths",
+    findingsCount: "findings",
+    maintenance: "Cleanup & retention",
+    partialLabel: "Partial scan",
+    scanned: "Scanned",
     title: "Storage & configuration",
     sub: "Read-only inspection · Moving files requires separate confirmation",
     refresh: "Inspect storage",

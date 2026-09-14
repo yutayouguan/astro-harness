@@ -18,6 +18,8 @@ const [
   prototypeCss,
   diagnosticsHook,
   diagnosticsModel,
+  diagnosticsPanel,
+  diagnosticsCss,
 ] = await Promise.all(
   [
     "../../styles/features/shell/layout/projects.css",
@@ -35,6 +37,8 @@ const [
     "../../../../../designs/astro-wallpaper/settings-prototype.css",
     "../../hooks/settings/useDiagnosticsSettings.ts",
     "../settings/diagnosticsModel.ts",
+    "../../components/settings/DiagnosticsPanel.tsx",
+    "../../styles/features/settings/diagnostics-workspace.css",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
 );
 
@@ -239,31 +243,29 @@ test("automatic compression hides expert controls behind native disclosure", () 
 test("diagnostics and about have task-specific layouts", () => {
   const diagnosticsRuntime = `${diagnosticsHook}\n${diagnosticsModel}`;
   assert.match(preferences, /prefs-category-stack--diagnostics/);
-  assert.match(preferences, /prefs-card--diagnostics/);
-  assert.match(preferences, /prefs-diag-status-grid/);
-  assert.match(preferences, /DiagnosticStatusCard/);
-  assert.match(preferences, /prefs-diag-filter-grid/);
-  assert.match(preferences, /prefs-diag-search/);
-  assert.match(preferences, /prefs-diag-live/);
+  assert.match(preferences, /<DiagnosticsPanel/);
+  assert.match(diagnosticsPanel, /diagnostics-status-strip/);
+  assert.match(diagnosticsPanel, /diagnostics-filters/);
+  assert.match(diagnosticsPanel, /diagnostics-search/);
+  assert.match(diagnosticsPanel, /SegmentedTabs/);
   assert.match(diagnosticsRuntime, /setInterval\(/);
-  assert.match(preferences, /DiagnosticLogTimeRange/);
   assert.match(diagnosticsRuntime, /sinceMs/);
   assert.match(diagnosticsRuntime, /untilMs/);
-  assert.match(preferences, /datetime-local/);
-  assert.match(preferences, /visibleLogRows/);
-  assert.match(diagnosticsRuntime, /diagnosticLogLevel/);
-  assert.match(preferences, /prefs-diag-log-list/);
-  assert.match(preferences, /const LINE_PRESETS = \[50, 100, 200, 500\]/);
-  assert.match(preferences, /logsCopied/);
+  assert.match(diagnosticsPanel, /datetime-local/);
+  assert.match(diagnosticsPanel, /visibleLogRows/);
+  assert.match(diagnosticsPanel, /diagnosticLogLevel/);
+  assert.match(diagnosticsPanel, /diagnostics-log-list/);
+  assert.match(diagnosticsPanel, /const LINE_PRESETS = \[50, 100, 200, 500\]/);
+  assert.match(diagnosticsPanel, /logsCopied/);
   assert.match(
     diagnosticsRuntime,
-    /invoke<DiagnosticsStatusDto>\("get_diagnostics_status"\)/,
+    /invoke<DiagnosticsStatusDto>\(\s*"get_diagnostics_status"/,
   );
   assert.match(
     diagnosticsRuntime,
     /invoke<string \| null>\("export_diagnostics_bundle"\)/,
   );
-  assert.match(preferences, /prefs-diag-export-card/);
+  assert.match(diagnosticsPanel, /exportDiagnostics/);
   assert.match(preferences, /prefs-category-stack--about/);
   assert.match(preferences, /prefs-card--about-hero/);
   assert.match(preferences, /prefs-card--about-update/);
@@ -280,21 +282,17 @@ test("diagnostics and about have task-specific layouts", () => {
   assert.match(updater, /app\.restart\(\)/);
   assert.doesNotMatch(preferences, /ABOUT_FEATURES\.map/);
   assert.match(
-    preferencesCss,
-    /\.prefs-card--diagnostics\s*\{[\s\S]*?flex:\s*1;/,
+    diagnosticsCss,
+    /\.diagnostics-log-list[^}]*flex: 1;[^}]*overflow: auto/,
   );
   assert.match(
-    preferencesCss,
-    /\.prefs-diag-log\s*\{[\s\S]*?flex:\s*1;[\s\S]*?overflow:\s*auto;/,
+    diagnosticsCss,
+    /\.diagnostics-status-strip[^}]*grid-template-columns: repeat\(4,/,
   );
   assert.match(
-    preferencesCss,
-    /\.prefs-diag-status-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,/,
+    diagnosticsCss,
+    /\.diagnostics-storage-panel[^}]*overflow: auto/,
   );
-  assert.match(preferencesCss, /\.prefs-diag-export-card\s*\{/);
-  assert.match(preferencesCss, /\.prefs-diag-log-row\.is-error/);
-  assert.match(preferencesCss, /\.prefs-diag-live\[data-active="true"\]/);
-  assert.match(preferencesCss, /\.prefs-diag-log-meta time/);
   assert.match(
     preferencesCss,
     /\.prefs-category-stack--about:not\(\[hidden\]\)[\s\S]*?grid-template-columns:\s*repeat\(2,[\s\S]*?width:\s*min\(100%, 980px\);/,

@@ -1266,6 +1266,61 @@ mod tests {
             "webp"
         );
     }
+
+    #[test]
+    #[ignore = "set ASTRO_PET_QA_MANIFEST to a local candidate pet.json; no GUI or real profile is used"]
+    fn imports_external_apng_candidate_without_applying() {
+        let source = PathBuf::from(
+            std::env::var_os("ASTRO_PET_QA_MANIFEST")
+                .expect("ASTRO_PET_QA_MANIFEST is required for this explicit acceptance test"),
+        );
+        assert!(source.is_absolute());
+        let manifest: types::DesktopPetManifest = serde_json::from_slice(
+            &types::desktop_pet::read_limited_pet_file(&source, MAX_MANIFEST_BYTES).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest.sprite_version_number, 3);
+        assert!(manifest
+            .motion_clips
+            .values()
+            .any(|clip| clip.durations_ms.len() > 19));
+
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("isolated-import");
+        let imported = import_animated_pet_at(&base, &source).unwrap();
+        assert!(!imported.enabled);
+        assert!(imported.active_pet_id.is_none());
+        assert!(imported.pet_path.is_none());
+        assert_eq!(imported.pets.len(), 1);
+        let identity = &imported.pets[0].identity;
+        assert_eq!(identity.sprite_version_number, Some(3));
+        assert_eq!(identity.motion_clips.len(), manifest.motion_clips.len());
+        for (name, clip) in &identity.motion_clips {
+            assert!(Path::new(&clip.path).starts_with(&base));
+            assert_eq!(clip.durations_ms, manifest.motion_clips[name].durations_ms);
+            let copied = fs::read(&clip.path).unwrap();
+            let original = fs::read(
+                source
+                    .parent()
+                    .unwrap()
+                    .join(&manifest.motion_clips[name].path),
+            )
+            .unwrap();
+            assert_eq!(
+                copied, original,
+                "asset bytes changed during import: {name}"
+            );
+            super::super::pet_apng::validate(&copied, clip).unwrap();
+        }
+        let restored = load_state_at(&base).unwrap();
+        assert!(!restored.enabled);
+        assert!(restored.active_pet_id.is_none());
+        assert_eq!(
+            restored.pets[0].identity.motion_clips,
+            identity.motion_clips
+        );
+    }
+
     use image::{DynamicImage, Rgba, RgbaImage};
 
     fn tiny_png() -> Vec<u8> {
