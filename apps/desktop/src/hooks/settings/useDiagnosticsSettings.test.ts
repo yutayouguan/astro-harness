@@ -43,7 +43,7 @@ test("diagnostic status projection keeps health semantics out of the panel", () 
     healthy.map((card) => [card.id, card.state]),
     [
       ["backend", "healthy"],
-      ["provider", "healthy"],
+      ["provider", "configured"],
       ["mcp", "healthy"],
       ["database", "healthy"],
     ],
@@ -82,5 +82,41 @@ test("diagnostic status projection exposes loading and unavailable states", () =
   const failed = buildDiagnosticStatusCards(null, false, "offline", t);
   assert.ok(
     failed.every((card) => card.detail === "prefs.diag.status.unavailable"),
+  );
+});
+
+test("status values distinguish configuration, no MCP and database readability", () => {
+  const cards = buildDiagnosticStatusCards(
+    { ...healthyStatus, mcpTotal: 0, mcpConnected: 0 },
+    false,
+    "",
+    t,
+  );
+  assert.match(cards[1].value, /^prefs.diag.status.providerEnabled:/);
+  assert.match(cards[1].detail, /^prefs.diag.status.providerConfigured:/);
+  assert.equal(cards[1].state, "configured");
+  assert.equal(cards[2].value, "prefs.diag.status.notConfigured");
+  assert.equal(cards[2].state, "unknown");
+  assert.equal(cards[3].value, "prefs.diag.status.databaseReadable");
+  assert.match(cards[3].detail, /"mode":"wal"/);
+  assert.match(cards[3].detail, /"version":"22"/);
+});
+
+test("failed status sources do not leave success counts or WAL as headline values", () => {
+  const cards = buildDiagnosticStatusCards(
+    {
+      ...healthyStatus,
+      backendHealthy: false,
+      providerError: "unavailable",
+      mcpError: "unavailable",
+      databaseHealthy: false,
+    },
+    false,
+    "",
+    t,
+  );
+  assert.ok(cards.every((card) => card.state === "error"));
+  assert.ok(
+    cards.every((card) => card.value === "prefs.diag.status.unavailable"),
   );
 });

@@ -26,10 +26,12 @@ export {
 
 export function useDiagnosticsSettings({
   active,
+  logsActive = active,
   activeSessionId,
   t,
 }: {
   active: boolean;
+  logsActive?: boolean;
   activeSessionId?: string | null;
   t: Translate;
 }) {
@@ -63,6 +65,7 @@ export function useDiagnosticsSettings({
   const [queried, setQueried] = useState(false);
   const [logsUpdatedAt, setLogsUpdatedAt] = useState<string | null>(null);
   const logRequestGenerationRef = useRef(0);
+  const statusRequestGenerationRef = useRef(0);
   const logRequestInFlightRef = useRef(false);
   const logRowsSignatureRef = useRef("");
   const logListRef = useRef<HTMLUListElement | null>(null);
@@ -78,6 +81,7 @@ export function useDiagnosticsSettings({
     : rows;
 
   async function refreshLogs(silent = false) {
+    if (!active || !logsActive) return;
     if (silent && logRequestInFlightRef.current) return;
     const generation = ++logRequestGenerationRef.current;
     const manual = manualSession.trim();
@@ -141,28 +145,36 @@ export function useDiagnosticsSettings({
   refreshRef.current = refreshLogs;
 
   const refreshDiagnosticsStatus = useCallback(async () => {
+    if (!active) return;
+    const generation = ++statusRequestGenerationRef.current;
     setDiagnosticsStatusBusy(true);
     setDiagnosticsStatusError("");
     try {
-      setDiagnosticsStatus(
-        await invoke<DiagnosticsStatusDto>("get_diagnostics_status"),
+      const result = await invoke<DiagnosticsStatusDto>(
+        "get_diagnostics_status",
       );
+      if (generation === statusRequestGenerationRef.current)
+        setDiagnosticsStatus(result);
     } catch (error) {
+      if (generation !== statusRequestGenerationRef.current) return;
       setDiagnosticsStatus(null);
       setDiagnosticsStatusError(
         error instanceof Error ? error.message : String(error),
       );
     } finally {
-      setDiagnosticsStatusBusy(false);
+      if (generation === statusRequestGenerationRef.current)
+        setDiagnosticsStatusBusy(false);
     }
-  }, []);
+  }, [active]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !logsActive) return;
     const timer = setTimeout(() => void refreshRef.current(), 250);
     return () => clearTimeout(timer);
   }, [
     active,
+    logsActive,
+    activeSessionId,
     scope,
     level,
     lines,
@@ -175,21 +187,32 @@ export function useDiagnosticsSettings({
   ]);
 
   useEffect(() => {
-    if (!active || !liveLogs) return;
+    if (!active || !logsActive || !liveLogs) return;
     const timer = window.setInterval(
       () => void refreshRef.current(true),
       1_500,
     );
     return () => window.clearInterval(timer);
-  }, [active, liveLogs]);
+  }, [active, logsActive, liveLogs]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    if (!hasSession) setScope("all");
+  }, [hasSession]);
+
+  useEffect(() => {
+    if (!active || !logsActive) setBusy(false);
+    return () => {
       logRequestGenerationRef.current += 1;
       logRequestInFlightRef.current = false;
-    },
-    [],
-  );
+    };
+  }, [active, logsActive, activeSessionId]);
+
+  useEffect(() => {
+    if (!active) setDiagnosticsStatusBusy(false);
+    return () => {
+      statusRequestGenerationRef.current += 1;
+    };
+  }, [active]);
 
   useEffect(() => {
     if (active) void refreshDiagnosticsStatus();

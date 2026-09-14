@@ -123,7 +123,7 @@ test("Preferences diagnostics wires wallpaper references and the command is regi
   );
   assert.match(
     panel,
-    /<StorageDiagnostics\s+active=\{activeCategory === "diagnostics"\}/,
+    /<DiagnosticsPanel\s+active=\{activeCategory === "diagnostics"\}/,
   );
   assert.match(native, /commands::config::inspect_home_storage/);
 });
