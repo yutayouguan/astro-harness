@@ -39,9 +39,11 @@ def load_frames(folder, pet):
     return frames
 
 
-def package(folder):
+def package(folder, study='head-study'):
+    if study not in ('head-study', 'secondary-study'):
+        raise ValueError('Unsupported study label')
     folder = Path(folder)
-    outputs = [folder / f'{pet}-head-study.apng' for pet in PETS]
+    outputs = [folder / f'{pet}-{study}.apng' for pet in PETS]
     report_path = folder / 'apng-validation.json'
     if any(p.exists() for p in outputs + [report_path]):
         raise FileExistsError('Refusing to overwrite a packaged study')
@@ -67,9 +69,14 @@ def package(folder):
                 assert all(hi == 0 for _, hi in diff.getextrema())
                 total += animation.info['duration']
                 while source_index < FRAME_COUNT and sum(durations[:source_index+1]) <= total + .01:
+                    # Also validate every original frame covered by a coalesced
+                    # hold; a matching first frame alone cannot prove no loss.
+                    covered = ImageChops.difference(decoded, frames[source_index])
+                    assert all(hi == 0 for _, hi in covered.getextrema())
                     source_index += 1
+                assert abs(sum(durations[:source_index])-total) < .01
             assert abs(total - 3000) < .01 and source_index == FRAME_COUNT
-            reports.append(dict(pet=pet, source_frames=FRAME_COUNT,
+            reports.append(dict(pet=pet, study=study, source_frames=FRAME_COUNT,
                                 encoded_frames=animation.n_frames,
                                 duration_ms=total, size=list(animation.size),
                                 lossless_decode=True, transparent=True,
@@ -82,4 +89,6 @@ def package(folder):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('folder', type=Path)
-    print(json.dumps(package(parser.parse_args().folder), indent=2))
+    parser.add_argument('--study', choices=('head-study', 'secondary-study'), default='head-study')
+    args = parser.parse_args()
+    print(json.dumps(package(args.folder, args.study), indent=2))

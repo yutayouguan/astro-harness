@@ -71,10 +71,17 @@ def create(pet):
                 slot.link = 'OBJECT'
                 slot.material = material
     assert mesh.data != original.data
+    # Newly linked copies have a stale matrix_world until dependency evaluation.
+    # The GLB uses local Y-up; copying its stale identity rotates the rig in the
+    # wrong space and can move a tail/face around an unrelated pivot.
+    scene.view_layers[0].update()
     armature = bpy.data.armatures.new(name + '_Bones')
     rig = bpy.data.objects.new(name + '_Rig', armature)
     scene.collection.objects.link(rig)
     rig.matrix_world = mesh.matrix_world.copy()
+    scene.view_layers[0].update()
+    assert max(abs(rig.matrix_world[r][c]-mesh.matrix_world[r][c])
+               for r in range(4) for c in range(4)) < 1e-6
     scene.view_layers[0].objects.active = rig
     rig.select_set(True)
     bpy.ops.object.mode_set(mode='EDIT')
@@ -93,12 +100,15 @@ def create(pet):
     # Broad C2-continuous neck blend, rigid face and stationary lower body.
     t = np.clip((coords[:, 1] - .38) / .20, 0, 1)
     weights = t**3 * (10 - 15*t + 6*t*t)
-    bins = np.rint(weights * 1024).astype(np.int32)
+    bins = np.rint(weights * 65536).astype(np.int32)
     head_group = mesh.vertex_groups.new(name='head')
     body_group = mesh.vertex_groups.new(name='body_anchor')
-    for value in np.unique(bins):
-        indices = np.flatnonzero(bins == value).tolist()
-        w = int(value) / 1024
+    order = np.argsort(bins)
+    boundaries = np.flatnonzero(np.diff(bins[order]))+1
+    for group_indices in np.split(order, boundaries):
+        value = bins[group_indices[0]]
+        indices = group_indices.tolist()
+        w = int(value) / 65536
         if w:
             head_group.add(indices, w, 'REPLACE')
         if w < 1:
@@ -143,6 +153,8 @@ def validate(pet):
     state = studies[pet]
     scene, mesh = state['scene'], state['mesh']
     bpy.context.window.scene = scene
+    assert max(abs(state['rig'].matrix_world[r][c]-mesh.matrix_world[r][c])
+               for r in range(4) for c in range(4)) < 1e-6, 'Rig/mesh coordinate mismatch'
     baseline = state['coords']
     feet = baseline[:, 1] < .12
     results = []

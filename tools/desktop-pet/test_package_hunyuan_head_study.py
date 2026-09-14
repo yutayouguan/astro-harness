@@ -26,6 +26,13 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             package(self.folder)
 
+    def test_secondary_label(self):
+        report = package(self.folder, 'secondary-study')
+        self.assertTrue((self.folder / 'naitang-secondary-study.apng').exists())
+        self.assertTrue(all(row['study'] == 'secondary-study' for row in report))
+        with self.assertRaises(ValueError):
+            package(self.folder, '../not-a-label')
+
     def test_missing_frame_prevents_any_output(self):
         (self.folder / 'pudding-055.png').unlink()
         with self.assertRaises(FileNotFoundError):
