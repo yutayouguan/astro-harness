@@ -7,7 +7,13 @@ mod rollout_projection;
 mod schema;
 mod search;
 mod sessions;
+mod thread_attachments;
 mod thread_context;
+pub use thread_attachments::{
+    MAX_THREAD_ATTACHMENTS, MAX_THREAD_ATTACHMENT_IDENTITY_KEY_BYTES,
+    MAX_THREAD_ATTACHMENT_PAGE_SIZE, MAX_THREAD_ATTACHMENT_PAYLOAD_BYTES,
+    MAX_THREAD_ATTACHMENT_TYPE_BYTES,
+};
 pub use thread_context::{ThreadContext, MAX_THREAD_NOTES_CHARS};
 
 use agent_db::sqlx::{self, Row};

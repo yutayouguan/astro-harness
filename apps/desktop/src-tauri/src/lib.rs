@@ -344,6 +344,9 @@ pub fn run() {
             commands::agent::write_daily_memory,
             // — session —
             commands::session::get_chat_history,
+            commands::chat::attachments::add_thread_attachment,
+            commands::chat::attachments::list_thread_attachments,
+            commands::chat::attachments::remove_thread_attachment,
             commands::session::fork_chat_session,
             commands::session::remove_chat_bubbles,
             commands::session::list_recent_sessions,

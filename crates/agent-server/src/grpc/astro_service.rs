@@ -2057,6 +2057,24 @@ impl AstroService for AstroServiceImpl {
             super::pending_interactions::respond(self, input).await?,
         )?))
     }
+    async fn add_thread_attachment(
+        &self,
+        request: Request<proto::AddThreadAttachmentRequest>,
+    ) -> Result<Response<proto::AddThreadAttachmentResponse>, Status> {
+        super::thread_attachments::add(self, request).await
+    }
+    async fn list_thread_attachments(
+        &self,
+        request: Request<proto::ListThreadAttachmentsRequest>,
+    ) -> Result<Response<proto::ListThreadAttachmentsResponse>, Status> {
+        super::thread_attachments::list(self, request).await
+    }
+    async fn remove_thread_attachment(
+        &self,
+        request: Request<proto::RemoveThreadAttachmentRequest>,
+    ) -> Result<Response<proto::RemoveThreadAttachmentResponse>, Status> {
+        super::thread_attachments::remove(self, request).await
+    }
     type SubscribeThreadEventsStream =
         Pin<Box<dyn futures::Stream<Item = Result<proto::ThreadEvent, Status>> + Send>>;
     /// [`generate_image`](Self::generate_image) 流类型。
@@ -5562,5 +5580,60 @@ mod tests {
 
         assert_eq!(error.code(), tonic::Code::InvalidArgument);
         assert!(!service.threads.contains("").await);
+    }
+
+    #[tokio::test]
+    async fn thread_attachment_rpcs_round_trip_and_remove() {
+        let dir = TempDir::new().unwrap();
+        memory::ensure_workspace(dir.path()).unwrap();
+        let service = AstroServiceImpl::new(dir.path().to_path_buf());
+        open_sessions(dir.path())
+            .await
+            .unwrap()
+            .ensure_session("thread-attachments", "test")
+            .await
+            .unwrap();
+
+        let added = AstroService::add_thread_attachment(
+            &service,
+            Request::new(proto::AddThreadAttachmentRequest {
+                thread_id: "thread-attachments".into(),
+                attachment_type: "workspace_file".into(),
+                identity_key: "notes.md".into(),
+                payload_json: serde_json::json!({"path":"notes.md"}).to_string(),
+            }),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+        assert_eq!(added.outcome, "created");
+
+        let listed = AstroService::list_thread_attachments(
+            &service,
+            Request::new(proto::ListThreadAttachmentsRequest {
+                thread_id: "thread-attachments".into(),
+                cursor: String::new(),
+                limit: 10,
+            }),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+        assert_eq!(listed.data.len(), 1);
+        assert_eq!(listed.data[0].identity_key, "notes.md");
+
+        let removed = AstroService::remove_thread_attachment(
+            &service,
+            Request::new(proto::RemoveThreadAttachmentRequest {
+                thread_id: "thread-attachments".into(),
+                attachment_type: "workspace_file".into(),
+                identity_key: "notes.md".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+        assert!(removed.removed);
+        assert_eq!(removed.attachment.unwrap().identity_key, "notes.md");
     }
 }

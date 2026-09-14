@@ -5,6 +5,7 @@ mod files;
 mod interrupt_store;
 mod pending_interactions;
 mod realtime_service;
+mod thread_attachments;
 mod thread_service;
 mod thread_settings;
 

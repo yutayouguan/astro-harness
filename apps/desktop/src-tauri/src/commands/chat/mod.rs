@@ -1,3 +1,4 @@
+pub mod attachments;
 pub mod branches;
 pub mod compaction;
 pub mod core;

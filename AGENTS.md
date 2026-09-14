@@ -99,7 +99,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 | `crates/agent-protocol` | `agent-protocol` | 统一 Thread 提交与事件协议：`Op`、`EventMsg`、`TurnItem`、approval/control 与扩展事件。 |
 | `crates/agent-rollout` | `agent-rollout` | append-only rollout 持久化、记录策略与 Thread 历史重建；是稳定事件恢复的事实源。 |
 | `crates/agent-proto` | `proto` | Protobuf / tonic gRPC 服务契约（backend ↔ Tauri shell）。定义 `AstroService` 的 Thread submit/resume/subscribe、ChatControl、媒体、Skill、MCP、Memory、Files、Token 与 Batch RPC。 |
-| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v23，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回、线程检查点。 |
+| `crates/agent-session` | `session` | `SessionStore`（`state.db` WAL SQLite，schema v24，FTS5）— 原生 `ResponseItem`、会话、billing、FTS 召回、线程检查点与线程附件。 |
 | `crates/agent-artifacts` | `artifacts` | 文件空间索引（`artifacts.db`）+ Knowledge Content DB（`knowledge.db`，FTS）。按来源（agent_write/user_upload/reconcile）注册文件，MIME 分类。 |
 | `crates/agent-usage` | `usage` | 用量事件 DB（`usage.db`）、per-agent 统计、路由感知成本估算（官方定价快照 + OpenRouter API）、trace insights、eval JSONL 导出。 |
 
@@ -216,7 +216,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 `maintain_tool_context()` 三阶段：prune（截断超大 tool 结果）→ LLM 辅模型摘要（`AuxiliaryTask::Compaction`）→ head/tail fallback。`compressed_content` 字段存 Provider 视图；`content` 字段永远保留原文。压缩后用 thrashing guard 防抖（同一轮连续压缩不生效）。
 
-`notes` 原子维护当前线程检查点（revision CAS，最多 8000 字符），不混入长期记忆；`history` 按 canonical rollout 物理行引用提供当前线程只读 list/search/read。`get_context_remaining` 使用最近采样占用，`new_context_window` 只排队绑定 turn 的请求，由完整工具批次落盘后的维护边界执行并报告结果。检查点作为独立 user 上下文注入，历史回退后标为过时。schema v22 → v23 增量建表，不重建原有会话数据。
+`notes` 原子维护当前线程检查点（revision CAS，最多 8000 字符），不混入长期记忆；`history` 按 canonical rollout 物理行引用提供当前线程只读 list/search/read。`get_context_remaining` 使用最近采样占用，`new_context_window` 只排队绑定 turn 的请求，由完整工具批次落盘后的维护边界执行并报告结果。检查点作为独立 user 上下文注入，历史回退后标为过时。schema v22 → v23 增量添加检查点，v23 → v24 增量添加线程附件，均不重建原有会话数据。
 
 ### Cron 的 non-Send 约束
 
@@ -241,7 +241,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
   tools/               # 工具领域运行数据；tool gate 在 config.toml
   skills/              # 技能包、origins.json、lock.json、backups/；开关在 config.toml
   sessions/
-    state.db           # ResponseItem、会话、FTS5、线程检查点（schema v23）
+    state.db           # ResponseItem、会话、FTS5、线程检查点与附件（schema v24）
     rollouts/          # append-only 事件事实源
     tool_spills/       # 大工具输出
     subagents/subagents-v2.db # Agent Graph、mailbox、状态事件

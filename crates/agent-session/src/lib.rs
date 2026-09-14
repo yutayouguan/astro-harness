@@ -16,7 +16,9 @@ pub use store::{
     projects::{Project, DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME},
     BillingDelta, NewResponseItem, RecentSession, ResponseItem, SearchHit, SessionBillingRow,
     SessionListFilter, SessionPlacementFilter, SessionStore, StoredResponseItem, StoredSession,
-    SCHEMA_VERSION,
+    MAX_THREAD_ATTACHMENTS, MAX_THREAD_ATTACHMENT_IDENTITY_KEY_BYTES,
+    MAX_THREAD_ATTACHMENT_PAGE_SIZE, MAX_THREAD_ATTACHMENT_PAYLOAD_BYTES,
+    MAX_THREAD_ATTACHMENT_TYPE_BYTES, SCHEMA_VERSION,
 };
 pub use tools::{dispatch_session_tool, record_message};
 pub use traits::ConversationStore;

@@ -40,6 +40,20 @@ export type StartChatRequest = {
   attachments: StartChatAttachment[];
 };
 
+export type ThreadAttachment = {
+  id: string;
+  threadId: string;
+  attachmentType: string;
+  identityKey: string;
+  payload: unknown;
+  createdAt: number;
+};
+
+export type ThreadAttachmentPage = {
+  data: ThreadAttachment[];
+  nextCursor: string | null;
+};
+
 type InvokeFn = <T>(
   command: string,
   args?: Record<string, unknown>,
@@ -58,6 +72,27 @@ export function createChatCommands(invokeFn: InvokeFn = invoke) {
       dataBase64: string;
       messageId: string;
     }) => invokeFn<{ path: string }>("save_chat_upload", args),
+    addThreadAttachment: (args: {
+      threadId: string;
+      attachmentType: string;
+      identityKey: string;
+      payload: unknown;
+    }) =>
+      invokeFn<{ outcome: "created" | "existing"; attachment: ThreadAttachment }>(
+        "add_thread_attachment",
+        args,
+      ),
+    listThreadAttachments: (args: {
+      threadId: string;
+      cursor?: string | null;
+      limit?: number;
+    }) =>
+      invokeFn<ThreadAttachmentPage>("list_thread_attachments", args),
+    removeThreadAttachment: (args: {
+      threadId: string;
+      attachmentType: string;
+      identityKey: string;
+    }) => invokeFn<boolean>("remove_thread_attachment", args),
     start: (request: StartChatRequest) =>
       invokeFn<string>("start_chat", { request }),
   };

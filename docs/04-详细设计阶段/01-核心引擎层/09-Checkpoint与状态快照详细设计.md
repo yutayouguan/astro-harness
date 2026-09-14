@@ -1,6 +1,6 @@
 # Checkpoint 与状态快照详细设计
 
-> **当前基线（2026-09-07）**：当前恢复使用 `agent-rollout`（`crates/agent-rollout`）append-only JSONL 事实源（`RolloutRecorder`、`PersistencePolicy`、`reconstruct`）、稳定 item identity 和 snapshot + live boundary。SessionStore（`crates/agent-session`，`state.db` WAL SQLite，schema v23，FTS5）是可销毁重建的原生 `ResponseItem` 索引。恢复协议：客户端先建立 `SubscribeThreadEvents` live stream → `ResumeThread(include_turns=true)` → Server 在 listener 内串行化 snapshot + 订阅 → 越过 live boundary 处理缓冲事件。`ThreadRollback` 是累计、可回放的 durable 控制事件。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
+> **当前基线（2026-09-14）**：当前恢复使用 `agent-rollout`（`crates/agent-rollout`）append-only JSONL 事实源（`RolloutRecorder`、`PersistencePolicy`、`reconstruct`）、稳定 item identity 和 snapshot + live boundary。SessionStore（`crates/agent-session`，`state.db` WAL SQLite，schema v24，FTS5）是可销毁重建的原生 `ResponseItem` 索引，同时保存线程附件。恢复协议：客户端先建立 `SubscribeThreadEvents` live stream → `ResumeThread(include_turns=true)` → Server 在 listener 内串行化 snapshot + 订阅 → 越过 live boundary 处理缓冲事件。`ThreadRollback` 是累计、可回放的 durable 控制事件。本文其余 checkpoint 表、快照覆盖和工作流断点方案若无当前源码对应，属于目标设计。
 
 > 版本：v1.0 | 日期：2026-08-11 | 状态：草稿（大部分内容为目标设计）
 > 对应需求：F-12 对话分支、F-01 Agent 核心执行（崩溃恢复/回滚）、F-22 工作流暂停恢复

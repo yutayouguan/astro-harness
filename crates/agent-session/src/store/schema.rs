@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use super::SessionStore;
 
-pub const SCHEMA_VERSION: i32 = 23;
+pub const SCHEMA_VERSION: i32 = 24;
 
 const THREAD_CONTEXT_DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS thread_context (
@@ -17,6 +17,21 @@ CREATE TABLE IF NOT EXISTS thread_context (
     compaction_reason TEXT,
     compaction_status TEXT NOT NULL DEFAULT 'idle'
 );
+"#;
+
+const THREAD_ATTACHMENTS_DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS thread_attachments (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    attachment_type TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    UNIQUE(session_id, attachment_type, identity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_thread_attachments_session
+    ON thread_attachments(session_id, created_at DESC, id DESC);
 "#;
 
 const SCHEMA_DDL: &str = r#"
@@ -147,10 +162,15 @@ impl SessionStore {
         if current == SCHEMA_VERSION {
             return self.validate_current_schema().await;
         }
-        // v22 -> v23 is additive: never rebuild existing conversations for this upgrade.
-        if current == 22 {
+        // v22 -> v24 and v23 -> v24 are additive: never rebuild existing conversations.
+        if matches!(current, 22 | 23) {
             let mut tx = self.pool.begin().await?;
-            sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
+            if current == 22 {
+                sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
+            }
+            sqlx::raw_sql(THREAD_ATTACHMENTS_DDL)
+                .execute(&mut *tx)
+                .await?;
             sqlx::query("UPDATE schema_version SET version = ?1")
                 .bind(SCHEMA_VERSION)
                 .execute(&mut *tx)
@@ -166,6 +186,9 @@ impl SessionStore {
         let mut tx = self.pool.begin().await?;
         sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
         sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(THREAD_ATTACHMENTS_DDL)
+            .execute(&mut *tx)
+            .await?;
         sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
             .execute(&mut *tx)
             .await?;
@@ -210,6 +233,15 @@ impl SessionStore {
         .context(
             "session database schema marker is current but response_items table is incomplete",
         )?;
+        sqlx::query(
+            "SELECT id, session_id, attachment_type, identity_key, payload_json, created_at
+             FROM thread_attachments LIMIT 0",
+        )
+        .execute(&self.pool)
+        .await
+        .context(
+            "session database schema marker is current but thread_attachments is incomplete",
+        )?;
         sqlx::query("SELECT rowid FROM response_items_fts LIMIT 0")
             .execute(&self.pool)
             .await
@@ -240,6 +272,7 @@ impl SessionStore {
              DROP TABLE IF EXISTS messages;
              DROP TABLE IF EXISTS response_items;
              DROP TABLE IF EXISTS project_roots;
+             DROP TABLE IF EXISTS thread_attachments;
              DROP TABLE IF EXISTS thread_context;
              DROP TABLE IF EXISTS sessions;
              DROP TABLE IF EXISTS projects;
@@ -249,6 +282,9 @@ impl SessionStore {
         .await?;
         sqlx::raw_sql(SCHEMA_DDL).execute(&mut *tx).await?;
         sqlx::raw_sql(THREAD_CONTEXT_DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(THREAD_ATTACHMENTS_DDL)
+            .execute(&mut *tx)
+            .await?;
         sqlx::raw_sql(RESPONSE_ITEMS_FTS_DDL)
             .execute(&mut *tx)
             .await?;

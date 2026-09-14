@@ -62,6 +62,42 @@ async fn v22_upgrade_preserves_history_billing_and_fts() {
         .write_thread_notes("kept", "still here", 0)
         .await
         .unwrap();
+    assert!(upgraded
+        .list_thread_attachments("kept", None, 10)
+        .await
+        .unwrap()
+        .data
+        .is_empty());
+}
+
+#[tokio::test]
+async fn v23_upgrade_adds_thread_attachments_without_rebuilding_sessions() {
+    let (dir, store) = test_store().await;
+    store.ensure_session("kept", "test").await.unwrap();
+    agent_db::sqlx::raw_sql("DROP TABLE thread_attachments; UPDATE schema_version SET version=23;")
+        .execute(store.pool())
+        .await
+        .unwrap();
+    drop(store);
+
+    let upgraded = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
+    assert_eq!(upgraded.schema_version().await.unwrap(), SCHEMA_VERSION);
+    assert!(upgraded.get_session("kept").await.unwrap().is_some());
+    let added = upgraded
+        .add_thread_attachment(
+            "kept",
+            "workspace_file",
+            "notes.md",
+            &serde_json::json!({"path":"notes.md"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        added.outcome,
+        agent_protocol::ThreadAttachmentAddOutcome::Created
+    );
 }
 
 #[tokio::test]

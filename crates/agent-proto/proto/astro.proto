@@ -37,6 +37,9 @@ service AstroService {
   rpc WatchPendingInteractions(Empty) returns (stream PendingInteractionsJson);
   rpc RespondPendingInteraction(PendingInteractionsJson) returns (PendingInteractionsJson);
   rpc UpdateTurnSettings(UpdateTurnSettingsRequest) returns (UpdateTurnSettingsResponse);
+  rpc AddThreadAttachment(AddThreadAttachmentRequest) returns (AddThreadAttachmentResponse);
+  rpc ListThreadAttachments(ListThreadAttachmentsRequest) returns (ListThreadAttachmentsResponse);
+  rpc RemoveThreadAttachment(RemoveThreadAttachmentRequest) returns (RemoveThreadAttachmentResponse);
   rpc ReconcileExtensions(ReconcileExtensionsRequest) returns (ReconcileExtensionsResponse);
   rpc ApproveGuardianDeniedAction(ApproveGuardianDeniedActionRequest) returns (Empty);
   rpc RunUserShellCommand(RunUserShellCommandRequest) returns (RunUserShellCommandResponse);
@@ -442,6 +445,49 @@ message UpdateTurnSettingsRequest {
 message UpdateTurnSettingsResponse {
   string status = 1; // applied | target_unavailable | rejected
   string message = 2;
+}
+
+message ThreadAttachment {
+  string id = 1;
+  string thread_id = 2;
+  string attachment_type = 3;
+  string identity_key = 4;
+  string payload_json = 5;
+  double created_at = 6;
+}
+
+message AddThreadAttachmentRequest {
+  string thread_id = 1;
+  string attachment_type = 2;
+  string identity_key = 3;
+  string payload_json = 4;
+}
+
+message AddThreadAttachmentResponse {
+  string outcome = 1; // created | existing
+  ThreadAttachment attachment = 2;
+}
+
+message ListThreadAttachmentsRequest {
+  string thread_id = 1;
+  string cursor = 2;
+  uint32 limit = 3;
+}
+
+message ListThreadAttachmentsResponse {
+  repeated ThreadAttachment data = 1;
+  string next_cursor = 2;
+}
+
+message RemoveThreadAttachmentRequest {
+  string thread_id = 1;
+  string attachment_type = 2;
+  string identity_key = 3;
+}
+
+message RemoveThreadAttachmentResponse {
+  bool removed = 1;
+  ThreadAttachment attachment = 2;
 }
 
 message ReconcileExtensionsRequest {
