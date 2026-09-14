@@ -1252,6 +1252,16 @@ fn content_to_tool_output(
     }
 }
 
+fn with_protocol_result_metadata(
+    output: types::ToolOutput,
+    metadata: Option<&rmcp::model::Meta>,
+) -> types::ToolOutput {
+    match metadata.and_then(|metadata| serde_json::to_value(metadata).ok()) {
+        Some(metadata) => output.with_metadata(metadata),
+        None => output,
+    }
+}
+
 /// 使用已解析的 `Peer` 执行 MCP 工具调用（lock-free，供 `Arc<Mutex<McpHub>>` 场景使用）。
 ///
 /// `qualified_name` 仅用于错误消息；`native` 是原生工具名（不含 `mcp__` 前缀）。
@@ -1288,12 +1298,14 @@ pub async fn call_tool_with_peer(
             .map(|tokens| tokens.saturating_mul(24).div_ceil(5))
             .unwrap_or(types::MAX_TOOL_RESULT_BYTES)
             .min(types::MAX_TOOL_RESULT_BYTES);
-        return Ok(types::ToolOutput::Text(types::truncate_tool_result(
+        let output = types::ToolOutput::Text(types::truncate_tool_result(
             &structured.to_string(),
             max_bytes,
-        )));
+        ));
+        return Ok(with_protocol_result_metadata(output, result.meta.as_ref()));
     }
-    Ok(content_to_tool_output(&result.content, output_token_limit))
+    let output = content_to_tool_output(&result.content, output_token_limit);
+    Ok(with_protocol_result_metadata(output, result.meta.as_ref()))
 }
 
 /// 按配置建立 MCP 连接并拉取工具列表。
@@ -1850,6 +1862,22 @@ mod tests {
         )
         .text()
         .eq("short"));
+    }
+
+    #[test]
+    fn protocol_result_metadata_is_kept_out_of_model_text() {
+        let metadata = rmcp::model::Meta(serde_json::Map::from_iter([(
+            "provider/requestId".into(),
+            serde_json::json!("request-1"),
+        )]));
+        let output =
+            with_protocol_result_metadata(types::ToolOutput::from("visible"), Some(&metadata));
+
+        assert_eq!(output.text(), "visible");
+        assert_eq!(
+            output.metadata().unwrap().stored_value(),
+            serde_json::json!({"provider/requestId":"request-1"})
+        );
     }
 
     fn stdio_server(command: &str) -> McpServerConfig {

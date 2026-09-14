@@ -3151,7 +3151,10 @@ mod tests {
                     ..ToolEntry::lifecycle_defaults()
                 },
                 Arc::new(|_name, _args| {
-                    Box::pin(async { Ok(types::ToolOutput::from("native-ok")) })
+                    Box::pin(async {
+                        Ok(types::ToolOutput::from("native-ok")
+                            .with_metadata(serde_json::json!({"request_id":"request-1"})))
+                    })
                 }),
             );
         session.set_current_turn_id("turn-native-namespace").await;
@@ -3179,18 +3182,28 @@ mod tests {
                 &[],
                 &[],
                 None,
+                output.metadata(),
             )
             .await
             .unwrap();
-        assert!(matches!(
-            session.clone_history().await.last(),
-            Some(agent_protocol::ResponseItem::FunctionCallOutput {
-                call_id: Some(call_id),
-                name: Some(name),
-                namespace: Some(namespace),
-                ..
-            }) if call_id == "call-native-namespace" && name == "probe" && namespace == "clock"
-        ));
+        let history = session.clone_history().await;
+        let Some(agent_protocol::ResponseItem::FunctionCallOutput {
+            call_id: Some(call_id),
+            name: Some(name),
+            namespace: Some(namespace),
+            internal_chat_message_metadata_passthrough: Some(metadata),
+            ..
+        }) = history.last()
+        else {
+            panic!("expected recorded namespaced tool output with metadata");
+        };
+        assert_eq!(call_id, "call-native-namespace");
+        assert_eq!(name, "probe");
+        assert_eq!(namespace, "clock");
+        assert_eq!(
+            metadata["astro_tool_result_metadata_v1"],
+            serde_json::json!({"request_id":"request-1"})
+        );
     }
 
     #[test]

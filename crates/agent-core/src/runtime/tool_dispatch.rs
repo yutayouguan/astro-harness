@@ -561,15 +561,7 @@ impl AgentLoop {
             },
         );
         let result = match transformed {
-            ::hooks::HookOutcome::ReplaceText(s) => match raw_result {
-                types::ToolOutput::Media { assets, .. } => {
-                    types::ToolOutput::Media { text: s, assets }
-                }
-                types::ToolOutput::FileChanges { changes, .. } => {
-                    types::ToolOutput::FileChanges { text: s, changes }
-                }
-                _ => types::ToolOutput::from(s),
-            },
+            ::hooks::HookOutcome::ReplaceText(s) => raw_result.with_text(s),
             _ => raw_result,
         };
         let post = self.post_tool_use_request(
@@ -616,17 +608,7 @@ impl AgentLoop {
         if model_text == result.text() {
             result
         } else {
-            match result {
-                types::ToolOutput::Media { assets, .. } => types::ToolOutput::Media {
-                    text: model_text,
-                    assets,
-                },
-                types::ToolOutput::FileChanges { changes, .. } => types::ToolOutput::FileChanges {
-                    text: model_text,
-                    changes,
-                },
-                _ => types::ToolOutput::from(model_text),
-            }
+            result.with_text(model_text)
         }
     }
 }

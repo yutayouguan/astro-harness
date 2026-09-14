@@ -322,6 +322,7 @@ impl AgentLoop {
             &[],
             &[],
             None,
+            None,
         )
         .await
     }
@@ -334,6 +335,7 @@ impl AgentLoop {
         additional_media: &[types::MediaAsset],
         file_changes: &[types::ToolFileChange],
         tool_status: Option<&ToolStatus>,
+        tool_result_metadata: Option<&types::ToolResultMetadata>,
     ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
         let (_, mut media) = types::extract_tool_media(content);
@@ -343,29 +345,38 @@ impl AgentLoop {
             }
         }
         let output = agent_protocol::FunctionCallOutputPayload::from_text(content.to_string());
-        let metadata = (!media.is_empty() || !file_changes.is_empty() || tool_status.is_some())
-            .then(|| {
-                let mut metadata = serde_json::Map::new();
-                if !media.is_empty() {
-                    metadata.insert(
-                        "astro_media".into(),
-                        serde_json::to_value(&media).unwrap_or_default(),
-                    );
-                }
-                if let Some(status) = tool_status {
-                    metadata.insert(
-                        "astro_tool_status".into(),
-                        serde_json::to_value(status).unwrap_or_default(),
-                    );
-                }
-                if !file_changes.is_empty() {
-                    metadata.insert(
-                        "astro_file_changes_v1".into(),
-                        serde_json::to_value(file_changes).unwrap_or_default(),
-                    );
-                }
-                serde_json::Value::Object(metadata)
-            });
+        let metadata = (!media.is_empty()
+            || !file_changes.is_empty()
+            || tool_status.is_some()
+            || tool_result_metadata.is_some())
+        .then(|| {
+            let mut metadata = serde_json::Map::new();
+            if !media.is_empty() {
+                metadata.insert(
+                    "astro_media".into(),
+                    serde_json::to_value(&media).unwrap_or_default(),
+                );
+            }
+            if let Some(status) = tool_status {
+                metadata.insert(
+                    "astro_tool_status".into(),
+                    serde_json::to_value(status).unwrap_or_default(),
+                );
+            }
+            if !file_changes.is_empty() {
+                metadata.insert(
+                    "astro_file_changes_v1".into(),
+                    serde_json::to_value(file_changes).unwrap_or_default(),
+                );
+            }
+            if let Some(tool_result_metadata) = tool_result_metadata {
+                metadata.insert(
+                    "astro_tool_result_metadata_v1".into(),
+                    tool_result_metadata.stored_value(),
+                );
+            }
+            serde_json::Value::Object(metadata)
+        });
         let namespace = tool_name.and_then(types::ToolName::namespace);
         let name = tool_name.map(types::ToolName::name);
         let spill_key = agent_protocol::ResponseItemId::new("tool_output");

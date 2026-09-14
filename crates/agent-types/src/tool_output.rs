@@ -3,6 +3,46 @@
 use crate::media::MediaAsset;
 use serde::{Deserialize, Serialize};
 
+pub const MAX_TOOL_RESULT_METADATA_BYTES: usize = 16 * 1024;
+
+/// Host-owned metadata returned alongside a tool result.
+///
+/// This is persisted in `ResponseItem` passthrough metadata for attribution and
+/// auditing, but remains separate from the model-visible text payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolResultMetadata {
+    Value(serde_json::Value),
+    OmittedDueToSizeLimit,
+}
+
+impl ToolResultMetadata {
+    pub fn capture(value: serde_json::Value) -> Self {
+        if serde_json::to_vec(&value)
+            .is_ok_and(|encoded| encoded.len() <= MAX_TOOL_RESULT_METADATA_BYTES)
+        {
+            Self::Value(value)
+        } else {
+            Self::OmittedDueToSizeLimit
+        }
+    }
+
+    pub fn stored_value(&self) -> serde_json::Value {
+        match self {
+            Self::Value(value) => value.clone(),
+            Self::OmittedDueToSizeLimit => {
+                serde_json::Value::String("omitted_due_to_size_limit".into())
+            }
+        }
+    }
+
+    fn estimated_len(&self) -> usize {
+        match self {
+            Self::Value(value) => serde_json::to_vec(value).map_or(0, |encoded| encoded.len()),
+            Self::OmittedDueToSizeLimit => "omitted_due_to_size_limit".len(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolFileChangeKind {
@@ -44,6 +84,11 @@ pub enum ToolOutput {
         text: String,
         changes: Vec<ToolFileChange>,
     },
+    /// A tool result with bounded, host-owned metadata.
+    WithMetadata {
+        output: Box<ToolOutput>,
+        metadata: ToolResultMetadata,
+    },
 }
 
 impl ToolOutput {
@@ -53,6 +98,7 @@ impl ToolOutput {
             Self::Text(s) => s,
             Self::Media { text, .. } => text,
             Self::FileChanges { text, .. } => text,
+            Self::WithMetadata { output, .. } => output.text(),
         }
     }
 
@@ -61,6 +107,7 @@ impl ToolOutput {
             Self::Text(s) => s,
             Self::Media { text, .. } => text,
             Self::FileChanges { text, .. } => text,
+            Self::WithMetadata { output, .. } => output.into_text(),
         }
     }
 
@@ -69,13 +116,43 @@ impl ToolOutput {
             Self::Text(_) => &[],
             Self::Media { assets, .. } => assets,
             Self::FileChanges { .. } => &[],
+            Self::WithMetadata { output, .. } => output.media(),
         }
     }
 
     pub fn file_changes(&self) -> &[ToolFileChange] {
         match self {
             Self::FileChanges { changes, .. } => changes,
+            Self::WithMetadata { output, .. } => output.file_changes(),
             _ => &[],
+        }
+    }
+
+    pub fn metadata(&self) -> Option<&ToolResultMetadata> {
+        match self {
+            Self::WithMetadata { metadata, .. } => Some(metadata),
+            _ => None,
+        }
+    }
+
+    pub fn with_metadata(self, value: serde_json::Value) -> Self {
+        Self::WithMetadata {
+            output: Box::new(self),
+            metadata: ToolResultMetadata::capture(value),
+        }
+    }
+
+    /// Replace only the model-visible text while retaining media, file changes,
+    /// and host-owned result metadata.
+    pub fn with_text(self, text: String) -> Self {
+        match self {
+            Self::Text(_) => Self::Text(text),
+            Self::Media { assets, .. } => Self::Media { text, assets },
+            Self::FileChanges { changes, .. } => Self::FileChanges { text, changes },
+            Self::WithMetadata { output, metadata } => Self::WithMetadata {
+                output: Box::new(output.with_text(text)),
+                metadata,
+            },
         }
     }
 
@@ -84,6 +161,7 @@ impl ToolOutput {
             Self::Text(s) => (s, Vec::new()),
             Self::Media { text, assets } => (text, assets),
             Self::FileChanges { text, .. } => (text, Vec::new()),
+            Self::WithMetadata { output, .. } => output.into_parts(),
         }
     }
 
@@ -120,6 +198,9 @@ impl ToolOutput {
                                 + 64 // JSON 结构开销
                         })
                         .sum::<usize>()
+            }
+            Self::WithMetadata { output, metadata } => {
+                output.estimated_len() + metadata.estimated_len()
             }
         }
     }
@@ -213,5 +294,28 @@ mod tests {
         .into_parts();
         assert_eq!(text, "audio");
         assert_eq!(media.len(), 1);
+    }
+
+    #[test]
+    fn metadata_is_bounded_and_survives_text_replacement() {
+        let output = ToolOutput::Media {
+            text: "before".into(),
+            assets: vec![],
+        }
+        .with_metadata(serde_json::json!({"provider": {"request_id": "r-1"}}))
+        .with_text("after".into());
+        assert_eq!(output.text(), "after");
+        assert_eq!(
+            output.metadata().unwrap().stored_value(),
+            serde_json::json!({"provider": {"request_id": "r-1"}})
+        );
+
+        let oversized = ToolOutput::from("ok").with_metadata(serde_json::json!({
+            "value": "x".repeat(MAX_TOOL_RESULT_METADATA_BYTES)
+        }));
+        assert_eq!(
+            oversized.metadata().unwrap().stored_value(),
+            serde_json::Value::String("omitted_due_to_size_limit".into())
+        );
     }
 }

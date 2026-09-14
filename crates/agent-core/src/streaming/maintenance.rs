@@ -372,6 +372,7 @@ pub(super) async fn record_tool_outcomes(
                     &tool_media,
                     &tool_file_changes,
                     Some(&tool_status),
+                    result.metadata(),
                 )
                 .await
         };

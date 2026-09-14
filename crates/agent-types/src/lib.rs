@@ -100,4 +100,7 @@ pub use tool_entry::{
     ToolExposure, ToolName, ToolSpec,
 };
 pub use tool_mode::{deserialize_optional_tool_mode, ToolMode, ToolModeFeatureFlags};
-pub use tool_output::{ToolFileChange, ToolFileChangeKind, ToolOutput};
+pub use tool_output::{
+    ToolFileChange, ToolFileChangeKind, ToolOutput, ToolResultMetadata,
+    MAX_TOOL_RESULT_METADATA_BYTES,
+};
