@@ -732,6 +732,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
                     type="button"
                     disabled={state.busy}
                     onClick={() => void state.selectScene(scene.id)}
+                    data-resize-stable="true"
                   >
                     {tr("还原场景", "Restore scene")}
                   </button>
@@ -786,6 +787,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
             <button
               type="button"
               disabled={state.busy || !availability?.choices.length}
+              data-resize-stable={Boolean(availability?.choices.length)}
               onClick={() => void state.shuffle(scope)}
               aria-describedby={shuffleHint ? id + "-shuffle-hint" : undefined}
             >
@@ -822,6 +824,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
           <button
             type="button"
             disabled={!state.canUndo || state.busy}
+            data-resize-stable={state.canUndo}
             onClick={() => void state.undoLast()}
           >
             <RotateCcw size={14} />

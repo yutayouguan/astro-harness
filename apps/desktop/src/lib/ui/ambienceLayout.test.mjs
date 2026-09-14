@@ -77,3 +77,26 @@ test("live pet resizing keeps available gallery tiles visually stable while stil
     /\[data-live-pet-scale="true"\][\s\S]*?\[data-has-image="true"\]:disabled,[^}]*opacity: 1/,
   );
 });
+
+test("restore, undo and shuffle keep eligible styling during resizing without enabling actions", () => {
+  assert.match(
+    panel,
+    /disabled=\{state.busy\}\s*onClick=\{\(\) => void state.selectScene\(scene.id\)\}\s*data-resize-stable="true"/,
+  );
+  assert.match(
+    panel,
+    /disabled=\{!state.canUndo \|\| state.busy\}\s*data-resize-stable=\{state.canUndo\}/,
+  );
+  assert.match(
+    panel,
+    /disabled=\{state.busy \|\| !availability\?\.choices.length\}\s*data-resize-stable=\{Boolean\(availability\?\.choices.length\)\}/,
+  );
+  assert.match(
+    css,
+    /\[data-live-pet-scale="true"\]\s*button\[data-resize-stable="true"\]:disabled\s*\{\s*opacity: 1;/,
+  );
+  assert.match(
+    css,
+    /\.desktop-ambience button:disabled\s*\{\s*opacity: 0\.45;/,
+  );
+});

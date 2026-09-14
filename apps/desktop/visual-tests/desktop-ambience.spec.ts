@@ -2,7 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 test("pet size changes natively before mouse release and one undo restores the gesture", async ({ page }) => {
   const { dialog } = await open(page, "slow-scale");
+  await dialog.getByText("显示调整", { exact: true }).click();
+  await dialog.getByRole("button", { name: "适应", exact: true }).click();
   await dialog.getByRole("tab", { name: "宠物", exact: true }).click();
+  const restore = dialog.getByRole("button", { name: "还原场景", exact: true });
+  const undo = dialog.getByRole("button", { name: "撤销", exact: true });
+  await expect(restore).toBeVisible();
+  await expect(undo).toBeEnabled();
   const slider = dialog.getByRole("slider", { name: "桌宠大小", exact: true });
   await slider.scrollIntoViewIfNeeded();
   const box = (await slider.boundingBox())!;
@@ -13,6 +19,9 @@ test("pet size changes natively before mouse release and one undo restores the g
   const intermediate = await slider.inputValue();
   expect(Number(intermediate)).toBeLessThan(0.3);
   await expect(dialog).toHaveAttribute("data-live-pet-scale", "true");
+  await expect(restore).toBeDisabled();
+  await expect(restore).toHaveCSS("opacity", "1");
+  await expect(undo).toHaveCSS("opacity", "1");
   await expect(dialog.locator('.ambience-scene-tile[data-has-image="true"]').first()).toHaveCSS("opacity", "1");
   await expect(page.getByTestId("native-pet-scale")).toHaveText(intermediate);
   await expect(slider).toBeEnabled();
