@@ -89,6 +89,23 @@ pub(super) fn validate_manifest(manifest: &types::DesktopPetManifest) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apng_frames_do_not_inherit_the_legacy_atlas_height_limit() {
+        let clips: types::pet_motion::PetMotionClips = serde_json::from_str(include_str!(
+            "../../../../src/assets/pets/naitang/apng/motion-clips.json"
+        ))
+        .unwrap();
+        let clip = &clips["kneading"];
+        // This is a sequence of independent frames, not a tall static PNG.
+        assert!(clip.dimensions().1 > 4096);
+        validate(
+            include_bytes!("../../../../src/assets/pets/naitang/apng/kneading.apng"),
+            clip,
+        )
+        .unwrap();
+    }
+
     #[test]
     fn validates_real_frames_and_rejects_timing_or_static_spoofs() {
         let clips: types::pet_motion::PetMotionClips = serde_json::from_str(include_str!(

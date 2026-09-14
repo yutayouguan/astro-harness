@@ -20,6 +20,7 @@ import {
 	loadNativeManifest,
 	assertNativeBinaryBinding,
 	parseNativeArgs,
+	nativeQaProfile,
 } from "./lib/native-config-acceptance.mjs";
 
 if (process.platform !== "darwin")
@@ -31,8 +32,10 @@ const resumed = args.resume ? await loadNativeManifest(args.resume) : undefined;
 const scratch =
 	resumed?.scratch ?? (await mkdtemp(join(tmpdir(), "astro-config-native-")));
 const astroRoot = join(scratch, "home");
-const identifier = `com.astroagent.configqa.${scratch.split("-").at(-1).toLowerCase()}`;
-const appName = "Astro Config QA";
+const purpose = resumed?.purpose ?? args.purpose;
+const profile = nativeQaProfile(purpose);
+const identifier = `${profile.prefix}.${scratch.split("-").at(-1).toLowerCase()}`;
+const appName = profile.appName;
 const app = join(scratch, `${appName}.app`);
 const contents = join(app, "Contents");
 const log = join(scratch, "native.log");
@@ -238,7 +241,7 @@ command = "/usr/bin/true"
 enabled = false
 `,
 		);
-		manifest = { identifier, app, astroRoot, log, frontendUrl: url };
+		manifest = { identifier, app, astroRoot, log, frontendUrl: url, ...(purpose === "pet" ? { purpose } : {}) };
 		await writeFile(
 			join(scratch, "manifest.json"),
 			JSON.stringify(manifest, null, 2),

@@ -4,9 +4,16 @@ import { basename, dirname, join, isAbsolute } from "node:path";
 
 export function parseNativeArgs(args) {
 	if (!args.length) return { onboarding: false };
+	if (args.length === 1 && args[0] === "--pet") return { onboarding: false, purpose: "pet" };
 	if (args.length === 1 && args[0] === "--onboarding") return { onboarding: true };
 	if (args.length === 2 && args[0] === "--resume") return { onboarding: false, resume: args[1] };
-	throw new Error("usage: node tools/verify-config-native.mjs [--onboarding | --resume <manifest.json>]");
+	throw new Error("usage: node tools/verify-config-native.mjs [--pet | --onboarding | --resume <manifest.json>]");
+}
+
+export function nativeQaProfile(purpose = "config") {
+	if (purpose === "config") return { appName: "Astro Config QA", prefix: "com.astroagent.configqa" };
+	if (purpose === "pet") return { appName: "Astro Pet QA", prefix: "com.astroagent.petqa" };
+	throw new Error("Unknown native acceptance purpose");
 }
 
 // Build-isolation check only; this does not authenticate untrusted executables.
@@ -36,12 +43,14 @@ export async function loadNativeManifest(file) {
 	if ((await lstat(manifestFile)).size > 16_384)
 		throw new Error("Acceptance manifest exceeds limit");
 	const data = JSON.parse(await readFile(manifestFile, "utf8"));
-	const identifier = `com.astroagent.configqa.${basename(scratch).split("-").at(-1).toLowerCase()}`;
+	const profile = nativeQaProfile(data.purpose);
+	const appDirectory = `${profile.appName}.app`;
+	const identifier = `${profile.prefix}.${basename(scratch).split("-").at(-1).toLowerCase()}`;
 	if (data.identifier !== identifier)
 		throw new Error("Unexpected QA application identifier");
 	for (const [key, expected] of [
 		["astroRoot", join(scratch, "home")],
-		["app", join(scratch, "Astro Config QA.app")],
+		["app", join(scratch, appDirectory)],
 	]) {
 		if (
 			typeof data[key] !== "string" ||
@@ -92,14 +101,15 @@ export async function loadNativeManifest(file) {
 	}
 	const binary = join(
 		scratch,
-		"Astro Config QA.app/Contents/MacOS/astro-agent",
+		`${appDirectory}/Contents/MacOS/astro-agent`,
 	);
 	if ((await realpath(binary)) !== binary || !(await lstat(binary)).isFile())
 		throw new Error("Invalid acceptance executable");
 	await assertNativeBinaryBinding(binary, data.astroRoot);
 	return {
 		identifier,
-		app: join(scratch, "Astro Config QA.app"),
+		...(data.purpose === "pet" ? { purpose: "pet" } : {}),
+		app: join(scratch, appDirectory),
 		astroRoot: join(scratch, "home"),
 		log,
 		frontendUrl: url.origin,
