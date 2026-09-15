@@ -6,7 +6,7 @@ test("storage inspection explains protected data and only previews cleanup", asy
   await expect(page.getByRole("heading", { name: "存储与配置" })).toBeVisible();
   await expect(page.getByText("检查与预览只读 · 移动文件需单独确认")).toBeVisible();
   await expect(page.getByText("资源引用已失效", { exact: true })).toBeVisible();
-  await page.getByText(/^清理预览/).click();
+  await page.locator("summary").filter({ hasText: "清理预览" }).click();
   await expect(page.getByText("models/cache/old-model-metadata.json")).toBeVisible();
   await page.getByText("保留策略", { exact: true }).click();
   await expect(page.getByText(/TTL（秒）: 600/)).toBeVisible();
