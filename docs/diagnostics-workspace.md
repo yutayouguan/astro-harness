@@ -59,6 +59,10 @@ WAL 与 schema 版本保留在详情，不再作为“健康状态”的大字�
 
 截图保存在本地 `output/diagnostics-workspace-20260914/`。
 
-原生验收边界：开发版 `target/debug/astro-agent` 与 1420 开发服务在运行，但当前电脑控制接口无法选择该未打包进程，只能枚举旧 QA 包。因此浏览器预览不能视为原生 Tauri WebView 验收；没有为验证而启动旧安装包、重启 APP 或访问真实清理数据。
+原生验收（2026-09-15，已通过）：用仓库自带底座 `node tools/verify-config-native.mjs` 启动隔离实例——独立标识 `com.astroagent.configqa.<scratch>`、临时数据根、私有回环前端，二进制以编译期 `ASTRO_NATIVE_ACCEPTANCE_ROOT` 绑定该数据根。直接在 CUA 里操作该实例复核真实 WKWebView：运行日志页与存储与配置页都正常渲染；四张状态卡各自带磨砂（`backdrop-filter` 生效，卡片间无连续底色条）、列间距 12px；筛选与搜索分两行、四列；无横向溢出；存储页的「清理预览 / 保留策略」是 `<summary>` 折叠项，与 `storage-diagnostics.spec.ts` 的定位一致。
+
+本次未覆盖：受限宿主（620×440、380×640）的原生核对没有做——该实例窗口拒绝按坐标拖拽缩放（`windowNotFoundAtPosition`），其受限布局结论仍来自浏览器样板。
+
+未触碰真实数据根的核对：`~/.astro/automation/cron/jobs.json` 与 `~/.astro/config.toml` 的时间戳在验收前后一致，隔离根内没有生成 `.env`。开发版 `target/debug/astro-agent` 是未打包进程，CUA 无法选中（`cua.getApp(<二进制路径>)` 返回 `Invalid app`），所以原生验收必须经由上述 QA 应用包；底座结束时会重建回普通 dev 工件。
 
 本轮完整前端测试快照：1082 项中 1077 通过、5 项未通过，集中在桌宠与侧栏的现有源码断言；这些文件不在本次修改范围。诊断、存储和设置相关的 69 项定向测试全部通过，TypeScript、Stylelint、生产构建和 CSS 层检查通过。
