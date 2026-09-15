@@ -8,7 +8,7 @@ test("creation separates static generation and import while retaining cancellati
   assert.match(source, /className="prefs-card pet-import-card"/);
   assert.match(source, /className="pet-create-submit"/);
   assert.match(source, /hidden=\{!withWallpaper\}/);
-  assert.match(source, /不包含动画帧/);
+  assert.match(source, /照片仅生成静态形象；动画可用内置奶糖或导入宠物包/);
   assert.match(source, /cancel_pet_generation/);
   assert.match(source, /disabled=\{!state.sourcePath \|\| busy != null\}/);
   assert.doesNotMatch(source, /<details|<summary/);

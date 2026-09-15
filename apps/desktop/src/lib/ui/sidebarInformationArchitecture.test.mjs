@@ -166,8 +166,8 @@ test("icon-only sidebar uses meaningful section controls instead of detached che
   assert.match(app, /<History size=\{18\} strokeWidth=\{1\.8\} \/>/);
   assert.match(
     app,
-    /const sidebarContentExpanded =\s*!sidebar\.sidebarCompact &&\s*\(sidebar\.showSidebarLabels \|\| sidebarRailPreview\);/,
-    "the rail preview should preserve the saved label preference",
+    /const sidebarContentExpanded =\s*!sidebar\.sidebarCompact &&\s*\(sidebar\.showSidebarLabels \|\| sidebarRailPreview \|\| interfaceTourActive\);/,
+    "the rail preview should preserve the saved label preference (the interface tour may force labels on)",
   );
   assert.match(
     app,

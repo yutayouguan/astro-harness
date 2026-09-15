@@ -22,7 +22,7 @@ const shellStyles = await readFile(
 test("the app shell exposes explicit sidebar occupancy", () => {
   assert.match(
     appSource,
-    /data-sidebar-state=\{sidebar\.sidebarVisible \? "visible" : "collapsed"\}/,
+    /data-sidebar-state=\{sidebar\.sidebarVisible \|\| interfaceTourActive \? "visible" : "collapsed"\}/,
   );
 });
 

@@ -71,7 +71,10 @@ test("opaque root underlays exclude desktop pets in normal, zoom and macOS modes
       );
     }
   }
-  assert.match(main, /colorScheme\s*=\s*isDesktopPetWindow\s*\?\s*"normal"/);
+  assert.match(
+    main,
+    /style\.colorScheme\s*=\s*isDesktopPetWindow\s*\|\|\s*isPetTaskWindow\s*\?\s*"normal"/,
+  );
   assert.match(backend, /\.transparent\(true\)/);
 });
 
@@ -116,7 +119,7 @@ test("static assets do not advertise working animation controls", () => {
   assert.match(pause, /enabled:.*\[2, 3\]\.includes\(state\.spriteVersionNumber \?\? 0\)/);
   assert.match(pause, /静态形象/);
   assert.match(creation, /生成静态形象/);
-  assert.match(creation, /不包含动画帧/);
+  assert.match(creation, /照片仅生成静态形象；动画可用内置奶糖或导入宠物包/);
 });
 
 test("pet refresh is non-activating, idempotent and scoped hit testing cannot target main", () => {
