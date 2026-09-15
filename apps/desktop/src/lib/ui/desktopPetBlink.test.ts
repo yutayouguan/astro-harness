@@ -98,3 +98,23 @@ test("calibrated eye masks apply only to the matching bundled Naitang artwork", 
     "Recalibrate the eye masks when changing the base artwork",
   );
 });
+
+test("every pet surface gates the masks through the same calibrated check", () => {
+  const surface = readFileSync(
+    new URL(
+      "../../components/desktop-pet/DesktopPetSurface.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const panel = readFileSync(
+    new URL("../../components/settings/PetLibraryPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  for (const source of [surface, panel]) {
+    assert.match(source, /blinkProfile=\{naitangBlinkProfile\(/);
+  }
+  // The APNG action pack lives in builtin-naitang-apng-* with 256px cells, so a
+  // substring check would enable 192px-cell masks on artwork they cannot fit.
+  assert.doesNotMatch(panel, /includes\("builtin-naitang-"\)/);
+});

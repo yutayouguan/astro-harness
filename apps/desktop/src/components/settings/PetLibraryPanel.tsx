@@ -8,6 +8,7 @@ import {
 import type { DesktopPetState } from "../../lib/ui/desktopPetState";
 import { filterPets, type PetRecord } from "../../lib/ui/petLibrary";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import { naitangBlinkProfile } from "../../lib/ui/desktopPetBlink";
 import DesktopPetCanvas from "../desktop-pet/DesktopPetCanvas";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
 import { SelectMenu } from "../ui/SelectMenu";
@@ -37,9 +38,7 @@ export function PetPortrait({
     <DesktopPetCanvas
       src={src}
       state={selectedAction === "kneading" ? "running" : "idle"}
-      blinkProfile={
-        identity.petPath.includes("builtin-naitang-") ? "naitang" : undefined
-      }
+      blinkProfile={naitangBlinkProfile(identity.petPath)}
       motionClips={active ? identity.motionClips : undefined}
       motionName={
         identity.motionClips?.[selectedAction] ? selectedAction : undefined
