@@ -12,6 +12,10 @@ import { usesIdleRig } from "../../lib/ui/petIdleRigMotion";
 import { usePetFrameHandoff } from "./usePetFrameHandoff";
 import { groomingFrame } from "../../lib/ui/desktopPetLeisure";
 import {
+  createPetBlinkTimeline,
+  naitangBlinkFrame,
+} from "../../lib/ui/desktopPetBlink";
+import {
   motionFrame,
   motionUsesNeutralFrame,
   type PetMotionClips,
@@ -31,6 +35,7 @@ import {
 export type DesktopPetCanvasProps = {
   src: string;
   groomingSrc?: string;
+  blinkProfile?: "naitang";
   motionClips?: PetMotionClips;
   motionName?: string;
   repeatMotion?: boolean;
@@ -84,6 +89,7 @@ export default function DesktopPetCanvas(props: DesktopPetCanvasProps) {
 function LegacyDesktopPetCanvas({
   src,
   groomingSrc,
+  blinkProfile,
   motionClips,
   motionName,
   repeatMotion = false,
@@ -111,6 +117,12 @@ function LegacyDesktopPetCanvas({
     repeatMotion,
   });
   const frameRequest = useRef(0);
+  const blinkTimeline = useRef<ReturnType<
+    typeof createPetBlinkTimeline
+  > | null>(null);
+  if (blinkProfile === "naitang" && !blinkTimeline.current) {
+    blinkTimeline.current = createPetBlinkTimeline();
+  }
   const startedAt = useRef<number | null>(null);
   const lastTick = useRef<number | null>(null);
   const gaze = useRef(0);
@@ -143,7 +155,7 @@ function LegacyDesktopPetCanvas({
       const motion = current.motionName
         ? motionRef.current?.[current.motionName]
         : undefined;
-      let image = motion
+      let image: CanvasImageSource | undefined = motion
         ? images.current["motion:" + current.motionName]
         : current.clip === "grooming"
           ? images.current.grooming
@@ -201,6 +213,21 @@ function LegacyDesktopPetCanvas({
         );
       }
       if (!image) return;
+      let blinkKey = "";
+      if (
+        blinkProfile === "naitang" &&
+        !motion &&
+        !current.clip &&
+        current.state === "idle"
+      ) {
+        const closure = current.reducedMotion
+          ? 0
+          : blinkTimeline.current!.sample(timestamp - startedAt.current);
+        const blink = naitangBlinkFrame(images.current.main, closure);
+        frame = { row: 0, column: blink ? 0 : closure === 1 ? 1 : 0 };
+        if (blink) image = blink;
+        blinkKey = "blink:" + Math.round(closure * 8);
+      }
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.round(DESKTOP_PET_CELL.width * ratio);
       const height = Math.round(DESKTOP_PET_CELL.height * ratio);
@@ -209,6 +236,7 @@ function LegacyDesktopPetCanvas({
         motion ? "motion:" + current.motionName : (current.clip ?? "main"),
         frame.row,
         frame.column,
+        blinkKey,
       ].join(":");
       if (
         !motion &&
@@ -276,7 +304,7 @@ function LegacyDesktopPetCanvas({
         frameRequest.current = window.requestAnimationFrame(draw);
       }
     },
-    [captureTransition],
+    [captureTransition, blinkProfile],
   );
 
   const requestDraw = useCallback(() => {

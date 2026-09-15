@@ -37,6 +37,9 @@ export function PetPortrait({
     <DesktopPetCanvas
       src={src}
       state={selectedAction === "kneading" ? "running" : "idle"}
+      blinkProfile={
+        identity.petPath.includes("builtin-naitang-") ? "naitang" : undefined
+      }
       motionClips={active ? identity.motionClips : undefined}
       motionName={
         identity.motionClips?.[selectedAction] ? selectedAction : undefined

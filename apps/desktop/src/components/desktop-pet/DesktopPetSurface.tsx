@@ -14,6 +14,7 @@ import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
 import { type DesktopPetAnimationState } from "../../lib/ui/desktopPetAnimation";
 import DesktopPetCanvas from "./DesktopPetCanvas";
 import { usePetRoaming } from "../../hooks/app/usePetRoaming";
+import { naitangBlinkProfile } from "../../lib/ui/desktopPetBlink";
 import { usePetHitTesting } from "./usePetHitTesting";
 import { motionDuration } from "../../lib/ui/petMotionClip";
 import {
@@ -524,6 +525,7 @@ export default function DesktopPetSurface() {
         {petSrc && ([2, 3].includes(state.spriteVersionNumber ?? 0)) ? (
           <DesktopPetCanvas
             src={petSrc}
+            blinkProfile={naitangBlinkProfile(state.petPath)}
             groomingSrc={resolveMediaSrc(state.groomingPath) || undefined}
             motionClips={roaming.frame?.clip && roaming.frame.clipName ? { ...state.motionClips, [roaming.frame.clipName]: roaming.frame.clip } : state.motionClips}
             motionName={
