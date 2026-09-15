@@ -54,14 +54,19 @@ pub fn get_tool_loading_settings() -> Result<ToolLoadingSettings, String> {
     tools::register_all(&mut registry);
     Ok(ToolLoadingSettings {
         modes: home::load_tool_loading_modes().map_err(|error| error.to_string())?,
-        adjustable_toolsets: home::KNOWN_TOOLSET_IDS.iter()
+        adjustable_toolsets: home::KNOWN_TOOLSET_IDS
+            .iter()
             .filter(|toolset| registry.toolset_loading_adjustable(toolset))
-            .map(|toolset| (*toolset).to_string()).collect(),
+            .map(|toolset| (*toolset).to_string())
+            .collect(),
     })
 }
 
 #[tauri::command]
-pub fn set_tool_loading_mode(toolset: String, mode: home::ToolLoadingMode) -> Result<ToolLoadingSettings, String> {
+pub fn set_tool_loading_mode(
+    toolset: String,
+    mode: home::ToolLoadingMode,
+) -> Result<ToolLoadingSettings, String> {
     let mut registry = tools::ToolRegistry::new();
     tools::register_all(&mut registry);
     if !registry.toolset_loading_adjustable(&toolset) {
@@ -86,10 +91,20 @@ mod tool_loading_tests {
         let saved = set_tool_loading_mode("browser".into(), home::ToolLoadingMode::Always).unwrap();
         assert_eq!(saved.modes["browser"], home::ToolLoadingMode::Always);
         assert!(home::load_tools_enabled().unwrap().is_empty());
-        assert!(get_tool_loading_settings().unwrap().modes.contains_key("browser"));
-        assert!(set_tool_loading_mode("apply_patch".into(), home::ToolLoadingMode::OnDemand).is_err());
+        assert!(get_tool_loading_settings()
+            .unwrap()
+            .modes
+            .contains_key("browser"));
+        assert!(
+            set_tool_loading_mode("apply_patch".into(), home::ToolLoadingMode::OnDemand).is_err()
+        );
         assert!(set_tool_loading_mode("system".into(), home::ToolLoadingMode::OnDemand).is_err());
-        assert!(set_tool_loading_mode("browser".into(), home::ToolLoadingMode::Auto).unwrap().modes.is_empty());
+        assert!(
+            set_tool_loading_mode("browser".into(), home::ToolLoadingMode::Auto)
+                .unwrap()
+                .modes
+                .is_empty()
+        );
     }
 }
 

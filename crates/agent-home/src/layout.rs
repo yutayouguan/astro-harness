@@ -98,7 +98,10 @@ pub const RETIRED_LAYOUT_PATHS: &[&str] = &[
 ];
 
 pub fn require_current_layout(base: &Path) -> anyhow::Result<()> {
-    anyhow::ensure!(!extension_migration_marker(base).exists(), "extension migration is incomplete; restore its recorded backup before restarting");
+    anyhow::ensure!(
+        !extension_migration_marker(base).exists(),
+        "extension migration is incomplete; restore its recorded backup before restarting"
+    );
     anyhow::ensure!(!base.join("backups/layout-in-progress.json").exists(),
         "Astro home migration is incomplete; inspect backups/layout-in-progress.json before restarting");
     for old in RETIRED_LAYOUT_PATHS {
