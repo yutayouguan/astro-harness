@@ -1,4 +1,7 @@
 html {
+  /* 终端内容区是阅读区，不是壁纸窗口：玻璃留给 dock 边框，
+     正文坐在与侧边栏同源的平面染色上，避免壁纸细节被放大成奶雾和同心色带。 */
+  --terminal-screen-plane: var(--sidebar-bg);
   --terminal-screen-bg: rgba(0, 0, 0, 0);
 }
 
@@ -33,11 +36,6 @@ html {
 .terminal-dock-header {
   border-bottom: 1px solid
     color-mix(in srgb, var(--glass-edge) 58%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, white 8%, transparent),
-    transparent
-  );
 }
 
 .terminal-dock-screen .xterm,
@@ -350,6 +348,7 @@ html {
   min-height: 0;
   padding: 4px 10px 0 14px;
   overflow: hidden;
+  background: var(--terminal-screen-plane);
 }
 
 .terminal-dock-screen .xterm {
