@@ -678,7 +678,7 @@ mod tests {
                 loop_end: 13,
                 loop_repeats: 3,
                 neutral_bookends: false,
-            locomotion: None,
+                locomotion: None,
             },
         );
         save_scene(dir.path(), scene.clone()).unwrap();

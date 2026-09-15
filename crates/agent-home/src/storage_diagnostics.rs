@@ -606,7 +606,11 @@ fn is_legacy_setting(name: &str) -> bool {
         && (name.ends_with("/config.json") || name.ends_with("/skills-enabled.json")))
 }
 
-pub(crate) fn cleanup_policy(name: &str, meta: &fs::Metadata, now: SystemTime) -> Option<&'static str> {
+pub(crate) fn cleanup_policy(
+    name: &str,
+    meta: &fs::Metadata,
+    now: SystemTime,
+) -> Option<&'static str> {
     let age = now.duration_since(meta.modified().ok()?).ok()?.as_secs();
     let filename = name.strip_prefix("logs/")?;
     let date = filename

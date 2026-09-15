@@ -3,8 +3,8 @@
 pub mod agent_icons;
 pub mod auto_icon;
 pub mod scan;
-pub mod tools_enabled;
 pub mod tool_loading;
+pub mod tools_enabled;
 
 pub use tool_loading::{load_tool_loading_modes, set_tool_loading_mode, ToolLoadingMode};
 

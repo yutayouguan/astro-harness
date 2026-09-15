@@ -1440,13 +1440,14 @@ pub async fn desktop_control(
         }
         "new_tab" => {
             let args: BrowserDesktopNewTabArgs = serde_json::from_value(args)?;
-            let url = args
-                .url
-                .filter(|url| !url.trim().is_empty())
-                .or_else(|| {
-                    let home = load_browser_settings(memory_dir).home_page;
-                    if home.trim().is_empty() { None } else { Some(home) }
-                });
+            let url = args.url.filter(|url| !url.trim().is_empty()).or_else(|| {
+                let home = load_browser_settings(memory_dir).home_page;
+                if home.trim().is_empty() {
+                    None
+                } else {
+                    Some(home)
+                }
+            });
             match url {
                 Some(url) => {
                     open_for_session(
@@ -1460,16 +1461,14 @@ pub async fn desktop_control(
                     )
                     .await
                 }
-                None => {
-                    Ok(serde_json::json!({
-                        "astro_browser": true,
-                        "url": "",
-                        "title": "",
-                        "status": "connected",
-                        "tabs": [],
-                    })
-                    .to_string())
-                }
+                None => Ok(serde_json::json!({
+                    "astro_browser": true,
+                    "url": "",
+                    "title": "",
+                    "status": "connected",
+                    "tabs": [],
+                })
+                .to_string()),
             }
         }
         "switch_tab" => {

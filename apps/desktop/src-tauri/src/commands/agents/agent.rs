@@ -272,7 +272,10 @@ pub fn cleanup_task_worktree(worktree_id: String) -> Result<bool, String> {
 /// 列出当前项目中已登记且仍可验证的 Astro worktree。
 #[tauri::command]
 pub fn list_task_worktrees(project_root: Option<String>) -> Result<Vec<TaskWorktreeDto>, String> {
-    let explicit_root = project_root.as_deref().map(str::trim).filter(|root| !root.is_empty());
+    let explicit_root = project_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty());
     let root = match explicit_root {
         Some(root) => agent::git_worktree::resolve_project_root(Some(std::path::Path::new(root)))
             .ok_or_else(|| format!("cannot resolve project root: {root}"))?,
