@@ -438,10 +438,12 @@ impl CommandHookRunner {
     }
 
     pub(crate) fn validate_migrated_home(root: &Path) -> anyhow::Result<Self> {
-        let mut runner = Self::default();
-        runner.authority_root = Some(root.to_path_buf());
-        runner.trust_hashes = crate::trust::load(root)?;
-        runner.runs = HookRunStore::with_audit_root(root);
+        let mut runner = Self {
+            authority_root: Some(root.to_path_buf()),
+            trust_hashes: crate::trust::load(root)?,
+            runs: HookRunStore::with_audit_root(root),
+            ..Default::default()
+        };
         runner.load_scope(root, CommandHookScope::User, CommandHookTrust::Trusted)?;
         Ok(runner)
     }

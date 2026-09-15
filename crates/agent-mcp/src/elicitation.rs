@@ -238,7 +238,7 @@ impl McpElicitationBroker {
     ) -> bool {
         let mut pending = self.pending.lock().expect("MCP elicitation mutex poisoned");
         let key = (server.to_string(), id.to_string());
-        if !pending.get(&key).is_some_and(|entry| entry.token == token) {
+        if pending.get(&key).is_none_or(|entry| entry.token != token) {
             return false;
         }
         let resolved = pending

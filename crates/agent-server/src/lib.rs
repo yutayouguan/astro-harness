@@ -1,4 +1,7 @@
 #![deny(clippy::unwrap_used)]
+// 每个 gRPC handler 都返回 `Result<_, tonic::Status>`：Status 本身较胖是该框架的
+// 约定（boxing 会改变 tonic/tower 的服务签名），这里统一放行 result_large_err。
+#![allow(clippy::result_large_err)]
 
 //! Astro 独立 gRPC 后端入口。
 //!

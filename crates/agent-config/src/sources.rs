@@ -144,6 +144,7 @@ pub fn documents(
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn visit(
     path: &Path,
     value: Value,
