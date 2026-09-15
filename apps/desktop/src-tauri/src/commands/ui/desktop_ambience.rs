@@ -64,15 +64,15 @@ fn save_scene_at(
     wallpaper: types::UiStyleWallpaper,
     tokens: types::UiStyleTokens,
 ) -> Result<types::DesktopPetState, String> {
-    let source = types::pet_scene::managed_file(&base, std::path::Path::new(&wallpaper.path))
+    let source = types::pet_scene::managed_file(base, std::path::Path::new(&wallpaper.path))
         .map_err(|e| e.to_string())?;
-    super::wallpaper::analyze_wallpaper_at(&base, &source)?;
+    super::wallpaper::analyze_wallpaper_at(base, &source)?;
     let bytes = types::desktop_pet::read_limited_pet_file(&source, 25 * 1024 * 1024)
         .map_err(|e| e.to_string())?;
     let id = format!("pet-{}", uuid::Uuid::new_v4().simple());
     let extension = source.extension().and_then(|s| s.to_str()).unwrap_or("png");
     let relative = format!("themes/{id}/wallpaper.{extension}");
-    let target = types::ui_style_root(&base).join(&relative);
+    let target = types::ui_style_root(base).join(&relative);
     let style = types::UiStyleManifest {
         schema_version: types::UI_STYLE_SCHEMA_VERSION,
         id: id.clone(),
@@ -88,7 +88,7 @@ fn save_scene_at(
     };
     style.validate()?;
     types::pet_scene::atomic_write(&target, &bytes).map_err(|e| e.to_string())?;
-    let result = types::update_desktop_pet_state(&base, |state| {
+    let result = types::update_desktop_pet_state(base, |state| {
         anyhow::ensure!(
             state.active_pet_id.as_deref() == Some(&pet_id),
             "当前宠物已切换，请重试"

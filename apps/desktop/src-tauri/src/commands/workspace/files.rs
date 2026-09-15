@@ -399,7 +399,7 @@ fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|_| missing())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -413,7 +413,7 @@ fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
                 return Ok(());
             }
         }
-        return Err(missing());
+        Err(missing())
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -421,7 +421,7 @@ fn open_path_with_vscode(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|_| missing())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
     {

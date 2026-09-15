@@ -236,7 +236,8 @@ impl State {
             .requests
             .iter()
             .find(|r| {
-                !self.seen.contains(&r.key) && !(main_front && self.main_visible.contains(&r.key))
+                let deferred_for_main_front = main_front && self.main_visible.contains(&r.key);
+                !(self.seen.contains(&r.key) || deferred_for_main_front)
             })
             .map(|r| r.key.clone());
         if self.initialized && allowed && !self.open && self.auto_candidate.is_none() {

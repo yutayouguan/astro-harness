@@ -187,7 +187,9 @@ async fn create_live_browser_webview<R: Runtime>(
             let navigation_app = app.clone();
             let navigation_label = target_label.clone();
             let requested_url = url.to_string();
-            let _ = tauri::async_runtime::spawn_blocking(move || {
+            // Fire-and-forget: the JoinHandle is dropped, the blocking task keeps
+            // validating the popup URL and navigating.
+            tauri::async_runtime::spawn_blocking(move || {
                 let Ok(validated_url) = tools::builtin::shell::browser::validate_live_webview_url(
                     &home::default_memory_dir(),
                     &requested_url,

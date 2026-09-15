@@ -50,15 +50,13 @@ pub async fn set_task_notifications_enabled(app: AppHandle, enabled: bool) -> Re
             .permission_state()
             .map_err(|e| e.to_string())?
             != PermissionState::Granted
-    {
-        if app
+        && app
             .notification()
             .request_permission()
             .map_err(|e| e.to_string())?
             != PermissionState::Granted
-        {
-            return Err("系统未允许通知，请在系统设置中授权后重试".into());
-        }
+    {
+        return Err("系统未允许通知，请在系统设置中授权后重试".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
         write_notifications_at(&home::default_memory_dir(), enabled)?;

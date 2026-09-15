@@ -111,7 +111,7 @@ mod macos {
 pub(super) fn primary_button_down() -> bool {
     #[cfg(target_os = "macos")]
     {
-        return macos::mouse_down();
+        macos::mouse_down()
     }
     #[cfg(target_os = "windows")]
     {
@@ -119,7 +119,7 @@ pub(super) fn primary_button_down() -> bool {
         extern "system" {
             fn GetAsyncKeyState(key: i32) -> i16;
         }
-        return unsafe { GetAsyncKeyState(1) < 0 };
+        unsafe { GetAsyncKeyState(1) < 0 }
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -129,7 +129,7 @@ pub(super) fn primary_button_down() -> bool {
 pub(super) fn foreground_fullscreen() -> bool {
     #[cfg(target_os = "macos")]
     {
-        return macos::fullscreen();
+        macos::fullscreen()
     }
     #[cfg(not(target_os = "macos"))]
     {
