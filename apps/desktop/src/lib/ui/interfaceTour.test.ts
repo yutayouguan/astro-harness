@@ -15,8 +15,17 @@ test("only a valid unresolved version offers the tour", () => {
   }
 });
 
-test("both locales cover the same five stable targets", () => {
-  const expected = ["composer", "model", "sidebar", "plugins", "settings"];
+test("both locales cover the same eight stable targets", () => {
+  const expected = [
+    "composer",
+    "model",
+    "toolbar",
+    "sidebar",
+    "workspace",
+    "plugins",
+    "appearance",
+    "settings",
+  ];
   for (const copy of Object.values(interfaceTourCopy)) {
     assert.deepEqual(
       copy.steps.map(([id]) => id),

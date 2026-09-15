@@ -1733,7 +1733,7 @@ export default function App() {
                     </div>
 
                     {/* ── 项目 ── */}
-                    <div className="sidebar-collapsible-section">
+                    <div className="sidebar-collapsible-section" data-tour="workspace">
                       <button
                         type="button"
                         className="sidebar-section-toggle"
@@ -2366,7 +2366,7 @@ export default function App() {
                     onActivePrefsChange={syncComposerFromModelPrefs}
                     disabled={chat.streaming}
                   />
-                  <div className="chat-header-tools">
+                  <div className="chat-header-tools" data-tour="toolbar">
                     <button
                       type="button"
                       className="header-icon-btn"

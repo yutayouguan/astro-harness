@@ -199,7 +199,12 @@ export default function InterfaceTour({
                       popover: {
                         title,
                         description,
-                        side: id === "composer" ? "top" : "right",
+                        side:
+                          id === "composer" || id === "appearance"
+                            ? "top"
+                            : id === "toolbar"
+                              ? "bottom"
+                              : "right",
                       },
                     },
                   ]

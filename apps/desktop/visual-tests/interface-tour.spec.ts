@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 const URL = "/iframe.html?id=app-onboarding-runtime--strict-native-transport&viewMode=story";
 const tour = (page: Page) => page.locator(".astro-interface-tour");
+const TOUR_TARGETS = ["composer", "model", "toolbar", "sidebar", "workspace", "plugins", "appearance", "settings"];
 test.setTimeout(60000);
 
 async function boot(page: Page, options: { resolved?: boolean; readError?: boolean; saveError?: boolean; collapsed?: boolean; locale?: string; petVisible?: boolean; labels?: boolean; petReadError?: boolean } = {}) {
@@ -99,17 +100,17 @@ async function expectOutcome(page: Page, outcome: string) {
   expect(mutations).toEqual([]);
 }
 
-test("five real targets, completion, reload suppression and sidebar replay", async ({ page }, testInfo) => {
+test("eight real targets, completion, reload suppression and sidebar replay", async ({ page }, testInfo) => {
   await boot(page);
   await expect(tour(page)).toContainText("花半分钟");
   await expect(tour(page).locator(".driver-popover-progress-text")).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath("welcome.png") });
   await tour(page).getByRole("button", { name: "带我了解", exact: true }).click();
-  for (const [index, id] of ["composer", "model", "sidebar", "plugins", "settings"].entries()) {
+  for (const [index, id] of TOUR_TARGETS.entries()) {
     await expect(page.locator(`[data-tour="${id}"].driver-active-element`)).toBeVisible();
-    await expect(tour(page).locator(".driver-popover-progress-text")).toHaveText(`${index + 1} / 5`);
-    if (index === 0 || index === 4) await page.screenshot({ path: testInfo.outputPath(`${id}.png`) });
-    await tour(page).getByRole("button", { name: index === 4 ? "开始使用" : "下一步", exact: true }).click();
+    await expect(tour(page).locator(".driver-popover-progress-text")).toHaveText(`${index + 1} / ${TOUR_TARGETS.length}`);
+    if (["workspace", "toolbar", "appearance"].includes(id)) await page.screenshot({ path: testInfo.outputPath(`${id}.png`) });
+    await tour(page).getByRole("button", { name: index === TOUR_TARGETS.length - 1 ? "开始使用" : "下一步", exact: true }).click();
   }
   await expectOutcome(page, "completed");
   await page.reload();
@@ -182,7 +183,7 @@ test("compact dark English tour stays within viewport", async ({ page }, testInf
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
   await expect(tour(page)).toContainText("Meet Astro");
   await tour(page).getByRole("button", { name: "Show me around", exact: true }).click();
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < TOUR_TARGETS.length; i++) {
     if (i === 0) await page.screenshot({ path: testInfo.outputPath("compact-dark.png") });
     const arrowMatches = await tour(page).evaluate(node => {
       const arrow = node.querySelector<HTMLElement>(".driver-popover-arrow")!;
@@ -198,7 +199,7 @@ test("compact dark English tour stays within viewport", async ({ page }, testInf
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(820);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(650);
-    await tour(page).getByRole("button", { name: i === 4 ? "Get started" : "Next", exact: true }).click();
+    await tour(page).getByRole("button", { name: i === TOUR_TARGETS.length - 1 ? "Get started" : "Next", exact: true }).click();
   }
   await expectOutcome(page, "completed");
 });
@@ -280,4 +281,20 @@ test("unknown pet visibility retries without guessing or mutating", async ({ pag
   await expect(button).toHaveAccessibleName("显示桌宠");
   expect(await page.evaluate(() => (window as any).__tourCalls.filter((c: any) =>
     ["resume_desktop_pet", "set_desktop_pet_enabled"].includes(c.cmd)))).toEqual([]);
+});
+
+test("non-dynamic mode without wallpaper omits the appearance step", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("astro-shell-color-prefs.v2", JSON.stringify({ style: "unified" }));
+  });
+  await boot(page);
+  await expect(page.locator('[data-tour="appearance"]')).toHaveCount(0);
+  await tour(page).getByRole("button", { name: "带我了解", exact: true }).click();
+  const targets = TOUR_TARGETS.filter(id => id !== "appearance");
+  for (const [index, id] of targets.entries()) {
+    await expect(page.locator(`[data-tour="${id}"].driver-active-element`)).toBeVisible();
+    await expect(tour(page).locator(".driver-popover-progress-text")).toHaveText(`${index + 1} / ${targets.length}`);
+    await tour(page).getByRole("button", { name: index === targets.length - 1 ? "开始使用" : "下一步", exact: true }).click();
+  }
+  await expectOutcome(page, "completed");
 });

@@ -54,6 +54,7 @@ export default function DynamicPaletteButton({
       aria-haspopup={controls ? "dialog" : undefined}
       type="button"
       className="shell-dynamic-palette-button"
+      data-tour="appearance"
       onClick={reshuffle}
       title={label}
       aria-label={label}
