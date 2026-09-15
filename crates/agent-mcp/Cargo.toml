@@ -33,3 +33,16 @@ http = "1"
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+# keyring 3 ships no default store: without a platform backend it silently falls
+# back to the in-memory mock, so stored credentials never come back on Windows
+# or Linux. Pin the native store per target (see keyring's "Credential store
+# features" docs).
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

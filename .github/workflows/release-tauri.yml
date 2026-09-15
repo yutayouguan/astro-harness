@@ -51,7 +51,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            xdg-utils
+            xdg-utils \
+            libdbus-1-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -115,4 +116,6 @@ jobs:
           releaseCommitish: main
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
-          args: ${{ matrix.args }}
+          # 基础配置默认关闭 updater 产物，让普通 `npm run tauri build` 与打包校验
+          # 不需要私钥；发布通道在这里显式打开，配合 TAURI_SIGNING_PRIVATE_KEY 签名。
+          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json

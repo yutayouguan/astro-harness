@@ -77,4 +77,11 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["NSWind
 window-vibrancy = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
+
+# keyring 3 defaults to the in-memory mock without a platform store, which would
+# make saved API keys unreachable after restart; Secret Service is the desktop
+# Linux keystore (crypto-rust keeps OpenSSL out of the build).
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

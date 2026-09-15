@@ -77,7 +77,9 @@ target/release/bundle/appimage/*.AppImage
 target/release/bundle/deb/*.deb
 ```
 
-图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`（`icon.png` / `icon.icns` / `icon.ico` 等）；DMG 安装窗口背景为 `dmg-background.png`，在 `tauri.conf.json` → `bundle.macOS.dmg` 中配置。
+图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`（`icon.png` / `icon.icns` / `icon.ico` 等）。DMG 窗口尺寸与图标位置在 `tauri.conf.json` → `bundle.macOS.dmg` 配置；默认不设自定义背景（曾引用过不存在的 `dmg-background.png`，会让 DMG 打包直接失败）。要加品牌背景，把 660×372 的 PNG 放进 `icons/`，再补上 `"background": "icons/<文件名>.png"`。
+
+默认配置不生成 updater 签名产物，所以 `npm run tauri build` 与多平台打包校验不需要私钥。发布通道（`.github/workflows/release-tauri.yml`）用 `--config src-tauri/tauri.release.conf.json` 打开 `createUpdaterArtifacts`，此时必须提供 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`；本机要出签名包时用同一组环境变量加同一个 `--config`。
 
 Windows / Linux 的 ARM 包需在对应 ARM 机器或 CI runner 上构建（见下方 CI）；本机 Mac **不能**交叉打出 Windows/Linux 安装包。
 

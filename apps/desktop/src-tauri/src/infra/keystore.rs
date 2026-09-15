@@ -67,14 +67,20 @@ fn provider_service_name(provider_id: &str, acceptance_root: Option<&str>) -> St
 mod tests {
     use super::*;
 
-    #[cfg(target_os = "macos")]
+    /// keyring 3 没有任何默认后端：缺少本平台 feature 时会退回内存 mock
+    /// （persistence = EntryOnly），Linux 的 keyutils 也只在重启前有效。
+    /// 各平台都必须落到真正的系统凭证存储，否则保存 API Key 会立刻读不回来。
     #[test]
-    fn macos_build_uses_persistent_native_keychain() {
+    fn keystore_backend_persists_until_delete_on_every_platform() {
         use keyring::credential::CredentialPersistence;
-        assert!(matches!(
-            keyring::default::default_credential_builder().persistence(),
-            CredentialPersistence::UntilDelete
-        ));
+        assert!(
+            matches!(
+                keyring::default::default_credential_builder().persistence(),
+                CredentialPersistence::UntilDelete
+            ),
+            "keyring has no native backend for this target (macOS: apple-native, \
+             Windows: windows-native, Linux: sync-secret-service)"
+        );
     }
 
     #[cfg(target_os = "macos")]

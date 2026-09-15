@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -7,6 +8,7 @@ const [
   commandModule,
   tauriLib,
   tauriConfig,
+  releaseConfig,
   cargo,
   workflow,
   preferences,
@@ -17,6 +19,7 @@ const [
     "../../../src-tauri/src/commands/mod.rs",
     "../../../src-tauri/src/lib.rs",
     "../../../src-tauri/tauri.conf.json",
+    "../../../src-tauri/tauri.release.conf.json",
     "../../../src-tauri/Cargo.toml",
     "../../../../../.github/workflows/release-tauri.yml",
     "../../components/settings/PreferencesPanel.tsx",
@@ -49,7 +52,17 @@ test("update commands check, verify, install, report progress, and restart", () 
 });
 
 test("release workflow publishes signed updater assets without source", () => {
-  assert.equal(JSON.parse(tauriConfig).bundle.createUpdaterArtifacts, true);
+  // 基础配置不带签名产物：本地 `npm run tauri build` 与多平台打包校验都无需私钥。
+  assert.equal(JSON.parse(tauriConfig).bundle.createUpdaterArtifacts, false);
+  // 发布通道显式合并 release 配置，恢复签名 updater 产物。
+  assert.equal(
+    JSON.parse(releaseConfig).bundle.createUpdaterArtifacts,
+    true,
+  );
+  assert.match(
+    workflow,
+    /--config src-tauri\/tauri\.release\.conf\.json/,
+  );
   assert.match(workflow, /owner:\s*yutayouguan/);
   assert.match(workflow, /repo:\s*astro-agent-releases/);
   assert.match(workflow, /secrets\.ASTRO_RELEASE_TOKEN/);
@@ -59,4 +72,18 @@ test("release workflow publishes signed updater assets without source", () => {
   assert.match(workflow, /releaseDraft:\s*false/);
   assert.match(workflow, /uploadUpdaterJson:\s*true/);
   assert.doesNotMatch(workflow, /branches:\s*\n\s*-\s*release/);
+});
+
+test("macOS bundle assets referenced by config exist on disk", () => {
+  const dmg = JSON.parse(tauriConfig).bundle.macOS?.dmg ?? {};
+  const configured = [dmg.background, ...JSON.parse(tauriConfig).bundle.icon].filter(
+    (value) => typeof value === "string",
+  );
+  for (const relative of configured) {
+    const file = new URL(`../../../src-tauri/${relative}`, import.meta.url);
+    assert.ok(
+      existsSync(file),
+      `tauri.conf.json references a bundle asset that is not in the repo: ${relative}`,
+    );
+  }
 });
