@@ -2673,6 +2673,9 @@ export default function App() {
                       restoreColors={restoreColorPrefs}
                       activeStyle={activeUiStyle}
                       theme={resolved}
+                      appearanceTour={
+                        colorStyle === "dynamic" || wallpaperEnabled
+                      }
                       onManage={(target) => openSettingsTab(
                         target === "scenes" ? "desktop-pet" : "preferences:appearance",
                       )}

@@ -55,6 +55,8 @@ export type AmbienceProps = {
   activeStyle: ReturnType<typeof useActiveUiStyle>;
   theme: "light" | "dark";
   onManage: (target: "scenes" | "wallpapers") => void;
+  /** Interface tour anchor is only meaningful while the pinwheel switches wallpapers or colors. */
+  appearanceTour?: boolean;
 };
 type Change =
   | { kind: "scene"; sceneId: string; expectedPetId?: string }

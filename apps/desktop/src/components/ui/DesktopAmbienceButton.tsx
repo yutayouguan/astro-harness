@@ -171,6 +171,7 @@ export default function DesktopAmbienceButton(props: AmbienceProps) {
         expanded={open}
         controls={id}
         animate={false}
+        tourAnchor={props.appearanceTour ? "appearance" : undefined}
         onReshuffle={show}
       />
       <PopoverSurface

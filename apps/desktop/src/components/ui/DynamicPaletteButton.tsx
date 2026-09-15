@@ -7,6 +7,7 @@ type Props = {
   expanded?: boolean;
   controls?: string;
   animate?: boolean;
+  tourAnchor?: string;
 };
 
 /** 灵动色彩模式在主聊天页的轻量重配色入口。 */
@@ -17,6 +18,7 @@ export default function DynamicPaletteButton({
   expanded,
   controls,
   animate = true,
+  tourAnchor,
 }: Props) {
   const rotorRef = useRef<SVGGElement | null>(null);
   const gradientPrefix = `dynamic-pinwheel-${useId().replace(/:/g, "")}`;
@@ -54,7 +56,7 @@ export default function DynamicPaletteButton({
       aria-haspopup={controls ? "dialog" : undefined}
       type="button"
       className="shell-dynamic-palette-button"
-      data-tour="appearance"
+      data-tour={tourAnchor}
       onClick={reshuffle}
       title={label}
       aria-label={label}
