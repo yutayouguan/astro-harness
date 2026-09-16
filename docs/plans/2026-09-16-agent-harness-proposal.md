@@ -26,7 +26,7 @@ Harness 负责 Reason → Act → Observe 循环、上下文、工具运行时�
 | 支点 | 一句话 | 关键机制 |
 | --- | --- | --- |
 | 能力热插拔 | 运行中长出新能力，不重启、不重编排 | 每轮 `reload_tools_and_mcp()` + Step 快照冻结 + Skill `astro_tools` 增量授权 |
-| 延迟工具发现 | 模型不背全量 schema，按需检索 | 原生 `tool_search`（BM25）+ `ToolSearchOutput` 授权 + Deferred 五级暴露 |
+| 延迟工具发现 | 模型不背全量 schema，按需检索 | 原生 `tool_search`（BM25）+ `ToolSearchOutput` 授权 + 命名空间 canonical 路由 + Deferred 五级暴露 |
 | 预算化上下文 | 上下文是资源，不是垃圾桶 | prune → 辅模型摘要 → head/tail 三段压缩 + 原文/模型视图分离 + 大结果 spill |
 | 尝试级安全 | 审批、沙箱、网络、Hook 绑定同一次执行尝试 | `StepContext` 不变量 + HITL/smart approval/trust 分级 + attempt-scoped network lease |
 | 事件溯源 | 事件流是事实源，SQLite 只是投影 | append-only rollout + 每 Thread live boundary + 崩溃重建 + 逐 Agent/session/tool 归因 |
@@ -219,6 +219,8 @@ Skill 被加载后：        skills::skill_astro_tools_with_config() → 增量�
 
 `tool_search` 激活的 Deferred 工具同理：只在后续 Step 生效。
 
+工具身份如何表达（`(namespace, child)` canonical 路由、保留前缀与冲突拒绝）见 §3.4。
+
 **现状锚点**：`runtime/mod.rs::reload_tools_and_mcp`、`runtime/{step_context,tool_router}.rs`、
 `agent-tools/src/engine/registry.rs`、`agent-skills/src/installed.rs`、`runtime/system_prompt.rs:177`。
 
@@ -235,7 +237,86 @@ Skill 被加载后：        skills::skill_astro_tools_with_config() → 增量�
 - **P2｜能力来源标注**：每个 `ToolEntry` 标注来源（builtin / skill / mcp / workflow / extension），
   让 UI 与审计都能回答「这个工具是谁给的」。
 
-### 3.4 tool_search 与延迟发现（必答项 ★）
+### 3.4 工具命名空间与 canonical 路由（必答项 ★）
+
+**目标**：命名空间是 wire 层的一等公民。工具身份是 `(namespace, child_name)` 结构对，
+不是拼接出来的字符串；模型侧、路由侧、分发侧共用同一个 canonical identity，
+任何「展平名伪装」都必须失败。
+
+**机制**
+
+```text
+ToolName::{ Plain(name) | Namespaced { namespace, name } }
+  wire_name() = "namespace.name"
+  namespace 为空或等于 DEFAULT_FUNCTION_NAMESPACE("functions") → 降级为 Plain
+
+ToolEntry { name: registered_name, namespace, model_name?, ... }
+  ToolEntry::tool_name()：由 registered_name 剥离 "{namespace}__"（其次 "{namespace}_"）
+                          得到 child name，再构成 canonical identity
+
+ToolRouter（每个 Step 冻结一份）
+  routes       = 本 Step 全部可执行 identity（含已激活的 Deferred）
+  model_routes = 允许模型顶层直调的 identity（routes 的真子集）
+  canonical_names: HashMap<ToolName, registered_name>   ← 冲突即 fail-closed
+```
+
+**五类 wire tool 与命名空间**
+
+| Responses wire type | 命名空间表现 | Astro 侧 |
+| --- | --- | --- |
+| Function | 无命名空间（默认 `functions`） | `ToolName::Plain` |
+| Freeform | 同 Function，参数为自由文本 | 保留原生 `freeform_format` |
+| Namespace | `namespace.tools[]`，子工具各自可带 `defer_loading` | `ToolName::Namespaced`；`tool_search` 输出时按 namespace 合并 |
+| ToolSearch | 顶层检索工具，自身无命名空间 | `tool_search`，返回可加载的 function / namespace spec |
+| WebSearch | Provider 托管检索（部分实现） | 与客户端 Deferred `web_search` 的语义需收敛 |
+
+**当前命名空间清单（以源码常量为准）**
+
+| 来源 | 模型侧命名空间 | 内部形态 |
+| --- | --- | --- |
+| 内置媒体 | `media`（`image_gen` / `tts` / `video_gen` / `music_gen`） | `registered_name` + `namespace = "media"` |
+| 浏览器 | `astro_browser`（`browser_open` → `astro_browser.open`） | 内部仍按 `browser_*` 路由与授权 |
+| Workflow | `workflow` | 每 Step 从 WorkflowStore 重建并冻结在 `ToolRouter` |
+| Cron | `cron` | 计划任务工具 |
+| MCP | `mcp__{sanitized_server}` + 原生子工具名 | 内部限定名 `mcp__{server}__{tool}` 只在 `McpHub` 分发边界使用 |
+| 其余内置 / Skill | 无命名空间（默认 `functions`） | `ToolName::Plain`；Skill 经 `astro_tools` 增量开放工具域，**不新造 wire 命名空间** |
+
+**不变量（fail-closed）**
+
+1. 同一 canonical identity 映射到两个不同注册名 → 构建 router 即失败
+   （实测文案：`tool identity collision for ...`），不依赖 HashMap 顺序；
+2. 模型可见但缺少 `CoreToolRuntime` 的条目 → 构建 router 即失败；
+3. 模型顶层直调必须落在 `model_routes` 内：Deferred 与 `CodeModeOnly` 的工具
+   不能被展平名或猜测名直接调用；
+4. `tool_search_output` 只授权**下一次 Step** 的 Deferred 激活，不修改注册表 exposure；
+5. 未注册的 `mcp__*` 一律拒绝——**前缀本身不构成授权**；
+6. CodeMode 的 JS 标识符归一化是**有损**的（`read-page` 与 `read_page` 可能同名），
+   嵌套路由发生冲突时不得任选一个 runtime；
+7. Server 边界即命名空间边界：`mcp__a` 与 `mcp__b` 的同名子工具不得互相遮蔽。
+
+**现状锚点**：`agent-types/src/tool_entry.rs`（`ToolName`、`DEFAULT_FUNCTION_NAMESPACE`）、
+`agent-core/src/runtime/tool_router.rs`（`model_routes`、canonical 冲突检测）、
+`agent-tools/src/engine/{registry,catalog}.rs`（`schemas_for_step` / `build_tool_router`）、
+`agent-mcp/src/names.rs`（`MCP_PREFIX` / `tool_namespace` / `qualify_tool_name`）、
+`agent-tools/src/builtin/shell/browser.rs`、`builtin/media/mod.rs`、
+`builtin/memory/scheduled.rs`、`engine/workflow.rs`。
+
+**建议补强**
+
+- **P0｜保留命名空间前缀保护**：`mcp__`、`astro_browser`、`workflow`、`media`、`cron`
+  应由宿主集中声明为保留前缀，Skill / Extension / MCP server id 不得占用，越界即 fail-closed 并给出诊断。
+  验收：注册一个名为 `mcp__x__y` 的 extension 工具被拒绝，且诊断指出冲突的保留前缀。
+- **P0｜审计与 UI 同时记录 canonical identity**：只记 `mcp__srv__ns_read_file` 这类限定名会产生歧义；
+  审计行需同时包含 wire `(namespace, child)`、注册名与来源。
+  验收：从导出的审计行可反查注册名与来源模块。
+- **P1｜冲突诊断 typed 化**：canonical 冲突 / 缺 runtime / 未注册 `mcp__*` / 展平名伪装四类
+  当前以字符串 `bail!` 呈现，建议收敛为 typed denial，便于 UI 聚合与测试断言。
+- **P1｜namespace 级检索预算**：`tool_search` 合并 namespace 后，应为单个 server/namespace
+  设子工具上限，避免一个大 MCP server 挤占整次搜索预算（与 §3.5 的字节预算配套）。
+- **P2｜命名空间常量收口**：`astro_browser`、`media`、`workflow`、`cron` 目前分散在各模块常量中，
+  建议集中声明一份命名空间注册表，供 router、审计与文档共用。
+
+### 3.5 tool_search 与延迟发现（必答项 ★）
 
 **目标**：模型不必背全量工具 schema；按需检索、按需激活，且检索结果本身构成**可审计的授权凭据**。
 
@@ -279,7 +360,7 @@ tool_search(query, limit=10)
 - **P1｜激活集合要进快照指纹**：把「本 Step 因哪次 tool_search 获得了哪些工具」并入 `StepContext` 指纹，
   使审计能回答「这个调用凭什么被允许」。验收：rollout 中可回放「搜索 → 激活 → 调用」三段证据链。
 
-### 3.5 上下文管理（必答项 ★）
+### 3.6 上下文管理（必答项 ★）
 
 **目标**：上下文是**预算化资源**；压缩只影响模型视图，**永不丢失原文**。
 
@@ -319,7 +400,7 @@ provider_reported  >  provider_recomputed  >  local_estimate   （顶层 total�
   建议把被压缩/落盘的条目暴露为可寻址句柄（thread 内 `history read`），
   让模型在需要时按需取回，而不是要求永不压缩。
 
-### 3.6 记忆系统（必答项 ★）
+### 3.7 记忆系统（必答项 ★）
 
 **目标**：长期记忆是**受治理的写入**，不是模型随手 append 的文本。
 
@@ -347,7 +428,7 @@ provider_reported  >  provider_recomputed  >  local_estimate   （顶层 total�
 - **P1｜dreaming 产出需 diff 预览**：离线管道应产出「拟新增/拟删除」的结构化 diff，
   经审批界面确认后写入，避免整段重写覆盖人工内容。
 
-### 3.7 Subagent 与审批授权（必答项 ★）
+### 3.8 Subagent 与审批授权（必答项 ★）
 
 **目标**：多 Agent 是**受控能力**，不是权限放大器；审批覆盖主聊天、子 Agent、MCP 与桌面弹窗。
 
@@ -385,7 +466,7 @@ provider_reported  >  provider_recomputed  >  local_estimate   （顶层 total�
 - **P1｜审批可解释**：smart approval 的裁决理由应写入 rollout（风险等级、依据），
   而不是只留最终 decision，否则审计无法解释「为什么这次被自动放行」。
 
-### 3.8 生成式 UI（A2UI）（必答项 ★）
+### 3.9 生成式 UI（A2UI）（必答项 ★）
 
 **目标**：模型可以生成**声明式界面**（表单、向导、结果卡），但 UI **不能**成为业务状态的唯一载体。
 
@@ -409,7 +490,7 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 - **P2｜A2UI 与审批打通**：把审批卡统一走 A2UI 声明式组件，减少一次性 UI 代码，
   同时保持 `uiRevision` 防陈旧语义。
 
-### 3.9 安全护栏
+### 3.10 安全护栏
 
 **目标**：安全不是 handler 末尾的一个 `if`，而是沿链的多层裁决。
 
@@ -435,7 +516,7 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 - P1：沙箱拒绝的结构化原因（`SandboxErr::Denied` 分类）应进入统一审计导出，
   便于回答「这次没执行是因为策略还是因为环境」。
 
-### 3.10 状态溯源与可观测（可恢复 / 可审计）（必答项 ★）
+### 3.11 状态溯源与可观测（可恢复 / 可审计）（必答项 ★）
 
 **目标**：任何一次执行都能在事后被完整重放与举证，且崩溃不产生歧义。
 
@@ -470,7 +551,7 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
   （同一 turn 内哪个工具贡献了多少 token / 时间），使「贵在哪」可回答。
 - **P1｜恢复演练指标**：记录恢复耗时、重建 item 数、去重命中数，纳入 trace insights。
 
-### 3.11 MCP 与多环境接入
+### 3.12 MCP 与多环境接入
 
 **目标**：把异构能力（终端、浏览器、MCP、媒体、Cron、Workflow）统一封装成受控工具。
 
@@ -519,6 +600,8 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 | 9 | A2UI 提交幂等键 | 协议 + 客户端 | 重放只产生一次业务效果 |
 | 10 | 统一审计导出 + 连续性/哈希链校验 | 导出器 + 校验脚本 | 删行可被检出 |
 | 11 | 崩溃注入测试（rollout↔投影窗口） | 集成测试 | 恢复完整、无重复副作用 |
+| 12 | 保留命名空间前缀保护（`mcp__` / `astro_browser` / `workflow` / `media` / `cron`） | 保留前缀表 + 构建期校验 | 越界注册被拒绝并给出诊断 |
+| 13 | 审计与 UI 同时记录 canonical `(namespace, child)`、注册名与来源 | 审计字段 + 导出 | 审计行可反查注册名与来源模块 |
 
 ### P1（显著提升可用性与可信度）
 
@@ -531,7 +614,8 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 - smart approval 裁决理由入 rollout；
 - usage 增加 tool 维度归因；
 - 恢复演练指标（耗时 / 重建数 / 去重命中）进 trace insights；
-- MCP event-stream opener 与 Desktop 订阅接线。
+- MCP event-stream opener 与 Desktop 订阅接线；
+- 命名空间冲突 typed denial；namespace 级 `tool_search` 子工具预算；命名空间常量集中声明。
 
 ### P2（体系化与体验）
 
@@ -551,6 +635,7 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 | 热加载生效时延 | 安装/启用到下一 turn 生效的耗时 | 不重启即可生效，且 diff 可见 | 端到端用例 + rollout 断言 |
 | 工具快照越界率 | 已发出调用因热加载获得更宽边界的次数 | **0** | `tool_search_alignment` 类测试 |
 | Deferred 越权率 | 未激活工具被直调的放行次数 | **0**（fail-closed） | fail-closed 套件 |
+| 命名空间越界率 | 保留前缀被 Skill / Extension / MCP server id 占用的次数 | **0** | 注册校验测试 |
 | 上下文压缩可解释率 | 能给出原因与范围的压缩比例 | 100% | rollout 事件断言 |
 | 崩溃恢复正确率 | kill 后历史重建与去重正确的比例 | 100% | crash-injection 测试 |
 | 重复副作用 | 恢复/重放产生的重复执行次数 | **0** | 幂等键 + 副作用计数断言 |
@@ -566,9 +651,9 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 | 阶段 | 目标 | 交付物 | 出口条件 |
 | --- | --- | --- | --- |
 | M0 基线冻结 | 把「已实现 / 部分实现 / 目标设计」三态写进文档与测试 | 指标埋点 + 基线测试 | `cargo check` / 定向测试全绿，指标可采集 |
-| M1 热加载与边界 | 热加载可审计、注册原子化、fail-closed 集中 | `CapabilityDiff`、staging→swap、fail-closed 套件 | P0#1、#2、#8 通过；越权率为 0 |
+| M1 热加载与边界 | 热加载可审计、注册原子化、命名空间保留前缀、fail-closed 集中 | `CapabilityDiff`、staging→swap、保留前缀表、fail-closed 套件 | P0#1、#2、#8、#12 通过；越权率为 0 |
 | M2 检索与预算 | `tool_search` 质量与预算；上下文压缩前置与可解释 | 归一化检索、字节预算、压缩事件 | P0#3、#4、#5 通过 |
-| M3 恢复与审计 | 崩溃注入、统一审计导出、工具级归因 | crash 测试、审计导出器、usage tool 维度 | P0#10、#11 通过；审计完整率 100% |
+| M3 恢复与审计 | 崩溃注入、统一审计导出、工具级与命名空间级归因 | crash 测试、审计导出器、usage tool 维度 | P0#10、#11、#13 通过；审计完整率 100% |
 | M4 记忆 / UI / 多 Agent 闭环 | 记忆来源与版本、A2UI 幂等与再水合、审批去重 | pending schema 升级、幂等键、去重键 | P0#6、#7、#9 通过 |
 
 每阶段收尾统一执行：`cargo fmt --all`、`cargo clippy --all-targets`、定向 `cargo test`、
@@ -601,6 +686,7 @@ Desktop 端 A2UI 渲染与测试（`apps/desktop/src/a2ui/`）。
 | Prompt / 上下文 | `prompt/{contract,context,context_source,context_usage}.rs`、`runtime/system_prompt.rs` |
 | 压缩 | `runtime/{context_maintenance,compression_state}.rs`、`compression.rs`、`exec/tool_llm_compress.rs` |
 | 工具注册与路由 | `crates/agent-tools/src/engine/{registry,dispatch,catalog}.rs`、`runtime/tool_router.rs` |
+| 命名空间 / canonical 路由 | `crates/agent-types/src/tool_entry.rs`（`ToolName`）、`runtime/tool_router.rs`（`model_routes`、冲突检测）、`crates/agent-mcp/src/names.rs`、`agent-tools/src/builtin/{shell/browser,media/mod,memory/scheduled}.rs`、`engine/workflow.rs` |
 | `tool_search` | `crates/agent-tools/src/builtin/shell/tool_search.rs`、`tests/tool_search_alignment.rs` |
 | Skills | `crates/agent-skills/src/{installed,registry,install}.rs` |
 | 记忆 | `crates/agent-memory/src/{lib,pending,dreaming,decision_log,permission_audit}.rs` |
