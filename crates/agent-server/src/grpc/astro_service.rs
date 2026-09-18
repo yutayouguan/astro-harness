@@ -603,6 +603,17 @@ async fn spawn_review_to_thread(
     session: &SessionHandle,
     turn_id: &str,
 ) -> Result<(), Status> {
+    // 线程一旦摄入外部上下文，自动记忆沉淀会让外部内容变成「自身经验」。
+    if session
+        .as_ref()
+        .sessions()
+        .is_memory_polluted(session.as_ref().session_id())
+        .await
+        .unwrap_or(false)
+    {
+        tracing::debug!("background review skipped: thread memory is polluted by external context");
+        return Ok(());
+    }
     let job = agent::exec::memory_review::job_from_agent(session.as_ref()).await;
     let applied = agent::exec::memory_review::maybe_run_background_review(job)
         .await

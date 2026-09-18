@@ -347,6 +347,12 @@ impl crate::ConversationStore for SessionStore {
     async fn invalidate_thread_notes(&self, session_id: &str) -> Result<()> {
         self.invalidate_thread_notes(session_id).await
     }
+    async fn mark_memory_polluted(&self, session_id: &str) -> Result<()> {
+        self.mark_memory_polluted(session_id).await
+    }
+    async fn is_memory_polluted(&self, session_id: &str) -> Result<bool> {
+        self.is_memory_polluted(session_id).await
+    }
     async fn thread_context(&self, session_id: &str) -> Result<ThreadContext> {
         self.thread_context(session_id).await
     }
@@ -475,12 +481,6 @@ pub(crate) fn is_unique_constraint(err: &sqlx::Error) -> bool {
         sqlx::Error::Database(e) => e.code().is_some_and(|c| c == "2067"),
         _ => false,
     }
-}
-
-/// 将用户查询包成 FTS5 短语（双引号转义），避免运算符注入。
-pub(crate) fn escape_fts5_query(query: &str) -> String {
-    let escaped = query.replace('"', "\"\"");
-    format!("\"{escaped}\"")
 }
 
 pub(crate) use types::truncate_chars;

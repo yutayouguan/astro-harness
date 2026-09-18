@@ -54,15 +54,19 @@ pub(crate) async fn insert_response_item_row(
     timestamp: f64,
 ) -> Result<i64> {
     let item_json = serde_json::to_string(entry.item).context("serialize response item")?;
+    let search_text = response_item_text(entry.item);
+    let search_text_seg = types::search_text::segment_for_index(&search_text);
     let result = sqlx::query(
         "INSERT INTO response_items (
-            session_id, item_json, role, search_text, tool_name, timestamp, token_count, finish_reason
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            session_id, item_json, role, search_text, search_text_seg, tool_name,
+            timestamp, token_count, finish_reason
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )
     .bind(entry.session_id)
     .bind(item_json)
     .bind(response_item_role(entry.item))
-    .bind(response_item_text(entry.item))
+    .bind(search_text)
+    .bind(search_text_seg)
     .bind(response_item_tool_name(entry.item))
     .bind(timestamp)
     .bind(entry.token_count)

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use types::SqliteStore;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 const DDL: &str = r#"
 CREATE TABLE IF NOT EXISTS contents (
@@ -101,6 +101,9 @@ impl KnowledgeDb {
         if ver == SCHEMA_VERSION {
             return validate_current_schema(&self.pool).await;
         }
+        if ver == 1 {
+            return self.migrate_v1_to_v2().await;
+        }
         if ver != 0 || has_user_tables(&self.pool).await? {
             anyhow::bail!(
                 "unsupported knowledge.db schema version {ver}; expected {SCHEMA_VERSION}"
@@ -109,6 +112,55 @@ impl KnowledgeDb {
 
         let mut tx = self.pool.begin().await?;
         sqlx::raw_sql(DDL).execute(&mut *tx).await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA user_version = {SCHEMA_VERSION}"
+        )))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        validate_current_schema(&self.pool).await
+    }
+
+    /// v1 -> v2：检索文本改为按字切分（中文短查询此前完全命中不了）。
+    ///
+    /// 正文只存在于 FTS 表内，所以先建新表并回填，再把旧表换掉——中途退出只会留下
+    /// 一张待清理的临时表，不会丢正文。
+    async fn migrate_v1_to_v2(&self) -> anyhow::Result<()> {
+        sqlx::query("DROP TABLE IF EXISTS contents_fts_v2")
+            .execute(&self.pool)
+            .await?;
+        sqlx::raw_sql(
+            "CREATE VIRTUAL TABLE contents_fts_v2 USING fts5(
+                 title, body, content_id UNINDEXED, tokenize = 'unicode61'
+             );",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let rows = sqlx::query("SELECT title, body, content_id FROM contents_fts")
+            .fetch_all(&self.pool)
+            .await?;
+        let mut tx = self.pool.begin().await?;
+        for row in &rows {
+            let title: String = row.get(0);
+            let body: String = row.get(1);
+            let content_id: String = row.get(2);
+            sqlx::query("INSERT INTO contents_fts_v2(title, body, content_id) VALUES (?1, ?2, ?3)")
+                .bind(types::search_text::segment_for_index(&title))
+                .bind(types::search_text::segment_for_index(&body))
+                .bind(content_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+
+        let mut tx = self.pool.begin().await?;
+        sqlx::raw_sql(
+            "DROP TABLE contents_fts;
+             ALTER TABLE contents_fts_v2 RENAME TO contents_fts;",
+        )
+        .execute(&mut *tx)
+        .await?;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "PRAGMA user_version = {SCHEMA_VERSION}"
         )))
@@ -155,8 +207,8 @@ impl KnowledgeDb {
                 .execute(&self.pool)
                 .await?;
             sqlx::query("INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)")
-                .bind(title)
-                .bind(body)
+                .bind(types::search_text::segment_for_index(title))
+                .bind(types::search_text::segment_for_index(body))
                 .bind(&id)
                 .execute(&self.pool)
                 .await?;
@@ -171,8 +223,8 @@ impl KnowledgeDb {
                 .execute(&self.pool)
                 .await?;
             sqlx::query("INSERT INTO contents_fts(title, body, content_id) VALUES (?1, ?2, ?3)")
-                .bind(title)
-                .bind(body)
+                .bind(types::search_text::segment_for_index(title))
+                .bind(types::search_text::segment_for_index(body))
                 .bind(&id)
                 .execute(&self.pool)
                 .await?;
@@ -213,6 +265,10 @@ impl KnowledgeDb {
         if q.is_empty() {
             return self.list(limit).await;
         }
+        // 查询串与索引写入使用同一套按字切分；纯标点等无法构成 token 的输入直接走 LIKE。
+        let Some(fts_query) = types::search_text::match_query(q) else {
+            return self.search_like(q, limit).await;
+        };
         let fts = async {
             let rows = sqlx::query(
                 "SELECT c.id, c.title, c.path, c.status, c.created_at
@@ -221,7 +277,7 @@ impl KnowledgeDb {
                  WHERE contents_fts MATCH ?1
                  LIMIT ?2",
             )
-            .bind(q)
+            .bind(&fts_query)
             .bind(limit as i64)
             .fetch_all(&self.pool)
             .await?
@@ -274,6 +330,7 @@ impl SqliteStore for KnowledgeDb {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
 mod tests {
     use super::*;
     use tempfile::TempDir;
@@ -303,7 +360,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn search_falls_back_on_bad_fts_query() {
+    async fn search_tolerates_operator_like_input() {
         let dir = TempDir::new().unwrap();
         let db = KnowledgeDb::open(dir.path().join("knowledge.db"))
             .await
@@ -311,9 +368,71 @@ mod tests {
         db.register("Guide", "/docs/a.md", "plain body text", "ready")
             .await
             .unwrap();
+        // 运算符样式输入被整体包成短语，不再作为 FTS 语法执行。
         let _ = db.search("a AND OR \"", 10).await.unwrap();
+        // 无法构成 token 的输入退回 LIKE。
+        let _ = db.search("，。", 10).await.unwrap();
         let hits = db.search("Guide", 10).await.unwrap();
         assert_eq!(hits.len(), 1);
+    }
+
+    /// 知识库与会话库共用同一套按字切分：中文短查询必须命中。
+    #[tokio::test]
+    async fn search_recalls_short_chinese_queries_in_body() {
+        let dir = TempDir::new().unwrap();
+        let db = KnowledgeDb::open(dir.path().join("knowledge.db"))
+            .await
+            .unwrap();
+        db.register(
+            "会话设计",
+            "/docs/session.md",
+            "会话列表需要支持中文检索与上下文压缩。",
+            "ready",
+        )
+        .await
+        .unwrap();
+
+        for query in ["会", "会话", "会话列表", "中文检索", "话列"] {
+            let hits = db.search(query, 10).await.unwrap();
+            assert_eq!(hits.len(), 1, "查询 {query:?} 应当命中知识库正文");
+        }
+        assert!(db.search("不存在的片段", 10).await.unwrap().is_empty());
+    }
+
+    /// v1 -> v2：中文索引重建后正文不丢，短查询由搜不到变为可命中。
+    #[tokio::test]
+    async fn v1_upgrade_rebuilds_chinese_index() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("knowledge.db");
+        let db = KnowledgeDb::open(&path).await.unwrap();
+        db.register(
+            "会话设计",
+            "/docs/session.md",
+            "会话列表的中文检索",
+            "ready",
+        )
+        .await
+        .unwrap();
+        // 还原成 v1 形态：正文按原文入索引、版本号回退。
+        sqlx::raw_sql(
+            "DELETE FROM contents_fts;
+             INSERT INTO contents_fts(title, body, content_id)
+                 SELECT title, '会话列表的中文检索', id FROM contents;
+             PRAGMA user_version = 1;",
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+        drop(db);
+
+        let upgraded = KnowledgeDb::open(&path).await.unwrap();
+        let (version,): (i32,) = sqlx::query_as("PRAGMA user_version")
+            .fetch_one(&upgraded.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        assert_eq!(upgraded.list(10).await.unwrap().len(), 1);
+        assert_eq!(upgraded.search("会话", 10).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

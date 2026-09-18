@@ -1497,6 +1497,7 @@ impl DesktopAgentThreadControl for DefaultDesktopAgentThreadControl {
 pub mod test_support;
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
 mod tests {
     use super::*;
     use agent_protocol::response_item::FunctionCallOutputPayload;

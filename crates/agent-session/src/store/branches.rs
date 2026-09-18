@@ -592,10 +592,10 @@ async fn copy_prefix_through_turn(
     let copied = match next_user {
         Some((timestamp, id)) => sqlx::query(
             "INSERT INTO response_items (
-                    session_id, item_json, role, search_text, tool_name,
+                    session_id, item_json, role, search_text, search_text_seg, tool_name,
                     timestamp, token_count, finish_reason
                  )
-                 SELECT ?1, item_json, role, search_text, tool_name,
+                 SELECT ?1, item_json, role, search_text, search_text_seg, tool_name,
                         timestamp, token_count, finish_reason
                  FROM response_items WHERE session_id = ?2
                  AND (timestamp < ?3 OR (timestamp = ?3 AND id < ?4))
@@ -610,10 +610,10 @@ async fn copy_prefix_through_turn(
         .rows_affected(),
         None => sqlx::query(
             "INSERT INTO response_items (
-                    session_id, item_json, role, search_text, tool_name,
+                    session_id, item_json, role, search_text, search_text_seg, tool_name,
                     timestamp, token_count, finish_reason
                  )
-                 SELECT ?1, item_json, role, search_text, tool_name,
+                 SELECT ?1, item_json, role, search_text, search_text_seg, tool_name,
                         timestamp, token_count, finish_reason
                  FROM response_items WHERE session_id = ?2
                  ORDER BY timestamp ASC, id ASC",

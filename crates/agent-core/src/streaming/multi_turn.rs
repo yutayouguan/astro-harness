@@ -1251,6 +1251,14 @@ pub(crate) async fn run_turn(
             if let ::hooks::HookOutcome::ReplaceText(s) = transformed {
                 full_response = s;
             }
+            // 记录本轮实际引用的记忆条目，供 Dreaming 按引用频次排序保留。
+            // 标签是 prompt 与回复之间的内部约定，统计完成后从正文里移除。
+            let cited = agent
+                .memory()
+                .record_citations_from_text(full_response.as_str());
+            if cited > 0 {
+                full_response = memory::citation::strip_citations(&full_response);
+            }
             let cancelled = agent.cancel_signal().is_cancelled();
             if cancelled {
                 return finish_task_cancelled(

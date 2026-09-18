@@ -61,6 +61,54 @@ impl ToolName {
     }
 }
 
+/// 该工具的结果是否来自工作区之外。
+///
+/// 联网检索、远端 MCP 与浏览器拿到的内容都不是自身经验，一旦写入会话就会把该线程标记为
+/// 「记忆污染」，避免这些内容被当作长期记忆沉淀。
+pub fn is_external_context_source(name: &ToolName) -> bool {
+    if name.wire_name().starts_with("mcp__") {
+        return true;
+    }
+    if matches!(name.namespace(), Some("astro_browser") | Some("browser")) {
+        return true;
+    }
+    matches!(name.name(), "web_search" | "web_fetch")
+}
+
+#[cfg(test)]
+mod external_context_tests {
+    use super::*;
+
+    #[test]
+    fn flags_web_mcp_and_browser_tools() {
+        for name in [
+            ToolName::plain("web_search"),
+            ToolName::plain("web_fetch"),
+            ToolName::plain("mcp__github__list_issues"),
+            ToolName::namespaced("astro_browser", "navigate"),
+            ToolName::namespaced("browser", "open"),
+        ] {
+            assert!(is_external_context_source(&name), "{name} 应视为外部上下文");
+        }
+    }
+
+    #[test]
+    fn keeps_local_and_memory_tools_clean() {
+        for name in [
+            ToolName::plain("terminal"),
+            ToolName::plain("apply_patch"),
+            ToolName::plain("code_exec"),
+            ToolName::plain("memory"),
+            ToolName::namespaced("memories", "search"),
+        ] {
+            assert!(
+                !is_external_context_source(&name),
+                "{name} 不应视为外部上下文"
+            );
+        }
+    }
+}
+
 impl fmt::Display for ToolName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.wire_name())

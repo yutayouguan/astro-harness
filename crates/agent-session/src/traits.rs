@@ -14,8 +14,16 @@ use crate::{BillingDelta, NewResponseItem, ScrolledResponseItem, SearchHit, Stor
 /// 要求 `Send`（`AgentLoop` 通过 `tokio::spawn` 跨线程移交），不要求 `Sync`。
 #[async_trait::async_trait]
 pub trait ConversationStore: Send + Sync {
+    /// 标记该线程已被外部上下文污染（联网检索 / 远端 MCP / 浏览器结果）。
     async fn invalidate_thread_notes(&self, _session_id: &str) -> Result<()> {
         Ok(())
+    }
+    async fn mark_memory_polluted(&self, _session_id: &str) -> Result<()> {
+        Ok(())
+    }
+    /// 该线程是否已被外部上下文污染；自动记忆沉淀据此跳过。
+    async fn is_memory_polluted(&self, _session_id: &str) -> Result<bool> {
+        Ok(false)
     }
     async fn thread_context(&self, _session_id: &str) -> Result<crate::store::ThreadContext> {
         Ok(crate::store::ThreadContext::default())

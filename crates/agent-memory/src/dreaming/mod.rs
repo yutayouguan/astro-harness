@@ -419,7 +419,9 @@ pub fn prepare_dream_job(
     }
     let memory_path = ws.join("MEMORY.md");
     let memory_before = read_text(&memory_path);
-    let (system_prompt, user_prompt) = build_dream_prompts(&agent.name, &memory_before, &diaries);
+    let memory_for_prompt = order_memory_by_usage(&ws, &memory_before);
+    let (system_prompt, user_prompt) =
+        build_dream_prompts(&agent.name, &memory_for_prompt, &diaries);
     Some(DreamJob {
         agent_id: agent.id.clone(),
         agent_name: agent.name.clone(),
@@ -429,6 +431,18 @@ pub fn prepare_dream_job(
         system_prompt,
         user_prompt,
     })
+}
+
+/// 入梦提示里按引用频次重排条目，高频记忆排在前面，避免被压缩时先丢。
+///
+/// `memory_before` 仍保留原文用于「新增条数」对比；这里只影响发给模型的视图。
+/// 无引用记录或只有单条时保持原顺序。
+fn order_memory_by_usage(workspace: &Path, raw: &str) -> String {
+    let entries = crate::parse_memory_entries(raw);
+    if entries.len() < 2 {
+        return raw.to_string();
+    }
+    crate::citation::sort_by_usage(&entries, workspace).join(crate::agent::store::ENTRY_DELIMITER)
 }
 
 /// 为所有 Agent 收集有待处理日记的入梦任务
@@ -564,7 +578,9 @@ pub fn mark_agent_dream_error(state: &mut DreamingState, agent_id: &str, err: &s
 mod tests {
     use super::*;
     use crate::workspace::ensure_workspace;
-    use home::{agent_workspace_dir, daily_memory_path, AgentInfo, DEFAULT_AGENT_ID};
+    use home::{
+        agent_workspace_dir, daily_memory_path, today_date_string, AgentInfo, DEFAULT_AGENT_ID,
+    };
     use tempfile::tempdir;
 
     fn default_agent(base: &std::path::Path) -> AgentInfo {
@@ -585,6 +601,34 @@ mod tests {
     fn sanitize_strips_fences() {
         let raw = "```markdown\n- a\n- b\n```";
         assert_eq!(sanitize_memory_output(raw), "- a\n- b");
+    }
+
+    /// 入梦提示按引用频次排序：被真正用过的记忆先出现，压缩时最后才丢。
+    #[test]
+    fn dream_prompt_orders_memory_by_citation_usage() {
+        let dir = tempdir().unwrap();
+        let base = dir.path();
+        ensure_workspace(base).unwrap();
+        let agent = default_agent(base);
+        let ws = agent_workspace_dir(base, DEFAULT_AGENT_ID);
+        std::fs::write(ws.join("MEMORY.md"), "低频条目\n§\n高频条目").unwrap();
+        let frequent = crate::citation::entry_id("高频条目");
+        crate::citation::record_citations(&ws, &[frequent.clone(), frequent]);
+        std::fs::write(
+            daily_memory_path(&ws, &today_date_string()),
+            "# 今天\n讨论了检索质量\n",
+        )
+        .unwrap();
+
+        let job = prepare_dream_job(base, &agent, &DreamingState::default()).expect("dream job");
+        let frequent_at = job.user_prompt.find("高频条目").expect("高频条目在提示里");
+        let rare_at = job.user_prompt.find("低频条目").expect("低频条目在提示里");
+        assert!(
+            frequent_at < rare_at,
+            "高频条目应排在低频条目之前: {frequent_at} vs {rare_at}"
+        );
+        // 原文仍保留给「新增条数」对比。
+        assert_eq!(job.memory_before, "低频条目\n§\n高频条目");
     }
 
     #[test]

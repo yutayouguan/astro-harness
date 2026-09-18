@@ -14,6 +14,9 @@ const USAGE_FILE: &str = "memory/usage.json";
 const ID_PREFIX_CHARS: usize = 64;
 const ID_HASH_LEN: usize = 8;
 
+/// 注入 prompt 时说明标签用途：只用于统计引用，不要出现在正文里。
+pub const CITATION_INSTRUCTION: &str = "（引用其中某条时，在回复末尾附上它的 [mem:xxxxxxxx] 标签；该标签会被自动移除，只用于统计记忆使用频次。）";
+
 /// 单条记忆的引用统计。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MemoryCitation {
@@ -98,11 +101,31 @@ pub fn render_with_citations(entries: &[String]) -> String {
 
 /// 从 assistant 消息中提取所有 `[mem:xxx]` 引用。
 pub fn extract_citations(text: &str) -> Vec<String> {
-    static RE: std::sync::LazyLock<regex::Regex> =
-        std::sync::LazyLock::new(|| regex::Regex::new(r"\[mem:([a-f0-9]{6,16})\]").unwrap());
-    RE.captures_iter(text)
+    citation_regex()
+        .captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
+}
+
+/// 去掉回复里的 `[mem:…]` 标签。
+///
+/// 引用计数在解析阶段已经完成，标签本身只是 prompt 与回复之间的内部约定，
+/// 不应出现在用户看到的正文里。
+pub fn strip_citations(text: &str) -> String {
+    let stripped = citation_regex().replace_all(text, "");
+    stripped
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn citation_regex() -> &'static regex::Regex {
+    static RE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"\[mem:([a-f0-9]{6,16})\]").unwrap());
+    &RE
 }
 
 /// 按引用频率排序条目（高频在前），用于 Dreaming 输入。
@@ -149,6 +172,13 @@ mod tests {
     #[test]
     fn extract_citations_empty_on_no_match() {
         assert!(extract_citations("no citations here").is_empty());
+    }
+
+    #[test]
+    fn strip_removes_tags_and_leaves_clean_text() {
+        let text = "按你的偏好回答 [mem:abc12345]  \n\n正文结束";
+        assert_eq!(strip_citations(text), "按你的偏好回答\n\n正文结束");
+        assert!(extract_citations(&strip_citations(text)).is_empty());
     }
 
     #[test]

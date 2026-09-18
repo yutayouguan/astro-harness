@@ -33,6 +33,39 @@ impl ThreadContext {
 }
 
 impl SessionStore {
+    /// 标记该线程已被「外部上下文」污染：一旦某轮写入了联网检索、远端 MCP 或浏览器结果，
+    /// 线程内容就不应再被当成自身经验沉淀进长期记忆。
+    ///
+    /// 幂等：已标记过的线程不再产生写事务。
+    pub async fn mark_memory_polluted(&self, session_id: &str) -> Result<()> {
+        let row: Option<(i64,)> =
+            sqlx::query_as("SELECT memory_polluted FROM thread_context WHERE session_id = ?1")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        if row.is_some_and(|(polluted,)| polluted != 0) {
+            return Ok(());
+        }
+        sqlx::query(
+            "INSERT INTO thread_context(session_id, memory_polluted) VALUES (?1, 1)
+             ON CONFLICT(session_id) DO UPDATE SET memory_polluted = 1",
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// 该线程是否已被外部上下文污染。
+    pub async fn is_memory_polluted(&self, session_id: &str) -> Result<bool> {
+        let row: Option<(i64,)> =
+            sqlx::query_as("SELECT memory_polluted FROM thread_context WHERE session_id = ?1")
+                .bind(session_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.is_some_and(|(polluted,)| polluted != 0))
+    }
+
     pub async fn thread_context(&self, session_id: &str) -> Result<ThreadContext> {
         let row = sqlx::query("SELECT notes, revision, compaction_turn, compaction_reason, compaction_status, notes_stale FROM thread_context WHERE session_id = ?1")
             .bind(session_id).fetch_optional(&self.pool).await?;

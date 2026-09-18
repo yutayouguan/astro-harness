@@ -339,6 +339,17 @@ impl AgentLoop {
         content: &str,
         record: ToolResultRecord<'_>,
     ) -> anyhow::Result<()> {
+        // 外部上下文（联网检索 / 远端 MCP / 浏览器）会污染该线程的记忆来源。
+        if let Some(name) = tool_name.filter(|name| types::is_external_context_source(name)) {
+            if let Err(error) = self
+                .services
+                .sessions
+                .mark_memory_polluted(&self.session_id)
+                .await
+            {
+                tracing::warn!(tool = %name, %error, "failed to mark thread memory pollution");
+            }
+        }
         let _write_guard = self.conversation_write_lock.lock().await;
         let (_, mut media) = types::extract_tool_media(content);
         for asset in record.media {

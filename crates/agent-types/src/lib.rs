@@ -24,6 +24,7 @@ pub mod pet_library;
 pub mod pet_motion;
 pub mod pet_preferences;
 pub mod pet_scene;
+pub mod search_text;
 pub mod sqlite;
 pub mod text;
 pub mod thread_memory_mode;
@@ -95,9 +96,9 @@ pub use text::{truncate_chars, truncate_tool_result, truncate_utf8, MAX_TOOL_RES
 pub use thread_memory_mode::ThreadMemoryMode;
 pub use tool_call::{ParsedToolCall, ToolCallAccumulator, ToolCallDelta};
 pub use tool_entry::{
-    ExecApprovalRequirement, FreeformToolFormat, McpToolAnnotations, McpToolApproval,
-    McpToolApprovalMode, McpToolApprovalRoute, NamespacedToolDef, SandboxablePreference, ToolEntry,
-    ToolExposure, ToolName, ToolSpec,
+    is_external_context_source, ExecApprovalRequirement, FreeformToolFormat, McpToolAnnotations,
+    McpToolApproval, McpToolApprovalMode, McpToolApprovalRoute, NamespacedToolDef,
+    SandboxablePreference, ToolEntry, ToolExposure, ToolName, ToolSpec,
 };
 pub use tool_mode::{deserialize_optional_tool_mode, ToolMode, ToolModeFeatureFlags};
 pub use tool_output::{

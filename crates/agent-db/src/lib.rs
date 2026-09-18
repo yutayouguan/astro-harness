@@ -1,5 +1,9 @@
 //! 统一 SQLite 基础层 — 所有 Astro DB 共用的文件级 PRAGMA 初始化、连接配置、池工厂和迁移。
 
+// 本 crate 就是唯一被允许直接创建 SQLite 池/连接的地方：文件级 PRAGMA 只在这里、
+// 每个库路径每进程设置一次。其他 crate 请使用 open_pool / open_pool_at_path。
+#![allow(clippy::disallowed_methods)]
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};

@@ -65,6 +65,19 @@ impl MemoryStore {
         render_with_header(&self.snapshot, self.max_chars, &self.store_name)
     }
 
+    /// 渲染 snapshot 供 prompt 注入：用量头照旧，条目带 `[mem:…]` 引用标签。
+    ///
+    /// 用量头不参与标签化——它随写入变化，若并进条目会改变条目 id，引用计数就会散掉。
+    pub fn snapshot_render_with_citations(&self) -> String {
+        render_with_header_body(
+            &self.snapshot,
+            self.max_chars,
+            &self.store_name,
+            Some(crate::citation::CITATION_INSTRUCTION),
+            &crate::citation::render_with_citations,
+        )
+    }
+
     /// 渲染 live 内容：用量头 + § 连接条目。
     pub fn live_render(&self) -> String {
         render_with_header(&self.live, self.max_chars, &self.store_name)
@@ -299,13 +312,28 @@ fn usage_percent(used: usize, limit: usize) -> u32 {
 }
 
 fn render_with_header(entries: &[String], max_chars: usize, store_name: &str) -> String {
+    render_with_header_body(entries, max_chars, store_name, None, &|entries| {
+        entries.join(ENTRY_DELIMITER)
+    })
+}
+
+fn render_with_header_body(
+    entries: &[String],
+    max_chars: usize,
+    store_name: &str,
+    note: Option<&str>,
+    body: &dyn Fn(&[String]) -> String,
+) -> String {
     let used = entry_chars(entries);
     let pct = usage_percent(used, max_chars);
     let header = format!("{store_name} ({pct}% — {used}/{max_chars})");
     if entries.is_empty() {
         return header;
     }
-    format!("{header}\n\n{}", entries.join(ENTRY_DELIMITER))
+    match note {
+        Some(note) if !note.is_empty() => format!("{header}\n{note}\n\n{}", body(entries)),
+        _ => format!("{header}\n\n{}", body(entries)),
+    }
 }
 
 fn over_limit_message(used: usize, limit: usize, entries: &[String]) -> String {

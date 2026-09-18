@@ -533,6 +533,7 @@ fn walkdir_files(root: &Path) -> anyhow::Result<Vec<PathBuf>> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
 mod tests {
     use super::*;
     use std::fs;

@@ -1,6 +1,6 @@
 //! 消息检索、聊天历史与 FTS。
 
-use super::{escape_fts5_query, truncate_chars, RecentSession, SearchHit, SessionStore};
+use super::{truncate_chars, RecentSession, SearchHit, SessionStore};
 use agent_db::sqlx::{self, AssertSqlSafe, Row};
 use anyhow::Result;
 use std::collections::HashSet;
@@ -18,15 +18,71 @@ type RecentSessionRow = (
     String,
 );
 
-/// FTS 命中收集参数（一次查询的表、过滤与输出缓冲）。
+/// 摘要前后各取的字符数。
+const SNIPPET_BEFORE_CHARS: usize = 24;
+const SNIPPET_AFTER_CHARS: usize = 60;
+
+/// FTS 命中收集参数（一次查询的过滤与输出缓冲）。
 struct FtsCollect<'a> {
-    fts_table: &'a str,
     fts_query: &'a str,
+    raw_query: &'a str,
     source_filter: Option<&'a str>,
     role_filter: Option<&'a str>,
     limit: i64,
     hits: &'a mut Vec<SearchHit>,
     seen: &'a mut HashSet<i64>,
+}
+
+/// 取 `byte_end` 之前最多 `max_chars` 个字符的起点。
+fn context_start(text: &str, byte_end: usize, max_chars: usize) -> usize {
+    let mut start = byte_end;
+    let mut chars = text[..byte_end].char_indices().rev();
+    for _ in 0..max_chars {
+        match chars.next() {
+            Some((index, _)) => start = index,
+            None => return 0,
+        }
+    }
+    start
+}
+
+/// 取 `byte_start` 之后最多 `max_chars` 个字符的终点。
+fn context_end(text: &str, byte_start: usize, max_chars: usize) -> usize {
+    let mut end = byte_start;
+    let mut chars = text[byte_start..].char_indices();
+    for _ in 0..max_chars {
+        match chars.next() {
+            Some((index, c)) => end = byte_start + index + c.len_utf8(),
+            None => return text.len(),
+        }
+    }
+    end
+}
+
+/// 在原文里生成命中摘要（带前后省略号）。
+///
+/// 展示文本是原文，不走切分——索引列里的空格不会泄漏到界面；`snippet()` 在
+/// contentless FTS 表上返回 NULL，这里改为直接切原文。
+fn build_snippet(text: &str, query: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let Some((match_start, match_end)) = types::search_text::find_match_range(trimmed, query)
+    else {
+        return truncate_chars(trimmed, SNIPPET_BEFORE_CHARS + SNIPPET_AFTER_CHARS);
+    };
+    let from = context_start(trimmed, match_start, SNIPPET_BEFORE_CHARS);
+    let to = context_end(trimmed, match_end, SNIPPET_AFTER_CHARS);
+    let mut snippet = String::with_capacity(to - from + 2);
+    if from > 0 {
+        snippet.push('…');
+    }
+    snippet.push_str(&trimmed[from..to]);
+    if to < trimmed.len() {
+        snippet.push('…');
+    }
+    snippet
 }
 
 fn add_placement_conditions(
@@ -54,7 +110,7 @@ fn add_placement_conditions(
 }
 
 impl SessionStore {
-    /// 跨会话 item FTS：优先 unicode61 索引，再合并 trigram（CJK / 子串）。
+    /// 跨会话 item FTS：索引侧与查询侧使用同一套按字切分。
     pub async fn search_messages(
         &self,
         query: &str,
@@ -66,13 +122,15 @@ impl SessionStore {
         if q.is_empty() || limit <= 0 {
             return Ok(Vec::new());
         }
-        let fts_query = escape_fts5_query(q);
+        let Some(fts_query) = types::search_text::match_query(q) else {
+            return Ok(Vec::new());
+        };
         let mut hits = Vec::new();
         let mut seen = HashSet::new();
 
         self.collect_fts_hits(FtsCollect {
-            fts_table: "response_items_fts",
             fts_query: &fts_query,
+            raw_query: q,
             source_filter,
             role_filter,
             limit,
@@ -80,18 +138,6 @@ impl SessionStore {
             seen: &mut seen,
         })
         .await?;
-        if (hits.len() as i64) < limit {
-            self.collect_fts_hits(FtsCollect {
-                fts_table: "response_items_fts_trigram",
-                fts_query: &fts_query,
-                source_filter,
-                role_filter,
-                limit,
-                hits: &mut hits,
-                seen: &mut seen,
-            })
-            .await?;
-        }
 
         for hit in &mut hits {
             hit.context = self
@@ -142,7 +188,7 @@ impl SessionStore {
         Ok(row.map(|r| r.get::<String, _>(0)))
     }
 
-    /// 在指定会话内按 FTS 召回消息 id（优先 unicode61，再补 trigram），按相关度排序。
+    /// 在指定会话内按 FTS 召回消息 id，按相关度排序。
     pub async fn recall_message_ids(
         &self,
         session_id: &str,
@@ -153,29 +199,13 @@ impl SessionStore {
         if query.is_empty() || limit == 0 {
             return Ok(Vec::new());
         }
-        let fts_query = escape_fts5_query(query);
+        let Some(fts_query) = types::search_text::match_query(query) else {
+            return Ok(Vec::new());
+        };
         let mut ids = Vec::new();
         let mut seen = HashSet::new();
-        self.collect_session_fts_ids(
-            "response_items_fts",
-            session_id,
-            &fts_query,
-            limit,
-            &mut ids,
-            &mut seen,
-        )
-        .await?;
-        if ids.len() < limit {
-            self.collect_session_fts_ids(
-                "response_items_fts_trigram",
-                session_id,
-                &fts_query,
-                limit,
-                &mut ids,
-                &mut seen,
-            )
+        self.collect_session_fts_ids(session_id, &fts_query, limit, &mut ids, &mut seen)
             .await?;
-        }
         Ok(ids)
     }
 
@@ -456,7 +486,6 @@ impl SessionStore {
 
     async fn collect_session_fts_ids(
         &self,
-        fts_table: &str,
         session_id: &str,
         fts_query: &str,
         limit: usize,
@@ -467,21 +496,19 @@ impl SessionStore {
         if remaining == 0 {
             return Ok(());
         }
-        let sql = format!(
+        let rows = sqlx::query(
             "SELECT m.id
-             FROM {fts} AS f
+             FROM response_items_fts AS f
              JOIN response_items AS m ON m.id = f.rowid
-             WHERE m.session_id = ?1 AND {fts} MATCH ?2
+             WHERE m.session_id = ?1 AND response_items_fts MATCH ?2
              ORDER BY rank
              LIMIT ?3",
-            fts = fts_table
-        );
-        let rows = sqlx::query(AssertSqlSafe(sql))
-            .bind(session_id)
-            .bind(fts_query)
-            .bind(remaining as i64)
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(session_id)
+        .bind(fts_query)
+        .bind(remaining as i64)
+        .fetch_all(&self.pool)
+        .await?;
         for row in &rows {
             let id: i64 = row.get::<i64, _>(0);
             if seen.insert(id) {
@@ -500,35 +527,29 @@ impl SessionStore {
             return Ok(());
         }
 
-        // fts_table 仅内部常量 `response_items_fts*`。
-        let sql = format!(
-            "SELECT m.id, m.session_id, m.role,
-                    COALESCE(snippet({fts}, 0, '', '', '…', 32), m.search_text, ''),
-                    m.tool_name
-             FROM {fts} AS f
+        let rows = sqlx::query(
+            "SELECT m.id, m.session_id, m.role, m.search_text, m.tool_name
+             FROM response_items_fts AS f
              JOIN response_items AS m ON m.id = f.rowid
              JOIN sessions AS s ON s.id = m.session_id
-             WHERE {fts} MATCH ?1
+             WHERE response_items_fts MATCH ?1
                AND (?2 IS NULL OR s.source = ?2)
                AND (?3 IS NULL OR m.role = ?3)
              ORDER BY m.timestamp DESC, m.id DESC
              LIMIT ?4",
-            fts = q.fts_table
-        );
-
-        let rows = sqlx::query(AssertSqlSafe(sql))
-            .bind(q.fts_query)
-            .bind(q.source_filter)
-            .bind(q.role_filter)
-            .bind(remaining)
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(q.fts_query)
+        .bind(q.source_filter)
+        .bind(q.role_filter)
+        .bind(remaining)
+        .fetch_all(&self.pool)
+        .await?;
 
         for row in &rows {
             let id: i64 = row.get::<i64, _>(0);
             let session_id: String = row.get::<String, _>(1);
             let role: String = row.get::<String, _>(2);
-            let snippet: String = row.get::<String, _>(3);
+            let text: String = row.get::<String, _>(3);
             let tool_name: Option<String> = row.get::<Option<String>, _>(4);
             if !q.seen.insert(id) {
                 continue;
@@ -537,7 +558,7 @@ impl SessionStore {
                 id,
                 session_id,
                 role,
-                snippet,
+                snippet: build_snippet(&text, q.raw_query),
                 context: String::new(),
                 tool_name,
             });

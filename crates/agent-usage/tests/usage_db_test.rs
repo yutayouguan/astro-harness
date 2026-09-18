@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
+
 use std::sync::Mutex;
 use tempfile::TempDir;
 use usage::db::{

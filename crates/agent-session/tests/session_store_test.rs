@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
+
 use agent_protocol::{FunctionCallOutputPayload, ResponseItem};
 use session::{NewResponseItem, SessionStore, SCHEMA_VERSION};
 use tempfile::TempDir;
@@ -511,4 +513,209 @@ async fn fts_indexes_native_item_text_and_tool_name() {
         .await
         .unwrap()
         .is_empty());
+}
+
+/// 中文短查询是本项目历史上完全搜不到的一类：`unicode61` 把整串汉字当一个 token，
+/// `trigram` 又要求至少 3 个字符。按字切分后 1–4 字查询都必须命中。
+#[tokio::test]
+async fn fts_recalls_chinese_queries_of_every_short_length() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    store
+        .append_response_item(NewResponseItem::new(
+            "s1",
+            &ResponseItem::user_text("帮我看看会话列表里的中文检索结果"),
+        ))
+        .await
+        .unwrap();
+
+    for query in ["会", "会话", "会话列", "会话列表", "中文检索", "话列"] {
+        let hits = store.search_messages(query, None, None, 5).await.unwrap();
+        assert!(
+            !hits.is_empty(),
+            "查询 {query:?} 应当命中，实际为空（中文检索回归）"
+        );
+        assert!(
+            !hits[0].snippet.contains(' '),
+            "展示摘要必须是原文，不能带索引切分产生的空格：{:?}",
+            hits[0].snippet
+        );
+    }
+
+    // 词序仍然受约束：倒过来的片段不应命中。
+    assert!(store
+        .search_messages("话会", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+    // 纯标点查询直接返回空，不报错。
+    assert!(store
+        .search_messages("，。", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+/// trigram 表被移除后，英文子串需求由查询侧的前缀匹配承担。
+#[tokio::test]
+async fn fts_prefix_query_matches_english_inflections() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    store
+        .append_response_item(NewResponseItem::new(
+            "s1",
+            &ResponseItem::user_text("retrying the connection after a lock"),
+        ))
+        .await
+        .unwrap();
+
+    assert!(!store
+        .search_messages("retry", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(!store
+        .search_messages("conn", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+/// 会话内召回走同一套切分（`recall_message_ids` 供上下文召回注入）。
+#[tokio::test]
+async fn session_recall_uses_the_segmented_index() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    let id = store
+        .append_response_item(NewResponseItem::new(
+            "s1",
+            &ResponseItem::user_text("上下文压缩的阈值是多少"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store.recall_message_ids("s1", "压缩", 5).await.unwrap(),
+        vec![id]
+    );
+    assert!(store
+        .recall_message_ids("s1", "无关内容", 5)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+/// 外部上下文污染标记：进入会话后只能单向置位，自动记忆沉淀据此跳过。
+#[tokio::test]
+async fn memory_pollution_flag_is_sticky_and_idempotent() {
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    assert!(!store.is_memory_polluted("s1").await.unwrap());
+
+    store.mark_memory_polluted("s1").await.unwrap();
+    assert!(store.is_memory_polluted("s1").await.unwrap());
+    // 重复标记不报错，也不改变结果。
+    store.mark_memory_polluted("s1").await.unwrap();
+    assert!(store.is_memory_polluted("s1").await.unwrap());
+
+    // 未标记的会话保持干净；线程上下文其余字段不受影响。
+    store.ensure_session("s2", "test").await.unwrap();
+    assert!(!store.is_memory_polluted("s2").await.unwrap());
+    assert_eq!(store.thread_context("s1").await.unwrap().revision, 0);
+}
+
+/// 索引体积预算：按字切分 + contentless 之后，每条消息的 FTS 开销必须保持在这个量级，
+/// 防止 trigram 或正文副本被重新引入。
+#[tokio::test]
+async fn fts_index_bytes_per_message_stay_within_budget() {
+    const MESSAGES: i64 = 200;
+    let (_dir, store) = test_store().await;
+    store.ensure_session("s1", "test").await.unwrap();
+    let body = "帮我看看会话列表里的中文检索结果".repeat(4);
+    for index in 0..MESSAGES {
+        store
+            .append_response_item(NewResponseItem::new(
+                "s1",
+                &ResponseItem::user_text(format!("{body} #{index}")),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let fts_bytes: i64 = agent_db::sqlx::query_scalar(
+        "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat WHERE name LIKE 'response_items_fts%'",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    let per_message = fts_bytes / MESSAGES;
+    println!("FTS 每消息索引开销: {per_message} bytes");
+    // 实测约 225 B/条（每条正文约 200 个汉字）。预算留了约 5 倍余量，
+    // 触发即说明又引入了 trigram 索引或正文副本这类结构性开销。
+    assert!(
+        per_message < 1_200,
+        "FTS 每消息索引开销 {per_message} B 超出预算，检查是否重新引入了 trigram 或正文副本"
+    );
+}
+
+/// v24 -> v25：重建索引、回填切分文本，但绝不重建既有会话。
+#[tokio::test]
+async fn v24_upgrade_rebuilds_index_without_losing_history() {
+    let (dir, store) = test_store().await;
+    store.ensure_session("kept", "test").await.unwrap();
+    store
+        .append_response_item(NewResponseItem::new(
+            "kept",
+            &ResponseItem::user_text("会话列表里的中文检索结果"),
+        ))
+        .await
+        .unwrap();
+
+    // 还原成 v24 的索引形态：无切分列、contentful unicode61 + trigram 两张表。
+    agent_db::sqlx::raw_sql(
+        "DROP TRIGGER IF EXISTS response_items_fts_insert;
+         DROP TRIGGER IF EXISTS response_items_fts_delete;
+         DROP TRIGGER IF EXISTS response_items_fts_update;
+         DROP TABLE IF EXISTS response_items_fts;
+         CREATE VIRTUAL TABLE response_items_fts USING fts5(
+             search_text, tool_name, item_json, tokenize='unicode61');
+         CREATE VIRTUAL TABLE response_items_fts_trigram USING fts5(
+             search_text, tool_name, item_json, tokenize='trigram');
+         INSERT INTO response_items_fts(rowid, search_text, tool_name, item_json)
+             SELECT id, search_text, tool_name, item_json FROM response_items;
+         INSERT INTO response_items_fts_trigram(rowid, search_text, tool_name, item_json)
+             SELECT id, search_text, tool_name, item_json FROM response_items;
+         ALTER TABLE response_items DROP COLUMN search_text_seg;
+         UPDATE schema_version SET version=24;",
+    )
+    .execute(store.pool())
+    .await
+    .unwrap();
+    drop(store);
+
+    let upgraded = SessionStore::open(&dir.path().join("state.db"))
+        .await
+        .unwrap();
+    assert_eq!(upgraded.schema_version().await.unwrap(), SCHEMA_VERSION);
+    assert!(upgraded.get_session("kept").await.unwrap().is_some());
+    // 升级前搜不到的两字查询，升级后必须命中。
+    assert!(!upgraded
+        .search_messages("会话", None, None, 5)
+        .await
+        .unwrap()
+        .is_empty());
+    let trigram: i64 = agent_db::sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name = 'response_items_fts_trigram'",
+    )
+    .fetch_one(upgraded.pool())
+    .await
+    .unwrap();
+    assert_eq!(trigram, 0, "升级后不应留下 trigram 索引表");
+    let contentless: i64 = agent_db::sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name = 'response_items_fts_content'",
+    )
+    .fetch_one(upgraded.pool())
+    .await
+    .unwrap();
+    assert_eq!(contentless, 0, "contentless 索引不应保留正文副本表");
 }

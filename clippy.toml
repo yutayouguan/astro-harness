@@ -3,3 +3,26 @@
 
 # Raise cognitive-complexity threshold for agent's streaming code
 cognitive-complexity-threshold = 40
+
+# SQLite pools must be created through `agent-db`'s open helpers.
+#
+# Those helpers are the single place that applies the file-level PRAGMAs
+# (`journal_mode = WAL`, `auto_vacuum`) exactly once per process. Opening a pool
+# directly bypasses that, which previously caused concurrent pool opens to
+# serialize on exclusive locks. Test code that intentionally opens a raw pool
+# must add `#[allow(clippy::disallowed_methods)]` at the call site or module.
+disallowed-methods = [
+    { path = "sqlx::Pool::connect", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::Pool::connect_with", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::Pool::connect_lazy", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::Pool::connect_lazy_with", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::Pool::set_connect_options", reason = "Do not replace options on pools created by agent-db." },
+    { path = "sqlx::pool::PoolOptions::connect", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::pool::PoolOptions::connect_with", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::pool::PoolOptions::connect_lazy", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::pool::PoolOptions::connect_lazy_with", reason = "Open SQLite pools through agent-db's open_pool helpers." },
+    { path = "sqlx::Connection::connect", reason = "Open SQLite connections through agent-db's open_pool helpers." },
+    { path = "sqlx::Connection::connect_with", reason = "Open SQLite connections through agent-db's open_pool helpers." },
+    { path = "sqlx::ConnectOptions::connect", reason = "Open SQLite connections through agent-db's open_pool helpers." },
+    { path = "sqlx::migrate::MigrateDatabase::create_database", reason = "Create SQLite databases through agent-db's open_pool helpers." },
+]

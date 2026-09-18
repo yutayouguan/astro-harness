@@ -120,7 +120,7 @@ impl MemoryManager {
     /// Prompt 注入用：MEMORY / USER 取 **snapshot**；今日日记读盘后截断到配置上限。
     pub fn prompt_snapshot_with_daily(&self) -> (String, String, String) {
         let mem = if self.config.memory_enabled {
-            self.memory.snapshot_render()
+            self.prompt_memory_with_citations()
         } else {
             String::new()
         };
@@ -134,6 +134,27 @@ impl MemoryManager {
             self.config.daily_prompt_max_chars,
         );
         (mem, user, daily)
+    }
+
+    /// 注入 prompt 的 MEMORY 层：每条记忆前置 `[mem:xxxxxxxx]` 标签。
+    ///
+    /// 标签只出现在 prompt 视图里，落盘的 `MEMORY.md` 保持无标签原文；模型引用这些标签
+    /// 后由 [`Self::record_citations_from_text`] 计数，成为 Dreaming 的排序信号。
+    fn prompt_memory_with_citations(&self) -> String {
+        self.memory.snapshot_render_with_citations()
+    }
+
+    /// 记录本轮回复实际引用的记忆条目，返回被记下的条目数。
+    ///
+    /// 引自 [`crate::citation::extract_citations`]：识别回复正文里的 `[mem:xxxxxxxx]`。
+    /// 未被引用的条目不会被计数，因此长期不用的记忆不会被这个信号保留。
+    pub fn record_citations_from_text(&self, text: &str) -> usize {
+        let ids = crate::citation::extract_citations(text);
+        if ids.is_empty() {
+            return 0;
+        }
+        crate::citation::record_citations(&self.workspace_dir, &ids);
+        ids.len()
     }
 
     /// 从磁盘重载 MEMORY / USER 到 live，并同步 snapshot（供换 session / 显式 refresh）。
@@ -386,6 +407,75 @@ pub fn dispatch_memory_tool(
 mod tests {
     use super::*;
     use std::fs;
+
+    /// 记忆以 `[mem:xxxxxxxx]` 标签注入 prompt，模型引用后计数——这是 Dreaming 的排序信号。
+    #[test]
+    fn prompt_memory_tags_entries_and_records_only_cited_usage() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.toml"),
+            r#""memory" = { "memory_enabled" = true }
+"#,
+        )
+        .unwrap();
+        let mut mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+        mgr.memory.add("用户偏好简洁中文").unwrap();
+        mgr.memory.add("项目使用 Rust 与 Tauri").unwrap();
+        mgr.refresh_memory_snapshot().unwrap();
+
+        let used = crate::citation::entry_id("用户偏好简洁中文");
+        let unused = crate::citation::entry_id("项目使用 Rust 与 Tauri");
+        let (mem, _user, _daily) = mgr.prompt_snapshot_with_daily();
+        assert!(
+            mem.contains(&format!("[mem:{used}]")),
+            "prompt 视图必须带引用标签: {mem:?}"
+        );
+        // 用量头不能被标签化：它随写入变化，并进条目会让 id 漂移。
+        let header = mem.lines().next().expect("header line");
+        assert!(header.starts_with("MEMORY ("), "首行应是用量头: {header:?}");
+        assert!(
+            !header.contains("[mem:"),
+            "用量头不应带引用标签: {header:?}"
+        );
+        // 标签用途必须写进 prompt，否则模型不会引用，统计闭环是空的。
+        assert!(
+            mem.contains("[mem:xxxxxxxx]"),
+            "prompt 必须说明标签用途: {mem:?}"
+        );
+        // 标签只出现在 prompt 视图里，落盘文件保持无标签原文。
+        assert!(!mgr.memory.snapshot_render().contains("[mem:"));
+
+        assert_eq!(
+            mgr.record_citations_from_text(&format!("根据 [mem:{used}] 的记忆作答")),
+            1
+        );
+        let store = crate::citation::load_citations(&mgr.workspace_dir);
+        assert_eq!(store.entries.get(&used).map(|c| c.usage_count), Some(1));
+        assert_eq!(store.entries.get(&unused).map(|c| c.usage_count), None);
+
+        mgr.record_citations_from_text(&format!("[mem:{used}] 再次引用"));
+        let store = crate::citation::load_citations(&mgr.workspace_dir);
+        assert_eq!(store.entries.get(&used).map(|c| c.usage_count), Some(2));
+
+        // 用量头变化（新增条数 → 百分比变化）后，已有条目的引用 id 必须保持不变。
+        mgr.memory.add("新增条目让用量头变化").unwrap();
+        mgr.refresh_memory_snapshot().unwrap();
+        let (mem_after, _user, _daily) = mgr.prompt_snapshot_with_daily();
+        assert!(
+            mem_after.contains(&format!("[mem:{used}]")),
+            "用量头变化后首条之外的条目 id 必须稳定: {mem_after:?}"
+        );
+    }
+
+    #[test]
+    fn record_citations_ignores_text_without_tags() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = MemoryManager::for_agent(dir.path().to_path_buf(), "main").unwrap();
+        assert_eq!(mgr.record_citations_from_text("没有任何引用"), 0);
+        assert!(crate::citation::load_citations(&mgr.workspace_dir)
+            .entries
+            .is_empty());
+    }
 
     #[test]
     fn for_agent_opens_stores_with_config_limits() {
