@@ -1,285 +1,457 @@
-# Astro Agent
+<div align="center">
 
-本地 AI 桌面工作站（阿童木）。支持智能对话、Realtime 语音会话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务。偏好设置保存在本机。
+<img src="docs/images/app-chat-shell.webp" alt="Astro Agent 主界面" width="920" />
 
-技术栈：**Rust workspace + Tauri 2 + React / Vite**。
+# Astro Agent（阿童木）
 
-## 环境要求
+**本地优先的多模态 AI 桌面工作站**：Rust 内核 · Tauri 2 外壳 · React 界面
+
+![Rust](https://img.shields.io/badge/Rust-2021-000000?logo=rust)
+![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
+![Crates](https://img.shields.io/badge/crates-28-6f42c1)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-1f6feb)
+![Data](https://img.shields.io/badge/data-100%25%20local-2ea043)
+
+</div>
+
+## 目录
+
+- [这是什么](#这是什么)
+- [界面速览](#界面速览)
+- [功能模块](#功能模块)
+  - [对话与 Agent 运行时](#1-对话与-agent-运行时)
+  - [人机协作：审批、澄清与权限](#2-人机协作审批澄清与权限)
+  - [模型接入与 Provider](#3-模型接入与-provider)
+  - [工具、Skills 与 MCP](#4-工具skills-与-mcp)
+  - [定时任务与可视化工作流](#5-定时任务与可视化工作流)
+  - [记忆、工作区与文件空间](#6-记忆工作区与文件空间)
+  - [用量洞察与可观测性](#7-用量洞察与可观测性)
+  - [内置浏览器与终端](#8-内置浏览器与终端)
+  - [桌面氛围、外观与桌宠](#9-桌面氛围外观与桌宠)
+  - [存储、诊断与安全边界](#10-存储诊断与安全边界)
+- [架构总览](#架构总览)
+- [快速开始](#快速开始)
+- [打包与发布](#打包与发布)
+- [运行形态](#运行形态)
+- [本机数据目录](#本机数据目录)
+- [README 截图如何生成](#readme-截图如何生成)
+- [文档索引](#文档索引)
+- [常用命令](#常用命令)
+- [许可证](#许可证)
+
+## 这是什么
+
+Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌面应用。它不是浏览器里的聊天框，而是一个把 **模型 + 工具 + 记忆 + 文件 + 自动化** 装进同一套进程的工作站。
+
+- **Agent 运行在本地进程内**：Rust 内核负责 Agent 循环、工具路由、沙箱与持久化；Tauri 壳默认以同进程方式启动 backend，双击 App 即可对话，无需另开终端。
+- **数据留在本机**：会话、记忆、文件索引、用量与安全审计写入 `~/.astro`，SQLite（WAL + FTS5）与 append-only rollout 是唯一事实源。
+- **模型可换、可回退**：内置 17 种 Provider 接入（含自定义 OpenAI 兼容端点），主模型在首个 token 前失败会自动切换到备用目标链；辅助任务（标题、压缩、审批、入梦）可单独指定模型。
+- **能力靠工具与 Skill 扩展**：终端、文件、代码执行、浏览器、记忆、子 Agent、图像 / 视频 / 语音生成等工具按 Agent 与交互模式动态装载，MCP Server 与 Skill 包即插即用。
+- **不静默越权**：危险命令、网络与文件写入按权限 profile 走沙箱与人工审批，全部动作可审计。
+
+### 关键特性一览
+
+| 主题 | 说明 |
+| --- | --- |
+| 对话 | Responses-only Agent 循环、原生 `ResponseItem` 历史、多轮工具调用、流式输出、上下文压缩与检查点续接 |
+| 工具 | 内置工具注册表、三级暴露策略与 BM25 检索、危险命令分类与审批、大结果落盘（tool spill） |
+| 扩展 | Skills（本机 / 商店）、MCP（stdio / Streamable HTTP）、Hooks 三总线、Extension Manifest |
+| 自动化 | Cron 定时任务、43 类节点的可视化工作流、Webhook 触发、Subagent 线程协作 |
+| 记忆 | MEMORY.md / USER.md 精炼记忆、Dreaming 入梦、待审批记忆队列、线程检查点与历史回读 |
+| 桌面 | 系统托盘常驻、桌面宠物、壁纸与氛围、内置浏览器与终端、Realtime 语音会话、中英双语 |
+| 安全 | 平台原生沙箱（Seatbelt / bubblewrap / Job Object）、受管网络代理、append-only 审计日志 |
+
+## 界面速览
+
+主界面左侧是导航与任务侧栏（会话、项目、定时任务、工作流、插件），中间是对话流，底部 Composer 负责模型选择、交互模式、审批策略与附件；右上角工具栏可以随时打开文件、终端、浏览器等停靠面板。
+
+> 本文所有截图都由仓库内的 Storybook 组件真实渲染后自动截取，不含本机会话数据，可用 `node scripts/capture-readme-shots.mjs` 复现（见 [README 截图如何生成](#readme-截图如何生成)）。
+
+## 功能模块
+
+### 1. 对话与 Agent 运行时
+
+<img src="docs/images/chat-turns.webp" alt="对话回合与工具调用时间线" width="760" />
+
+- **Responses-only 主链路**：Agent 请求统一走 Responses API，历史就是原生 `ResponseItem`；`AstroThread → SessionTask → TurnContext → StepContext` 逐层收窄一次 Step 的模型、工具与预算。
+- **回合时间线**：思考、工具调用、命令输出、引用、token 用量与缓存命中率都作为 Thread item 投影到桌面端，可逐条展开。
+- **多轮工具循环**：`tool_rounds` 每条用户消息重置，单条消息默认最多 90 轮；`code_exec` 独占轮可退还预算。
+- **上下文管理**：prune → 辅模型摘要 → head/tail fallback 三阶段压缩，原文永久保留、Provider 视图使用压缩视图，并带 thrashing guard 防抖。
+- **续接与恢复**：线程检查点（`notes`）+ 历史回读（`history`）让长任务可跨重启继续；rollout 文件是事实源，SQLite 可由 rollout 重建。
+- **模型回退**：首个 chunk 前失败自动切换备用模型目标；主模型与五类辅助任务各自拥有独立目标链。
+
+### 2. 人机协作：审批、澄清与权限
+
+<img src="docs/images/approval.webp" alt="危险命令审批卡片" width="700" />
+
+- **按需审批**：危险命令、越界写入与未覆盖网络目标会弹出审批卡（本次允许 / 始终允许同类 / 拒绝），也可以选择让 Agent 在回合中发起结构化提问。
+- **生成式 UI（A2UI）**：Agent 可用 `astro://a2ui/catalog/v2` 的 22 种组件推送卡片、表单、澄清向导等结构化界面，而非纯文本。
+- **权限画像**：`ReadOnly` / `WorkspaceWrite` / `DangerFullAccess` 三级模型决定可写目录与命令沙箱模式，权限变更与授权事件写入 append-only 审计日志。
+- **桌宠弹窗**：桌宠可见时，审批与提问可以在独立弹窗里就地处理，不需要切回主窗口。
+- **交互模式**：Agent / Plan 模式按 `InteractionMode` 过滤可用工具 schema；行为说明只进 Responses `instructions`，不污染用户消息。
+
+<img src="docs/images/permissions.webp" alt="工具审批与权限设置" width="820" />
+
+### 3. 模型接入与 Provider
+
+<img src="docs/images/providers.webp" alt="Provider 配置" width="820" />
+
+- **17 种 Provider 接入**：OpenAI、Azure OpenAI、Anthropic、Google（含 Gemini Native）、DeepSeek、智谱、月之暗面、OpenRouter、MiniMax、火山引擎、混元、NVIDIA、百炼、Ollama 以及自定义 OpenAI 兼容端点。
+- **凭证托管**：API Key 存系统 keyring 或 `.env`，配置统一落在 `~/.astro/config.toml`，写入走同一文件锁与分段更新。
+- **模型目录与能力标记**：本地缓存模型元数据与定价；只有声明 Responses 能力的 Provider 才会被 Agent 主链路使用。
+- **辅助模型**：标题生成、上下文压缩、智能审批、入梦与记忆回顾可以分别绑定到更便宜或更快的模型。
+
+<img src="docs/images/onboarding-provider.webp" alt="首次启动的模型接入引导" width="820" />
+
+首次启动用一次引导完成模型接入、工作区选择与本机初始化；引导可跳过，用户档案在对话里建立，不阻塞直接提问。
+
+### 4. 工具、Skills 与 MCP
+
+<img src="docs/images/skills.webp" alt="Skill 卡片" width="820" />
+
+- **内置工具域**：终端与 PTY、文件读写与 `apply_patch`、代码执行、页面浏览、记忆与上下文、子 Agent、待办与计划、图像 / 视频 / 音频 / 语音生成与理解、桌面宠物与 UI 风格等。
+- **工具注册表**：`inventory` 自注册 + 统一 `ToolRegistry::dispatch`；schema 清洗、路径安全解析、命令 allowlist / hardline 阻断与沙箱审计元数据统一在分发层完成。
+- **Skills**：扫描 `~/.astro/skills/` 与 Agent 级目录的 `SKILL.md`，支持商店安装、版本更新、快照回滚、用量统计；Skill frontmatter 的 `astro_tools` 可 additive 开放工具集。
+- **MCP**：stdio 与 Streamable HTTP 两种传输、进程级连接池、自动重连、OAuth 凭据、Server 工具发现与调用；模型侧看到 `mcp__{server}` 命名空间，内部保留 `mcp__{server}__{tool}` 执行键。
+- **Hooks**：Plugin / Command / Gateway / Shell 四类执行面覆盖 `PreToolUse`、`PostToolUse`、`PreLlmCall`、`TransformToolResult` 等事件，可拦截、修改或注入上下文。
+
+<img src="docs/images/mcp.webp" alt="MCP Server 管理" width="560" />
+
+### 5. 定时任务与可视化工作流
+
+<img src="docs/images/cron.webp" alt="定时任务" width="760" />
+
+- **调度语法**：支持 `every:Nunit`（可叠加工作日过滤）、`custom:` 日历重复（小时 / 天 / 周 / 月 / 年）与五段 cron。
+- **稳定相位**：按本地墙钟记录起始相位，编辑或重启不会让「每 N 天」重新按 epoch 对齐。
+- **运行记录**：每次触发写入 `cron_v1.db`，任务完成、失败与需要确认时推送系统通知；ticker 每 30 秒认领到期任务。
+
+<img src="docs/images/workflow.webp" alt="可视化工作流编辑器" width="920" />
+
+- **DAG 工作流**：43 类节点分属触发器、AI、多媒体生成、流程控制、数据处理与动作六类，支持条件分支、循环、子工作流嵌套（最大深度 5）。
+- **执行与变量**：Kahn 拓扑排序后同层并行执行，`{{var}}` 插值、嵌套 JSON 路径与条件表达式求值，失败可按 abort / skip / fallback 策略处理。
+- **暴露给模型**：工作流可注册为 Agent 工具（原生 / 延迟暴露），由模型在对话中直接调用；也支持定时触发与 `POST /webhook/{workflow_id}`。
+
+### 6. 记忆、工作区与文件空间
+
+- **精炼记忆**：`MEMORY.md`（事实与偏好）与 `USER.md`（用户画像）由 `MemoryManager` 统一读写并生成快照，注入系统提示。
+- **Dreaming 入梦**：定时回顾历史会话，提炼新记忆进入待审批队列，用户或 Agent 审批后才落盘；记忆回顾会主动提出清理与合并建议。
+- **工作区**：`SOUL.md`、`AGENTS.md`、日记与生成物存放在 `~/.astro/workspace/`，项目级规则读项目根 `AGENTS.md` 与 `.astro/config.toml`。
+- **文件空间**：`artifacts.db` 登记 Agent 产出与用户上传文件并做磁盘对账，`knowledge.db` 提供标题与正文的 FTS5 检索，按 doc / image / code / sheet / av / pdf_ppt 分类过滤。
+- **上下文召回**：会话超过最近若干轮后，用 FTS5 从历史与知识库召回相关片段注入本轮上下文。
+
+### 7. 用量洞察与可观测性
+
+<img src="docs/images/insights.webp" alt="用量与调用链洞察" width="820" />
+
+- **用量事件库**：`usage.db` 记录 tool / skill / mcp / cron / llm 五类事件，支持按月 / 季 / 年聚合、时间序列与多维排行。
+- **成本估算**：结合官方定价快照与 OpenRouter 模型目录（24h 缓存）给出每次调用的 USD 估价，或标记 `included` / `unknown`。
+- **调用链 Tracing**：按会话聚合 span 链（含输入输出、耗时与父子关系），并可导出 JSONL 供离线评测与 DSPy 使用。
+
+### 8. 内置浏览器与终端
+
+<img src="docs/images/browser.webp" alt="内置浏览器停靠面板" width="620" />
+
+- **浏览器停靠**：右侧面板与 Agent 共享同一会话，Agent 可以打开、检查、点击并修改页面，用户可随时接管。
+- **终端停靠**：PTY 终端与 Agent 前台命令共用沙箱策略，输出可被模型读取；后台任务与前台命令在权限与网络策略上分别处理。
+- **结构化拒绝**：沙箱拒绝、网络策略拒绝与普通失败分类明确，拒绝不会自动升级为更宽的权限。
+
+### 9. 桌面氛围、外观与桌宠
+
+<img src="docs/images/preferences.webp" alt="外观、材质与壁纸偏好" width="820" />
+
+- **外观系统**：材质强度、界面缩放、灵动配色、渐变外壳与壁纸组合成统一的视觉层；浅色 / 深色主题跟随系统或手动指定。
+
+<img src="docs/images/ambience.webp" alt="壁纸与桌面氛围设置" width="820" />
+
+<img src="docs/images/desktop-pet.webp" alt="桌面宠物工作室" width="920" />
+
+- **桌面宠物**：从照片或参考图生成 Q 版形象，支持 APNG 与混合渲染，可设置造型、位置与大小，并作为常驻窗口待在桌面上。
+- **宠物即入口**：桌宠弹窗里可以处理审批与提问、查看任务进度，不必切回主窗口。
+- **界面导览**：首次进入提供 8 个区域的轻量导览（输入框、模型、工具栏、侧栏、工作区、插件、外观、设置），可跳过、可重看，不修改任何配置。
+
+### 10. 存储、诊断与安全边界
+
+<img src="docs/images/storage.webp" alt="存储诊断" width="820" />
+
+- **存储诊断**：检查本机数据目录、数据库与配置文件是否完整，识别新装、部分迁移与失效配置，并给出可执行的清理预览。
+- **离线迁移**：`~/.astro` 的旧布局必须离线迁移，启动时发现旧目录或未完成迁移会拒绝初始化，避免生成空数据库。
+- **安全边界**：派生进程进平台原生沙箱；开启受管网络代理后，前台 terminal 与 code_exec 的出站流量只走绑定到该次调用的 loopback 代理，域名按 allow / deny / ask 裁决并做 DNS 重绑定防护。
+- **可审计**：沙箱与权限事件写入 append-only JSONL 审计日志，桌面端可查询。
+
+## 架构总览
+
+```text
+┌──────────────────────────────── Desktop (Tauri 2 + React/Vite) ───────────────────────────────┐
+│  对话/任务侧栏 · 工作流编辑器 · 设置与洞察 · 桌宠 · 浏览器与终端停靠                          │
+└───────────────▲───────────────────────────────────────────────────────▲───────────────────────┘
+                │ Tauri commands                                  gRPC (tonic, 默认同进程)
+┌───────────────┴───────────────────────────────────────────────────────┴───────────────────────┐
+│                                    agent-server（AstroService）                                │
+│  Durable Thread 管理 · 事件订阅 · Cron ticker · Workflow/Webhook 触发                          │
+└───────────────▲───────────────────────────────────────────────────────────────────────────────┘
+                │ Op / EventMsg / ResponseItem（agent-protocol）
+┌───────────────┴───────────────────────────────────────────────────────────────────────────────┐
+│                                      agent（Agent 运行时）                                     │
+│  AstroThread → SessionTask → TurnContext → StepContext → Prompt → ResponsesRequest            │
+│  工具路由 · 压缩 · HITL 审批 · Hooks · 子 Agent · 记忆注入 · 用量                             │
+└──┬─────────────┬──────────────┬───────────────┬───────────────┬───────────────┬───────────────┘
+   │             │              │               │               │               │
+ providers      tools        skills/mcp      sandbox        rollout/session   memory
+ 模型适配      内置工具      扩展能力        权限与网络      历史与索引        记忆与学习
+```
+
+一次用户输入的完整链路：
+
+```text
+用户输入
+  → AgentLoop::run_turn()            # 重置轮次预算、热加载工具与 MCP、写入 Session
+  → build_conversation_context()     # 记忆 + FTS 召回 + 工作区规则
+  → build_system_prompt()            # 稳定指令 / 动态上下文 / 原生工具 schema 三层
+  → 多轮事件循环（step 级冻结 provider、model 与工具路由）
+      ├─ 流式补全 → 累积原生 tool_call_delta
+      ├─ 记录 assistant item → 执行工具 → 记录 output item
+      └─ 无工具调用 → 最终答案
+  → rollout（append-only 事实源） → SQLite 投影 → gRPC → Desktop
+```
+
+### Workspace 结构
+
+```text
+astro/
+├── Cargo.toml              # Workspace 根（28 个 crate + 1 个桌面应用）
+├── crates/                 # Rust crate（扁平 agent-* 命名）
+└── apps/
+    └── desktop/            # React + Vite UI + Tauri 2 壳 + Storybook 组件库
+```
+
+### 模块速查
+
+| 分组 | Crate | 职责 |
+| --- | --- | --- |
+| 大脑 | `agent-core` (`agent`) | Agent 循环、流式多轮、工具分发、压缩、HITL、Hooks、Prompt 组装 |
+| | `agent-providers` (`providers`) | 17 类模型与媒体 Provider、Responses-only Agent 入口、fallback 链 |
+| | `agent-protocol` / `agent-types` | `Op` / `EventMsg` / `TurnItem` / `ResponseItem` 与跨 crate 共享类型 |
+| | `agent-subagents` (`subagents`) | V2 Agent Threads：Graph、mailbox、状态与配额 |
+| | `agent-memory` (`memory`) | MEMORY.md / USER.md 快照、Dreaming、待审批队列、决策日志 |
+| | `agent-evolution` (`evolution`) | 技能候选生成、评审门禁、GEPA-lite 搜索与策展 |
+| 工具 | `agent-tools` (`tools`) | 全部内置工具、注册表与分发、审批与 schema 清洗 |
+| | `agent-a2ui` (`a2ui`) | 22 种生成式 UI 组件目录、模板与操作校验 |
+| 通道 | `agent-server` (`server`) | gRPC 服务、Durable Thread、Cron/Workflow/Webhook |
+| | `agent-proto` (`proto`) | 37 个 RPC、77 个 protobuf message 的契约 |
+| 存储 | `agent-session` (`session`) | `state.db`（WAL + FTS5，schema v24）：会话、消息、检查点、附件 |
+| | `agent-rollout` (`agent-rollout`) | append-only JSONL 历史（可恢复事件的事实源） |
+| | `agent-artifacts` (`artifacts`) | 文件空间索引 `artifacts.db` 与知识检索 `knowledge.db` |
+| | `agent-usage` (`usage`) | 用量事件、成本估算、调用链 Tracing 与 eval 导出 |
+| | `agent-home` (`home`) | `~/.astro` 路径约定、日志、全局 TOML 与工具开关 |
+| 自动化 | `agent-cron` (`cron`) | 定时任务定义、调度解析与运行记录 |
+| | `agent-workflow` (`workflow`) | 43 类节点的 DAG 引擎与运行历史 |
+| 扩展 | `agent-skills` (`skills`) | Skill 扫描、安装、注册表、更新与快照 |
+| | `agent-mcp` (`mcp`) | MCP 客户端、连接池、工具发现与 OAuth |
+| | `agent-hooks` (`hooks`) | Plugin / Command / Gateway / Shell 生命周期钩子 |
+| | `agent-extensions` | Extension manifest、turn 冻结快照与下一轮 reconcile |
+| 安全 | `agent-sandbox` (`sandbox`) | 三级权限模型、平台原生沙箱与审计 |
+| | `agent-network-proxy` (`network-proxy`) | 受管 CONNECT 代理、域名裁决与 DNS 重绑定防护 |
+| | `agent-delegate` (`worktree`) | 显式桌面任务的 git worktree 隔离 |
+| 外壳 | `astro-agent` | Tauri 2 桌面壳：内嵌 backend、托盘、单实例与 32 个命令模块 |
+
+## 快速开始
+
+### 环境要求
 
 - [Rust](https://rustup.rs/)（edition 2021）
 - Node.js 18+
 - [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)（macOS 需 Xcode CLT）
 
-## 快速开始
+### 启动
 
 ```bash
-# 安装前端依赖
+# 安装前端依赖（首次）
 cd apps/desktop && npm install
 
-# 开发模式（热更新）
+# 开发模式（Tauri + 内嵌 backend + 前端热更新）
 npm run tauri dev
 
-# 打包桌面应用（当前机器默认架构的全部 bundle）
-npm run tauri build
+# 仅编译检查后端（最快）
+cargo check
 
-# 仅打 macOS DMG / .app（需在 macOS 上执行）
-npm run tauri build -- --bundles dmg
-npm run tauri build -- --bundles app
+# 跑测试
+cargo test
 ```
 
-### macOS：ARM（Apple Silicon）与 x86_64（Intel）
+双击打包后的 App 即可使用：Tauri 壳会在同进程启动 gRPC backend（含 Cron），不需要另开终端。
 
-本机默认只打**当前 CPU 架构**。要同时支持 ARM / x86，先安装 Rust 目标：
+### 只用命令行跑后端
 
 ```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-```
-
-然后在 `apps/desktop/` 下按架构打包（npm scripts）：
-
-```bash
-# Apple Silicon (ARM64)
-npm run tauri:build:arm
-npm run tauri:build:dmg:arm
-
-# Intel (x86_64)
-npm run tauri:build:x64
-npm run tauri:build:dmg:x64
-
-# Universal（一份包同时含 ARM + x86，体积更大）
-npm run tauri:build:universal
-npm run tauri:build:dmg:universal
-```
-
-等价 CLI：
-
-```bash
-npm run tauri build -- --target aarch64-apple-darwin
-npm run tauri build -- --target x86_64-apple-darwin
-npm run tauri build -- --target universal-apple-darwin
-```
-
-产物目录（按 target 区分）：
-
-```text
-# macOS
-target/aarch64-apple-darwin/release/bundle/macos|dmg/...
-target/x86_64-apple-darwin/release/bundle/macos|dmg/...
-target/universal-apple-darwin/release/bundle/...   # universal
-target/release/bundle/...                          # 本机默认架构时
-
-# Windows（Windows / CI）
-target/release/bundle/nsis/*.exe
-target/release/bundle/msi/*.msi
-
-# Linux（Linux / CI）
-target/release/bundle/appimage/*.AppImage
-target/release/bundle/deb/*.deb
-```
-
-图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`（`icon.png` / `icon.icns` / `icon.ico` 等）。DMG 窗口尺寸与图标位置在 `tauri.conf.json` → `bundle.macOS.dmg` 配置；默认不设自定义背景（曾引用过不存在的 `dmg-background.png`，会让 DMG 打包直接失败）。要加品牌背景，把 660×372 的 PNG 放进 `icons/`，再补上 `"background": "icons/<文件名>.png"`。
-
-默认配置不生成 updater 签名产物，所以 `npm run tauri build` 与多平台打包校验不需要私钥。发布通道（`.github/workflows/release-tauri.yml`）用 `--config src-tauri/tauri.release.conf.json` 打开 `createUpdaterArtifacts`，此时必须提供 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`；本机要出签名包时用同一组环境变量加同一个 `--config`。
-
-Windows / Linux 的 ARM 包需在对应 ARM 机器或 CI runner 上构建（见下方 CI）；本机 Mac **不能**交叉打出 Windows/Linux 安装包。
-
-也可在仓库根目录用 Cargo 只编译二进制（不含安装包）：
-
-```bash
-cargo build -p astro-agent --release
-cargo build -p astro-agent --release --target aarch64-apple-darwin
-cargo build -p astro-agent --release --target x86_64-apple-darwin
-```
-
-## CI 多平台打包
-
-仓库已配置 GitHub Actions（见 `.github/workflows/`）：
-
-| Workflow | 触发 | 作用 |
-|----------|------|------|
-| `build-tauri` | PR（相关路径变更）/ 手动 | macOS **arm64 + x86_64**、Linux x64、Windows x64，上传 Artifacts |
-| `release-tauri` | 手动 / `release` 分支 / `v*` 标签 | 同上，写入**草稿** GitHub Release |
-
-说明：
-
-- macOS：CI 分别构建 ARM 与 Intel 两套包；若只要一份通用包，可在本机用 `npm run tauri:build:universal`。
-- Tauri 需在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
-- 首次使用 Release 前，在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**。
-- 推送到 GitHub 后，在 Actions 页点 **Run workflow** 即可试跑。
-
-## 托盘常驻
-
-关闭主窗口会**隐藏到系统托盘**，内嵌 backend / cron 继续运行。左键点托盘图标可恢复窗口；托盘菜单「退出 Astro」或 macOS「Astro → 退出」才会真正结束进程。
-
-偏好设置中的界面语言（中文 / English）会同步到**原生菜单栏与托盘**文案。
-
-定时任务（含后台 due 触发与手动「立即执行」）以及入梦完成/失败时，会弹出**系统通知**（需授予通知权限）。
-
-## gRPC 后端（默认内嵌）
-
-`tauri dev` / 打包后的 `.app` **默认在同进程启动 gRPC backend**（含 cron），无需另开终端。双击 APP 即可聊天。
-
-**端口：** 未设置 `ASTRO_GRPC_ADDR` 时内嵌使用 `127.0.0.1:0`，由系统分配空闲端口，并在进程内告诉壳侧客户端（用户无感、不与其它进程抢 50051）。独立 `cargo run -p server` 仍默认 `127.0.0.1:50051`。
-
-调试固定端口：
-
-```bash
-export ASTRO_GRPC_ADDR=127.0.0.1:50051
-```
-
-**单实例：** 再次打开 APP 不会起第二套进程/backend，而是把已有窗口拉到前台（Windows/Linux 走 single-instance 插件；macOS 另支持 Dock 再点 / Reopen）。
-
-如需**独立进程**调试：
-
-```bash
-# 终端 1：只跑 backend（默认 50051）
+# 终端 1：独立进程的 backend（默认 127.0.0.1:50051）
 cargo run -p server
 
-# 终端 2：关掉内嵌，连外部 backend
+# 终端 2：关掉内嵌 backend，连接上面的进程
 export ASTRO_EMBED_BACKEND=0
 export ASTRO_GRPC_ADDR=127.0.0.1:50051
 cd apps/desktop && npm run tauri dev
 ```
 
-也可在 `~/.astro/.env` 写入 `ASTRO_EMBED_BACKEND=0` / `ASTRO_GRPC_ADDR=…`。
+内嵌模式下未设置 `ASTRO_GRPC_ADDR` 时使用 `127.0.0.1:0`，由系统分配空闲端口，用户无感、也不与其它进程抢端口。`~/.astro/.env` 同样可以写 `ASTRO_EMBED_BACKEND` / `ASTRO_GRPC_ADDR`。
 
-### 结构化异步用户输入
+## 打包与发布
 
-Agent 可在回合继续运行时调用 `request_user_input_async`，一次发出一个或多个自包含问题，
-并可提供建议选项。请求会以 `AgentMessageItem { delivery: async, questions }` 进入
-Thread item 时间线，先持久化再投影到 Desktop；用户回答作为普通 user input 进入当前
-turn。旧工具名不再注册，调用方必须直接使用 `request_user_input_async`。
-
-### Durable Thread 设置与 Persistent reasoning
-
-`ThreadSettingsApplied` 将 provider/backend/model/reasoning 设置写入 rollout。热 Session
-读取当前设置，冷 Thread 读取最后一条持久设置，`start/resume/fork/list/history` 使用同一
-投影。用量另以 `TokenUsageRecord { latest, cumulative, compaction_response_id }` 保存；resume
-恢复累计基线，fork 不继承父 Thread 的累计值。
-
-OpenAI 模型目录只有提供非空 `persistent_instructions` 时，Desktop 才显示
-`persistent` effort。Astro 本地保持该名称，OpenAI Responses wire 映射为 `disabled`，并把
-目录指令合并进 instructions；Azure、OpenRouter、DeepSeek 和自定义 Provider 明确拒绝该
-effort，不做兼容降级。
-
-## Realtime 语音会话
-
-Realtime 已拆分为独立 `agent-realtime` crate，并通过统一 Thread 协议接入桌面端：
-
-- 桌面端默认使用 WebRTC，通过 `oai-events` data channel 和媒体 track 建立双向会话；
-- 支持 WebSocket 兼容传输、WebRTC SDP offer/answer，以及 ExistingCall sideband 接管；
-- Azure OpenAI 使用 GA `/openai/v1`：WebSocket/sideband 采用 `api-key`，WebRTC 通过
-  `client_secrets` 临时凭据与原始 `application/sdp` 协商；
-- 支持 Astro wire 协议 `v2`（OpenAI/Azure GA `/v1/realtime` 事件族）与显式 `v3`
-  （Codex 专用 `/live/{call_id}`）；这里的 V2/V3 不是模型版本，也不是 GA/Beta 代际；
-- `gpt-realtime` 原生处理文字/音频输入输出，不要求独立转写模型；Realtime 仅暴露
-  `background_agent` 与 `remain_silent` 两个内部控制动作；
-- 完整 transcript、会话边界和 BEM promotion 以 `RealtimeItem` 持久化到 rollout，原始音频和 delta 不落盘；
-- Codex handoff 可把语音请求转为普通 Agent turn，再按 `thinking` / `commentary` / `bem_tags` 返回 Realtime call。
-- 生产音频路径仍由 WebView/WebRTC 或 PCM WebSocket 提供；native voice helper 已完成设计审查，
-  在三平台 runtime 产物、签名和打包链就绪前不暴露空入口。
-
-设计与恢复契约见 [Realtime 子系统](./docs/realtime-subsystem.md)，Azure 来源快照与映射见
-[Azure OpenAI Realtime 参考](./docs/azure/realtime/README.md)，整体 Agent 边界见
-[架构总览](./docs/03-系统设计阶段/01-架构设计/01-架构总览.md)。
-
-## Extension、MCP 与受管网络
-
-- `ExtensionSnapshot` 在 turn 内冻结；`ReconcileExtensions` 比较内容指纹并报告 MCP、Skills、
-  Hooks、toolsets 影响，新快照从下一 turn 激活。
-- `McpEventStreamManager` 已提供 `thread_id + subscription_id` 所有权、active 握手、单调
-  attempt id、有界队列和权限/Server 取消基础；具体 MCP Server opener 与 UI 订阅入口尚未接线。
-- managed network 的 `header_injections` 只作为 host/method/path/header requirement 被保留，
-  Debug 不输出 header value。当前 CONNECT 隧道无法观察 TLS 内部 method/path，因此不宣称
-  已对 HTTPS 执行注入。
-- Remote Extension Marketplace 已完成服务、供应链与回滚设计；Astro 尚无对应产品服务与
-  bundle 信任根，因此当前只激活本地用户扩展和可信项目扩展。
-
-详见 [Extension Manifest](./docs/extensions.md)、[Remote Marketplace 设计](./docs/superpowers/specs/2026-09-04-remote-marketplace-alignment-design.md) 与 [Native Voice Helper 设计](./docs/superpowers/specs/2026-09-04-native-voice-helper-alignment-design.md)。
-
-## 仓库结构
-
-```text
-astro/
-├── Cargo.toml              # Workspace 根（28 个 crate + 1 个桌面应用）
-├── crates/                 # 所有 Rust crate（扁平 agent-* 命名）
-│   ├── agent-core/         # Agent 运行时核心（Session、streaming、工具路由）
-│   ├── agent-types/        # 跨 crate DTO（权限、模型、ToolEntry、ToolExposure 等）
-│   ├── agent-config/       # 分层配置原语
-│   ├── agent-protocol/     # Core 协议与 canonical ResponseItem
-│   ├── agent-rollout/      # JSONL append-only 历史
-│   ├── agent-realtime/     # WebSocket/WebRTC/ExistingCall 与 V2/V3 会话
-│   ├── agent-providers/    # 多厂商 LLM/图像 Provider（15+ 厂商）
-│   ├── agent-tools/        # 工具实现 + ToolRegistry（BM25 搜索、三级暴露）
-│   ├── agent-subagents/    # V2 Agent Thread 子 Agent 系统
-│   ├── agent-memory/       # 记忆管理
-│   ├── agent-server/       # gRPC 服务端
-│   ├── agent-session/      # 会话库（SQLite WAL + FTS5）
-│   ├── agent-sandbox/      # 沙箱权限控制
-│   ├── agent-network-proxy/ # 受管网络代理
-│   ├── agent-delegate/    # 显式桌面任务的 managed worktree
-│   ├── agent-skills/       # Skills 管理
-│   ├── agent-mcp/          # MCP 客户端
-│   ├── agent-hooks/        # typed Hook 生命周期与 Command/MCP 执行
-│   ├── agent-proto/        # Protobuf / tonic gRPC 契约
-│   └── ...                 # 另有 9 个 crate（db/extensions/artifacts/usage/cron/workflow/a2ui/evolution/home）
-└── apps/
-    └── desktop/            # React + Vite UI + Tauri 2 壳
+```bash
+cd apps/desktop
+npm run tauri build                 # 当前机器默认架构的全部 bundle
+npm run tauri build -- --bundles dmg
+npm run tauri build -- --bundles app
 ```
 
-| package name | 说明 |
-|-------|------|
-| `astro-agent` | Tauri 桌面应用（`apps/desktop/src-tauri`） |
-| `agent` | Agent 运行时核心（Session、AstroThread、streaming） |
-| `server` | gRPC 服务（可独立运行；桌面壳默认同进程内嵌） |
-| `providers` | Agent Responses-only 路由 + 工具/媒体 Provider 适配 |
-| `tools` | 工具实现 + ToolRegistry（Responses 原生 Namespace、ToolExposure 三级暴露、BM25 搜索） |
-| `subagents` | V2 Agent Thread 子 Agent 系统 |
-| `memory` | 记忆管理（MEMORY.md/USER.md 快照） |
-| `session` | 会话消息与账单（SQLite WAL + FTS5） |
-| `usage` | 用量统计与 Tracing 洞察 |
-| `sandbox` | 沙箱权限控制（PermissionProfile） |
-| `network-proxy` | attempt-scoped CONNECT 代理、审批与脱敏 header requirements |
-| `worktree` | 显式桌面多任务的 detached managed worktree；opaque ID/manifest 校验清理，Subagent 不隐式调用 |
-| `agent-config` | 分层配置原语 |
-| `agent-protocol` | Core 协议（Op、EventMsg、TurnItem、ResponseItem） |
-| `agent-rollout` | JSONL append-only 权威历史 |
-| `realtime` | Realtime 运输、typed event、transcript reducer 与 Codex handoff/BEM |
-| `skills` / `mcp` | 扩展能力（Skills、原生 namespaced MCP、process-owned event streams） |
-| `agent-extensions` | Extension manifest、turn-frozen snapshot 与 next-turn reconcile |
-| `hooks` | Plugin、Command/MCP、Gateway、Shell 生命周期钩子 |
-| `proto` / `types` | gRPC 契约与公共类型 |
+### macOS：ARM 与 x86_64
 
-运行时架构见 [`docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md`](./docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md)，Realtime 见 [`docs/realtime-subsystem.md`](./docs/realtime-subsystem.md)，钩子说明见 [`docs/hooks.md`](./docs/hooks.md)，本轮 Codex 对齐记录见 [`docs/更新说明/2026-09-03-Codex源码对齐.md`](./docs/更新说明/2026-09-03-Codex源码对齐.md)。
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-Azure `gpt-image-2` 文档：
+npm run tauri:build:arm            # Apple Silicon
+npm run tauri:build:x64            # Intel
+npm run tauri:build:universal      # Universal（ARM + x86 一份包）
 
-- [配置与使用说明](./docs/azure-gpt-image-2.md)
-- [实现设计](./docs/superpowers/specs/2026-09-01-azure-gpt-image-2-design.md)
+npm run tauri:build:dmg:arm        # 对应 DMG 变体
+npm run tauri:build:dmg:x64
+npm run tauri:build:dmg:universal
+```
+
+产物按 target 区分：
+
+```text
+target/aarch64-apple-darwin/release/bundle/macos|dmg/...
+target/x86_64-apple-darwin/release/bundle/macos|dmg/...
+target/universal-apple-darwin/release/bundle/...
+target/release/bundle/nsis|msi|appimage|deb/...     # Windows / Linux
+```
+
+图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`；DMG 窗口尺寸与图标位置在 `tauri.conf.json` → `bundle.macOS.dmg`。默认不设自定义背景（曾引用不存在的 `dmg-background.png` 会让打包直接失败），需要品牌背景时放入 660×372 的 PNG 并补上 `"background"` 字段。
+
+默认配置不生成 updater 签名产物，因此常规打包不需要私钥；发布通道使用 `src-tauri/tauri.release.conf.json` 打开 `createUpdaterArtifacts`，此时必须提供 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。Windows / Linux 的 ARM 包需要在对应系统或 CI runner 上构建，本机 Mac 无法交叉产出。
+
+### CI 多平台打包
+
+| Workflow | 触发 | 作用 |
+| --- | --- | --- |
+| `build-tauri` | PR（相关路径变更）/ 手动 | macOS arm64 + x86_64、Linux x64、Windows x64，上传 Artifacts |
+| `release-tauri` | 手动 / `release` 分支 / `v*` 标签 | 同上，写入**草稿** GitHub Release |
+
+- Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
+- 首次使用 Release 前，在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**。
+- 推送到 GitHub 后，在 Actions 页点 **Run workflow** 即可试跑。
+
+## 运行形态
+
+### 托盘常驻
+
+关闭主窗口会隐藏到系统托盘，内嵌 backend 与 Cron 继续运行；左键点托盘图标恢复窗口，「退出 Astro」才会真正结束进程。偏好设置里的界面语言会同步到原生菜单栏与托盘文案。
+
+### 单实例
+
+再次打开 App 不会起第二套进程或 backend，而是把已有窗口拉到前台（Windows / Linux 走 single-instance 插件，macOS 另支持 Dock 再点与 Reopen）。
+
+### Realtime 语音会话
+
+Realtime 是独立 crate，并通过统一 Thread 协议接入桌面端：默认 WebRTC（`oai-events` data channel + 媒体 track），同时支持 WebSocket 兼容传输、SDP offer/answer 与 ExistingCall sideband 接管。Azure OpenAI 使用 GA `/openai/v1`，WebRTC 走 `client_secrets` 临时凭据。完整 transcript 与会话边界以 `RealtimeItem` 持久化，原始音频不落盘；语音请求可通过 Codex handoff 转成普通 Agent turn。
+
+### 结构化异步提问
+
+Agent 在回合继续运行时可以调用 `request_user_input_async` 发出一个或多个自包含问题（可带建议选项），回答作为普通 user input 进入当前 turn。
+
+### Durable Thread 设置
+
+`ThreadSettingsApplied` 把 provider / backend / model / reasoning 写入 rollout：热 Session 读当前设置，冷 Thread 读最后一条持久设置，`start / resume / fork / list / history` 使用同一投影。用量以 `TokenUsageRecord { latest, cumulative, compaction_response_id }` 保存，resume 恢复累计基线，fork 不继承父线程累计值。
+
+## 本机数据目录
+
+```text
+~/.astro/
+  config.toml          # 唯一全局配置入口（旧 YAML 已退役）
+  .env                 # 凭证环境入口
+  agents/              # *.toml 自定义 Agent；active.json 当前专家标识
+  models/              # cache/ 模型元数据与定价
+  tools/               # 工具领域运行数据（开关在 config.toml）
+  skills/              # 技能包、origins.json、lock.json、backups/
+  sessions/
+    state.db           # ResponseItem、会话、FTS5、线程检查点与附件（schema v24）
+    rollouts/          # append-only 事件事实源
+    tool_spills/       # 大工具输出落盘
+    subagents/subagents-v2.db   # Agent Graph、mailbox、状态事件
+  artifacts/           # artifacts.db、knowledge.db、uploads/
+  usage/               # usage.db 与 agents/{id}/stats.json
+  automation/
+    cron/              # jobs.json、cron_v1.db、output/
+    workflows/         # workflows.json、workflow.db、schedule_state.json
+  memory/              # dreaming.json、pending/
+  evolution/           # 学习、决策、进化记录与 dspy/.venv
+  security/            # audit/、locks/
+  browser/             # 浏览器配置与登录 profile（不是可随意删除的缓存）
+  ui/                  # onboarding.json、图标、壁纸、主题、桌宠
+  logs/                # 运行日志
+  workspace/           # SOUL.md、USER.md、MEMORY.md、AGENTS.md、日记与生成物
+  backups/             # 离线迁移备份与清单
+```
+
+路径统一由 `home::layout` 提供，业务模块不自行拼接领域目录。旧布局必须离线迁移；启动时发现旧目录或未完成的迁移会拒绝初始化，避免生成空的平行数据库。详见 [本机数据的领域布局](docs/home-layout.md) 与 [全局设置](docs/global-settings.md)。
+
+## README 截图如何生成
+
+截图来自 `apps/desktop` 的 Storybook 组件（真实渲染，只替换原生 transport），因此可复现且不含本机数据：
+
+```bash
+cd apps/desktop
+npm run build-storybook                        # 生成 storybook-static
+node scripts/capture-readme-shots.mjs          # 输出 docs/images/*.webp
+node scripts/capture-readme-shots.mjs skills   # 只重截某几张
+```
+
+脚本默认把 PNG 转成 WebP（安装 `cwebp` 时自动启用）；未安装则保留 PNG。截图清单（Story、裁剪区域、主题）都写在脚本顶部的 `SHOTS` 数组里。
+
+## 文档索引
+
+| 入口 | 内容 |
+| --- | --- |
+| [docs/README.md](docs/README.md) | 文档总目录（按软件工程阶段组织） |
+| [架构总览](docs/03-系统设计阶段/01-架构设计/01-架构总览.md) | 系统分层、模块依赖与数据流 |
+| [Responses 原生运行时](docs/03-系统设计阶段/01-架构设计/12-Responses原生Agent运行时架构.md) | Responses-only 契约与原生历史 |
+| [Agent Harness 总体架构](docs/03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md) | Agent = Model + Harness 基线 |
+| [Realtime 子系统](docs/03-系统设计阶段/02-核心功能模块/11-Realtime子系统.md) | 运输、版本、handoff 与恢复契约 |
+| [MCP 集成](docs/03-系统设计阶段/02-核心功能模块/03-MCP集成.md) | Server 配置、工具发现与命名空间 |
+| [Skills 系统](docs/03-系统设计阶段/02-核心功能模块/04-Skills系统.md) | Skill 生命周期与工具开关 |
+| [Subagent 系统](docs/03-系统设计阶段/02-核心功能模块/05-Subagent系统设计.md) | Agent Threads、配额与恢复 |
+| [记忆系统](docs/03-系统设计阶段/02-核心功能模块/10-记忆系统.md) | 精炼记忆、入梦与审批 |
+| [Hook 运行契约](docs/03-系统设计阶段/03-基础设施/09-Hook运行契约.md) | 三总线 Hook 事件与返回值 |
+| [安全边界](docs/03-系统设计阶段/03-基础设施/06-安全边界.md) | 沙箱、审批与审计 |
+| [Extension Manifest](docs/03-系统设计阶段/09-生态扩展/03-Extension-Manifest.md) | 扩展清单、快照与 reconcile |
+| [本机数据布局](docs/home-layout.md) | `~/.astro` 领域目录与迁移边界 |
+| [全局设置](docs/global-settings.md) | `config.toml` 收口与显式迁移 |
+| [存储诊断](docs/storage-diagnostics.md) | 数据目录检查与清理预览 |
+| [主界面导览](docs/interface-tour.md) | 界面导览行为与保存边界 |
+| [图像生成模型](docs/image-generation-models.md) / [Azure gpt-image-2](docs/azure/azure-gpt-image-2.md) | 图像生成配置与实现 |
 
 ## 常用命令
 
 ```bash
-# 格式化全部后端 Rust 代码
-cargo fmt --all
+# 后端
+cargo fmt --all                      # 格式化
+cargo fmt --all -- --check           # 仅检查格式
+cargo check                          # Workspace 检查
+cargo clippy --all-targets           # Lint
+cargo test                           # 全量测试
+cargo test -p agent                  # 单 crate 测试
+cargo test -p agent <test_name> -- --nocapture
 
-# 检查后端格式（不修改文件）
-cargo fmt --all -- --check
-
-# 格式化全部前端代码
-npm --prefix apps/desktop run format
-
-# 检查前端格式（不修改文件）
-npm --prefix apps/desktop run format:check
-
-# Workspace 检查
-cargo check
-
-# 跑测试（示例）
-cargo test -p server
-
-# 仅构建前端静态资源
-cd apps/desktop && npm run build
+# 前端
+cd apps/desktop
+npm run build                        # tsc + vite build + 样式层级检查
+npx tsc --noEmit                     # 仅类型检查
+npm run test                         # 前端单测
+npm run test:visual                  # Playwright + Storybook 视觉回归
+npm run storybook                    # 组件开发服务器（:6006）
+npm run format:check                 # Biome 格式检查
+npm run lint:css                     # Stylelint
 ```
 
 ## 许可证
