@@ -1,5 +1,6 @@
 /** 输入框浮动命令面板（/ 斜杠 · @ 提及）。 */
 import { useEffect, useMemo, useRef } from "react";
+import { Check } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { SlashAction } from "../../lib/chat/composerCommands";
 import type { ComposerContextToken } from "../../lib/chat/composerContext";
@@ -114,17 +115,19 @@ export function ComposerPalette({
                         {item.icon}
                       </span>
                     )}
-                    <span className="composer-palette-item-name">
-                      {item.title}
-                    </span>
-                    {item.description && (
-                      <span className="composer-palette-item-hint">
-                        {item.description}
+                    <span className="composer-palette-item-text">
+                      <span className="composer-palette-item-name">
+                        {item.title}
                       </span>
-                    )}
+                      {item.description && (
+                        <span className="composer-palette-item-hint">
+                          {item.description}
+                        </span>
+                      )}
+                    </span>
                     {selected && (
                       <span className="composer-palette-check" aria-hidden>
-                        ✓
+                        <Check size={14} strokeWidth={2.4} />
                       </span>
                     )}
                   </button>

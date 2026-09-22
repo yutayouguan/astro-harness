@@ -311,30 +311,31 @@ export function buildMentionCandidates(
     skills: { id: string; name: string; description?: string }[];
     mcpServers?: { id: string; name: string; description?: string }[];
   },
-  t?: (key: string) => string,
+  t?: (key: MessageKey) => string,
 ): (MentionCandidate & { group?: string })[] {
-  const groupAdd = t?.("chat.paletteGroupAdd") ?? "添加";
-  const groupPlugins = t?.("chat.paletteGroupPlugins") ?? "插件";
+  const groupAgents = t?.("chat.mentionGroupAgents") ?? "Agents";
+  const groupSkills = t?.("chat.mentionGroupSkills") ?? "Skills";
+  const groupMcp = t?.("chat.mentionGroupMcp") ?? "MCP";
 
   const agents = opts.agents.map((a) => ({
     kind: "agent" as MentionKind,
     id: a.id,
     name: a.name,
-    group: groupAdd,
+    group: groupAgents,
   }));
   const skills = opts.skills.map((s) => ({
     kind: "skill" as MentionKind,
     id: s.id,
     name: s.name,
     description: s.description,
-    group: groupPlugins,
+    group: groupSkills,
   }));
   const mcps = (opts.mcpServers ?? []).map((m) => ({
     kind: "mcp" as MentionKind,
     id: m.id,
     name: m.name,
     description: m.description,
-    group: groupPlugins,
+    group: groupMcp,
   }));
   return [...agents, ...skills, ...mcps];
 }

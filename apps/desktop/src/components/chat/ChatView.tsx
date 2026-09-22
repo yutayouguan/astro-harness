@@ -1609,19 +1609,22 @@ export default function ChatView({
   }, [skills, t]);
 
   const mentionItems: PaletteItem[] = useMemo(() => {
-    const candidates = buildMentionCandidates({
-      agents: agents
-        .filter((a): a is AgentIconInfo & { id: string; name: string } =>
-          Boolean(a.id && a.name),
-        )
-        .map((a) => ({ id: a.id, name: a.name })),
-      skills,
-      mcpServers: mcpServers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description,
-      })),
-    });
+    const candidates = buildMentionCandidates(
+      {
+        agents: agents
+          .filter((a): a is AgentIconInfo & { id: string; name: string } =>
+            Boolean(a.id && a.name),
+          )
+          .map((a) => ({ id: a.id, name: a.name })),
+        skills,
+        mcpServers: mcpServers.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+        })),
+      },
+      t,
+    );
     return candidates.map((c) => {
       const descKey =
         c.kind === "agent"
@@ -1635,6 +1638,7 @@ export default function ChatView({
         title: `@${c.name}`,
         description: c.description || t(descKey),
         icon,
+        group: c.group,
         mentionKind: c.kind,
         action: "insert" as const,
         contextToken: {

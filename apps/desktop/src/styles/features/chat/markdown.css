@@ -2611,33 +2611,26 @@ html[data-theme="dark"] .todo-progress-item.is-current {
   margin-top: 0;
 }
 
-/* ── 命令面板（Codex 风格） ──────────────────────────── */
+/* ── 命令面板（与「对话模式 · 审批权限」弹出框同一材质与行式） ──────── */
 
 .composer-palette {
   margin: 0 12px 8px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid
-    color-mix(in srgb, var(--glass-edge) 75%, rgba(148, 163, 184, 0.2));
-  background: var(--composer-bg, #fff);
-  box-shadow:
-    0 16px 48px rgba(15, 23, 42, 0.12),
-    0 2px 8px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--titlebar-menu-border);
+  background: var(--titlebar-menu-bg);
+  box-shadow: var(--titlebar-menu-shadow);
+  backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
   max-height: min(55vh, 480px);
   display: flex;
   flex-direction: column;
 }
 
-html[data-theme="dark"] .composer-palette {
-  background: var(--composer-bg, #1e1e2e);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-}
-
 .composer-palette-list {
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px;
+  padding: 0.35rem;
   flex: 1;
 }
 
@@ -2648,95 +2641,100 @@ html[data-theme="dark"] .composer-palette {
   font-size: 13px;
 }
 
-/* 分组标签 — Codex 风格 */
+/* 分组标签 — 对齐 .composer-policy-section-label */
 .composer-palette-group-label {
-  padding: 10px 14px 5px;
-  font-size: 12px;
+  padding: 0.45rem 0.65rem 0.28rem;
+  font-size: 0.68rem;
   font-weight: 650;
   color: var(--ink-mute);
-  opacity: 0.55;
-  text-transform: none;
-  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .composer-palette-group + .composer-palette-group {
-  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 50%, transparent);
-  margin-top: 2px;
-  padding-top: 2px;
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
+  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 72%, transparent);
 }
 
-/* 面板项 — Codex 风格：图标-名称 左，描述 右 */
+/* 面板项 — 图标 · 名称/描述两行 · 右侧勾选 */
 .composer-palette-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0.55rem;
   text-align: left;
   border: none;
-  border-radius: 8px;
-  padding: 9px 12px;
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
   background: transparent;
   color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.1s ease;
 }
 
 .composer-palette-item.is-active,
 .composer-palette-item:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-
-html[data-theme="dark"] .composer-palette-item.is-active,
-html[data-theme="dark"] .composer-palette-item:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .composer-palette-ico {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  font-size: 14px;
+  width: 1.05rem;
   flex-shrink: 0;
+  font-size: 0.9rem;
+  line-height: 1;
   color: var(--ink-mute);
+}
+
+.composer-palette-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
 }
 
 .composer-palette-item-name {
-  font-size: 13.5px;
-  font-weight: 650;
+  font-weight: 500;
+  line-height: 1.2;
   color: var(--ink);
-  white-space: nowrap;
-}
-
-.composer-palette-item-hint {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--ink-mute);
-  opacity: 0.55;
-  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.composer-palette-item-hint {
+  font-size: 0.72rem;
+  font-weight: 450;
+  color: var(--ink-mute);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-palette-item.is-selected .composer-palette-item-name {
+  font-weight: 650;
+}
+
 .composer-palette-check {
-  color: var(--tone-green, #16a34a);
-  font-weight: 700;
-  font-size: 14px;
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ink);
 }
 
 .composer-palette-foot {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
-  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 45%, transparent);
+  padding: 7px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   font-size: 11px;
-  color: var(--ink-mute);
-  opacity: 0.5;
+  color: var(--text-tertiary, var(--ink-mute));
 }
 
 .composer-palette-foot kbd {
