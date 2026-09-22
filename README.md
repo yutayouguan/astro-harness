@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/app-chat-shell.webp" alt="Astro Agent 主界面" width="920" />
+<img src="docs/images/app-overview.webp" alt="Astro Agent 主界面" width="920" />
 
 # Astro Agent（阿童木）
 
@@ -21,21 +21,21 @@
 - [界面速览](#界面速览)
 - [功能模块](#功能模块)
   - [对话与 Agent 运行时](#1-对话与-agent-运行时)
-  - [人机协作：审批、澄清与权限](#2-人机协作审批澄清与权限)
-  - [模型接入与 Provider](#3-模型接入与-provider)
+  - [交互控制、审批与权限](#2-交互控制审批与权限)
+  - [模型接入、模型市场与 Provider](#3-模型接入模型市场与-provider)
   - [工具、Skills 与 MCP](#4-工具skills-与-mcp)
   - [定时任务与可视化工作流](#5-定时任务与可视化工作流)
   - [记忆、工作区与文件空间](#6-记忆工作区与文件空间)
   - [用量洞察与可观测性](#7-用量洞察与可观测性)
   - [内置浏览器与终端](#8-内置浏览器与终端)
-  - [桌面氛围、外观与桌宠](#9-桌面氛围外观与桌宠)
-  - [存储、诊断与安全边界](#10-存储诊断与安全边界)
+  - [外观、氛围与桌宠](#9-外观氛围与桌宠)
+  - [环境依赖、诊断与存储](#10-环境依赖诊断与存储)
 - [架构总览](#架构总览)
 - [快速开始](#快速开始)
 - [打包与发布](#打包与发布)
 - [运行形态](#运行形态)
 - [本机数据目录](#本机数据目录)
-- [README 截图如何生成](#readme-截图如何生成)
+- [README 截图如何维护](#readme-截图如何维护)
 - [文档索引](#文档索引)
 - [常用命令](#常用命令)
 - [许可证](#许可证)
@@ -55,6 +55,7 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 | 主题 | 说明 |
 | --- | --- |
 | 对话 | Responses-only Agent 循环、原生 `ResponseItem` 历史、多轮工具调用、流式输出、上下文压缩与检查点续接 |
+| 模型 | 17 种 Provider 接入、模型市场与 OpenRouter 目录曲线、推理档位切换、辅助模型独立路由 |
 | 工具 | 内置工具注册表、三级暴露策略与 BM25 检索、危险命令分类与审批、大结果落盘（tool spill） |
 | 扩展 | Skills（本机 / 商店）、MCP（stdio / Streamable HTTP）、Hooks 三总线、Extension Manifest |
 | 自动化 | Cron 定时任务、43 类节点的可视化工作流、Webhook 触发、Subagent 线程协作 |
@@ -66,13 +67,13 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 
 主界面左侧是导航与任务侧栏（会话、项目、定时任务、工作流、插件），中间是对话流，底部 Composer 负责模型选择、交互模式、审批策略与附件；右上角工具栏可以随时打开文件、终端、浏览器等停靠面板。
 
-> 本文所有截图都由仓库内的 Storybook 组件真实渲染后自动截取，不含本机会话数据，可用 `node scripts/capture-readme-shots.mjs` 复现（见 [README 截图如何生成](#readme-截图如何生成)）。
+> 本文截图均截取自运行中的 Astro Agent 桌面端真实窗口（含真实壁纸、桌宠与本地工作区），不是设计稿。
 
 ## 功能模块
 
 ### 1. 对话与 Agent 运行时
 
-<img src="docs/images/chat-turns.webp" alt="对话回合与工具调用时间线" width="760" />
+<img src="docs/images/chat-answer.webp" alt="对话：长回答与能力清单" width="900" />
 
 - **Responses-only 主链路**：Agent 请求统一走 Responses API，历史就是原生 `ResponseItem`；`AstroThread → SessionTask → TurnContext → StepContext` 逐层收窄一次 Step 的模型、工具与预算。
 - **回合时间线**：思考、工具调用、命令输出、引用、token 用量与缓存命中率都作为 Thread item 投影到桌面端，可逐条展开。
@@ -81,52 +82,63 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 - **续接与恢复**：线程检查点（`notes`）+ 历史回读（`history`）让长任务可跨重启继续；rollout 文件是事实源，SQLite 可由 rollout 重建。
 - **模型回退**：首个 chunk 前失败自动切换备用模型目标；主模型与五类辅助任务各自拥有独立目标链。
 
-### 2. 人机协作：审批、澄清与权限
+Composer 上方的用量浮层可以随时拆解当前上下文占用（会话消息、工具定义、系统提示词、Skills、记忆各自的 token 与缓存命中），并给出本轮费用结余：
 
-<img src="docs/images/approval.webp" alt="危险命令审批卡片" width="700" />
+<img src="docs/images/context-usage.webp" alt="上下文使用浮层" width="420" />
+
+### 2. 交互控制、审批与权限
+
+<img src="docs/images/chat-settings.webp" alt="对话设置：详细程度、面板显示与忙碌时发送模式" width="900" />
 
 - **按需审批**：危险命令、越界写入与未覆盖网络目标会弹出审批卡（本次允许 / 始终允许同类 / 拒绝），也可以选择让 Agent 在回合中发起结构化提问。
 - **生成式 UI（A2UI）**：Agent 可用 `astro://a2ui/catalog/v2` 的 22 种组件推送卡片、表单、澄清向导等结构化界面，而非纯文本。
 - **权限画像**：`ReadOnly` / `WorkspaceWrite` / `DangerFullAccess` 三级模型决定可写目录与命令沙箱模式，权限变更与授权事件写入 append-only 审计日志。
 - **桌宠弹窗**：桌宠可见时，审批与提问可以在独立弹窗里就地处理，不需要切回主窗口。
 - **交互模式**：Agent / Plan 模式按 `InteractionMode` 过滤可用工具 schema；行为说明只进 Responses `instructions`，不污染用户消息。
+- **显示与并发偏好**：过程信息（思考过程、技能调用、工具标签、MCP 调用、Hook 事件、记忆更新、时间戳）可逐项开关；任务忙碌时的后续输入可按「排队 / 引导（steer）/ 打断」处理。
 
-<img src="docs/images/permissions.webp" alt="工具审批与权限设置" width="820" />
+### 3. 模型接入、模型市场与 Provider
 
-### 3. 模型接入与 Provider
-
-<img src="docs/images/providers.webp" alt="Provider 配置" width="820" />
+<img src="docs/images/providers.webp" alt="模型服务：Provider 配置" width="900" />
 
 - **17 种 Provider 接入**：OpenAI、Azure OpenAI、Anthropic、Google（含 Gemini Native）、DeepSeek、智谱、月之暗面、OpenRouter、MiniMax、火山引擎、混元、NVIDIA、百炼、Ollama 以及自定义 OpenAI 兼容端点。
 - **凭证托管**：API Key 存系统 keyring 或 `.env`，配置统一落在 `~/.astro/config.toml`，写入走同一文件锁与分段更新。
 - **模型目录与能力标记**：本地缓存模型元数据与定价；只有声明 Responses 能力的 Provider 才会被 Agent 主链路使用。
 - **辅助模型**：标题生成、上下文压缩、智能审批、入梦与记忆回顾可以分别绑定到更便宜或更快的模型。
 
-<img src="docs/images/onboarding-provider.webp" alt="首次启动的模型接入引导" width="820" />
+对话区右上角的模型选择器按 Provider 分组切换模型与推理档位：
 
-首次启动用一次引导完成模型接入、工作区选择与本机初始化；引导可跳过，用户档案在对话里建立，不阻塞直接提问。
+<img src="docs/images/model-picker.webp" alt="模型选择器" width="520" />
+
+模型市场把「能买什么」摊开：模型卡片带上下文长度、价格与延迟，另有 OpenRouter 目录曲线、任务与模型排行、语音与视觉模型，以及按编码 Agent（Claude Code、Codex、Cline 等）统计的用量折扣参考。
+
+<img src="docs/images/model-market.webp" alt="模型市场" width="900" />
 
 ### 4. 工具、Skills 与 MCP
 
-<img src="docs/images/skills.webp" alt="Skill 卡片" width="820" />
+<img src="docs/images/tools.webp" alt="内置工具开关" width="900" />
 
 - **内置工具域**：终端与 PTY、文件读写与 `apply_patch`、代码执行、页面浏览、记忆与上下文、子 Agent、待办与计划、图像 / 视频 / 音频 / 语音生成与理解、桌面宠物与 UI 风格等。
 - **工具注册表**：`inventory` 自注册 + 统一 `ToolRegistry::dispatch`；schema 清洗、路径安全解析、命令 allowlist / hardline 阻断与沙箱审计元数据统一在分发层完成。
+- **开关与审批**：工具可按 Agent 启用/禁用并查看参数规模；「命令审批」独立成页，危险命令规则与豁免都在这里维护。
+
+<img src="docs/images/skills.webp" alt="本机 Skills" width="900" />
+
 - **Skills**：扫描 `~/.astro/skills/` 与 Agent 级目录的 `SKILL.md`，支持商店安装、版本更新、快照回滚、用量统计；Skill frontmatter 的 `astro_tools` 可 additive 开放工具集。
 - **MCP**：stdio 与 Streamable HTTP 两种传输、进程级连接池、自动重连、OAuth 凭据、Server 工具发现与调用；模型侧看到 `mcp__{server}` 命名空间，内部保留 `mcp__{server}__{tool}` 执行键。
 - **Hooks**：Plugin / Command / Gateway / Shell 四类执行面覆盖 `PreToolUse`、`PostToolUse`、`PreLlmCall`、`TransformToolResult` 等事件，可拦截、修改或注入上下文。
 
-<img src="docs/images/mcp.webp" alt="MCP Server 管理" width="560" />
+<img src="docs/images/mcp.webp" alt="MCP 服务器市场" width="900" />
 
 ### 5. 定时任务与可视化工作流
 
-<img src="docs/images/cron.webp" alt="定时任务" width="760" />
+<img src="docs/images/cron.webp" alt="定时任务与运行详情" width="900" />
 
 - **调度语法**：支持 `every:Nunit`（可叠加工作日过滤）、`custom:` 日历重复（小时 / 天 / 周 / 月 / 年）与五段 cron。
 - **稳定相位**：按本地墙钟记录起始相位，编辑或重启不会让「每 N 天」重新按 epoch 对齐。
 - **运行记录**：每次触发写入 `cron_v1.db`，任务完成、失败与需要确认时推送系统通知；ticker 每 30 秒认领到期任务。
 
-<img src="docs/images/workflow.webp" alt="可视化工作流编辑器" width="920" />
+<img src="docs/images/workflow.webp" alt="可视化工作流编辑器" width="900" />
 
 - **DAG 工作流**：43 类节点分属触发器、AI、多媒体生成、流程控制、数据处理与动作六类，支持条件分支、循环、子工作流嵌套（最大深度 5）。
 - **执行与变量**：Kahn 拓扑排序后同层并行执行，`{{var}}` 插值、嵌套 JSON 路径与条件表达式求值，失败可按 abort / skip / fallback 策略处理。
@@ -134,50 +146,62 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 
 ### 6. 记忆、工作区与文件空间
 
+<img src="docs/images/memory.webp" alt="记忆与每日笔记" width="900" />
+
 - **精炼记忆**：`MEMORY.md`（事实与偏好）与 `USER.md`（用户画像）由 `MemoryManager` 统一读写并生成快照，注入系统提示。
 - **Dreaming 入梦**：定时回顾历史会话，提炼新记忆进入待审批队列，用户或 Agent 审批后才落盘；记忆回顾会主动提出清理与合并建议。
+- **日历与轨迹**：记忆页用日历 + 时间轴浏览「本月轨迹」，每日笔记可随时复盘，长期记忆按待审批队列逐条确认。
 - **工作区**：`SOUL.md`、`AGENTS.md`、日记与生成物存放在 `~/.astro/workspace/`，项目级规则读项目根 `AGENTS.md` 与 `.astro/config.toml`。
 - **文件空间**：`artifacts.db` 登记 Agent 产出与用户上传文件并做磁盘对账，`knowledge.db` 提供标题与正文的 FTS5 检索，按 doc / image / code / sheet / av / pdf_ppt 分类过滤。
 - **上下文召回**：会话超过最近若干轮后，用 FTS5 从历史与知识库召回相关片段注入本轮上下文。
 
 ### 7. 用量洞察与可观测性
 
-<img src="docs/images/insights.webp" alt="用量与调用链洞察" width="820" />
+<img src="docs/images/usage.webp" alt="用量统计概览" width="900" />
 
 - **用量事件库**：`usage.db` 记录 tool / skill / mcp / cron / llm 五类事件，支持按月 / 季 / 年聚合、时间序列与多维排行。
 - **成本估算**：结合官方定价快照与 OpenRouter 模型目录（24h 缓存）给出每次调用的 USD 估价，或标记 `included` / `unknown`。
 - **调用链 Tracing**：按会话聚合 span 链（含输入输出、耗时与父子关系），并可导出 JSONL 供离线评测与 DSPy 使用。
 
+调用链标签页把一次会话的执行过程铺开：调用次数与耗时、每个工具/模型的去向、token 与费用明细，以及原始输入输出。
+
+<img src="docs/images/trace.webp" alt="调用链追踪" width="900" />
+
 ### 8. 内置浏览器与终端
 
-<img src="docs/images/browser.webp" alt="内置浏览器停靠面板" width="620" />
+<img src="docs/images/browser.webp" alt="浏览器设置与运行权限" width="900" />
 
 - **浏览器停靠**：右侧面板与 Agent 共享同一会话，Agent 可以打开、检查、点击并修改页面，用户可随时接管。
 - **终端停靠**：PTY 终端与 Agent 前台命令共用沙箱策略，输出可被模型读取；后台任务与前台命令在权限与网络策略上分别处理。
+- **浏览器权限**：独立 Chromium 会话、独立 profile 目录、默认窗口尺寸、本机回环地址与下载开关、已批准站点都在设置里集中管理。
 - **结构化拒绝**：沙箱拒绝、网络策略拒绝与普通失败分类明确，拒绝不会自动升级为更宽的权限。
 
-### 9. 桌面氛围、外观与桌宠
+<img src="docs/images/terminal.webp" alt="终端设置" width="900" />
 
-<img src="docs/images/preferences.webp" alt="外观、材质与壁纸偏好" width="820" />
+### 9. 外观、氛围与桌宠
+
+<img src="docs/images/appearance.webp" alt="外观：氛围配色、壁纸与应用图标" width="900" />
 
 - **外观系统**：材质强度、界面缩放、灵动配色、渐变外壳与壁纸组合成统一的视觉层；浅色 / 深色主题跟随系统或手动指定。
+- **壁纸与氛围**：可上传图片或让 AI 生成壁纸，设置填充模式与内容保护强度，最近使用的背景随手切换；应用图标可在蓝色 / 深蓝 / 黑色 / 白色等变体间切换。
 
-<img src="docs/images/ambience.webp" alt="壁纸与桌面氛围设置" width="820" />
-
-<img src="docs/images/desktop-pet.webp" alt="桌面宠物工作室" width="920" />
+<img src="docs/images/desktop-pet.webp" alt="桌面宠物" width="900" />
 
 - **桌面宠物**：从照片或参考图生成 Q 版形象，支持 APNG 与混合渲染，可设置造型、位置与大小，并作为常驻窗口待在桌面上。
 - **宠物即入口**：桌宠弹窗里可以处理审批与提问、查看任务进度，不必切回主窗口。
 - **界面导览**：首次进入提供 8 个区域的轻量导览（输入框、模型、工具栏、侧栏、工作区、插件、外观、设置），可跳过、可重看，不修改任何配置。
 
-### 10. 存储、诊断与安全边界
+### 10. 环境依赖、诊断与存储
 
-<img src="docs/images/storage.webp" alt="存储诊断" width="820" />
+<img src="docs/images/environment.webp" alt="环境依赖" width="900" />
 
+- **环境依赖**：uv / RTK / fd / ripgrep / Bun / Lark CLI 等外部工具链在设置里自检，缺失项给出复制即用的安装命令。
 - **存储诊断**：检查本机数据目录、数据库与配置文件是否完整，识别新装、部分迁移与失效配置，并给出可执行的清理预览。
 - **离线迁移**：`~/.astro` 的旧布局必须离线迁移，启动时发现旧目录或未完成迁移会拒绝初始化，避免生成空数据库。
 - **安全边界**：派生进程进平台原生沙箱；开启受管网络代理后，前台 terminal 与 code_exec 的出站流量只走绑定到该次调用的 loopback 代理，域名按 allow / deny / ask 裁决并做 DNS 重绑定防护。
 - **可审计**：沙箱与权限事件写入 append-only JSONL 审计日志，桌面端可查询。
+
+<img src="docs/images/diagnostics.webp" alt="诊断与错误详情" width="900" />
 
 ## 架构总览
 
@@ -396,18 +420,37 @@ Agent 在回合继续运行时可以调用 `request_user_input_async` 发出一�
 
 路径统一由 `home::layout` 提供，业务模块不自行拼接领域目录。旧布局必须离线迁移；启动时发现旧目录或未完成的迁移会拒绝初始化，避免生成空的平行数据库。详见 [本机数据的领域布局](docs/home-layout.md) 与 [全局设置](docs/global-settings.md)。
 
-## README 截图如何生成
+## README 截图如何维护
 
-截图来自 `apps/desktop` 的 Storybook 组件（真实渲染，只替换原生 transport），因此可复现且不含本机数据：
+`docs/images/` 下的图片都是从运行中的 App 窗口截取的真机画面，文件名即模块名：
+
+| 文件 | 对应界面 |
+| --- | --- |
+| `app-overview.webp` | 主界面：欢迎页 + 导航侧栏 + 终端停靠 |
+| `chat-answer.webp` / `context-usage.webp` | 对话长回答 / 上下文占用浮层 |
+| `chat-settings.webp` | 对话设置：显示详细程度、面板显示、忙碌时发送模式 |
+| `model-picker.webp` / `providers.webp` / `model-market.webp` | 模型选择器 / Provider 配置 / 模型市场 |
+| `tools.webp` / `skills.webp` / `mcp.webp` | 内置工具 / 本机 Skills / MCP 市场 |
+| `cron.webp` / `workflow.webp` | 定时任务与运行详情 / 可视化工作流 |
+| `memory.webp` | 记忆、日历与每日笔记 |
+| `usage.webp` / `trace.webp` | 用量统计 / 调用链追踪 |
+| `browser.webp` / `terminal.webp` | 浏览器设置 / 终端设置 |
+| `appearance.webp` / `desktop-pet.webp` | 外观与壁纸 / 桌面宠物 |
+| `environment.webp` / `diagnostics.webp` | 环境依赖 / 诊断与错误详情 |
+
+更新流程：
 
 ```bash
-cd apps/desktop
-npm run build-storybook                        # 生成 storybook-static
-node scripts/capture-readme-shots.mjs          # 输出 docs/images/*.webp
-node scripts/capture-readme-shots.mjs skills   # 只重截某几张
+# 1. 启动 App（或用打包好的 .app 窗口截图）
+cd apps/desktop && npm run tauri dev
+
+# 2. 把原图放进 docs/images/raw/（该目录已 gitignore，不会进仓库）
+
+# 3. 转成宽度 1600 的 WebP 覆盖同名文件
+cwebp -q 90 -alpha_q 100 docs/images/raw/<原图>.png -o docs/images/tools.webp
 ```
 
-脚本默认把 PNG 转成 WebP（安装 `cwebp` 时自动启用）；未安装则保留 PNG。截图清单（Story、裁剪区域、主题）都写在脚本顶部的 `SHOTS` 数组里。
+需要不带任何本机数据的组件级截图时，可以改用 `apps/desktop` 的 Storybook（`npm run storybook`，真实组件渲染、只替换原生 transport）。
 
 ## 文档索引
 

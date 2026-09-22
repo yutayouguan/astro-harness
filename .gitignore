@@ -41,5 +41,8 @@ __pycache__/
 # Brainstorm visual companion
 .superpowers/
 
+# Raw README screenshot sources (kept locally, not published)
+docs/images/raw/
+
 # Git worktrees
 .worktrees/
