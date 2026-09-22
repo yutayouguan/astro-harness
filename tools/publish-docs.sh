@@ -6,12 +6,15 @@
 #
 # 快照规则：
 #   - 只取 README.md 与 docs/**（跳过 docs/images/raw 与 .DS_Store）
+#   - 默认跳过内部过程文档 docs/superpowers/**、docs/codex/**，并把指向它们的链接降级为纯文本
+#     （PUBLISH_INTERNAL_DOCS=1 可一并公开）
 #   - 路径脱敏：<repo 绝对路径> → <repo>，/Users/<me> → ~，并去掉本机用户名
 #   - 在 README 顶部加「本仓库只发布文档」说明
 #   - 独立 git 历史（不含源码提交），main 分支，force-push 覆盖
 set -euo pipefail
 
 PUBLIC_REPO="${PUBLIC_REPO:-yutayouguan/astro-agent-docs}"
+PUBLISH_INTERNAL_DOCS="${PUBLISH_INTERNAL_DOCS:-0}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOME_DIR="${HOME:-/Users/$(whoami)}"
 BANNER='> **说明**：本仓库只发布 Astro Agent 的**文档与界面截图**，源代码不在此仓库公开。'
@@ -33,10 +36,41 @@ echo "==> 快照目录：$STAGE"
 
 mkdir -p "$STAGE/docs"
 cp "$REPO_ROOT/README.md" "$STAGE/README.md"
-rsync -a \
-  --exclude 'images/raw/' \
-  --exclude '.DS_Store' \
-  "$REPO_ROOT/docs/" "$STAGE/docs/"
+RSYNC_ARGS=(-a --exclude 'images/raw/' --exclude '.DS_Store')
+if [ "$PUBLISH_INTERNAL_DOCS" != "1" ]; then
+  RSYNC_ARGS+=(--exclude 'superpowers/' --exclude 'codex/')
+fi
+rsync "${RSYNC_ARGS[@]}" "$REPO_ROOT/docs/" "$STAGE/docs/"
+
+if [ "$PUBLISH_INTERNAL_DOCS" != "1" ]; then
+  echo "==> 降级指向内部文档的链接（superpowers/、codex/）"
+  python3 - "$STAGE" <<'PY'
+import os, re, sys
+
+stage = sys.argv[1]
+link = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+hit = 0
+for root, _dirs, files in os.walk(stage):
+    for name in files:
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(root, name)
+        text = open(path, encoding="utf-8").read()
+
+        def downgrade(match):
+            global hit
+            target = match.group(2)
+            if "superpowers/" not in target and not re.search(r"codex/20\d\d-", target):
+                return match.group(0)
+            hit += 1
+            return match.group(1)
+
+        updated = link.sub(downgrade, text)
+        if updated != text:
+            open(path, "w", encoding="utf-8").write(updated)
+print(f"    降级 {hit} 个链接")
+PY
+fi
 
 echo "==> 脱敏本机路径"
 find "$STAGE" -type f \( -name '*.md' -o -name '*.json' -o -name '*.toml' -o -name '*.sh' -o -name '*.txt' \) -print0 |

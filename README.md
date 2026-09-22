@@ -18,6 +18,7 @@
 ## 目录
 
 - [这是什么](#这是什么)
+- [Agent = Model + Harness](#agent--model--harness)
 - [界面速览](#界面速览)
 - [功能模块](#功能模块)
   - [对话与 Agent 运行时](#1-对话与-agent-运行时)
@@ -62,6 +63,39 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 | 记忆 | MEMORY.md / USER.md 精炼记忆、Dreaming 入梦、待审批记忆队列、线程检查点与历史回读 |
 | 桌面 | 系统托盘常驻、桌面宠物、壁纸与氛围、内置浏览器与终端、Realtime 语音会话、中英双语 |
 | 安全 | 平台原生沙箱（Seatbelt / bubblewrap / Job Object）、受管网络代理、append-only 审计日志 |
+
+## Agent = Model + Harness
+
+模型只负责「想」，其余全在 Harness 里。同一个模型放进不同质量的 Harness，表现可以差一个量级：**Astro Agent 的产品定位，就是把 Harness 做完整。**
+
+```text
+Agent = Model + Harness
+
+  Model            只负责推理与生成
+
+  Harness
+   ├── Loop          执行循环：推理 → 行动 → 观察，直到完成 / 中断 / 耗尽
+   ├── Context       上下文与记忆：决定模型每一步能看见什么
+   ├── Tools         工具中介：把意图翻译成受控的真实执行
+   ├── Safety        权限与安全：审批、沙箱、路径与网络边界
+   ├── Recovery      错误与恢复：超时、取消、fallback、崩溃重启
+   ├── Observability 可观测与审计：事件、用量、成本、审批与拒绝
+   └── Environment   运行环境：终端、浏览器、MCP、媒体、Cron、工作流、桌宠
+```
+
+七个维度在本项目里的落点：
+
+| Harness 维度 | 含义 | 落点 |
+| --- | --- | --- |
+| **Loop** | 执行循环：推理 → 行动 → 观察，直到完成 / 中断 / 耗尽 | `AstroThread → SessionTask → TurnContext → StepContext`；一次 Step 冻结 provider / model / 工具路由，单条消息默认 90 轮工具预算，随时可中断、可续接 |
+| **Context** | 上下文与记忆：决定模型每一步能看见什么 | 三层 Prompt（稳定指令 / 动态上下文 / 原生工具 schema）、FTS5 召回、prune→摘要→head/tail 三阶段压缩、线程检查点 `notes`、MEMORY.md / USER.md 与 Dreaming |
+| **Tools** | 工具中介：把意图翻译成受控的真实执行 | `ToolRegistry` + 三级暴露 + BM25 检索；内置终端 / 文件 / 代码执行 / 浏览器 / 记忆 / 子 Agent / 媒体工具，MCP 与 Skills 按轮热加载 |
+| **Safety** | 权限与安全：审批、沙箱、路径与网络边界 | 三级权限画像、Seatbelt / bubblewrap / Job Object 平台沙箱、受管 CONNECT 代理与 DNS 重绑定防护、危险命令分类与审批、append-only 审计 |
+| **Recovery** | 错误与恢复：超时、取消、fallback、崩溃重启 | 首个 token 前的模型 fallback 链、工具超时与取消、结构化拒绝分类（不误升级权限）、rollout + 检查点跨重启续接 |
+| **Observability** | 可观测与审计：事件、用量、成本、审批与拒绝 | 统一 `EventMsg` → rollout → gRPC/Tauri 投影的单一事件流，用量事件库与成本估算、调用链 Tracing、安全审计日志 |
+| **Environment** | 运行环境：终端、浏览器、MCP、媒体、Cron、工作流、桌宠 | PTY 终端与浏览器停靠、MCP 进程池、图像 / 视频 / 音频 / 语音生成与理解、Cron 定时任务与 43 类节点工作流、桌面宠物与壁纸氛围 |
+
+设计与契约见 [Agent Harness 总体架构](docs/03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)，代码级契约见 [Agent Harness 执行外壳详细设计](docs/04-详细设计阶段/01-核心引擎层/14-Agent-Harness执行外壳详细设计.md)。
 
 ## 界面速览
 
