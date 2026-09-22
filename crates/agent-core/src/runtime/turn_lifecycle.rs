@@ -36,6 +36,14 @@ where
     })
 }
 
+/// 仅当本轮真正新起一个 turn 时才应排队 `@Skill` 待加载技能。
+///
+/// `Steer` 模式与 not-idle 的 `StartIfIdle` / `StartOrSteer` 都不会进入
+/// `finish_prepared_turn`，因此不能排队，否则技能名会残留到下一轮被误加载。
+fn should_queue_loaded_skills(active_turn_id: Option<&str>, mode: &TurnInputMode) -> bool {
+    active_turn_id.is_none() && !matches!(mode, TurnInputMode::Steer { .. })
+}
+
 fn discovered_deferred_tool_names(
     history: &[agent_protocol::ResponseItem],
 ) -> HashSet<types::ToolName> {
@@ -233,7 +241,11 @@ impl Session {
                 .await
                 .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         }
-        self.queue_loaded_skills(loaded_skills).await;
+        // 仅当本轮真正新起一个 turn 时才排队技能（steer / not-idle 不消费，
+        // 否则会残留到下一轮导致误加载）。
+        if should_queue_loaded_skills(active_turn_id.as_deref(), &mode) {
+            self.queue_loaded_skills(loaded_skills).await;
+        }
         match mode {
             TurnInputMode::StartOrSteer => match active_turn_id {
                 Some(turn_id) => {
@@ -1112,6 +1124,34 @@ mod tests {
                 client_message_id: None,
             }
         );
+    }
+
+    #[test]
+    fn should_queue_loaded_skills_only_for_a_fresh_start() {
+        // 新起 turn 才排队
+        assert!(should_queue_loaded_skills(
+            None,
+            &TurnInputMode::StartOrSteer
+        ));
+        assert!(should_queue_loaded_skills(
+            None,
+            &TurnInputMode::StartIfIdle
+        ));
+        // Steer / not-idle 不排队，避免残留到下一轮
+        assert!(!should_queue_loaded_skills(
+            None,
+            &TurnInputMode::Steer {
+                expected_turn_id: "t".into(),
+            },
+        ));
+        assert!(!should_queue_loaded_skills(
+            Some("active"),
+            &TurnInputMode::StartOrSteer,
+        ));
+        assert!(!should_queue_loaded_skills(
+            Some("active"),
+            &TurnInputMode::StartIfIdle,
+        ));
     }
 
     #[tokio::test]
