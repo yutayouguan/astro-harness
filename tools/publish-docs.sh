@@ -5,8 +5,9 @@
 #   PUBLIC_REPO=owner/name ./tools/publish-docs.sh
 #
 # 快照规则：
-#   - 只取 README.md 与 docs/**（跳过 docs/images/raw 与 .DS_Store）
-#   - 默认跳过内部过程文档 docs/superpowers/**、docs/codex/**，并把指向它们的链接降级为纯文本
+#   - 只取 git 已跟踪的 README.md 与 docs/**（未提交的草稿一律不发布）
+#   - 默认跳过内部过程文档 docs/superpowers/**、docs/codex/**、docs/plans/**，
+#     并把指向它们的链接降级为纯文本
 #     （PUBLISH_INTERNAL_DOCS=1 可一并公开）
 #   - 路径脱敏：<repo 绝对路径> → <repo>，/Users/<me> → ~，并去掉本机用户名
 #   - 在 README 顶部加「本仓库只发布文档」说明
@@ -15,40 +16,51 @@ set -euo pipefail
 
 PUBLIC_REPO="${PUBLIC_REPO:-yutayouguan/astro-agent-docs}"
 PUBLISH_INTERNAL_DOCS="${PUBLISH_INTERNAL_DOCS:-0}"
+INTERNAL_DOC_DIRS=(docs/superpowers/ docs/codex/ docs/plans/)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOME_DIR="${HOME:-/Users/$(whoami)}"
 BANNER='> **说明**：本仓库只发布 Astro Agent 的**文档与界面截图**，源代码不在此仓库公开。'
 SOURCE_NOTE='> 下面的构建与运行命令需要 Astro Agent 的完整源码，本仓库只包含文档。'
 
-STAGE="$(mktemp -d)"
+WORK="$(mktemp -d)"
+STAGE="$WORK/site"
 cleanup() {
   local status=$?
   if [ "$status" -eq 0 ] && [ "${KEEP_STAGE:-0}" != "1" ]; then
-    rm -rf "$STAGE"
+    rm -rf "$WORK"
     echo "==> 已清理快照目录（KEEP_STAGE=1 可保留）"
   else
-    echo "==> 快照保留在 ${STAGE}"
+    echo "==> 快照保留在 ${WORK}"
   fi
   return "$status"
 }
 trap cleanup EXIT
 echo "==> 快照目录：$STAGE"
 
-mkdir -p "$STAGE/docs"
-cp "$REPO_ROOT/README.md" "$STAGE/README.md"
-RSYNC_ARGS=(-a --exclude 'images/raw/' --exclude '.DS_Store')
+mkdir -p "$STAGE"
+
+# 只发布已提交内容：未跟踪文件（草稿、个人笔记）不进公开快照
+LIST="$WORK/files.txt"
+# core.quotePath=false：中文路径按原文输出，交给 rsync --files-from 解析
+git -C "$REPO_ROOT" -c core.quotePath=false ls-files README.md docs >"$LIST"
 if [ "$PUBLISH_INTERNAL_DOCS" != "1" ]; then
-  RSYNC_ARGS+=(--exclude 'superpowers/' --exclude 'codex/')
+  for dir in "${INTERNAL_DOC_DIRS[@]}"; do
+    grep -v "^${dir}" "$LIST" >"$LIST.tmp" || true
+    mv "$LIST.tmp" "$LIST"
+  done
 fi
-rsync "${RSYNC_ARGS[@]}" "$REPO_ROOT/docs/" "$STAGE/docs/"
+grep -v '/\.DS_Store$' "$LIST" >"$LIST.tmp" || true
+mv "$LIST.tmp" "$LIST"
+rsync -a --files-from="$LIST" "$REPO_ROOT/" "$STAGE/"
 
 if [ "$PUBLISH_INTERNAL_DOCS" != "1" ]; then
-  echo "==> 降级指向内部文档的链接（superpowers/、codex/）"
+  echo "==> 降级指向内部文档的链接（superpowers/、codex/、plans/）"
   python3 - "$STAGE" <<'PY'
 import os, re, sys
 
 stage = sys.argv[1]
 link = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+internal = re.compile(r"(^|/)(superpowers|codex|plans)/")
 hit = 0
 for root, _dirs, files in os.walk(stage):
     for name in files:
@@ -60,7 +72,7 @@ for root, _dirs, files in os.walk(stage):
         def downgrade(match):
             global hit
             target = match.group(2)
-            if "superpowers/" not in target and not re.search(r"codex/20\d\d-", target):
+            if not internal.search(target):
                 return match.group(0)
             hit += 1
             return match.group(1)
