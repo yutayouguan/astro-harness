@@ -420,6 +420,7 @@ pub struct StartChatRequest {
     pub interaction_mode: Option<String>,
     pub project_id: Option<String>,
     pub project_root: Option<String>,
+    pub loaded_skills: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -631,6 +632,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         interaction_mode,
         project_id,
         project_root,
+        loaded_skills,
     } = request;
     let sid = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let use_memory = use_memory.unwrap_or(true);
@@ -914,6 +916,7 @@ pub async fn start_chat(app: AppHandle, request: StartChatRequest) -> Result<Str
         rollback_keep_chat_bubbles: keep_chat_bubbles.map(|keep| keep.max(0) as u32),
         persistent_instructions: persistent_instructions.unwrap_or_default(),
         model_profile_json,
+        loaded_skills: loaded_skills.unwrap_or_default(),
     };
 
     let bridge = managed_bridge(&app).inner().clone();

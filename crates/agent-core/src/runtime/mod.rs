@@ -1588,6 +1588,58 @@ impl Session {
         self.lock_state().pending_inject_context = Some(ctx.into());
     }
 
+    /// 取出并清空本轮待 eager 加载的技能名。
+    pub(crate) async fn take_loaded_skills(&self) -> Vec<String> {
+        std::mem::take(&mut self.lock_state().pending_loaded_skills)
+    }
+
+    /// 排队本轮 `@Skill` 待加载技能名（回合开始前由 `finish_prepared_turn` 消费并注入 system prompt）。
+    pub(crate) async fn queue_loaded_skills(&self, names: Vec<String>) {
+        let mut state = self.lock_state();
+        for name in names {
+            if !name.trim().is_empty() && !state.pending_loaded_skills.iter().any(|n| n == &name) {
+                state.pending_loaded_skills.push(name);
+            }
+        }
+    }
+
+    /// 从本轮 `@Skill` 提及加载 SKILL.md 正文并拼成结构化 system 片段；
+    /// 同时按 frontmatter `astro_tools` additive 激活工具集（与 `skills(action=load)` 对齐）。
+    ///
+    /// 正文注入 system prompt（每回合构建一次），因此跨工具轮次保持可见，
+    /// 且不写入 canonical history（不违反相邻 user 角色去重不变量）。
+    pub(crate) fn load_skill_context_body(&self, names: &[String]) -> Option<String> {
+        let config = self.skill_config_overrides();
+        let mut blocks = Vec::new();
+        for raw in names {
+            let name = raw.trim();
+            if name.is_empty() {
+                continue;
+            }
+            let loaded = match skills::load_skill_by_name_with_config(name, &config) {
+                Ok(loaded) => loaded,
+                Err(error) => {
+                    tracing::warn!(skill = name, error = %error, "eager skill load failed");
+                    continue;
+                }
+            };
+            if !loaded.metadata.astro_tools.is_empty() {
+                self.services
+                    .tool_registry
+                    .write()
+                    .expect("tool registry lock poisoned")
+                    .activate_skill_toolsets(&loaded.metadata.astro_tools);
+            }
+            let content =
+                types::truncate_tool_result(&loaded.content, types::MAX_TOOL_RESULT_BYTES);
+            let path = loaded.path.to_string_lossy().into_owned();
+            blocks.push(format!(
+                "<skill>\n<name>{name}</name>\n<path>{path}</path>\n{content}\n</skill>"
+            ));
+        }
+        (!blocks.is_empty()).then(|| blocks.join("\n\n"))
+    }
+
     /// 当前会话轮次序号（从 1 起，未开始为 0）。
     pub async fn session_turn(&self) -> usize {
         self.lock_state().turn.current_turn()

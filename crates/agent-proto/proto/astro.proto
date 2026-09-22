@@ -160,6 +160,8 @@ message ChatRequest {
   string persistent_instructions = 43;
   // 模型目录运行时能力（types::ModelProfile JSON）。
   string model_profile_json = 44;
+  // 前端 @Skill / /skill 解析出的待加载技能名列表；后端在回合开始前 eager 加载并注入。
+  repeated string loaded_skills = 45;
 }
 
 // 聊天多模态图片附件（OpenAI 兼容 image_url 的 data URL 原料）。

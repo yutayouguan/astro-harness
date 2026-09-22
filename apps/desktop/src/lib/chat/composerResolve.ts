@@ -1,14 +1,12 @@
 /**
- * 发送前解析 `/技能` 与 `@提及`，对齐 Hermes：
- * - `/skill`：把 SKILL.md 注入为用户消息正文（非 system，保护 prompt cache）
+ * 发送前解析 `/技能` 与 `@提及`：
+ * - `/skill`：解析出待加载技能名，交给后端在回合开始前 eager 加载并注入
  * - 可链式多个前导 `/skill`（最多 5 个），其后为用户指令
  * - `@Agent`：切换全局活跃 Agent（本轮起用新 session 绑定）
- * - `@Skill`：同 `/skill`，注入全文
+ * - `@Skill`：同 `/skill`，只传技能名，不再把 SKILL.md 全文拼进用户消息
  * - `@MCP`：启用对应 MCP server（写入全局 `.astro/config.toml`）
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import type { SkillContent } from "../../types";
 import { parseSlashInput, resolveBuiltinSlash } from "./composerCommands.ts";
 
 const MAX_LEADING_SKILLS = 5;
@@ -22,7 +20,7 @@ export type MentionCatalog = {
 export type ResolvedComposerTurn = {
   /** 气泡展示用（去掉前导 /skill，保留可读指令） */
   displayText: string;
-  /** 发给模型的正文（含技能全文） */
+  /** 发给模型的正文（干净的用户指令，不含技能全文） */
   modelText: string;
   /** 需要切换到的 Agent id */
   switchAgentId?: string;
@@ -122,32 +120,20 @@ export function peelAtMentions(
   };
 }
 
-async function loadSkillMarkdown(name: string): Promise<string | null> {
-  try {
-    const dto = await invoke<SkillContent>("get_skill_content", { name });
-    const body = dto.content?.trim();
-    if (!body) return null;
-    return body;
-  } catch {
-    return null;
-  }
-}
-
-/** Hermes 风格：技能正文作为用户消息块注入 */
-export function formatSkillInjection(
-  loaded: { name: string; content: string }[],
+/**
+ * 计算发给模型的正文：技能全文不再拼接进用户消息，由后端 eager 注入。
+ * 仅当用户只 @ 了技能、没有附加指令时，给一个简短的中性提示。
+ */
+export function resolveModelText(
   instruction: string,
+  hasLoadedSkills: boolean,
+  rawTrimmed: string,
 ): string {
-  if (loaded.length === 0) return instruction;
-
-  const blocks = loaded
-    .map((s) => `Please follow this skill (${s.name}):\n\n${s.content.trim()}`)
-    .join("\n\n---\n\n");
-
-  if (!instruction) {
-    return `${blocks}\n\n(The skill is loaded. Ask what the user needs next if the task is unclear.)`;
+  if (instruction.trim()) return instruction;
+  if (hasLoadedSkills) {
+    return "(The skill is loaded. Ask what the user needs next if the task is unclear.)";
   }
-  return `${blocks}\n\n---\n\nUser request:\n${instruction}`;
+  return rawTrimmed;
 }
 
 /**
@@ -192,12 +178,6 @@ export async function resolveComposerTurn(
     if (!uniqueSkills.some((x) => norm(x) === norm(n))) uniqueSkills.push(n);
   }
 
-  const loaded: { name: string; content: string }[] = [];
-  for (const name of uniqueSkills.slice(0, MAX_LEADING_SKILLS)) {
-    const content = await loadSkillMarkdown(name);
-    if (content) loaded.push({ name, content });
-  }
-
   const instruction = peeledAt.rest;
   const displayText =
     uniqueSkills.length > 0
@@ -206,7 +186,11 @@ export async function resolveComposerTurn(
           .join(" ")
       : instruction || trimmed;
 
-  const modelText = formatSkillInjection(loaded, instruction || displayText);
+  const modelText = resolveModelText(
+    instruction,
+    uniqueSkills.length > 0,
+    trimmed,
+  );
 
   const primaryAgent = peeledAt.agents[0];
 
@@ -217,6 +201,6 @@ export async function resolveComposerTurn(
     switchAgentName: primaryAgent?.name,
     enableMcpIds: peeledAt.mcps.map((m) => m.id),
     enableMcpNames: peeledAt.mcps.map((m) => m.name),
-    loadedSkills: loaded.map((l) => l.name),
+    loadedSkills: uniqueSkills.slice(0, MAX_LEADING_SKILLS),
   };
 }

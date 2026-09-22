@@ -200,6 +200,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,
     inject: Option<&str>,
+    loaded_skills: Option<&str>,
     skill_index: &[(&str, &str)],
     dynamic_ctx: &DynamicContext,
     runtime: RuntimePromptLayers<'_>,
@@ -229,6 +230,12 @@ pub(crate) fn assemble_prompt_contract_with_usage(
         "skills",
         PromptBuilder::new().with_skills_index(skill_index).build(),
     );
+    let loaded_skills = RenderedSource::new(
+        "loaded_skills",
+        loaded_skills
+            .map(|text| titled("# 已加载 Skills", text))
+            .unwrap_or_default(),
+    );
     let mcp = RenderedSource::new("mcp", runtime.mcp_instructions);
     let timestamp = RenderedSource::new("timestamp", runtime.timestamp);
     let dynamic = RenderedSource::new("dynamic", dynamic_ctx.render());
@@ -251,6 +258,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     user.allocate(budget, &memory);
     user.allocate(budget, &daily);
     developer.allocate(budget, &skills);
+    developer.allocate(budget, &loaded_skills);
     developer.allocate(budget, &mcp);
     user.allocate(budget, &timestamp);
     user.allocate(budget, &dynamic);
@@ -258,7 +266,7 @@ pub(crate) fn assemble_prompt_contract_with_usage(
     let base = base.render(&["soul", "identity", "tool_guidance"]);
     // 在活跃协作模式之前渲染能力说明，以便模式可以覆盖通用使用指引
     // 而不丢失其先前的预算预留。
-    let developer = developer.render(&["skills", "mcp", "mode"]);
+    let developer = developer.render(&["skills", "loaded_skills", "mcp", "mode"]);
     let user = user.render(&[
         "agents",
         "thread_checkpoint",
@@ -312,6 +320,7 @@ pub fn assemble_prompt_contract(
     budget: &mut ContextBudget,
     static_ctx: &StaticContext,
     inject: Option<&str>,
+    loaded_skills: Option<&str>,
     skill_index: &[(&str, &str)],
     dynamic_ctx: &DynamicContext,
     runtime: RuntimePromptLayers<'_>,
@@ -320,6 +329,7 @@ pub fn assemble_prompt_contract(
         budget,
         static_ctx,
         inject,
+        loaded_skills,
         skill_index,
         dynamic_ctx,
         runtime,
@@ -357,6 +367,7 @@ mod tests {
             &mut budget,
             &static_ctx,
             Some("HOOK_CONTEXT"),
+            None,
             &[("example-skill", "Example skill")],
             &dynamic,
             runtime("DEVELOPER_POLICY", "MCP_INSTRUCTIONS"),
@@ -456,6 +467,7 @@ mod tests {
             &mut budget,
             &static_ctx,
             Some(hook),
+            None,
             &[("huge-skill", huge_skill.as_str())],
             &dynamic,
             runtime(mode, &huge_mcp),
@@ -487,6 +499,7 @@ mod tests {
             &mut budget,
             &static_ctx,
             Some("HOOK"),
+            None,
             &[("skill", "description")],
             &DynamicContext::from_recalled(1, "RECALL"),
             runtime("MODE", "MCP"),

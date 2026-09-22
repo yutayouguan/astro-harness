@@ -324,6 +324,7 @@ export function useSend(deps: UseSendDeps) {
       // resolve /skill and @mentions
       let displayText = text;
       let modelBody = text;
+      let loadedSkills: string[] = [];
       const sid = sessionId ?? crypto.randomUUID();
       sendStartLockRef.current = true;
       try {
@@ -358,6 +359,7 @@ export function useSend(deps: UseSendDeps) {
 
             displayText = resolved.displayText || text;
             modelBody = resolved.modelText || text;
+            loadedSkills = resolved.loadedSkills;
 
             if (resolved.enableMcpIds.length > 0) {
               try {
@@ -1096,6 +1098,7 @@ export function useSend(deps: UseSendDeps) {
             dataBase64: a.dataBase64 ?? null,
             localPath: uploadedPaths.get(a.id) ?? a.localPath ?? null,
           })),
+          loadedSkills,
         });
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");

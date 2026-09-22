@@ -238,12 +238,13 @@ impl AgentLoop {
 
     /// 构造三层契约：稳定基础指令、带角色动态上下文、外置原生工具 schema。
     pub async fn build_prompt_contract(&self) -> crate::prompt::PromptContract {
-        self.build_prompt_contract_with_inject(None).await
+        self.build_prompt_contract_with_inject(None, None).await
     }
 
     pub(crate) async fn build_prompt_contract_with_inject(
         &self,
         inject: Option<&str>,
+        loaded_skills: Option<&str>,
     ) -> crate::prompt::PromptContract {
         skills::set_workspace_override(&self.workspace_dir());
         let (static_ctx, dynamic_ctx, skill_pairs) = self.system_prompt_parts().await;
@@ -289,6 +290,7 @@ impl AgentLoop {
             &mut budget,
             &static_ctx,
             inject,
+            loaded_skills,
             &skill_index,
             &dynamic_ctx,
             crate::prompt::contract::RuntimePromptLayers {

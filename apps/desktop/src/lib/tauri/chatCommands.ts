@@ -38,6 +38,7 @@ export type StartChatRequest = {
   interactionMode: ChatInteractionMode;
   projectId: string;
   attachments: StartChatAttachment[];
+  loadedSkills?: string[];
 };
 
 export type ThreadAttachment = {

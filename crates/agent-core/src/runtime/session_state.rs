@@ -23,6 +23,8 @@ pub(crate) struct SessionState {
     pub(crate) compression: compression_state::CompressionState,
     pub(crate) turn: turn_budget::TurnState,
     pub(crate) pending_inject_context: Option<String>,
+    /// `@Skill` 本轮待 eager 加载并注入的技能名；消费一次后清空。
+    pub(crate) pending_loaded_skills: Vec<String>,
     pub(crate) pending_learning_nudge: Option<String>,
     /// 用于 WorldState 差分比较的最新持久化角色上下文基线。
     pub(crate) prompt_context_snapshot: Option<Value>,
@@ -62,6 +64,7 @@ impl SessionState {
             compression: compression_state::CompressionState::default(),
             turn: turn_budget::TurnState::default(),
             pending_inject_context: None,
+            pending_loaded_skills: Vec::new(),
             pending_learning_nudge: None,
             prompt_context_snapshot: None,
             prompt_context_history: Vec::new(),

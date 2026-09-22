@@ -197,6 +197,7 @@ impl Session {
         let TurnInputRequest {
             input,
             rollback_keep_chat_bubbles,
+            loaded_skills,
             thread_settings,
         } = request;
         if input.is_empty()
@@ -232,6 +233,7 @@ impl Session {
                 .await
                 .map_err(|error| TurnInputError::Invalid(error.to_string()))?;
         }
+        self.queue_loaded_skills(loaded_skills).await;
         match mode {
             TurnInputMode::StartOrSteer => match active_turn_id {
                 Some(turn_id) => {
@@ -598,8 +600,10 @@ impl Session {
         self.lock_state().compression.last_recalled_context = format_recalled_context(&recalled);
 
         self.increment_turn().await;
+        let loaded_skills = self.take_loaded_skills().await;
+        let loaded_skills_body = self.load_skill_context_body(&loaded_skills);
         let prompt = self
-            .build_prompt_contract_with_inject(admission_context)
+            .build_prompt_contract_with_inject(admission_context, loaded_skills_body.as_deref())
             .await;
         self.persist_prompt_context_if_changed(&prompt).await;
         let system_prompt = prompt.flattened();
@@ -1108,6 +1112,40 @@ mod tests {
                 client_message_id: None,
             }
         );
+    }
+
+    #[tokio::test]
+    async fn eager_skill_mention_injects_structured_fragment_and_activates_toolset() {
+        let dir = TempDir::new().unwrap();
+        let skill_dir = dir.path().join("skills/eager-skill");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        let skill_md = skill_dir.join("SKILL.md");
+        std::fs::write(
+            &skill_md,
+            "---\nname: eager-skill\ndescription: test\nastro_tools: [exec_command]\n---\n# Eager Skill\n\nDo the thing.\n",
+        )
+        .unwrap();
+
+        let config = crate::runtime::Config::with_defaults(dir.path().to_path_buf());
+        let session = Session::with_session_id(config, "eager-skill-mention".into())
+            .await
+            .unwrap();
+        session.set_skill_config_overrides(vec![(skill_md, true)]);
+
+        let body = session
+            .load_skill_context_body(&["eager-skill".to_string()])
+            .expect("skill body should be produced");
+
+        assert!(body.contains("<name>eager-skill</name>"));
+        assert!(body.contains("Do the thing."));
+        // 旧行为是把全文拼进用户消息；新行为必须不再出现该 flatten 标记。
+        assert!(!body.contains("Please follow this skill"));
+        assert!(session
+            .tool_registry()
+            .await
+            .skill_override_toolsets()
+            .iter()
+            .any(|ts| ts == "exec_command"));
     }
 
     #[tokio::test]

@@ -28,6 +28,10 @@ pub struct TurnInputRequest {
     /// accepting the new input. Used by edited-input resubmission; absent for normal turns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rollback_keep_chat_bubbles: Option<u32>,
+    /// Skill names mentioned via `@Skill` / `/skill`; loaded eagerly at turn start
+    /// and injected as structured context (not flattened into the user message).
+    #[serde(default)]
+    pub loaded_skills: Vec<String>,
     /// Persistent settings applied only after this input is accepted.
     #[serde(skip, default)]
     pub thread_settings: ThreadSettingsOverrides,

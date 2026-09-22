@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  formatSkillInjection,
   peelAtMentions,
   peelLeadingSkillSlashes,
+  resolveModelText,
 } from "./composerResolve.ts";
 
 test("peels leading skill slashes and keeps the rest", () => {
@@ -43,12 +43,14 @@ test("peels @agent @skill @mcp", () => {
   assert.equal(r.rest, "use with please");
 });
 
-test("formats skill injection like Hermes user message", () => {
-  const out = formatSkillInjection(
-    [{ name: "demo", content: "# Demo\nDo X" }],
-    "run it",
+test("resolves clean model text without inlining skill content", () => {
+  // 有指令时只保留用户指令，不再拼进 SKILL.md 全文
+  assert.equal(
+    resolveModelText("帮我查天气", true, "@aihot 帮我查天气"),
+    "帮我查天气",
   );
-  assert.match(out, /Please follow this skill \(demo\):/);
-  assert.match(out, /# Demo\nDo X/);
-  assert.match(out, /User request:\nrun it/);
+  // 只 @ 了技能、没有附加指令时给中性提示
+  assert.match(resolveModelText("", true, "@aihot"), /skill is loaded/);
+  // 无技能提及时原样返回
+  assert.equal(resolveModelText("hello", false, "hello"), "hello");
 });

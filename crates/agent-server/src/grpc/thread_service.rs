@@ -488,6 +488,7 @@ fn turn_request_from_chat_with_requirement(
                 .then(|| chat.client_message_id.trim().to_string()),
         }],
         rollback_keep_chat_bubbles: chat.rollback_keep_chat_bubbles,
+        loaded_skills: chat.loaded_skills.clone(),
         thread_settings: Default::default(),
     })
 }
