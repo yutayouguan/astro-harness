@@ -22,6 +22,7 @@ import {
 import { MorphToggleIcon } from "../icons/MorphIcon";
 import {
   dispatchSessionsChanged,
+  getPendingSessionTitle,
   subscribeSessionsChanged,
   type SessionListKind,
 } from "../../lib/chat/sessionManagement";
@@ -370,7 +371,10 @@ function SessionItem({
   });
   void unreadTick;
 
-  const title = s.summary || t("chat.rightPanel.untitledSession");
+  const title =
+    s.summary?.trim() ||
+    getPendingSessionTitle(s.sessionId) ||
+    t("chat.rightPanel.untitledSession");
 
   const measureTitle = useCallback(() => {
     const el = titleRef.current;

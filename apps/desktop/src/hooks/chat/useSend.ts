@@ -18,7 +18,11 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
-import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
+import {
+  dispatchSessionsChanged,
+  setPendingSessionTitle,
+} from "../../lib/chat/sessionManagement";
+import { pendingSessionTitle } from "../../lib/chat/sessionTitle";
 import { upsertAsyncAgentUpdate } from "../../lib/chat/asyncAgentUpdate";
 import {
   parseModeSwitchResult,
@@ -1102,7 +1106,11 @@ export function useSend(deps: UseSendDeps) {
           })),
           loadedSkills,
         });
-        if (isNewSession) dispatchSessionsChanged();
+        if (isNewSession) {
+          const preview = pendingSessionTitle(displayText);
+          if (preview) setPendingSessionTitle(sid, preview);
+          dispatchSessionsChanged();
+        }
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");
       } catch (err) {

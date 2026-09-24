@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { visibleSessionTitle } from "./sessionTitle.ts";
+import { pendingSessionTitle, visibleSessionTitle } from "./sessionTitle.ts";
 
 test("hides the generated short id from duplicate cron session titles", () => {
   assert.equal(
@@ -21,4 +21,10 @@ test("keeps normal titles and unrelated suffixes intact", () => {
     visibleSessionTitle("定时任务 · test · abcdef12", "737536f4-rest"),
     "定时任务 · test · abcdef12",
   );
+});
+
+test("pending title collapses whitespace and truncates by code points", () => {
+  assert.equal(pendingSessionTitle("  hello\n\n  world  "), "hello world");
+  assert.equal(pendingSessionTitle("abcdefghij", 5), "abcde");
+  assert.equal(pendingSessionTitle("   \n\t "), "");
 });

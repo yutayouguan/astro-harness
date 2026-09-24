@@ -66,6 +66,7 @@ import {
 } from "./components/icons";
 import { useChatDisplayPrefs } from "./hooks/chat/useChatDisplayPrefs";
 import { useActiveSessionMetadata } from "./hooks/chat/useActiveSessionTitle";
+import { usePendingSessionTitle } from "./hooks/chat/usePendingSessionTitle";
 import { useChatSession } from "./hooks/chat/useChatSession";
 import {
   useProjectFileWorkbench,
@@ -1292,7 +1293,9 @@ export default function App() {
   const featureNav =
     nav === "cron" || nav === "loop" || nav === "skills" ? nav : null;
   const activeSession = useActiveSessionMetadata(chat.sessionId);
-  const conversationTitle = activeSession?.summary ?? null;
+  const pendingConversationTitle = usePendingSessionTitle(chat.sessionId);
+  const conversationTitle =
+    activeSession?.summary || pendingConversationTitle || null;
   useEffect(() => setConversationMenuAnchor(null), [chat.sessionId]);
   const renameConversation = useCallback(async () => {
     if (!chat.sessionId || !conversationTitle) return;

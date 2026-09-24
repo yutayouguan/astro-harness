@@ -19,6 +19,21 @@ export function subscribeSessionsChanged(listener: () => void): () => void {
   return () => window.removeEventListener(SESSIONS_CHANGED_EVENT, listener);
 }
 
+/** 新建会话在 AI 标题落库前的前端兜底标题（sessionId → title）。 */
+const pendingSessionTitles = new Map<string, string>();
+
+/** 记录一个会话的前端兜底标题；只设置，不触发列表刷新（由调用方决定）。 */
+export function setPendingSessionTitle(sessionId: string, title: string): void {
+  const trimmed = title.trim();
+  if (!sessionId || !trimmed) return;
+  pendingSessionTitles.set(sessionId, trimmed);
+}
+
+/** 读取会话的前端兜底标题；后端已返回 summary 时调用方应优先用 summary。 */
+export function getPendingSessionTitle(sessionId: string): string | undefined {
+  return pendingSessionTitles.get(sessionId);
+}
+
 export async function deleteManagedSession(
   sessionId: string,
   activeSessionId: string | null,

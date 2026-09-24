@@ -17,3 +17,13 @@ export function visibleSessionTitle(
     ? title.slice(0, -suffix.length).trimEnd()
     : title;
 }
+
+/**
+ * 由用户输入派生一个「立即展示」的兜底标题：折叠空白成单行并截断。
+ * 后端 AI 标题尚未生成前，侧栏与顶部先显示它。
+ */
+export function pendingSessionTitle(text: string, maxChars = 32): string {
+  const collapsed = text.trim().split(/\s+/).join(" ");
+  if (!collapsed) return "";
+  return [...collapsed].slice(0, maxChars).join("").trim();
+}
