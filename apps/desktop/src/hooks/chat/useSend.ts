@@ -18,6 +18,7 @@ import {
 import { elapsedSecSince } from "../../lib/chat/elapsedSec";
 import { normalizeContextUsageEvent } from "../../lib/chat/contextUsage";
 import { saveContextUsageForSession } from "../../lib/chat/chatSessionStore";
+import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
 import { upsertAsyncAgentUpdate } from "../../lib/chat/asyncAgentUpdate";
 import {
   parseModeSwitchResult,
@@ -326,6 +327,7 @@ export function useSend(deps: UseSendDeps) {
       let modelBody = text;
       let loadedSkills: string[] = [];
       const sid = sessionId ?? crypto.randomUUID();
+      const isNewSession = sessionId == null;
       sendStartLockRef.current = true;
       try {
         if (text && !resumeJson) {
@@ -1100,6 +1102,7 @@ export function useSend(deps: UseSendDeps) {
           })),
           loadedSkills,
         });
+        if (isNewSession) dispatchSessionsChanged();
         pendingKeepChatBubblesRef.current = null;
         setStatusPhase("generating");
       } catch (err) {

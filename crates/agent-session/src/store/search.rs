@@ -21,6 +21,8 @@ type RecentSessionRow = (
 /// 摘要前后各取的字符数。
 const SNIPPET_BEFORE_CHARS: usize = 24;
 const SNIPPET_AFTER_CHARS: usize = 60;
+/// 侧栏「未命名会话」兜底标题的最大字符数（首条用户消息的精简预览）。
+const PREVIEW_TITLE_MAX_CHARS: usize = 32;
 
 /// FTS 命中收集参数（一次查询的过滤与输出缓冲）。
 struct FtsCollect<'a> {
@@ -243,7 +245,7 @@ impl SessionStore {
         Ok(result)
     }
 
-    /// 按 `started_at` 降序列出会话；preview 取首条 user content（截断 120 字）。
+    /// 按 `started_at` 降序列出会话；preview 取首条 user content 的精简预览。
     /// `project_root` 过滤：`Some(path)` = 仅该项目，`None` = 全部。
     pub async fn list_sessions(
         &self,
@@ -467,7 +469,11 @@ impl SessionStore {
                         project_id,
                         title,
                         started_at,
-                        preview: preview.map(|p| truncate_chars(&p, 120)),
+                        preview: preview.and_then(|p| {
+                            let title =
+                                types::derive_preview_title(&p, PREVIEW_TITLE_MAX_CHARS);
+                            (!title.is_empty()).then_some(title)
+                        }),
                         ended_at,
                         end_reason,
                         archived_at,

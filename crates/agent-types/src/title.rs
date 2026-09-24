@@ -44,6 +44,25 @@ pub fn sanitize_title(raw: &str, max_chars: usize) -> String {
         .to_string()
 }
 
+/// 由首条用户消息派生一个「可立即展示」的精简预览标题。
+///
+/// 折叠空白与换行、去掉首尾空白并截断到 `max_chars`。结果为空表示没有可展示文本。
+/// 与 [`sanitize_title`] 不同，这里不尝试去 Markdown/引号包装，只保证单行、简短，
+/// 供 AI 标题尚未生成前作为侧栏与顶部的兜底展示。
+pub fn derive_preview_title(raw: &str, max_chars: usize) -> String {
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim();
+    if trimmed.is_empty() || max_chars == 0 {
+        return String::new();
+    }
+    trimmed
+        .chars()
+        .take(max_chars)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
 fn strip_wrapping<'a>(s: &'a str, marker: &str) -> Option<&'a str> {
     s.strip_prefix(marker)?.strip_suffix(marker)
 }
@@ -91,5 +110,16 @@ mod tests {
     fn truncates_to_max_chars() {
         let long = "一二三四五六七八九十";
         assert_eq!(sanitize_title(long, 4), "一二三四");
+    }
+
+    #[test]
+    fn derive_preview_title_collapses_whitespace_and_truncates() {
+        assert_eq!(
+            derive_preview_title("  hello\n\n  world  ", 20),
+            "hello world"
+        );
+        assert_eq!(derive_preview_title("  \n\t ", 10), "");
+        assert_eq!(derive_preview_title("hello", 0), "");
+        assert_eq!(derive_preview_title("abcdefghij", 5), "abcde");
     }
 }

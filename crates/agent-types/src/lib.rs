@@ -64,7 +64,7 @@ pub use permissions::{
     DANGER_FULL_ACCESS_PROFILE, READ_ONLY_PROFILE, WORKSPACE_PROFILE,
 };
 pub use sqlite::{AstroDb, DbSpec, SqlitePool, SqliteStore};
-pub use title::sanitize_title;
+pub use title::{derive_preview_title, sanitize_title};
 pub use tool_spill::{
     is_externalized_view, make_prune_view, make_spill_view, spill_path_for_prompt,
     write_tool_spill, write_tool_spill_with_key, DEFAULT_SPILL_THRESHOLD_BYTES, PRUNE_MIN_CHARS,

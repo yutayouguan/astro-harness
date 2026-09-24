@@ -182,7 +182,7 @@ pub struct SearchHit {
     pub tool_name: Option<String>,
 }
 
-/// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 截断作 preview。
+/// 侧栏「近期会话」列表项：`title` 优先，否则用首条 user `content` 精简后的 preview。
 #[derive(Debug, Clone)]
 pub struct RecentSession {
     pub id: String,
