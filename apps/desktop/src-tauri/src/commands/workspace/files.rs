@@ -246,15 +246,44 @@ fn sanitize_entry_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+/// 词法归一化路径：折叠 `.` 与 `..`，不接触文件系统，也不解析符号链接。
+///
+/// 归一化只决定“请求指向哪里”，归属仍由 [`resolve_project_path`] 的 root
+///（及符号链接解析）检查兜底，因此不会放宽越界限制。
+fn normalize_lexically(path: &Path) -> PathBuf {
+    use std::path::Component;
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // 相对路径开头的 `..` 保留；文件系统根之上的 `..` 等于根目录本身。
+                if !normalized.pop() && !normalized.has_root() {
+                    normalized.push(component.as_os_str());
+                }
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        normalized
+    }
+}
+
 fn project_review_path(roots: &[PathBuf], requested: &str) -> Result<(PathBuf, PathBuf), String> {
     let requested = requested.trim();
     if requested.is_empty() {
         return Err("文件路径不能为空".into());
     }
 
-    let path = PathBuf::from(requested);
+    // 变更记录里的路径可能带 `.` / `..`（Agent 相对工作目录写入，例如
+    // `../skills/aihot/SKILL.md`）。先归一化，再判断是否落在项目根内。
+    let path = normalize_lexically(Path::new(requested));
     if path.is_absolute() {
-        let resolved = resolve_project_path(roots, requested)?;
+        let resolved = resolve_project_path(roots, &path.to_string_lossy())?;
         let root = roots
             .iter()
             .find(|root| resolved.starts_with(root.as_path()))
@@ -265,7 +294,7 @@ fn project_review_path(roots: &[PathBuf], requested: &str) -> Result<(PathBuf, P
 
     let candidates = roots
         .iter()
-        .map(|root| (root.clone(), root.join(&path)))
+        .map(|root| (root.clone(), normalize_lexically(&root.join(&path))))
         .collect::<Vec<_>>();
     let selected = candidates
         .iter()
@@ -1533,6 +1562,49 @@ mod project_path_tests {
             project_review_path(&[root.path().to_path_buf()], "src/main.rs").unwrap();
         assert_eq!(selected_root, root.path());
         assert_eq!(selected_file, file);
+    }
+
+    #[test]
+    fn normalizes_dotted_review_path_inside_project_root() {
+        let root = TempDir::new().unwrap();
+        let file = root.path().join("README.md");
+        std::fs::write(&file, "readme\n").unwrap();
+
+        let absolute = root.path().join("src").join("..").join("README.md");
+        let (absolute_root, absolute_file) =
+            project_review_path(&[root.path().to_path_buf()], &absolute.to_string_lossy()).unwrap();
+        assert_eq!(absolute_root, root.path());
+        assert_eq!(absolute_file, file);
+
+        let (relative_root, relative_file) =
+            project_review_path(&[root.path().to_path_buf()], "src/../README.md").unwrap();
+        assert_eq!(relative_root, root.path());
+        assert_eq!(relative_file, file);
+    }
+
+    #[test]
+    fn reports_outside_project_review_path_without_parent_dir_error() {
+        let parent = TempDir::new().unwrap();
+        let root = parent.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let outside = parent.path().join("note.md");
+        std::fs::write(&outside, "note\n").unwrap();
+
+        // 相对越界、绝对越界、以及“超出根目录深度的 ..”都应报归属错误，
+        // 而不是把归一化后的路径当成 `..` 注入拒绝。
+        for target in [
+            PathBuf::from("../note.md"),
+            outside.clone(),
+            root.join("src")
+                .join("..")
+                .join("..")
+                .join("..")
+                .join("note.md"),
+        ] {
+            let error =
+                project_review_path(&[root.clone()], &target.to_string_lossy()).unwrap_err();
+            assert!(error.contains("路径不属于该项目"), "{error}");
+        }
     }
 
     #[test]

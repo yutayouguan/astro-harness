@@ -1,4 +1,8 @@
-import type { ChatActivity, ConversationEntry } from "../../types";
+import type {
+  ChatActivity,
+  ConversationEntry,
+  ToolFileChange,
+} from "../../types";
 
 export type TodoPlanItem = {
   text: string;
@@ -89,6 +93,78 @@ function addChange(
     additions,
     deletions,
   });
+}
+
+/**
+ * 记录一次结构化文件变更（带工作目录与 before/after 快照）。
+ *
+ * 同一路径的连续变更合并为最早的 before 与最新的 after；`apply_patch`
+ * 常见的“先删后建”因此仍能保留可审查、可撤销的完整快照。
+ */
+function mergeStructuredChange(
+  changes: Map<string, FileChangeItem>,
+  change: ToolFileChange,
+) {
+  const path = cleanPath(change.move_path || change.path);
+  if (!path) return;
+  const current = changes.get(path);
+  if (current) {
+    current.afterContent = change.after_content;
+    current.additions += change.additions;
+    current.deletions += change.deletions;
+    current.reversible =
+      current.reversible === true && change.reversible === true;
+    current.kind = change.kind;
+    return;
+  }
+  changes.set(path, {
+    root: change.root,
+    path,
+    sourcePath: change.path,
+    kind: change.kind,
+    beforeContent: change.before_content,
+    afterContent: change.after_content,
+    additions: change.additions,
+    deletions: change.deletions,
+    reversible: change.reversible,
+  });
+}
+
+/** 有精确快照时以快照为准重算增删行数，避免“先删后建”被重复计数。 */
+function trimSnapshotCounts(item: FileChangeItem) {
+  if (item.beforeContent == null && item.afterContent == null) return;
+  const before = (item.beforeContent ?? "").replace(/\n$/, "").split("\n");
+  const after = (item.afterContent ?? "").replace(/\n$/, "").split("\n");
+  if (item.beforeContent == null) before.length = 0;
+  if (item.afterContent == null) after.length = 0;
+  let prefix = 0;
+  while (
+    prefix < before.length &&
+    prefix < after.length &&
+    before[prefix] === after[prefix]
+  )
+    prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < before.length - prefix &&
+    suffix < after.length - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  )
+    suffix += 1;
+  item.deletions = before.length - prefix - suffix;
+  item.additions = after.length - prefix - suffix;
+}
+
+function summarizeChanges(
+  changes: Map<string, FileChangeItem>,
+): FileChangeSummary {
+  const items = [...changes.values()];
+  for (const item of items) trimSnapshotCounts(item);
+  return {
+    items,
+    additions: items.reduce((sum, item) => sum + item.additions, 0),
+    deletions: items.reduce((sum, item) => sum + item.deletions, 0),
+  };
 }
 
 function patchTextFromInput(input: string | undefined): string {
@@ -261,6 +337,14 @@ export function extractFileChangeSummary(
         changes.clear();
         continue;
       }
+      // 运行时给出的结构化变更是权威来源：带工作目录与 before/after 快照，
+      // 审查面板据此离线渲染，不再依赖项目根与 Git 状态。
+      if (activity.fileChanges?.length) {
+        for (const change of activity.fileChanges) {
+          mergeStructuredChange(changes, change);
+        }
+        continue;
+      }
       const name = normalizedToolName(activity.title);
       if (name === "apply_patch") {
         collectPatchChanges(changes, patchTextFromInput(activity.input));
@@ -278,12 +362,7 @@ export function extractFileChangeSummary(
     }
   }
 
-  const items = [...changes.values()];
-  return {
-    items,
-    additions: items.reduce((sum, item) => sum + item.additions, 0),
-    deletions: items.reduce((sum, item) => sum + item.deletions, 0),
-  };
+  return summarizeChanges(changes);
 }
 
 /** 聚合单个 assistant turn 的结构化净变更。 */
@@ -293,61 +372,36 @@ export function extractTurnFileChangeSummary(
   const changes = new Map<string, FileChangeItem>();
   for (const activity of message.activities ?? []) {
     for (const change of activity.fileChanges ?? []) {
-      const path = change.move_path || change.path;
-      const current = changes.get(path);
-      if (current) {
-        current.afterContent = change.after_content;
-        current.additions += change.additions;
-        current.deletions += change.deletions;
-        current.reversible = current.reversible === true && change.reversible;
-        current.kind = change.kind;
-        continue;
-      }
-      changes.set(path, {
-        root: change.root,
-        path,
-        sourcePath: change.path,
-        kind: change.kind,
-        beforeContent: change.before_content,
-        afterContent: change.after_content,
-        additions: change.additions,
-        deletions: change.deletions,
-        reversible: change.reversible,
-      });
+      mergeStructuredChange(changes, change);
     }
   }
-  const items = [...changes.values()];
-  for (const item of items) {
-    if (item.beforeContent == null && item.afterContent == null) continue;
-    const before = (item.beforeContent ?? "").replace(/\n$/, "").split("\n");
-    const after = (item.afterContent ?? "").replace(/\n$/, "").split("\n");
-    if (item.beforeContent == null) before.length = 0;
-    if (item.afterContent == null) after.length = 0;
-    let prefix = 0;
-    while (
-      prefix < before.length &&
-      prefix < after.length &&
-      before[prefix] === after[prefix]
-    )
-      prefix += 1;
-    let suffix = 0;
-    while (
-      suffix < before.length - prefix &&
-      suffix < after.length - prefix &&
-      before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-    )
-      suffix += 1;
-    item.deletions = before.length - prefix - suffix;
-    item.additions = after.length - prefix - suffix;
-  }
-  return {
-    items,
-    additions: items.reduce((sum, item) => sum + item.additions, 0),
-    deletions: items.reduce((sum, item) => sum + item.deletions, 0),
-  };
+  return summarizeChanges(changes);
 }
 
 export function displayFileName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
   return parts[parts.length - 1] || path;
+}
+
+/**
+ * 审查面板需要绝对路径：用变更记录的工作目录补齐相对路径，并消除
+ * `.` / `..` 段。缺失 `root` 或本身是绝对路径时原样返回。
+ */
+export function resolveFileReviewPath(
+  file: Pick<FileChangeItem, "root" | "path">,
+): string {
+  const raw = cleanPath(file.path);
+  const root = file.root?.trim().replace(/[\\/]+$/, "") ?? "";
+  if (!raw || !root) return raw;
+  if (raw.startsWith("/") || /^[A-Za-z]:[\\/]/.test(raw)) return raw;
+  const segments: string[] = [];
+  for (const segment of `${root}/${raw}`.replace(/\\/g, "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
 }

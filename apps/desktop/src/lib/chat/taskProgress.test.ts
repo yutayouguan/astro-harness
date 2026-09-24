@@ -8,6 +8,7 @@ import {
   extractTurnFileChangeSummary,
   isTodoActivity,
   isTodoOnlyActivityMessage,
+  resolveFileReviewPath,
 } from "./taskProgress.ts";
 
 const patch = `*** Begin Patch
@@ -221,4 +222,98 @@ test("aggregates exact file snapshots within one assistant turn", () => {
       },
     ],
   });
+});
+
+test("todo file changes keep recorded snapshots for delete + re-add of one path", () => {
+  const workspace = "/Users/me/.astro/workspace";
+  const target = "../skills/aihot/SKILL.md";
+  const summary = extractFileChangeSummary([
+    { id: "u-1", role: "user", content: "写入 aihot skill" },
+    {
+      id: "a-1",
+      role: "assistant",
+      content: "",
+      activities: [
+        {
+          id: "todo-1",
+          kind: "tool",
+          title: "todo",
+          input: JSON.stringify({
+            action: "create",
+            items: [{ text: "写入 SKILL.md", done: true }],
+          }),
+          status: "done",
+        },
+        {
+          id: "patch-1",
+          kind: "tool",
+          title: "apply_patch",
+          input: JSON.stringify(
+            "*** Begin Patch\n*** Delete File: ../skills/aihot/SKILL.md\n*** Add File: ../skills/aihot/SKILL.md\n+new\n*** End Patch",
+          ),
+          status: "done",
+          fileChanges: [
+            {
+              root: workspace,
+              path: target,
+              kind: "delete",
+              before_content: "old\n",
+              additions: 0,
+              deletions: 1,
+              reversible: true,
+            },
+            {
+              root: workspace,
+              path: target,
+              kind: "add",
+              after_content: "new\n",
+              additions: 1,
+              deletions: 0,
+              reversible: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(summary, {
+    additions: 1,
+    deletions: 1,
+    items: [
+      {
+        root: workspace,
+        path: target,
+        sourcePath: target,
+        kind: "add",
+        beforeContent: "old\n",
+        afterContent: "new\n",
+        additions: 1,
+        deletions: 1,
+        reversible: true,
+      },
+    ],
+  });
+});
+
+test("resolves review paths against the recorded workspace root", () => {
+  assert.equal(
+    resolveFileReviewPath({
+      root: "/Users/me/.astro/workspace",
+      path: "../skills/aihot/SKILL.md",
+    }),
+    "/Users/me/.astro/skills/aihot/SKILL.md",
+  );
+  assert.equal(
+    resolveFileReviewPath({ root: "/repo/apps", path: "./src/../src/main.rs" }),
+    "/repo/apps/src/main.rs",
+  );
+  assert.equal(
+    resolveFileReviewPath({ root: "/repo/", path: "/repo/src/main.rs" }),
+    "/repo/src/main.rs",
+  );
+  assert.equal(
+    resolveFileReviewPath({ path: "../skills/aihot/SKILL.md" }),
+    "../skills/aihot/SKILL.md",
+  );
 });

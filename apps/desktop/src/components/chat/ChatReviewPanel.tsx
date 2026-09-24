@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileCode2, FileDiff, RefreshCw, X } from "lucide-react";
-import type { FileChangeItem } from "../../lib/chat/taskProgress";
+import {
+  resolveFileReviewPath,
+  type FileChangeItem,
+} from "../../lib/chat/taskProgress";
 import { parseUnifiedDiff } from "../../lib/chat/unifiedDiff";
 
 export type ProjectGitDiff = {
@@ -120,7 +123,10 @@ export default function ChatReviewPanel({
     const frozen = selectedFile ? frozenDiff(selectedFile) : null;
     const request = frozen
       ? Promise.resolve(frozen)
-      : loadDiff(projectId, selectedPath);
+      : loadDiff(
+          projectId,
+          resolveFileReviewPath(selectedFile ?? { path: selectedPath }),
+        );
     request
       .then((next) => {
         if (!active) return;
