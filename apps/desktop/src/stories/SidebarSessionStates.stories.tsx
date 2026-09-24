@@ -437,7 +437,9 @@ export const CronSessionTitlesStory: Story = {
   name: "Cron Session Titles",
   render: () => <CronSessionTitles />,
   beforeEach: () => {
-    mockIPC((command) => (command === "list_sessions" ? cronAwareSessions : null));
+    mockIPC((command) =>
+      command === "list_sessions" ? cronAwareSessions : null,
+    );
     return () => clearMocks();
   },
 };

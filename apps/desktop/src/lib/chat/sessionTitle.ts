@@ -36,7 +36,10 @@ export function sessionTitleDisplay(
 ): SessionTitleDisplay {
   const title = visibleSessionTitle(summary, sessionId);
   if (title.startsWith(CRON_TITLE_PREFIX)) {
-    return { isCron: true, title: title.slice(CRON_TITLE_PREFIX.length).trim() };
+    return {
+      isCron: true,
+      title: title.slice(CRON_TITLE_PREFIX.length).trim(),
+    };
   }
   // 任务名为空时存储值只剩前缀，且尾部空格已被 trim。
   if (title === CRON_TITLE_PREFIX.trimEnd()) return { isCron: true, title: "" };

@@ -122,7 +122,9 @@
 /* 定时任务会话：时钟图标顶替标题里的「定时任务 · 」前缀 */
 .sidebar-session-main .sidebar-session-cron-mark {
   align-self: center;
-  margin-right: -3px;
+  margin-right: -4px;
+  /* 行高盒中心比文字视觉中心低约 2px，图标单独上提对齐 */
+  translate: 0 -2px;
 }
 
 .sidebar-session-main .sidebar-session-pin-mark,

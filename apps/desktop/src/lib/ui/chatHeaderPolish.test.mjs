@@ -34,8 +34,10 @@ test("conversation title truncates and only exposes its full text when overflowi
 
   assert.match(css, /\.conversation-title[\s\S]*?text-overflow: ellipsis;/);
   assert.match(source, /scrollWidth > node\.clientWidth \+ 1/);
-  assert.match(source, /data-tip=\{overflowing \? title : undefined\}/);
+  assert.match(source, /const fullTitle = accessibleTitle \?\? title;/);
+  assert.match(source, /data-tip=\{overflowing \? fullTitle : undefined\}/);
   assert.match(source, /data-tip-delay=\{overflowing \? "400" : undefined\}/);
+  assert.match(source, /aria-label=\{`\$\{fullTitle\} · \$\{renameLabel\}`\}/);
   assert.match(source, /onClick=\{onRename\}/);
   assert.match(tips, /getAttribute\("data-tip-delay"\)/);
   assert.match(tips, /showFor\(el, true\)/);

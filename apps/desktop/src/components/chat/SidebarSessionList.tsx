@@ -441,8 +441,8 @@ function SessionItem({
         {isCron && (
           <IconCron
             className="sidebar-session-cron-mark"
-            width={12}
-            height={12}
+            width={13}
+            height={13}
             strokeWidth={1.8}
             aria-hidden
           />

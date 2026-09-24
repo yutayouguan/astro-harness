@@ -459,8 +459,18 @@ test("session activity preserves title space and progressively reveals tools", (
   );
   assert.match(
     sessionList,
-    /data-tip=\{titleOverflow\.overflowing \? title : undefined\}/,
+    /data-tip=\{titleOverflow\.overflowing \? accessibleTitle : undefined\}/,
     "clipped titles should expose their full text through the shared tooltip",
+  );
+  assert.match(
+    sessionList,
+    /const accessibleTitle = isCron \? `\$\{t\("nav\.cron"\)\} · \$\{title\}` : title;/,
+    "cron sessions should keep the 定时任务 wording for assistive tech",
+  );
+  assert.match(
+    sessionList,
+    /className="sidebar-session-cron-mark"/,
+    "cron sessions should mark the title with the clock icon instead of text",
   );
   assert.match(
     sessionList,

@@ -3,16 +3,20 @@ import { useLayoutEffect, useRef, useState } from "react";
 type ConversationTitleProps = {
   title: string;
   renameLabel: string;
+  /** 读屏与悬浮提示用的完整名称；展示标题已用图标替代文字时传它 */
+  accessibleTitle?: string;
   onRename: () => void;
 };
 
 export default function ConversationTitle({
   title,
   renameLabel,
+  accessibleTitle,
   onRename,
 }: ConversationTitleProps) {
   const titleRef = useRef<HTMLButtonElement | null>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const fullTitle = accessibleTitle ?? title;
 
   useLayoutEffect(() => {
     const node = titleRef.current;
@@ -38,10 +42,10 @@ export default function ConversationTitle({
       ref={titleRef}
       type="button"
       className="content-title-main conversation-title-trigger"
-      title={overflowing ? title : undefined}
-      data-tip={overflowing ? title : undefined}
+      title={overflowing ? fullTitle : undefined}
+      data-tip={overflowing ? fullTitle : undefined}
       data-tip-delay={overflowing ? "400" : undefined}
-      aria-label={`${title} · ${renameLabel}`}
+      aria-label={`${fullTitle} · ${renameLabel}`}
       onClick={onRename}
     >
       {title}

@@ -1297,7 +1297,7 @@ export default function App() {
   const pendingConversationTitle = usePendingSessionTitle(chat.sessionId);
   const conversationTitle =
     activeSession?.summary || pendingConversationTitle || null;
-  // 定时任务会话用时钟图标代替标题里的「定时任务 · 」前缀，
+  // 定时任务会话的存储标题带「定时任务 · 」前缀：展示层换成时钟图标，
   // 重命名仍写回后端原始标题。
   const conversationDisplay = conversationTitle
     ? sessionTitleDisplay(conversationTitle, chat.sessionId ?? "")
@@ -2320,6 +2320,11 @@ export default function App() {
                           >
                             <ConversationTitle
                               title={conversationDisplayTitle}
+                              accessibleTitle={
+                                isCronConversation
+                                  ? `${t("nav.cron")} · ${conversationDisplayTitle}`
+                                  : undefined
+                              }
                               renameLabel={t("sessions.rename")}
                               onRename={() => void renameConversation()}
                             />
