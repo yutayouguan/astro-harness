@@ -20,6 +20,7 @@ import {
   PinOff as PinOffData,
 } from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
+import { IconCron } from "../icons/NavIcons";
 import {
   dispatchSessionsChanged,
   getPendingSessionTitle,
@@ -36,7 +37,10 @@ import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
 import type { RecentSessionDto } from "../../types";
 import type { SessionStatusMap } from "../../hooks/chat/useSessionStatusMap";
-import { visibleSessionTitle } from "../../lib/chat/sessionTitle";
+import {
+  sessionTitleDisplay,
+  visibleSessionTitle,
+} from "../../lib/chat/sessionTitle";
 import { compactSessionTime } from "../../lib/chat/compactSessionTime";
 import {
   matchesSidebarSessionPlacement,
@@ -371,10 +375,15 @@ function SessionItem({
   });
   void unreadTick;
 
+  const display = sessionTitleDisplay(s.summary ?? "", s.sessionId);
   const title =
-    s.summary?.trim() ||
+    display.title ||
     getPendingSessionTitle(s.sessionId) ||
     t("chat.rightPanel.untitledSession");
+  // 定时任务会话用时钟图标代替标题里的「定时任务 · 」前缀，
+  // 读屏与悬浮提示仍保留文字语义。
+  const isCron = display.isCron && Boolean(display.title);
+  const accessibleTitle = isCron ? `${t("nav.cron")} · ${title}` : title;
 
   const measureTitle = useCallback(() => {
     const el = titleRef.current;
@@ -424,11 +433,20 @@ function SessionItem({
         type="button"
         className="sidebar-session-main"
         aria-current={isActive ? "page" : undefined}
-        aria-label={title}
-        data-tip={titleOverflow.overflowing ? title : undefined}
+        aria-label={accessibleTitle}
+        data-tip={titleOverflow.overflowing ? accessibleTitle : undefined}
         data-tip-delay={titleOverflow.overflowing ? "400" : undefined}
         onClick={onOpen}
       >
+        {isCron && (
+          <IconCron
+            className="sidebar-session-cron-mark"
+            width={12}
+            height={12}
+            strokeWidth={1.8}
+            aria-hidden
+          />
+        )}
         <span className="sidebar-session-title-wrap" ref={titleWrapRef}>
           <span
             className="sidebar-session-title"

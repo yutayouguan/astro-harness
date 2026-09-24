@@ -45,6 +45,37 @@ const menuSessions = Array.from({ length: 5 }, (_, index) => ({
   pinnedAt: null,
 })) satisfies RecentSessionDto[];
 
+/** 定时任务会话的存储标题带「定时任务 · 」前缀，展示层换成时钟图标。 */
+const cronAwareSessions = [
+  {
+    sessionId: "cron-session-daily",
+    source: "tauri",
+    summary: "定时任务 · 每日 8 点舆情早报",
+    createdAt: new Date().toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+  {
+    sessionId: "737536f4-6588-4cbc-99a2-7abc20d49b15",
+    source: "tauri",
+    summary: "定时任务 · 每周一整理收件箱 · 737536f4",
+    createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+  {
+    sessionId: "chat-session-1",
+    source: "tauri",
+    summary: "美化 AI 回答面板",
+    createdAt: new Date(Date.now() - 7_200_000).toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+] satisfies RecentSessionDto[];
+
 function SessionRow({
   title,
   time,
@@ -334,6 +365,30 @@ function SessionMenuNearBottom() {
   );
 }
 
+function CronSessionTitles() {
+  return (
+    <main className="app-shell" data-tone="blue" style={{ minHeight: "100vh" }}>
+      <div className="body-row">
+        <aside
+          className="sidebar is-open is-pinned is-labels"
+          style={{ "--sidebar-w-wide": "320px" } as CSSProperties}
+        >
+          <div className="sidebar-sessions is-global">
+            <SidebarSessionList
+              activeSessionId={null}
+              sessionStatuses={{}}
+              projectId={null}
+              query=""
+              listKind="active"
+              onOpenSession={() => {}}
+            />
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
 const meta = {
   id: "sidebar-session-states",
   title: "Shell/Sidebar Session States",
@@ -376,4 +431,13 @@ export const SettingsNavigation: Story = {
 
 export const SessionMenuNearBottomEdge: Story = {
   render: () => <SessionMenuNearBottom />,
+};
+
+export const CronSessionTitlesStory: Story = {
+  name: "Cron Session Titles",
+  render: () => <CronSessionTitles />,
+  beforeEach: () => {
+    mockIPC((command) => (command === "list_sessions" ? cronAwareSessions : null));
+    return () => clearMocks();
+  },
 };

@@ -128,6 +128,7 @@ import { interfaceTourCopy, requestInterfaceTour } from "./lib/ui/interfaceTour"
 import type { FileChangeItem } from "./lib/chat/taskProgress";
 import type { SessionListKind } from "./lib/chat/sessionManagement";
 import { dispatchSessionsChanged } from "./lib/chat/sessionManagement";
+import { sessionTitleDisplay } from "./lib/chat/sessionTitle";
 import {
   applyDefaultProjectRoot,
   DEFAULT_PROJECT_PLACEHOLDER,
@@ -1296,6 +1297,16 @@ export default function App() {
   const pendingConversationTitle = usePendingSessionTitle(chat.sessionId);
   const conversationTitle =
     activeSession?.summary || pendingConversationTitle || null;
+  // 定时任务会话用时钟图标代替标题里的「定时任务 · 」前缀，
+  // 重命名仍写回后端原始标题。
+  const conversationDisplay = conversationTitle
+    ? sessionTitleDisplay(conversationTitle, chat.sessionId ?? "")
+    : null;
+  const conversationDisplayTitle =
+    conversationDisplay?.title || conversationTitle || "";
+  const isCronConversation = Boolean(
+    conversationDisplay?.isCron && conversationDisplay.title,
+  );
   useEffect(() => setConversationMenuAnchor(null), [chat.sessionId]);
   const renameConversation = useCallback(async () => {
     if (!chat.sessionId || !conversationTitle) return;
@@ -2287,12 +2298,20 @@ export default function App() {
                           data-tone={shellTone}
                           aria-hidden
                         >
-                          <ProjectFolderIcon
-                            iconId={activeProject?.icon}
-                            expanded={false}
-                            size={18}
-                            loading="eager"
-                          />
+                          {isCronConversation ? (
+                            <IconCron
+                              width={18}
+                              height={18}
+                              strokeWidth={1.8}
+                            />
+                          ) : (
+                            <ProjectFolderIcon
+                              iconId={activeProject?.icon}
+                              expanded={false}
+                              size={18}
+                              loading="eager"
+                            />
+                          )}
                         </div>
                         <div className="page-title-text">
                           <h1
@@ -2300,7 +2319,7 @@ export default function App() {
                             data-tone={shellTone}
                           >
                             <ConversationTitle
-                              title={conversationTitle}
+                              title={conversationDisplayTitle}
                               renameLabel={t("sessions.rename")}
                               onRename={() => void renameConversation()}
                             />
