@@ -44,5 +44,8 @@ __pycache__/
 # Raw README screenshot sources (kept locally, not published)
 docs/images/raw/
 
+# Visual QA artifacts written by playwright specs
+/output/
+
 # Git worktrees
 .worktrees/
