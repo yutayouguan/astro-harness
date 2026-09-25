@@ -75,7 +75,7 @@ export function dynamicGradientForTab(
   const h0 = hashString(`${seed}::${tabId}`);
   const h1 = hashString(`${seed}::${tabId}::b`);
   const hue = h0 % 360;
-  const delta = 28 + (h1 % 53); // 28–80°
+  const delta = 40 + (h1 % 61); // 40–100°：与预设同一标准，保证色相真的分得开
   const hue2 = (hue + delta) % 360;
 
   const sat1 = theme === "light" ? 58 + (h0 % 12) : 54 + (h0 % 14);
@@ -86,10 +86,11 @@ export function dynamicGradientForTab(
   const primary = hslToHex(hue, sat1, lit1);
   const secondary = hslToHex(hue2, sat2, lit2);
 
-  const px = 12 + (h0 % 28);
-  const py = 6 + (h1 % 22);
-  const sx = 62 + ((h0 >>> 8) % 30);
-  const sy = 18 + ((h1 >>> 8) % 28);
+  // 主色左上、辅色右下：对角构图，避免两点都挤在上半屏造成下半屏死区
+  const px = 10 + (h0 % 24);
+  const py = 6 + (h1 % 20);
+  const sx = 68 + ((h0 >>> 8) % 24);
+  const sy = 70 + ((h1 >>> 8) % 24);
 
   return {
     id: "custom",
