@@ -683,7 +683,11 @@ html[data-theme="light"] .app-shell[data-tone="twilight"] {
     linear-gradient(165deg, #f5f3ff 0%, #fce7f3 48%, #faf5ff 100%);
 }
 
-/* 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块） */
+/*
+ * 统一模式自定义渐变：位置/RGB 由 JS 写入；强度/扩散按色点数与主题自动算（无用户滑块）。
+ * 角色权重：主色略低、辅色略高（暗色 0.28 / 0.26，亮色 0.46 / 0.50），底部 50% 100%
+ * 回响改用辅色，避免出现「上半屏亮带 + 下半屏死区」。改这里需同步 shellHaloForRole。
+ */
 html[data-theme="dark"]:is(
   [data-color-style="unified"],
   [data-color-style="dynamic"]
@@ -724,10 +728,10 @@ html[data-theme="dark"]:is(
         calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
         var(--shell-grad-py, 8%),
       rgba(
-        var(--shell-grad-pr, 37),
-        var(--shell-grad-pg, 99),
-        var(--shell-grad-pb, 235),
-        calc(0.34 * var(--shell-grad-strength, 1))
+        var(--shell-grad-pr, 53),
+        var(--shell-grad-pg, 103),
+        var(--shell-grad-pb, 201),
+        calc(0.28 * var(--shell-grad-strength, 1))
       ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
@@ -736,10 +740,10 @@ html[data-theme="dark"]:is(
         calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
         var(--shell-grad-sy, 22%),
       rgba(
-        var(--shell-grad-sr, 6),
-        var(--shell-grad-sg, 182),
-        var(--shell-grad-sb, 212),
-        calc(0.16 * var(--shell-grad-strength, 1))
+        var(--shell-grad-sr, 79),
+        var(--shell-grad-sg, 192),
+        var(--shell-grad-sb, 184),
+        calc(0.26 * var(--shell-grad-strength, 1))
       ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
@@ -747,10 +751,10 @@ html[data-theme="dark"]:is(
       ellipse calc(55% * var(--shell-grad-spread, 1))
         calc(45% * var(--shell-grad-spread, 1)) at 50% 100%,
       rgba(
-        var(--shell-grad-pr, 37),
-        var(--shell-grad-pg, 99),
-        var(--shell-grad-pb, 235),
-        calc(0.1 * var(--shell-grad-strength, 1))
+        var(--shell-grad-sr, 79),
+        var(--shell-grad-sg, 192),
+        var(--shell-grad-sb, 184),
+        calc(0.12 * var(--shell-grad-strength, 1))
       ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
@@ -798,10 +802,10 @@ html[data-theme="light"]:is(
         calc(70% * var(--shell-grad-spread, 1)) at var(--shell-grad-px, 18%)
         var(--shell-grad-py, 8%),
       rgba(
-        var(--shell-grad-pr, 37),
-        var(--shell-grad-pg, 99),
-        var(--shell-grad-pb, 235),
-        calc(0.58 * var(--shell-grad-strength, 1))
+        var(--shell-grad-pr, 53),
+        var(--shell-grad-pg, 103),
+        var(--shell-grad-pb, 201),
+        calc(0.46 * var(--shell-grad-strength, 1))
       ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),
@@ -810,10 +814,10 @@ html[data-theme="light"]:is(
         calc(55% * var(--shell-grad-spread, 1)) at var(--shell-grad-sx, 88%)
         var(--shell-grad-sy, 22%),
       rgba(
-        var(--shell-grad-sr, 6),
-        var(--shell-grad-sg, 182),
-        var(--shell-grad-sb, 212),
-        calc(0.42 * var(--shell-grad-strength, 1))
+        var(--shell-grad-sr, 79),
+        var(--shell-grad-sg, 192),
+        var(--shell-grad-sb, 184),
+        calc(0.5 * var(--shell-grad-strength, 1))
       ),
       transparent calc(50% * var(--shell-grad-spread, 1))
     ),
@@ -821,10 +825,10 @@ html[data-theme="light"]:is(
       ellipse calc(60% * var(--shell-grad-spread, 1))
         calc(50% * var(--shell-grad-spread, 1)) at 50% 100%,
       rgba(
-        var(--shell-grad-pr, 37),
-        var(--shell-grad-pg, 99),
-        var(--shell-grad-pb, 235),
-        calc(0.28 * var(--shell-grad-strength, 1))
+        var(--shell-grad-sr, 79),
+        var(--shell-grad-sg, 192),
+        var(--shell-grad-sb, 184),
+        calc(0.22 * var(--shell-grad-strength, 1))
       ),
       transparent calc(55% * var(--shell-grad-spread, 1))
     ),

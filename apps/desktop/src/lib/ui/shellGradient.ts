@@ -210,8 +210,8 @@ export function shellHaloForRole(
   extraIndex = 0,
 ): { alpha: number; fadePct: number } {
   if (theme === "light") {
-    if (role === "primary") return { alpha: 0.58, fadePct: 55 };
-    if (role === "secondary") return { alpha: 0.42, fadePct: 50 };
+    if (role === "primary") return { alpha: 0.46, fadePct: 55 };
+    if (role === "secondary") return { alpha: 0.5, fadePct: 50 };
     const extras = [
       { alpha: 0.38, fadePct: 48 },
       { alpha: 0.34, fadePct: 46 },
@@ -219,8 +219,8 @@ export function shellHaloForRole(
     ];
     return extras[Math.min(Math.max(0, extraIndex), 2)];
   }
-  if (role === "primary") return { alpha: 0.34, fadePct: 55 };
-  if (role === "secondary") return { alpha: 0.16, fadePct: 50 };
+  if (role === "primary") return { alpha: 0.28, fadePct: 55 };
+  if (role === "secondary") return { alpha: 0.26, fadePct: 50 };
   const extras = [
     { alpha: 0.2, fadePct: 48 },
     { alpha: 0.18, fadePct: 46 },
@@ -255,6 +255,20 @@ export function shellGradientPreviewBackground(
     const color = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})` : stop.color;
     return `radial-gradient(circle at ${stop.x}% ${stop.y}%, ${color} 0%, transparent ${fade}%)`;
   });
+  // 壳层在底部 50% 100% 还叠一层辅色回响，预览同步，避免底部死区
+  const echo = stops[1] ?? stops[0];
+  if (echo) {
+    const a =
+      Math.round((theme === "dark" ? 0.12 : 0.22) * strength * 1000) / 1000;
+    const fade = Math.round(55 * spread * 10) / 10;
+    const rgb = hexToRgb(echo.color);
+    const color = rgb
+      ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
+      : echo.color;
+    layers.push(
+      `radial-gradient(circle at 50% 100%, ${color} 0%, transparent ${fade}%)`,
+    );
+  }
   return `${layers.join(", ")}, ${base}`;
 }
 
@@ -275,50 +289,50 @@ export const SHELL_GRADIENT_PRESETS: {
   {
     id: "ocean",
     labelKey: "prefs.colorStyle.preset.ocean",
-    primary: { color: "#2563eb", x: 18, y: 8 },
-    secondary: { color: "#06b6d4", x: 88, y: 22 },
+    primary: { color: "#3567c9", x: 20, y: 12 },
+    secondary: { color: "#4fc0b8", x: 80, y: 86 },
   },
   {
     id: "aurora",
     labelKey: "prefs.colorStyle.preset.aurora",
-    primary: { color: "#8b5cf6", x: 16, y: 12 },
-    secondary: { color: "#22d3ee", x: 86, y: 28 },
+    primary: { color: "#7250d8", x: 16, y: 10 },
+    secondary: { color: "#4fcf9c", x: 84, y: 88 },
   },
   {
     id: "indigo",
     labelKey: "prefs.colorStyle.preset.indigo",
-    primary: { color: "#4f46e5", x: 20, y: 10 },
-    secondary: { color: "#818cf8", x: 82, y: 30 },
+    primary: { color: "#3f4fae", x: 12, y: 20 },
+    secondary: { color: "#7d97e8", x: 86, y: 72 },
   },
   {
     id: "violet",
     labelKey: "prefs.colorStyle.preset.violet",
-    primary: { color: "#7c3aed", x: 18, y: 14 },
-    secondary: { color: "#c4b5fd", x: 84, y: 26 },
+    primary: { color: "#8a55cf", x: 22, y: 10 },
+    secondary: { color: "#f2a888", x: 78, y: 86 },
   },
   {
     id: "rose",
     labelKey: "prefs.colorStyle.preset.rose",
-    primary: { color: "#db2777", x: 16, y: 10 },
-    secondary: { color: "#fb7185", x: 86, y: 24 },
+    primary: { color: "#cf4480", x: 16, y: 14 },
+    secondary: { color: "#f9b98d", x: 84, y: 80 },
   },
   {
     id: "sunset",
     labelKey: "prefs.colorStyle.preset.sunset",
-    primary: { color: "#ea580c", x: 18, y: 12 },
-    secondary: { color: "#ef4444", x: 88, y: 28 },
+    primary: { color: "#e0662b", x: 18, y: 82 },
+    secondary: { color: "#d1568f", x: 82, y: 18 },
   },
   {
     id: "amber",
     labelKey: "prefs.colorStyle.preset.amber",
-    primary: { color: "#d97706", x: 20, y: 10 },
-    secondary: { color: "#fbbf24", x: 84, y: 26 },
+    primary: { color: "#cf8b22", x: 14, y: 18 },
+    secondary: { color: "#34a89a", x: 86, y: 84 },
   },
   {
     id: "forest",
     labelKey: "prefs.colorStyle.preset.forest",
-    primary: { color: "#15803d", x: 18, y: 12 },
-    secondary: { color: "#34d399", x: 86, y: 24 },
+    primary: { color: "#3d8a58", x: 22, y: 12 },
+    secondary: { color: "#d8c06a", x: 80, y: 88 },
   },
 ];
 
