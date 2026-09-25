@@ -157,6 +157,15 @@ async fn persisted_thread_settings(
     agent_rollout::latest_thread_settings(&items)
 }
 
+/// 线程最近一次上下文占用快照（rollout 持久化）。
+/// 切换会话 / 重开窗口后前端用它补回环形占用与分层明细，本地缓存缺失也能恢复。
+async fn persisted_context_usage(session_id: &str) -> Option<agent_protocol::ContextUsageEvent> {
+    let root = home::default_memory_dir().join("sessions").join("rollouts");
+    let path = agent_rollout::find_rollout(&root, session_id).ok()??;
+    let items = agent_rollout::read_rollout(&path).await.ok()?;
+    agent_rollout::latest_context_usage(&items)
+}
+
 async fn persisted_thread_settings_at(
     path: Option<std::path::PathBuf>,
 ) -> Option<agent_protocol::ThreadSettingsSnapshot> {
@@ -263,6 +272,21 @@ pub async fn get_chat_history(
             .map(|value| value.reasoning_effort.clone())
             .filter(|value| !value.trim().is_empty()),
     })
+}
+
+/// 读取线程最近一次上下文占用快照（rollout 持久化）。
+///
+/// 前端切换会话 / 重开窗口时用它补回环形占用与分层明细；
+/// 本地缓存缺失或过期时以这里为准。线程没有占用记录时返回 `None`。
+#[tauri::command]
+pub async fn get_context_usage(
+    session_id: String,
+) -> Result<Option<agent_protocol::ContextUsageEvent>, String> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return Ok(None);
+    }
+    Ok(persisted_context_usage(sid).await)
 }
 
 /// 从当前会话分支。

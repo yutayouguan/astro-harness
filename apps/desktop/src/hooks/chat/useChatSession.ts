@@ -71,7 +71,10 @@ import type {
   PendingInterrupt,
   ProviderDto,
 } from "../../types";
-import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import {
+  normalizeContextUsageEvent,
+  type ContextUsageSnapshot,
+} from "../../lib/chat/contextUsage";
 import type { ChatDisplayPrefs } from "./useChatDisplayPrefs";
 import type { ShowToastOptions } from "../ui/useTransientToast";
 import type { MessageKey } from "../../i18n/messages";
@@ -1103,6 +1106,38 @@ export function useChatSession({
   }, [streamRafRef, streamPendingRef]);
 
   // ── Restore history ───────────────────────────────────────────────────────
+  /**
+   * 用 rollout 里持久化的上下文占用补回占用视图。
+   * 本地缓存可能缺失（换会话时被覆盖 / 清理过 / 换设备），后端快照才是事实源；
+   * 本地已有更新的快照时保留本地值，避免流式期间回退数字。
+   */
+  const hydrateContextUsage = useCallback(
+    async (sid: string | null) => {
+      if (!sid) return;
+      const version = navigationVersion.current;
+      try {
+        const payload = await invoke<
+          Parameters<typeof normalizeContextUsageEvent>[0] | null
+        >("get_context_usage", { sessionId: sid });
+        if (!payload) return;
+        // 回读期间用户已经切到别的会话：丢弃这次结果。
+        if (
+          navigationUi.current.sessionId !== sid &&
+          version !== navigationVersion.current
+        )
+          return;
+        const snapshot = normalizeContextUsageEvent(payload);
+        setContextUsage((prev) =>
+          prev && prev.updatedAt >= snapshot.updatedAt ? prev : snapshot,
+        );
+        if (persistClientState) saveContextUsageForSession(sid, snapshot);
+      } catch {
+        // 读取失败时保留本地快照
+      }
+    },
+    [persistClientState],
+  );
+
   const applyRestoredHistory = useCallback(
     (
       sid: string | null,
@@ -1124,6 +1159,7 @@ export function useChatSession({
       // 按会话恢复占用快照，避免显示上一会话数字
       const usage = loadContextUsageForSession(sid);
       setContextUsage(usage);
+      void hydrateContextUsage(sid);
       if (persistClientState) {
         saveChatSession(sid, settled, pendingInterrupts, usage);
       }
@@ -1132,7 +1168,7 @@ export function useChatSession({
       });
       return true;
     },
-    [currentRunIdRef, persistClientState],
+    [currentRunIdRef, hydrateContextUsage, persistClientState],
   );
 
   const restoreChatHistory = useCallback(async () => {
@@ -2249,6 +2285,7 @@ export function useChatSession({
           setSessionEndReason(endReason);
           const usage = loadContextUsageForSession(resolvedSessionId);
           setContextUsage(usage);
+          void hydrateContextUsage(resolvedSessionId);
         }
         setSessionEphemeral(!!hist.ephemeral);
         setSideParentSessionId(

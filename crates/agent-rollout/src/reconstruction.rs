@@ -79,6 +79,14 @@ pub fn latest_token_usage(items: &[RolloutItem]) -> Option<agent_protocol::Token
     })
 }
 
+/// 线程最近一次上下文占用快照：切换会话 / 重开窗口后恢复占用视图的事实源。
+pub fn latest_context_usage(items: &[RolloutItem]) -> Option<agent_protocol::ContextUsageEvent> {
+    items.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(agent_protocol::EventMsg::ContextUsage(event)) => Some(event.clone()),
+        _ => None,
+    })
+}
+
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
@@ -242,8 +250,9 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        drop_last_n_user_turns, effective_response_history, latest_thread_settings,
-        latest_token_usage, read_rollout_with_diagnostics, realtime_history,
+        drop_last_n_user_turns, effective_response_history, latest_context_usage,
+        latest_thread_settings, latest_token_usage, read_rollout_with_diagnostics,
+        realtime_history,
     };
     use crate::RolloutItem;
 
@@ -360,6 +369,40 @@ mod tests {
             restored.compaction_response_id.as_deref(),
             Some("compact-1")
         );
+    }
+
+    #[test]
+    fn latest_context_usage_prefers_the_latest_snapshot() {
+        let snapshot = |total_tokens: u32| {
+            RolloutItem::EventMsg(agent_protocol::EventMsg::ContextUsage(
+                agent_protocol::ContextUsageEvent {
+                    turn_id: format!("turn-{total_tokens}"),
+                    context_window: 1_000_000,
+                    total_tokens,
+                    estimated_total_tokens: total_tokens,
+                    source: agent_protocol::ContextUsageSource::ProviderReported,
+                    latest_usage: None,
+                    segments: vec![agent_protocol::ContextUsageSegment {
+                        id: "conversation".into(),
+                        tokens: total_tokens,
+                        count: None,
+                        items: Vec::new(),
+                    }],
+                    updated_at: i64::from(total_tokens),
+                    recommend_compact: false,
+                },
+            ))
+        };
+
+        assert!(latest_context_usage(&[RolloutItem::SessionMeta(
+            serde_json::json!({"thread_id": "thread-1"})
+        )])
+        .is_none());
+
+        let items = vec![snapshot(20_000), snapshot(85_541)];
+        let restored = latest_context_usage(&items).expect("latest context usage");
+        assert_eq!(restored.total_tokens, 85_541);
+        assert_eq!(restored.segments[0].id, "conversation");
     }
 
     #[tokio::test]
