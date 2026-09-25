@@ -17,10 +17,7 @@ import { AnimatePresence } from "framer-motion";
 import AboutDialog from "./components/ui/AboutDialog";
 import DesktopAmbienceButton from "./components/ui/DesktopAmbienceButton";
 import { explicitStylePalette } from "./lib/ui/desktopAmbience";
-import ChatRightPanel, {
-  type ChatRightTab,
-} from "./components/chat/ChatRightPanel";
-import ChatReviewPanel from "./components/chat/ChatReviewPanel";
+import type { ChatRightTab } from "./components/chat/ChatRightPanel";
 import SideChatPanel from "./components/chat/SideChatPanel";
 import ConversationTitle from "./components/chat/ConversationTitle";
 import ProjectContextMenu from "./components/chat/ProjectContextMenu";
@@ -31,28 +28,9 @@ import SidebarSessionList from "./components/chat/SidebarSessionList";
 import SessionActionsMenu from "./components/chat/SessionActionsMenu";
 import { resolveSessionStatus } from "./components/chat/SessionStatusIcon";
 import ChatView from "./components/chat/ChatView";
-import BrowserDock from "./components/chat/BrowserDock";
-import ProjectFileEditor, {
-  ProjectFileTabs,
-} from "./components/chat/ProjectFileEditor";
-import ProjectFilesPanel from "./components/chat/ProjectFilesPanel";
-import LoopPanel from "./components/loop/LoopPanel";
-import CronPanel from "./components/schedule/CronPanel";
-import InsightsPanel from "./components/settings/InsightsPanel";
-import ModelMarketPanel from "./components/settings/ModelMarketPanel";
-import MemoryPanel from "./components/settings/MemoryPanel";
 import ModelPicker from "./components/agents/ModelPicker";
 import ExpandableSearch from "./components/ui/ExpandableSearch";
-import PreferencesPanel from "./components/settings/PreferencesPanel";
-import BrowserSettingsPanel from "./components/settings/BrowserSettingsPanel";
-import TerminalSettingsPanel from "./components/settings/TerminalSettingsPanel";
-import EnvironmentDependenciesPanel from "./components/settings/EnvironmentDependenciesPanel";
-import DesktopPetPanel from "./components/settings/DesktopPetPanel";
-import ProvidersPanel from "./components/settings/ProvidersPanel";
 import SidebarContextMenu from "./components/settings/SidebarContextMenu";
-import PluginsPage from "./components/plugins/PluginsPage";
-import ToolsPanel from "./components/settings/ToolsPanel";
-import EvolutionModelsPanel from "./components/settings/EvolutionModelsPanel";
 import {
   AstroLogoMark,
   IconCron,
@@ -182,7 +160,52 @@ import type {
   ProviderModelsResult,
 } from "./types";
 
+// 首屏只保留聊天主链路，重面板按需加载（局部打开的文件/终端/浏览器同样处理）。
 const TerminalDock = lazy(() => import("./components/chat/TerminalTabsDock"));
+const BrowserDock = lazy(() => import("./components/chat/BrowserDock"));
+const ChatReviewPanel = lazy(() => import("./components/chat/ChatReviewPanel"));
+const ProjectFileEditor = lazy(
+  () => import("./components/chat/ProjectFileEditor"),
+);
+const ProjectFileTabs = lazy(() =>
+  import("./components/chat/ProjectFileEditor").then((module) => ({
+    default: module.ProjectFileTabs,
+  })),
+);
+const LoopPanel = lazy(() => import("./components/loop/LoopPanel"));
+const CronPanel = lazy(() => import("./components/schedule/CronPanel"));
+const PluginsPage = lazy(() => import("./components/plugins/PluginsPage"));
+const PreferencesPanel = lazy(
+  () => import("./components/settings/PreferencesPanel"),
+);
+const ToolsPanel = lazy(() => import("./components/settings/ToolsPanel"));
+const BrowserSettingsPanel = lazy(
+  () => import("./components/settings/BrowserSettingsPanel"),
+);
+const TerminalSettingsPanel = lazy(
+  () => import("./components/settings/TerminalSettingsPanel"),
+);
+const EnvironmentDependenciesPanel = lazy(
+  () => import("./components/settings/EnvironmentDependenciesPanel"),
+);
+const DesktopPetPanel = lazy(
+  () => import("./components/settings/DesktopPetPanel"),
+);
+const EvolutionModelsPanel = lazy(
+  () => import("./components/settings/EvolutionModelsPanel"),
+);
+const InsightsPanel = lazy(() => import("./components/settings/InsightsPanel"));
+const ModelMarketPanel = lazy(
+  () => import("./components/settings/ModelMarketPanel"),
+);
+const ProvidersPanel = lazy(
+  () => import("./components/settings/ProvidersPanel"),
+);
+const MemoryPanel = lazy(() => import("./components/settings/MemoryPanel"));
+const ChatRightPanel = lazy(() => import("./components/chat/ChatRightPanel"));
+const ProjectFilesPanel = lazy(
+  () => import("./components/chat/ProjectFilesPanel"),
+);
 const ACTIVE_PROJECT_KEY = "astro.activeProjectId";
 
 export default function App() {
@@ -2145,89 +2168,91 @@ export default function App() {
               </div>
               <div className="page-body">
                 <div className="settings-content-inline">
-                  {settingsTab.startsWith("preferences") && (
-                    <PreferencesPanel
-                      section={
-                        settingsTab === "preferences"
-                          ? "general"
-                          : (settingsTab.split(
-                              ":",
-                            )[1] as import("./components/settings/PreferencesPanel").PreferenceCategory)
-                      }
-                      mode={mode}
-                      onChange={setMode}
-                      colorStyle={colorStyle}
-                      onColorStyleChange={setColorStyle}
-                      gradient={gradient}
-                      onGradientChange={setGradient}
-                      onBeginCustomGradient={beginGradientEdit}
-                      onPreviewGradient={previewGradient}
-                      onCommitCustomGradient={commitGradientEdit}
-                      onCancelCustomGradient={cancelGradientEdit}
-                      onReshuffleDynamic={reshuffleDynamic}
-                      wallpaper={wallpaper}
-                      tone={shellTone}
-                      chatDisplayPrefs={chatDisplayPrefs}
-                      onChatVerbosityChange={setVerbosity}
-                      onChatAnswerLayoutChange={setAnswerLayout}
-                      onChatToggleChange={setToggle}
-                      activeSessionId={chat.sessionId ?? undefined}
-                    />
-                  )}
-                  {settingsTab === "tools" && (
-                    <ToolsPanel
-                      active={nav === "settings"}
-                      modelInfo={loadingModelInfo?.providerId === activeProvider?.id && loadingModelInfo?.info.id === activeProvider?.model ? loadingModelInfo?.info : null}
-                      initialTab={toolsInitialTab}
-                      onInitialTabConsumed={() => setToolsInitialTab(null)}
-                    />
-                  )}
-                  {settingsTab === "browser" && (
-                    <BrowserSettingsPanel
-                      active={nav === "settings"}
-                      tone={shellTone}
-                    />
-                  )}
-                  {settingsTab === "terminal" && (
-                    <TerminalSettingsPanel tone={shellTone} />
-                  )}
-                  {settingsTab === "environment-dependencies" && (
-                    <EnvironmentDependenciesPanel
-                      active={nav === "settings"}
-                      tone={shellTone}
-                    />
-                  )}
-                  {settingsTab === "desktop-pet" && (
-                    <DesktopPetPanel active={nav === "settings"} />
-                  )}
-                  {settingsTab === "evolution" && (
-                    <EvolutionModelsPanel
-                      active={nav === "settings"}
-                      tone={shellTone}
-                    />
-                  )}
-                  {settingsTab === "insights" && (
-                    <InsightsPanel active={nav === "settings"} />
-                  )}
-                  {settingsTab === "models" && (
-                    <ModelMarketPanel
-                      active={nav === "settings"}
-                      onProvidersStateChange={syncProvidersFromState}
-                    />
-                  )}
-                  {settingsTab === "providers" && (
-                    <ProvidersPanel
-                      active={nav === "settings"}
-                      onStateChange={syncProvidersFromState}
-                      tone={shellTone}
-                    />
-                  )}
-                  {settingsTab === "memory" && (
-                    <MemoryPanel
-                      onClose={() => setSettingsTab("preferences")}
-                      sessionId={chat.sessionId}
-                    />
-                  )}
+                  <Suspense fallback={null}>
+                    {settingsTab.startsWith("preferences") && (
+                      <PreferencesPanel
+                        section={
+                          settingsTab === "preferences"
+                            ? "general"
+                            : (settingsTab.split(
+                                ":",
+                              )[1] as import("./components/settings/PreferencesPanel").PreferenceCategory)
+                        }
+                        mode={mode}
+                        onChange={setMode}
+                        colorStyle={colorStyle}
+                        onColorStyleChange={setColorStyle}
+                        gradient={gradient}
+                        onGradientChange={setGradient}
+                        onBeginCustomGradient={beginGradientEdit}
+                        onPreviewGradient={previewGradient}
+                        onCommitCustomGradient={commitGradientEdit}
+                        onCancelCustomGradient={cancelGradientEdit}
+                        onReshuffleDynamic={reshuffleDynamic}
+                        wallpaper={wallpaper}
+                        tone={shellTone}
+                        chatDisplayPrefs={chatDisplayPrefs}
+                        onChatVerbosityChange={setVerbosity}
+                        onChatAnswerLayoutChange={setAnswerLayout}
+                        onChatToggleChange={setToggle}
+                        activeSessionId={chat.sessionId ?? undefined}
+                      />
+                    )}
+                    {settingsTab === "tools" && (
+                      <ToolsPanel
+                        active={nav === "settings"}
+                        modelInfo={loadingModelInfo?.providerId === activeProvider?.id && loadingModelInfo?.info.id === activeProvider?.model ? loadingModelInfo?.info : null}
+                        initialTab={toolsInitialTab}
+                        onInitialTabConsumed={() => setToolsInitialTab(null)}
+                      />
+                    )}
+                    {settingsTab === "browser" && (
+                      <BrowserSettingsPanel
+                        active={nav === "settings"}
+                        tone={shellTone}
+                      />
+                    )}
+                    {settingsTab === "terminal" && (
+                      <TerminalSettingsPanel tone={shellTone} />
+                    )}
+                    {settingsTab === "environment-dependencies" && (
+                      <EnvironmentDependenciesPanel
+                        active={nav === "settings"}
+                        tone={shellTone}
+                      />
+                    )}
+                    {settingsTab === "desktop-pet" && (
+                      <DesktopPetPanel active={nav === "settings"} />
+                    )}
+                    {settingsTab === "evolution" && (
+                      <EvolutionModelsPanel
+                        active={nav === "settings"}
+                        tone={shellTone}
+                      />
+                    )}
+                    {settingsTab === "insights" && (
+                      <InsightsPanel active={nav === "settings"} />
+                    )}
+                    {settingsTab === "models" && (
+                      <ModelMarketPanel
+                        active={nav === "settings"}
+                        onProvidersStateChange={syncProvidersFromState}
+                      />
+                    )}
+                    {settingsTab === "providers" && (
+                      <ProvidersPanel
+                        active={nav === "settings"}
+                        onStateChange={syncProvidersFromState}
+                        tone={shellTone}
+                      />
+                    )}
+                    {settingsTab === "memory" && (
+                      <MemoryPanel
+                        onClose={() => setSettingsTab("preferences")}
+                        sessionId={chat.sessionId}
+                      />
+                    )}
+                  </Suspense>
                 </div>
               </div>
             </>
@@ -2235,45 +2260,47 @@ export default function App() {
             <>
               <div className="page-body page-body--bare">
                 <div className="feature-content-inline">
-                  {featureNav === "cron" && (
-                    <CronPanel
-                      active
-                      providers={providers.map((p) => ({
-                        id: p.id,
-                        name: p.display_name,
-                        model: p.model,
-                        kind: p.kind,
-                      }))}
-                      activeProviderId={activeProviderId}
-                      tone={shellTone}
-                    />
-                  )}
-                  {featureNav === "loop" && (
-                    <LoopPanel
-                      active
-                      providers={providers.map((p) => ({
-                        id: p.id,
-                        name: p.display_name,
-                        model: p.model,
-                        kind: p.kind,
-                      }))}
-                      onCollapseSidebar={sidebar.collapseSidebar}
-                      onExpandSidebar={sidebar.pinSidebar}
-                    />
-                  )}
-                  {featureNav === "skills" && (
-                    <PluginsPage
-                      active
-                      initialTab={skillsInitialTab}
-                      onInitialTabConsumed={() => setSkillsInitialTab(null)}
-                      onInstallWithAgent={(prompt, contextToken) => {
-                        setInput(prompt);
-                        setComposerContextPrefill(contextToken ?? null);
-                        setNav("chat");
-                      }}
-                      tone={shellTone}
-                    />
-                  )}
+                  <Suspense fallback={null}>
+                    {featureNav === "cron" && (
+                      <CronPanel
+                        active
+                        providers={providers.map((p) => ({
+                          id: p.id,
+                          name: p.display_name,
+                          model: p.model,
+                          kind: p.kind,
+                        }))}
+                        activeProviderId={activeProviderId}
+                        tone={shellTone}
+                      />
+                    )}
+                    {featureNav === "loop" && (
+                      <LoopPanel
+                        active
+                        providers={providers.map((p) => ({
+                          id: p.id,
+                          name: p.display_name,
+                          model: p.model,
+                          kind: p.kind,
+                        }))}
+                        onCollapseSidebar={sidebar.collapseSidebar}
+                        onExpandSidebar={sidebar.pinSidebar}
+                      />
+                    )}
+                    {featureNav === "skills" && (
+                      <PluginsPage
+                        active
+                        initialTab={skillsInitialTab}
+                        onInitialTabConsumed={() => setSkillsInitialTab(null)}
+                        onInstallWithAgent={(prompt, contextToken) => {
+                          setInput(prompt);
+                          setComposerContextPrefill(contextToken ?? null);
+                          setNav("chat");
+                        }}
+                        tone={shellTone}
+                      />
+                    )}
+                  </Suspense>
                 </div>
               </div>
             </>
@@ -2284,12 +2311,14 @@ export default function App() {
               >
                 <div className="content-heading">
                   {projectFiles.tabs.length > 0 ? (
-                    <ProjectFileTabs
-                      workbench={projectFiles}
-                      mdMode={projectMdMode}
-                      onMdModeChange={changeProjectMdMode}
-                      onPreviewInBrowser={previewProjectFileInBrowser}
-                    />
+                    <Suspense fallback={null}>
+                      <ProjectFileTabs
+                        workbench={projectFiles}
+                        mdMode={projectMdMode}
+                        onMdModeChange={changeProjectMdMode}
+                        onPreviewInBrowser={previewProjectFileInBrowser}
+                      />
+                    </Suspense>
                   ) : conversationTitle ? (
                     <>
                       <div className="page-title-block">
@@ -2561,11 +2590,13 @@ export default function App() {
                       messages={chat.messages}
                       workspaceContent={
                         projectFiles.tabs.length > 0 ? (
-                          <ProjectFileEditor
-                            workbench={projectFiles}
-                            theme={resolved}
-                            mdMode={projectMdMode}
-                          />
+                          <Suspense fallback={null}>
+                            <ProjectFileEditor
+                              workbench={projectFiles}
+                              theme={resolved}
+                              mdMode={projectMdMode}
+                            />
+                          </Suspense>
                         ) : null
                       }
                       composerPresentation={
@@ -2708,24 +2739,28 @@ export default function App() {
                       )}
                     />
                   </div>
-                  <ProjectFilesPanel
-                    open={activeChatRightDock === "project-files"}
-                    workbench={projectFiles}
-                    onWidthChange={setProjectFilesWidth}
-                  />
-                  {browserDockPresence.mounted ? (
-                    <BrowserDock
-                      open={browserDockPresence.visible}
-                      preview={chat.browserPreview}
-                      expanded={browserExpanded}
-                      onControl={chat.controlBrowser}
-                      onExpandedChange={setBrowserExpanded}
-                      onClose={() => {
-                        setBrowserExpanded(false);
-                        setBrowserComposerOverlayOpen(false);
-                        setBrowserDockOpen(false);
-                      }}
+                  <Suspense fallback={null}>
+                    <ProjectFilesPanel
+                      open={activeChatRightDock === "project-files"}
+                      workbench={projectFiles}
+                      onWidthChange={setProjectFilesWidth}
                     />
+                  </Suspense>
+                  {browserDockPresence.mounted ? (
+                    <Suspense fallback={null}>
+                      <BrowserDock
+                        open={browserDockPresence.visible}
+                        preview={chat.browserPreview}
+                        expanded={browserExpanded}
+                        onControl={chat.controlBrowser}
+                        onExpandedChange={setBrowserExpanded}
+                        onClose={() => {
+                          setBrowserExpanded(false);
+                          setBrowserComposerOverlayOpen(false);
+                          setBrowserDockOpen(false);
+                        }}
+                      />
+                    </Suspense>
                   ) : null}
                   <div
                     className={`side-chat-dock${activeChatRightDock === "side-chat" ? " is-open" : ""}`}
@@ -2767,52 +2802,56 @@ export default function App() {
                   </div>
                   <AnimatePresence initial={false}>
                     {activeChatRightDock === "inspector" && (
-                      <ChatRightPanel
-                        key="chat-inspector"
-                        tab={chat.chatRightTab}
-                        onTabChange={setChatRightTab}
-                        onClose={() => setChatRightOpen(false)}
-                        sessionId={chat.sessionId}
-                        turnId={chat.currentTurnId}
-                        tokenUsage={chat.tokenUsage}
-                        contextUsage={chat.contextUsage}
-                        contextWindow={contextWindow}
-                        messages={chat.messages}
-                        streaming={chat.streaming}
-                        subagentRoots={subagents.roots}
-                        subagentThreads={subagents.threads}
-                        subagentRootServiceTier={
-                          subagents.state.rootServiceTier
-                        }
-                        subagentError={subagents.error}
-                        subagentsLoading={subagents.loading}
-                        subagentsInitialized={subagents.initialized}
-                        onRefreshSubagents={subagents.refresh}
-                        onMarkSubagentRead={subagents.markRead}
-                        onOpenSession={(sessionId) =>
-                          openSessionFromFilespace(sessionId)
-                        }
-                        onOpenSideSession={(sessionId) => {
-                          sideChat.openExisting(sessionId, chat.sessionId);
-                        }}
-                        onPrefillInput={setInput}
-                        onOpenMemory={() => openSettingsTab("memory")}
-                        onOpenSkills={() => setNav("skills")}
-                      />
+                      <Suspense fallback={null}>
+                        <ChatRightPanel
+                          key="chat-inspector"
+                          tab={chat.chatRightTab}
+                          onTabChange={setChatRightTab}
+                          onClose={() => setChatRightOpen(false)}
+                          sessionId={chat.sessionId}
+                          turnId={chat.currentTurnId}
+                          tokenUsage={chat.tokenUsage}
+                          contextUsage={chat.contextUsage}
+                          contextWindow={contextWindow}
+                          messages={chat.messages}
+                          streaming={chat.streaming}
+                          subagentRoots={subagents.roots}
+                          subagentThreads={subagents.threads}
+                          subagentRootServiceTier={
+                            subagents.state.rootServiceTier
+                          }
+                          subagentError={subagents.error}
+                          subagentsLoading={subagents.loading}
+                          subagentsInitialized={subagents.initialized}
+                          onRefreshSubagents={subagents.refresh}
+                          onMarkSubagentRead={subagents.markRead}
+                          onOpenSession={(sessionId) =>
+                            openSessionFromFilespace(sessionId)
+                          }
+                          onOpenSideSession={(sessionId) => {
+                            sideChat.openExisting(sessionId, chat.sessionId);
+                          }}
+                          onPrefillInput={setInput}
+                          onOpenMemory={() => openSettingsTab("memory")}
+                          onOpenSkills={() => setNav("skills")}
+                        />
+                      </Suspense>
                     )}
                     {activeChatRightDock === "review" && reviewState && (
-                      <ChatReviewPanel
-                        key="chat-review"
-                        projectId={activeProjectId}
-                        files={reviewState.files}
-                        selectedPath={reviewState.selectedPath}
-                        onSelectPath={(selectedPath) =>
-                          setReviewState((current) =>
-                            current ? { ...current, selectedPath } : current,
-                          )
-                        }
-                        onClose={() => setReviewState(null)}
-                      />
+                      <Suspense fallback={null}>
+                        <ChatReviewPanel
+                          key="chat-review"
+                          projectId={activeProjectId}
+                          files={reviewState.files}
+                          selectedPath={reviewState.selectedPath}
+                          onSelectPath={(selectedPath) =>
+                            setReviewState((current) =>
+                              current ? { ...current, selectedPath } : current,
+                            )
+                          }
+                          onClose={() => setReviewState(null)}
+                        />
+                      </Suspense>
                     )}
                   </AnimatePresence>
                 </div>
