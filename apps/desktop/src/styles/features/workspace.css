@@ -1430,16 +1430,6 @@ html[data-theme="dark"] .ws-media-frame {
   min-width: 2.4em;
 }
 
-.ws-codemirror .cm-activeLineGutter {
-  background: transparent !important;
-  color: #7c3aed !important;
-  font-weight: 600;
-}
-
-.ws-codemirror .cm-activeLine {
-  border-radius: 0 8px 8px 0;
-}
-
 .ws-codemirror .cm-foldGutter span {
   color: #a78bfa;
   padding: 0 4px;
@@ -1539,10 +1529,6 @@ html[data-theme="dark"] .ws-editor-wrap {
 
 html[data-theme="dark"] .ws-codemirror .cm-gutters {
   color: #94a3b8;
-}
-
-html[data-theme="dark"] .ws-codemirror .cm-activeLineGutter {
-  color: #c4b5fd !important;
 }
 
 html[data-theme="dark"] .ws-codemirror .cm-content {

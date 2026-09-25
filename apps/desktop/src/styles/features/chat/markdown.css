@@ -1890,6 +1890,40 @@ html[data-theme="dark"]
   grid-row: 1;
 }
 
+/* 胶囊输入只有一行：展开控件收进输入区右侧的留白，
+   与右侧动作组同高同尺寸，不再浮到卡片上沿、压住麦克风。 */
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-expand-btn {
+  top: 50%;
+  right: -3px;
+  width: 34px;
+  height: 34px;
+  translate: 0 -50%;
+}
+
+/* 同一行里弧线读不出含义：胶囊内直接用展开图标，
+   悬停底色仍由 ::before 提供。 */
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-expand-indicator {
+  opacity: 0;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded)
+  .composer-expand-btn
+  .composer-expand-icon.is-expand {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-expand-glyph,
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-expand-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-shell.is-capsule:not(.is-capsule-expanded) .composer-expand-btn::before {
+  width: 30px;
+  height: 30px;
+}
+
 @media (max-width: 560px) {
   .composer-shell.is-capsule {
     right: 10px;

@@ -265,6 +265,21 @@ test("composer exposes an accessible hover-revealed input height control", async
     styles,
     /\.composer-expand-btn::before\s*\{[\s\S]*?width:\s*17px;[\s\S]*?height:\s*17px;/,
   );
+  assert.match(
+    styles,
+    /\.composer-shell\.is-capsule:not\(\.is-capsule-expanded\) \.composer-expand-btn\s*\{[\s\S]*?top:\s*50%;[\s\S]*?translate:\s*0 -50%;/,
+    "capsule layout keeps the expand control inside the input row",
+  );
+  assert.match(
+    styles,
+    /\.composer-shell\.is-capsule:not\(\.is-capsule-expanded\) \.composer-expand-indicator\s*\{[\s\S]*?opacity:\s*0;/,
+    "the corner arc must not float over the capsule action row",
+  );
+  assert.match(
+    styles,
+    /\.composer-shell\.is-capsule:not\(\.is-capsule-expanded\)[\s\S]*?\.composer-expand-icon\.is-expand\s*\{[\s\S]*?opacity:\s*1;/,
+    "capsule layout shows the expand glyph at rest",
+  );
 });
 
 test("composer leaves ordinary clipboard text to the native textarea paste", async () => {

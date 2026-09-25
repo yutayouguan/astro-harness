@@ -38,8 +38,9 @@ export default function WorkspaceEditor({
       basicSetup={{
         lineNumbers: true,
         foldGutter: true,
-        highlightActiveLine: true,
-        highlightActiveLineGutter: true,
+        // 不整行铺高亮：点过一行会留下一条通栏色带，和选区混在一起。
+        highlightActiveLine: false,
+        highlightActiveLineGutter: false,
         bracketMatching: true,
         autocompletion: false,
         dropCursor: true,
