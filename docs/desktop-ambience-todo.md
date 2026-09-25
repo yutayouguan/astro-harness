@@ -122,6 +122,7 @@ Storybook测试图片是此前已授权生成的窗台/森林/草地成品副本
 - [x] 角色权重改为亮色 0.46/0.50、暗色 0.28/0.26，底部 50% 100% 回响从主色改为辅色，消除下半屏死区。
 - [x] `shellGradientPreviewBackground` 同步这条回响层，编辑器画布预览不再与壳层不一致。
 - [x] `shellHaloForRole` 与 `shell.css` 两处权重保持同一份基线；CSS 变量兜底值同步为新默认色。
+- [x] 老安装 localStorage 里存的旧预设色值在读取时刷新为当前预设（`refreshPresetGradient`）；手动编辑过的 `custom` 渐变原样保留，不改用户自选色。
 - [x] 新增预设形态回归测试（对角构图、色相跨度）与 `dynamicGradient.test.ts`（确定性、对角构图、色相跨度、HSL 边界）。
 - [x] 全量前端测试 1105 项、TypeScript、stylelint、生产构建（含 CSS 层序校验）、ambience 视觉用例 18 项、design-baseline 亮暗截图均通过。
 - [ ] 原生 Tauri 实机观感确认：`tauri dev` 热更新可直接查看，仍需在真实窗口逐组过一遍亮暗。

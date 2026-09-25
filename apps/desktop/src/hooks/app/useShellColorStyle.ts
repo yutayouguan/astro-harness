@@ -4,6 +4,7 @@ import { createDynamicSeed } from "../../lib/ui/dynamicGradient";
 import {
   cloneGradient,
   DEFAULT_SHELL_COLOR_PREFS,
+  refreshPresetGradient,
   type ShellColorPrefs,
   type ShellColorStyle,
   type ShellGradient,
@@ -31,7 +32,8 @@ function readStoredPrefs(): ShellColorPrefs {
             : createDynamicSeed();
         return {
           style: parseStyle(o.style),
-          gradient: normalizeGradient(o.gradient),
+          // 预设色值随版本重调，老安装里存的旧预设在这里刷新；自定义渐变原样保留
+          gradient: refreshPresetGradient(normalizeGradient(o.gradient)),
           dynamicSeed: seed,
         };
       }

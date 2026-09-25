@@ -7,6 +7,8 @@ import {
   hexToRgb,
   isNearBlack,
   isNearWhite,
+  gradientFromPreset,
+  refreshPresetGradient,
   SHELL_GRADIENT_PRESETS,
   shellGradSpread,
   shellGradStrength,
@@ -140,4 +142,25 @@ test("preset palette keeps real hue travel (indigo stays the quiet single-hue pa
     preset.secondary.color,
   ]);
   assert.equal(new Set(colors).size, colors.length, "duplicate preset colors");
+});
+
+test("stored preset gradients refresh to the current preset values", () => {
+  const expected = gradientFromPreset("rose");
+  const stale = {
+    id: "rose" as const,
+    primary: { color: "#db2777", x: 16, y: 10 },
+    secondary: { color: "#fb7185", x: 86, y: 24 },
+    extras: [],
+  };
+  assert.notEqual(stale.primary.color, expected.primary.color);
+  assert.deepEqual(refreshPresetGradient(stale), expected);
+
+  // 手动编辑过的渐变（id custom）必须原样保留
+  const custom = {
+    id: "custom" as const,
+    primary: { color: "#123456", x: 5, y: 5 },
+    secondary: { color: "#654321", x: 95, y: 95 },
+    extras: [{ color: "#abcdef", x: 50, y: 50 }],
+  };
+  assert.deepEqual(refreshPresetGradient(custom), custom);
 });

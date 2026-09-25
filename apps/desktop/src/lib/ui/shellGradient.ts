@@ -379,6 +379,14 @@ export function gradientFromPreset(id: ShellGradientPresetId): ShellGradient {
   };
 }
 
+/**
+ * 预设色值随版本重调：保留用户选中的预设 id，刷新为当前色值。
+ * 手动编辑过渐变的 id 是 `custom`，不在这里覆盖。
+ */
+export function refreshPresetGradient(gradient: ShellGradient): ShellGradient {
+  return gradient.id === "custom" ? gradient : gradientFromPreset(gradient.id);
+}
+
 export function cloneGradient(g: ShellGradient): ShellGradient {
   return {
     id: g.id,
