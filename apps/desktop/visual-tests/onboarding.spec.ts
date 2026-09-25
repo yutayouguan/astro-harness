@@ -99,7 +99,10 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
             localStorage.setItem("qa.state", JSON.stringify(state));
             return true;
           }
-          case "list_installed_skills": return [{ id: "first-meeting", name: "first-meeting", enabled: true }];
+          // 技能不可用时，客户端连清单都拿不到 —— requiredSkill 门控在这里拦下首次见面。
+          case "list_installed_skills":
+            if (w.__failMeetingSkill) return [];
+            return [{ id: "first-meeting", name: "first-meeting", enabled: true }];
           case "get_skill_content":
             if (w.__failMeetingSkill) throw Error("skill not installed");
             return { content: firstMeetingSkill };
@@ -176,7 +179,9 @@ async function installTransport(page: Page, boot: Boot = "fresh") {
           case "get_system_wallpaper": throw Error("No system wallpaper in QA");
           case "get_agent_tools": return [];
           case "start_chat": {
-            if (!args.request?.content.includes("Please follow this skill (first-meeting)")) throw Error("TEST FAILURE: no task should auto-send");
+            // 首次见面走 /first-meeting 指令 + requiredSkill 门控：
+            // 客户端剥掉指令标记，只把技能名作为已加载技能上报，正文由后端注入。
+            if (!args.request?.loadedSkills?.includes("first-meeting")) throw Error("TEST FAILURE: no task should auto-send");
             localStorage.setItem("qa.meetingRequests", String(Number(localStorage.getItem("qa.meetingRequests") ?? 0) + 1));
             return args.request.sessionId;
           }
@@ -335,9 +340,9 @@ test("first meeting auto-starts once through real chat and survives reload witho
   await page.getByRole("button", { name: "进入 Astro，认识一下", exact: true }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("qa.meetingRequests"))).toBe("1");
   const submitted = await page.evaluate(() => (window as any).__onboardingCalls.find((call: any) => call.cmd === "start_chat").args.request);
-  expect(submitted.content).toContain("first-meeting");
-  expect(submitted.content).toContain("request_user_input_async");
-  expect(submitted.content).toContain("确认后才记住");
+  // 技能正文由后端注入：客户端剥掉 /first-meeting 标记，只把它作为已加载技能上报。
+  expect(submitted.content).toContain("第一次见面");
+  expect(submitted.loadedSkills).toContain("first-meeting");
   expect(submitted.useMemory).toBe(true);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("qa.state")!).first_meeting)).toEqual({ status: "started", session_id: submitted.sessionId });
   await page.reload();

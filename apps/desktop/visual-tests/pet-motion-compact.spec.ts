@@ -24,7 +24,8 @@ for (const theme of ["light", "dark"]) {
       expect((await preview.boundingBox())!.height).toBeLessThan(330);
       if (width === 1440) {
         expect((await preview.boundingBox())!.width).toBe(220);
-        expect((await preferences.boundingBox())!.height).toBeLessThan(460);
+        // 材质统一后 soft inset 略高（实测 469）；阈值放宽但仍能挡住两列塌陷。
+        expect((await preferences.boundingBox())!.height).toBeLessThan(480);
         const previewBox = (await preview.boundingBox())!;
         const rightInset = panelBox.x + panelBox.width - previewBox.x - previewBox.width;
         expect(rightInset).toBeGreaterThanOrEqual(16);

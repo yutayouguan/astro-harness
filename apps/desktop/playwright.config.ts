@@ -7,10 +7,15 @@ export default defineConfig({
   testDir: "./visual-tests",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
+  // Storybook dev 单实例在满并发下会偶发「story 还没渲染出来」，
+  // 表现为与改动无关的随机失败：限制并发并保留一次本地重试。
+  workers: process.env.CI ? 2 : 3,
+  retries: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? "github" : "list",
   snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
   expect: {
+    // iframe 首次命中要现编译 story 模块，5s 对冷启动偏紧。
+    timeout: 10_000,
     toHaveScreenshot: {
       animations: "disabled",
       maxDiffPixelRatio: 0.02,

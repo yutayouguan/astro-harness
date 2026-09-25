@@ -114,7 +114,9 @@ for (const theme of ["light", "dark"]) {
     const preview = page.locator(".pet-motion-preview");
     await expect(preview).toBeVisible();
     await expect(preview).toHaveCSS("backdrop-filter", "none");
-    expect(await preview.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain("radial-gradient");
+    // 设置材质统一后，动作预览用统一 inset 面色（不再自带径向渐变）；
+    // 色相跟随由卡片与控件承担，见上面的 metrics 断言。
+    expect(await preview.evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
     const select = page.locator(".pet-detail-interval select");
     const before = await select.evaluate((el) => getComputedStyle(el).backgroundColor);
     await page.evaluate(() => document.documentElement.style.setProperty("--wallpaper-tone", "#408561"));
