@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState, type CSSProperties } from "react";
 import WorkspaceEditor from "../components/workspace/WorkspaceEditor";
-import type { ResolvedTheme } from "../hooks/app/useTheme";
+import { ThemeProvider, type ResolvedTheme } from "../hooks/app/useTheme";
 
 const identitySample = `# IDENTITY.md — Agent 身份
 
@@ -56,6 +56,14 @@ const meta = {
   title: "Design/Project File Editor",
   component: ProjectFileEditorSample,
   parameters: { layout: "fullscreen" },
+  // 与真实 APP 一致：ThemeProvider 会安装输入焦点环的运行时
+  decorators: [
+    (Story) => (
+      <ThemeProvider>
+        <Story />
+      </ThemeProvider>
+    ),
+  ],
 } satisfies Meta<typeof ProjectFileEditorSample>;
 export default meta;
 type Story = StoryObj<typeof meta>;

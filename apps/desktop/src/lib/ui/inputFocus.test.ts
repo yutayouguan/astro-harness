@@ -138,6 +138,29 @@ test("focus lifecycle moves one marker, preserves pointer typing and cleans list
   assert.equal(input.attributes.size, 0);
 });
 
+test("document editors keep the caret as their only focus frame", async () => {
+  const [reset, focusStyles] = await Promise.all([
+    readFile(
+      new URL("../../styles/foundation/reset.css", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../styles/materials/soft-focus.css", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  // 可编辑区不再被标记成输入框，因此不会拿到 [data-input-focus] 的那圈描边。
+  assert.ok(
+    INPUT_FOCUS_CONTROL.includes(
+      '[contenteditable="true"][role="textbox"]:not(.cm-content)',
+    ),
+  );
+  assert.match(focusStyles, /\[data-input-focus\]\s*\{[\s\S]*?outline:/);
+  // WebKit 原生焦点环也要压掉，否则换一种描边继续套在正文上。
+  assert.match(reset, /\.cm-editor \.cm-content\s*\{[\s\S]*?outline:\s*none;/);
+});
+
 test("shared focus uses theme gradients in both materials, with contrast and solid fallbacks", async () => {
   const css = await readFile(
     new URL("../../styles/materials/soft-focus.css", import.meta.url),

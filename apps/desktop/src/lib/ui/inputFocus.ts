@@ -5,7 +5,9 @@ export const INPUT_FOCUS_CONTROL = [
   "select:not(:disabled)",
   "button.select-menu-trigger:not(:disabled)",
   "button.cron-sched-field-shell:not(:disabled)",
-  '[contenteditable="true"][role="textbox"]',
+  // 文档编辑器的可编辑区（CodeMirror .cm-content）不套输入框焦点环：
+  // 打开文件后光标本身就是焦点提示，整块描边会和内容混在一起。
+  '[contenteditable="true"][role="textbox"]:not(.cm-content)',
 ].join(", ");
 
 // Only actual input shells, never a whole form/card. New composites can opt in

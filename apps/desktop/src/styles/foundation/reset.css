@@ -66,3 +66,11 @@ code,
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* 文档编辑器不给可编辑区画焦点框：光标与选区已经是焦点提示，
+   整块描边会像给正文套了一圈输入框（WebKit 还会补一层原生焦点环）。 */
+.cm-editor,
+.cm-editor .cm-scroller,
+.cm-editor .cm-content {
+  outline: none;
+}
