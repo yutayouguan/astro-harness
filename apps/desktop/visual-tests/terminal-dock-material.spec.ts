@@ -1,9 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Production App and CSS; only the native transport is faked. Guards the terminal
-// reading field: over a wallpaper the xterm area must sit on the sidebar plane
-// instead of showing the blurred photo (which reads as milk plus mach banding),
-// and the dock header must not carry the white halo overlay.
+// reading field: the xterm area is a transparent pane over the dock's frosted
+// glass (no extra white plane), and the dock header carries no white halo overlay.
 
 const TERMINAL_TOGGLE = "打开或折叠终端（⌘/Ctrl+J）";
 
@@ -182,7 +181,7 @@ async function boot(page: Page, theme: string) {
 }
 
 for (const theme of ["light", "dark"]) {
-  test(`${theme}: terminal content sits on the sidebar plane under a wallpaper`, async ({
+  test(`${theme}: terminal content reads through the dock frost under a wallpaper`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -196,6 +195,7 @@ for (const theme of ["light", "dark"]) {
     });
 
     const measured = await page.evaluate(() => {
+      const dock = document.querySelector(".terminal-dock")!;
       const screen = document.querySelector(".terminal-dock-screen")!;
       const header = document.querySelector(".terminal-dock-header")!;
       const sidebar = document.querySelector(".sidebar")!;
@@ -214,6 +214,7 @@ for (const theme of ["light", "dark"]) {
       return {
         screen: rgb(getComputedStyle(screen).backgroundColor),
         sidebarPlane: rgb(resolve(sidebar, "--sidebar-bg")),
+        dockBackdrop: getComputedStyle(dock).backdropFilter,
         headerImage: getComputedStyle(header).backgroundImage,
         xterm: getComputedStyle(
           screen.querySelector(".xterm") as Element,
@@ -221,11 +222,11 @@ for (const theme of ["light", "dark"]) {
       };
     });
 
-    // A defined reading field: opaque enough that wallpaper detail cannot smear
-    // through the xterm area, and the same tint the sidebar rail resolves to.
-    expect(measured.screen.a).toBeGreaterThanOrEqual(0.6);
-    expect(measured.screen).toEqual(measured.sidebarPlane);
-    // xterm keeps painting transparent rows on top of that field.
+    // 终端不自带偏白底板：文字直接读 dock 的磨砂玻璃。
+    expect(measured.screen.a).toBe(0);
+    expect(measured.screen).not.toEqual(measured.sidebarPlane);
+    expect(measured.dockBackdrop).toMatch(/blur/);
+    // xterm keeps painting transparent rows on top of that glass.
     expect(measured.xterm).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
     // No white gradient halo on the dock header.
     expect(measured.headerImage).toBe("none");

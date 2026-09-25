@@ -53,7 +53,8 @@ function terminalTheme() {
   const read = (name: string, fallback: string) =>
     styles.getPropertyValue(name).trim() || fallback;
   return {
-    background: read("--sidebar-bg", "#111318"),
+    // 走与多标签终端一致的屏幕底色：默认透明，让 dock 的磨砂玻璃透出来。
+    background: read("--terminal-screen-bg", read("--sidebar-bg", "#111318")),
     foreground: read("--ink", "#e8eaf0"),
     cursor: read("--tone", "#7aa2f7"),
     selectionBackground: read("--tone-soft", "rgba(122, 162, 247, 0.28)"),

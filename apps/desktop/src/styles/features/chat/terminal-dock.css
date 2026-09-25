@@ -1,7 +1,7 @@
 html {
-  /* 终端内容区是阅读区，不是壁纸窗口：玻璃留给 dock 边框，
-     正文坐在与侧边栏同源的平面染色上，避免壁纸细节被放大成奶雾和同心色带。 */
-  --terminal-screen-plane: var(--sidebar-bg);
+  /* 终端内容区跟 dock 同一层磨砂玻璃：平面透明，xterm 正文直接坐在
+     backdrop-filter 的磨砂背景上，而不是再压一层偏白的侧栏底色。 */
+  --terminal-screen-plane: transparent;
   --terminal-screen-bg: rgba(0, 0, 0, 0);
 }
 
@@ -411,10 +411,12 @@ html {
 
 @media (prefers-contrast: more) {
   html[data-theme="light"] {
+    --terminal-screen-plane: var(--sidebar-bg);
     --terminal-screen-bg: rgb(255, 255, 255);
   }
 
   html[data-theme="dark"] {
+    --terminal-screen-plane: var(--sidebar-bg);
     --terminal-screen-bg: rgb(4, 6, 12);
   }
 }

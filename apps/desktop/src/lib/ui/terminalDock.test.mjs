@@ -126,11 +126,16 @@ test("terminal uses the top-right tool group material", () => {
   assert.doesNotMatch(dock, /"data-wallpaper"/);
   assert.match(css, /html\[data-theme="light"\]/);
   assert.match(css, /--terminal-screen-bg:\s*rgba\(0, 0, 0, 0\)/);
-  // 终端正文坐在与侧边栏同源的平面染色上，壁纸不再透过 xterm 区域形成奶雾和色带。
-  assert.match(css, /--terminal-screen-plane:\s*var\(--sidebar-bg\)/);
+  // 终端正文直接坐在 dock 的磨砂玻璃上，不再压一层偏白的侧栏底板。
+  assert.match(css, /--terminal-screen-plane:\s*transparent/);
   assert.match(
     css,
     /\.terminal-dock-screen\s*\{[\s\S]*?background:\s*var\(--terminal-screen-plane\);/,
+  );
+  // 高对比度仍回到不透明底板，保证可读性。
+  assert.match(
+    css,
+    /@media \(prefers-contrast: more\)[\s\S]*?--terminal-screen-plane:\s*var\(--sidebar-bg\)/,
   );
   const header = css.match(/\.terminal-dock-header\s*\{([\s\S]*?)\}/)?.[1] ?? "";
   assert.doesNotMatch(header, /linear-gradient/);
