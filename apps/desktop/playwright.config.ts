@@ -3,6 +3,15 @@ import { defineConfig, devices } from "@playwright/test";
 const port = 6006;
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
+// 用真 WebKit（WKWebView 同引擎）跑一小撮断言型用例：布局/材质这类
+// Chromium 看不出来的差异，只有换引擎才会暴露。截图基线仍只跑 Chromium。
+const WEBKIT_SMOKE = [
+  "**/project-file-editor.spec.ts",
+  "**/chat-activity-memo.spec.ts",
+  "**/terminal-dock-material.spec.ts",
+  "**/dock-edge-layout.spec.ts",
+];
+
 export default defineConfig({
   testDir: "./visual-tests",
   fullyParallel: true,
@@ -31,6 +40,22 @@ export default defineConfig({
       : undefined,
     trace: "on-first-retry",
   },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: chromiumExecutable
+          ? { executablePath: chromiumExecutable }
+          : undefined,
+      },
+    },
+    {
+      name: "webkit",
+      testMatch: WEBKIT_SMOKE,
+      use: { ...devices["Desktop Safari"] },
+    },
+  ],
   webServer: {
     command: process.env.CI
       ? `http-server storybook-static -a 127.0.0.1 -p ${port} -c-1`
