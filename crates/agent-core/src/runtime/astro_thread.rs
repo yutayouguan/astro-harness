@@ -149,6 +149,9 @@ mod tests {
     use super::*;
     use crate::runtime::{AgentStatus, Config, RuntimeIoBindError};
 
+    /// 测试等待预算：轮询 / 通道等待给足余量，
+    /// 避免 CI 或机器负载下 1 秒被误判为失败。
+    const WAIT_BUDGET: Duration = Duration::from_secs(15);
     async fn recorder(dir: &TempDir, name: &str) -> RolloutRecorder {
         RolloutRecorder::open(dir.path().join(name)).await.unwrap()
     }
@@ -366,7 +369,7 @@ mod tests {
 
         assert_eq!(thread.status(), AgentStatus::Idle);
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .expect("thread should terminate after shutdown");
 
@@ -401,7 +404,7 @@ mod tests {
         rejected_recorder.shutdown().await.unwrap();
 
         first.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), first.wait_terminated())
+        timeout(WAIT_BUDGET, first.wait_terminated())
             .await
             .expect("first thread should remain usable");
         assert_eq!(first.status(), AgentStatus::Shutdown);
@@ -535,13 +538,13 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(submitted, TurnInputSubmission::Started { .. }));
-        timeout(Duration::from_secs(1), called.notified())
+        timeout(WAIT_BUDGET, called.notified())
             .await
             .expect("actor submission should enter the model loop");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -617,7 +620,7 @@ mod tests {
         let mut settings_index = None;
         let mut started_index = None;
         let mut event_index = 0;
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 match event.msg {
@@ -653,7 +656,7 @@ mod tests {
         }
 
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -712,9 +715,7 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(started, TurnInputSubmission::Started { .. }));
-        timeout(Duration::from_secs(1), entered.notified())
-            .await
-            .unwrap();
+        timeout(WAIT_BUDGET, entered.notified()).await.unwrap();
 
         let (_, rejected) = thread
             .submit_turn(
@@ -748,7 +749,7 @@ mod tests {
 
         thread.submit(Op::Interrupt).await.unwrap();
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -832,7 +833,7 @@ mod tests {
             .unwrap();
         let turn_id = submitted.turn_id().unwrap().to_string();
 
-        let request_id = timeout(Duration::from_secs(2), async {
+        let request_id = timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 if let agent_protocol::EventMsg::RequestUserInput(request) = event.msg {
@@ -856,7 +857,7 @@ mod tests {
         .await
         .unwrap();
 
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 if matches!(
@@ -873,7 +874,7 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 2);
 
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -936,9 +937,7 @@ mod tests {
             .await
             .unwrap();
         let turn_id = submitted.turn_id().unwrap().to_string();
-        timeout(Duration::from_secs(2), entered.notified())
-            .await
-            .unwrap();
+        timeout(WAIT_BUDGET, entered.notified()).await.unwrap();
 
         assert_eq!(
             first_thread.suspend_turn_and_shutdown().await.unwrap(),
@@ -946,7 +945,7 @@ mod tests {
                 turn_id: turn_id.clone()
             }
         );
-        timeout(Duration::from_secs(2), first_thread.wait_terminated())
+        timeout(WAIT_BUDGET, first_thread.wait_terminated())
             .await
             .unwrap();
 
@@ -993,7 +992,7 @@ mod tests {
                 turn_id: turn_id.clone()
             }
         );
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = second_thread.next_event().await.unwrap();
                 if matches!(
@@ -1018,7 +1017,7 @@ mod tests {
         );
 
         second_thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), second_thread.wait_terminated())
+        timeout(WAIT_BUDGET, second_thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -1091,7 +1090,7 @@ mod tests {
             .unwrap();
         let mut entered = false;
         let mut exited = false;
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 match event.msg {
@@ -1166,7 +1165,7 @@ mod tests {
         );
 
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -1213,7 +1212,7 @@ mod tests {
             })
             .await
             .unwrap();
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 if matches!(
@@ -1230,7 +1229,7 @@ mod tests {
 
         thread.submit(Op::Interrupt).await.unwrap();
         let mut exited = false;
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 match event.msg {
@@ -1259,7 +1258,7 @@ mod tests {
         assert_eq!(history.matches("Review was interrupted").count(), 1);
 
         thread.submit(Op::Shutdown).await.unwrap();
-        timeout(Duration::from_secs(1), thread.wait_terminated())
+        timeout(WAIT_BUDGET, thread.wait_terminated())
             .await
             .unwrap();
     }
@@ -1387,7 +1386,7 @@ mod tests {
             })
             .await
             .unwrap();
-        timeout(Duration::from_secs(2), async {
+        timeout(WAIT_BUDGET, async {
             loop {
                 let event = thread.next_event().await.unwrap();
                 if matches!(

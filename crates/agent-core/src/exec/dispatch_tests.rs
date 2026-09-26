@@ -11,6 +11,10 @@ use subagents::{AgentGraphStore, AgentStatusV2, Limits, RunnerEvent};
 
 use agent_db::sqlx;
 
+/// 测试等待预算：轮询 / 通道等待的上限。条件满足即返回，所以给足余量
+/// 不会拖慢正常路径，只在并发争用/慢机器上避免误判失败。
+const WAIT_BUDGET: Duration = Duration::from_secs(15);
+
 async fn dispatch(dir: &tempfile::TempDir) -> DefaultAgentThreadDispatch {
     dispatch_for_root(
         dir,
@@ -1201,7 +1205,7 @@ async fn close_rejects_previously_admitted_handoff_without_starting_a_new_genera
             .await
         }
     });
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
@@ -1484,7 +1488,7 @@ async fn wait_for_shutdown_and_barrier_release(
     dispatch: &DefaultAgentThreadDispatch,
     thread: &AgentThreadV2,
 ) {
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             let current = dispatch
                 .control
@@ -1667,7 +1671,7 @@ async fn close_waits_for_preexisting_spawn_reservation_then_closes_committed_chi
         async move { desktop.close_subtree("root-session", "/root/parent").await }
     });
 
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while !dispatch
             .control
             .is_path_closing(&parent.canonical_path)
@@ -2446,7 +2450,7 @@ async fn cancelling_spawn_before_startup_acceptance_rolls_back_every_artifact() 
     spawn.abort();
     assert!(spawn.await.unwrap_err().is_cancelled());
     hook.release.notify_one();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch.runtime_manager.is_running(&child.thread_id) {
             tokio::task::yield_now().await;
         }
@@ -2559,7 +2563,7 @@ async fn cancelling_spawn_after_permit_before_turn_started_releases_identity() {
     spawn.abort();
     assert!(spawn.await.unwrap_err().is_cancelled());
     hook.release.notify_one();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             if !dispatch.runtime_manager.is_running(&child.thread_id)
                 && dispatch.control.identity_count().unwrap() == 0
@@ -4050,7 +4054,7 @@ async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
         )
         .await
     });
-    let queued = tokio::time::timeout(Duration::from_secs(1), async {
+    let queued = tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             let queued = dispatch
                 .control
@@ -4074,7 +4078,7 @@ async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
     followup.await.unwrap().unwrap();
     joined_followup.await.unwrap().unwrap();
 
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             let starts = dispatch
                 .control
@@ -4092,7 +4096,7 @@ async fn followup_at_terminal_cleanup_is_handed_off_to_a_new_turn() {
     })
     .await
     .expect("durable followup must start a second turn after cleanup handoff");
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while !dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
@@ -4131,7 +4135,7 @@ async fn idle_followup_reports_runtime_start_failure_instead_of_triggered_succes
     let spawned = AgentThreadDispatch::spawn_agent(&dispatch, spawn_request(&memory_dir))
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .runtime_manager
             .is_running(&spawned.thread.thread_id)
@@ -4223,7 +4227,7 @@ async fn concurrent_cold_followups_recover_once_and_share_one_starting_generatio
     let spawned = AgentThreadDispatch::spawn_agent(&*dispatch, spawn)
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .runtime_manager
             .is_running(&spawned.thread.thread_id)
@@ -4283,7 +4287,7 @@ async fn concurrent_cold_followups_recover_once_and_share_one_starting_generatio
     let (first, second) = tokio::join!(first, second);
     first.unwrap().unwrap();
     second.unwrap().unwrap();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .runtime_manager
             .is_running(&spawned.thread.thread_id)
@@ -4457,7 +4461,7 @@ async fn canceling_idle_followup_caller_does_not_cancel_manager_owned_start() {
     start_entered.notified().await;
     caller.abort();
     start_release.notify_one();
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             let starts = dispatch
                 .control
@@ -4545,7 +4549,7 @@ async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
         )
         .await
     });
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
@@ -4584,7 +4588,7 @@ async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
         )
         .await
     });
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)
@@ -4599,11 +4603,9 @@ async fn terminal_handoff_keeps_starting_slot_visible_to_third_followup() {
     .await
     .unwrap();
     start_release.notify_one();
-    let (second, third) = tokio::time::timeout(Duration::from_secs(2), async {
-        tokio::join!(second, third)
-    })
-    .await
-    .unwrap();
+    let (second, third) = tokio::time::timeout(WAIT_BUDGET, async { tokio::join!(second, third) })
+        .await
+        .unwrap();
     second.unwrap().unwrap();
     third.unwrap().unwrap();
     let starts = dispatch
@@ -4660,7 +4662,7 @@ async fn shutdown_rejects_pending_followup_without_starting_a_new_generation() {
         )
         .await
     });
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         while dispatch
             .control
             .drain_mailbox(&spawned.thread.canonical_path)

@@ -10,6 +10,10 @@ use agent::streaming::{run_multi_turn_events_with_responses_fn, ResponsesOverrid
 use providers::CompletionStream;
 use tempfile::TempDir;
 
+/// 测试等待预算：轮询 / 通道等待的上限。条件满足即返回，所以给足余量
+/// 不会拖慢正常路径，只在并发争用/慢机器上避免误判失败。
+const WAIT_BUDGET: Duration = Duration::from_secs(15);
+
 async fn wait_for_agent_thread_extensions(
     managed: &Arc<ManagedThread>,
     memory_dir: &std::path::Path,
@@ -612,7 +616,7 @@ async fn cancelled_generation_launch_cleans_registration_and_restores_settings()
     assert!(launch_owner.await.unwrap_err().is_cancelled());
     release_launch.notify_one();
 
-    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             if service
                 .pause_controls
@@ -710,7 +714,7 @@ async fn abandoned_launch_reply_after_send_rolls_back_exact_generation() {
     assert!(!session.cancel_signal().is_cancelled());
 
     drop(guarded_reply);
-    tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+    tokio::time::timeout(WAIT_BUDGET, worker)
         .await
         .expect("false acknowledgement must release the launch worker")
         .unwrap();
@@ -719,7 +723,7 @@ async fn abandoned_launch_reply_after_send_rolls_back_exact_generation() {
     assert_eq!(session.temperature(), initial_temperature);
     assert_eq!(session.interaction_mode().await, initial_mode);
     assert_eq!(
-        tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+        tokio::time::timeout(WAIT_BUDGET, &mut gate_wait)
             .await
             .expect("false acknowledgement must resolve the exact gate")
             .expect("gate resolution")
@@ -785,7 +789,7 @@ async fn abandoned_prepared_admission_after_send_does_not_commit() {
         .await
         .expect("worker must send its admission reply")
         .expect("current session must be admitted");
-    tokio::time::timeout(std::time::Duration::from_secs(1), worker)
+    tokio::time::timeout(WAIT_BUDGET, worker)
         .await
         .expect("prepare worker must finish after transferring the commit capability")
         .unwrap();
@@ -1290,12 +1294,12 @@ async fn cancelled_cancel_owner_still_finishes_gate_cleanup() {
     assert!(matches!(owner.await, Err(error) if error.is_cancelled()));
     release_abort.notify_one();
 
-    let resolution = tokio::time::timeout(std::time::Duration::from_secs(1), &mut gate_wait)
+    let resolution = tokio::time::timeout(WAIT_BUDGET, &mut gate_wait)
         .await
         .expect("detached cancel worker must resolve the exact gate")
         .expect("gate resolution");
     assert_eq!(resolution.status, "cancelled");
-    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             if !service
                 .generation_operations
@@ -1355,7 +1359,7 @@ async fn cancelled_release_owner_still_finishes_session_cleanup() {
     release_finalize_tx.send(()).unwrap();
     session.shutdown_runtime().await;
 
-    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+    tokio::time::timeout(WAIT_BUDGET, async {
         loop {
             if !service
                 .generation_operations

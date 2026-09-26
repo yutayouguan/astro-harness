@@ -292,6 +292,10 @@ async fn latest_assistant_text(session: &Arc<Session>, message_start: usize) -> 
 
 #[cfg(test)]
 mod tests {
+
+    /// 测试等待预算：轮询等待的上限，条件满足即返回；
+    /// 给足余量只为避免并发争用下 1 秒被误判为失败。
+    const WAIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(15);
     use super::*;
     use crate::streaming::run_multi_turn_events_with_responses_fn;
     use agent_protocol::{
@@ -509,7 +513,7 @@ mod tests {
             None,
             event_tx,
         ));
-        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        tokio::time::timeout(WAIT_BUDGET, async {
             loop {
                 if matches!(
                     event_rx.recv().await,
@@ -526,7 +530,7 @@ mod tests {
         .expect("old turn must start");
 
         let result = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
+            WAIT_BUDGET,
             run_background_multi_turn_controlled_with_responses(
                 Arc::clone(&session),
                 vec![test_target()],
@@ -543,7 +547,7 @@ mod tests {
         .expect("background replacement must not hang")
         .expect("new background turn must complete");
         assert_eq!(result.0, "done");
-        tokio::time::timeout(std::time::Duration::from_secs(1), old_run)
+        tokio::time::timeout(WAIT_BUDGET, old_run)
             .await
             .expect("old run must observe replacement")
             .unwrap();
@@ -561,7 +565,7 @@ mod tests {
         session.begin_runtime_shutdown();
 
         let result = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
+            WAIT_BUDGET,
             run_background_multi_turn_controlled_with_responses(
                 session,
                 vec![test_target()],
