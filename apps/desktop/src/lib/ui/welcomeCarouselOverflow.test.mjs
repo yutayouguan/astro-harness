@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatCss } from "./chatCssSource.mjs";
 
-const styles = await readFile(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const styles = await readChatCss();
 
 test("welcome marquee keeps vertical hover clearance inside clipped rows", () => {
   assert.match(

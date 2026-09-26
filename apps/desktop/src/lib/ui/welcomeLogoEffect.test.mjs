@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readChatCssSync } from "./chatCssSource.mjs";
 
 const canvas = readFileSync(
   new URL("../../components/chat/WelcomeLogoEffect.tsx", import.meta.url),
@@ -10,10 +11,7 @@ const welcome = readFileSync(
   new URL("../../components/chat/ChatWelcome.tsx", import.meta.url),
   "utf8",
 );
-const styles = readFileSync(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const styles = readChatCssSync();
 
 test("welcome logo mounts a lazily loaded vgpu material layer", () => {
   assert.match(welcome, /<WelcomeLogoEffect \/>/);

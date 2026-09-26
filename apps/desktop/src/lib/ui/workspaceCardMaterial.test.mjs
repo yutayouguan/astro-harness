@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatCss } from "./chatCssSource.mjs";
 
 const glass = await readFile(
   new URL("../../styles/tokens/component/glass.css", import.meta.url),
@@ -30,10 +31,7 @@ const tools = await readFile(
   new URL("../../styles/features/tools.css", import.meta.url),
   "utf8",
 );
-const welcome = await readFile(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const welcome = await readChatCss();
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

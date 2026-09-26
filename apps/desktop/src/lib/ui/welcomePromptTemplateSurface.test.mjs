@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatCss } from "./chatCssSource.mjs";
 
 const welcomeSource = await readFile(
   new URL("../../components/chat/ChatWelcome.tsx", import.meta.url),
@@ -10,10 +11,7 @@ const chatViewSource = await readFile(
   new URL("../../components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
-const styles = await readFile(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const styles = await readChatCss();
 
 test("welcome cards send localized templates with explicit slot hints", () => {
   assert.match(welcomeSource, /promptTemplateHints\(prompt\)/);

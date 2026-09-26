@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatCss } from "./chatCssSource.mjs";
 
 const chatViewUrl = new URL(
   "../../components/chat/ChatView.tsx",
@@ -145,7 +146,7 @@ test("composer does not expose a reasoning control", async () => {
     new URL("../../components/chat/ComposerPalette.tsx", import.meta.url),
     "utf8",
   );
-  const styles = await readFile(markdownCssUrl, "utf8");
+  const styles = await readChatCss();
 
   for (const removedContract of ["composer-thinking-btn", "<Lightbulb"]) {
     assert.doesNotMatch(source, new RegExp(removedContract), removedContract);
@@ -161,7 +162,7 @@ test("composer does not expose a reasoning control", async () => {
 test("composer approval selector keeps the three supported permission choices", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const messages = await readFile(messagesUrl, "utf8");
-  const styles = await readFile(markdownCssUrl, "utf8");
+  const styles = await readChatCss();
   const presets = source.match(
     /const PERMISSION_PRESETS:[\s\S]*?= \[(?<items>[\s\S]*?)\];/,
   )?.groups?.items;
@@ -199,7 +200,7 @@ test("composer approval selector keeps the three supported permission choices", 
 
 test("composer keeps context usage available at every occupancy level", async () => {
   const source = await readFile(chatViewUrl, "utf8");
-  const styles = await readFile(markdownCssUrl, "utf8");
+  const styles = await readChatCss();
 
   assert.match(source, /className="composer-context-wrap"/);
   assert.match(source, /<ContextUsagePopover/);
@@ -215,7 +216,7 @@ test("composer keeps context usage available at every occupancy level", async ()
 test("composer exposes an accessible hover-revealed input height control", async () => {
   const source = await readFile(chatViewUrl, "utf8");
   const messages = await readFile(messagesUrl, "utf8");
-  const styles = await readFile(markdownCssUrl, "utf8");
+  const styles = await readChatCss();
 
   assert.match(source, /className="composer-expand-btn"/);
   assert.match(source, /className="composer-expand-indicator"/);

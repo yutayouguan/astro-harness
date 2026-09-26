@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readChatCssSync } from "./chatCssSource.mjs";
 
 const welcome = readFileSync(
   new URL("../../components/chat/ChatWelcome.tsx", import.meta.url),
@@ -10,10 +11,7 @@ const chatView = readFileSync(
   new URL("../../components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
-const styles = readFileSync(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const styles = readChatCssSync();
 
 test("welcome logo is an accessible focus action with click confetti", () => {
   assert.match(welcome, /className="chat-welcome-mark"/);

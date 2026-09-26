@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatCss } from "./chatCssSource.mjs";
 
 const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
 const panel = await readFile(
@@ -48,10 +49,7 @@ const unifiedStyles = await readFile(
   new URL("../../styles/tokens/unified-color.css", import.meta.url),
   "utf8",
 );
-const welcomeStyles = await readFile(
-  new URL("../../styles/features/chat/markdown.css", import.meta.url),
-  "utf8",
-);
+const welcomeStyles = await readChatCss();
 const accessibilityStyles = await readFile(
   new URL("../../styles/tokens/a11y.css", import.meta.url),
   "utf8",

@@ -57,6 +57,7 @@
 @import "./features/chat/activity.css" layer(features);
 @import "./features/chat/navigation.css" layer(features);
 @import "./features/chat/markdown.css" layer(features);
+@import "./features/chat/welcome.css" layer(features);
 @import "./features/chat/answer-panel.css" layer(features);
 @import "./features/chat/activity-groups.css" layer(features);
 @import "./features/chat/tool-activity-polish.css" layer(features);
