@@ -162,8 +162,7 @@ async fn persisted_thread_settings(
 async fn persisted_context_usage(session_id: &str) -> Option<agent_protocol::ContextUsageEvent> {
     let root = home::default_memory_dir().join("sessions").join("rollouts");
     let path = agent_rollout::find_rollout(&root, session_id).ok()??;
-    let items = agent_rollout::read_rollout(&path).await.ok()?;
-    agent_rollout::latest_context_usage(&items)
+    agent_rollout::read_last_context_usage(&path).await.ok()?
 }
 
 async fn persisted_thread_settings_at(

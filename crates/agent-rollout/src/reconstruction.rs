@@ -87,6 +87,57 @@ pub fn latest_context_usage(items: &[RolloutItem]) -> Option<agent_protocol::Con
     })
 }
 
+/// 单行解析：只有上下文占用事件才返回快照。
+fn context_usage_from_line(line: &[u8]) -> Option<agent_protocol::ContextUsageEvent> {
+    match serde_json::from_slice::<RolloutLine>(line).ok()?.item {
+        RolloutItem::EventMsg(agent_protocol::EventMsg::ContextUsage(event)) => Some(event),
+        _ => None,
+    }
+}
+
+async fn read_tail(path: &Path, bytes: u64) -> io::Result<Vec<u8>> {
+    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
+    let mut file = tokio::fs::File::open(path).await?;
+    let len = file.metadata().await?.len();
+    let window = bytes.min(len);
+    file.seek(std::io::SeekFrom::Start(len - window)).await?;
+    let mut buffer = vec![0u8; window as usize];
+    file.read_exact(&mut buffer).await?;
+    Ok(buffer)
+}
+
+/// 读取线程最近一次上下文占用快照，优先只扫文件尾部窗口。
+///
+/// 长线程的 rollout 可以到 MB 级，切换会话时没必要整份解析；尾部窗口里找不到
+/// （例如快照很旧）时再退回整份解析，结果与 [`latest_context_usage`] 一致。
+pub async fn read_last_context_usage(
+    path: &Path,
+) -> io::Result<Option<agent_protocol::ContextUsageEvent>> {
+    const TAIL_WINDOW_BYTES: u64 = 256 * 1024;
+
+    let len = tokio::fs::metadata(path).await?.len();
+    if len > TAIL_WINDOW_BYTES {
+        let tail = read_tail(path, TAIL_WINDOW_BYTES).await?;
+        let mut end = tail.len();
+        while end > 0 {
+            let start = tail[..end]
+                .iter()
+                .rposition(|byte| *byte == b'\n')
+                .map_or(0, |index| index + 1);
+            if let Some(event) = context_usage_from_line(&tail[start..end]) {
+                return Ok(Some(event));
+            }
+            if start == 0 {
+                break;
+            }
+            end = start - 1;
+        }
+    }
+
+    Ok(latest_context_usage(&read_rollout(path).await?))
+}
+
 /// Rebuild the effective model history after applying append-only compaction and rollback markers.
 pub fn effective_response_history(items: &[RolloutItem]) -> Vec<ResponseItem> {
     let mut history = Vec::new();
@@ -251,8 +302,8 @@ mod tests {
 
     use super::{
         drop_last_n_user_turns, effective_response_history, latest_context_usage,
-        latest_thread_settings, latest_token_usage, read_rollout_with_diagnostics,
-        realtime_history,
+        latest_thread_settings, latest_token_usage, read_last_context_usage,
+        read_rollout_with_diagnostics, realtime_history,
     };
     use crate::RolloutItem;
 
@@ -403,6 +454,71 @@ mod tests {
         let restored = latest_context_usage(&items).expect("latest context usage");
         assert_eq!(restored.total_tokens, 85_541);
         assert_eq!(restored.segments[0].id, "conversation");
+    }
+
+    #[tokio::test]
+    async fn read_last_context_usage_covers_tail_window_and_old_snapshots() {
+        use std::fmt::Write as _;
+
+        let temp = TempDir::new().unwrap();
+        let snapshot_line = |total_tokens: u32| {
+            serde_json::to_string(&crate::RolloutLine {
+                timestamp: "2026-09-26T00:00:00Z".into(),
+                ordinal: None,
+                item: RolloutItem::EventMsg(agent_protocol::EventMsg::ContextUsage(
+                    agent_protocol::ContextUsageEvent {
+                        turn_id: format!("turn-{total_tokens}"),
+                        context_window: 1_000_000,
+                        total_tokens,
+                        estimated_total_tokens: total_tokens,
+                        source: agent_protocol::ContextUsageSource::ProviderReported,
+                        latest_usage: None,
+                        segments: Vec::new(),
+                        updated_at: i64::from(total_tokens),
+                        recommend_compact: false,
+                    },
+                )),
+            })
+            .unwrap()
+        };
+        let filler_line = serde_json::to_string(&crate::RolloutLine {
+            timestamp: "2026-09-26T00:00:00Z".into(),
+            ordinal: None,
+            item: RolloutItem::SessionMeta(serde_json::json!({"padding": "x".repeat(160)})),
+        })
+        .unwrap();
+
+        // 尾部窗口足够：快照在末尾，长文件也只扫窗口。
+        let tail_path = temp.path().join("tail.jsonl");
+        let mut deep = String::new();
+        for _ in 0..2_000 {
+            let _ = writeln!(deep, "{filler_line}");
+        }
+        let _ = writeln!(deep, "{}", snapshot_line(85_541));
+        std::fs::write(&tail_path, deep).unwrap();
+        assert!(
+            std::fs::metadata(&tail_path).unwrap().len() > 256 * 1024,
+            "fixture must exceed the tail window"
+        );
+        let found = read_last_context_usage(&tail_path)
+            .await
+            .unwrap()
+            .expect("snapshot inside the tail window");
+        assert_eq!(found.total_tokens, 85_541);
+
+        // 快照早于窗口：退回整份解析，结果一致。
+        let head_path = temp.path().join("head.jsonl");
+        let mut shallow = String::new();
+        let _ = writeln!(shallow, "{}", snapshot_line(20_000));
+        for _ in 0..2_000 {
+            let _ = writeln!(shallow, "{filler_line}");
+        }
+        std::fs::write(&head_path, shallow).unwrap();
+        let old = read_last_context_usage(&head_path)
+            .await
+            .unwrap()
+            .expect("snapshot older than the tail window");
+        assert_eq!(old.total_tokens, 20_000);
     }
 
     #[tokio::test]
