@@ -1106,6 +1106,66 @@ export function useChatSession({
   }, [streamRafRef, streamPendingRef]);
 
   // ── Restore history ───────────────────────────────────────────────────────
+  /** 流式状态的最新值：回读 reconcile 是异步的，不能用渲染期闭包里的旧值。 */
+  const streamingRef = useRef(streaming);
+  streamingRef.current = streaming;
+
+  /** 会话元信息（临时会话 / 结束原因等）统一从后端历史投影。 */
+  const applySessionMetaFromHistory = useCallback(
+    (history: ResponseItemHistoryDto) => {
+      setSessionEphemeral(!!history.ephemeral);
+      setSideParentSessionId(
+        history.ephemeral ? (history.parentSessionId ?? null) : null,
+      );
+      setSideExcludedTurnCount(
+        history.ephemeral ? (history.excludedTurnCount ?? 0) : 0,
+      );
+      if (history.endReason) {
+        setSessionReadOnly(true);
+        setSessionEndReason(history.endReason);
+      }
+      if (history.ephemeral && history.sessionId && persistClientState) {
+        saveEphemeralSessionMeta(
+          history.sessionId,
+          history.parentSessionId,
+          history.excludedTurnCount ?? 0,
+        );
+      }
+    },
+    [persistClientState],
+  );
+
+  /**
+   * 本地快照只负责首屏即时显示，消息与元信息最终以 DB 为准：
+   * 崩溃残留、压缩/回滚、其它窗口写入都可能让快照落后，启动后必须校正一次。
+   */
+  const reconcileHistoryFromBackend = useCallback(
+    async (sid: string): Promise<boolean> => {
+      try {
+        const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
+          sessionId: sid,
+          limit: 200,
+        });
+        applySessionMetaFromHistory(history);
+        const restored = projectResponseItemsToEntries(history.items ?? []);
+        if (restored.length > 0) {
+          // 已经开始新回合或用户切走了会话：不要覆盖现场状态。
+          const idle =
+            !streamingRef.current &&
+            !turnInFlightRef.current &&
+            !sendStartLockRef.current &&
+            navigationUi.current.sessionId === sid;
+          if (idle) setMessages(settleRestoredActivities(restored));
+        }
+        return true;
+      } catch {
+        // 后端不可用时保留本地快照
+        return false;
+      }
+    },
+    [applySessionMetaFromHistory],
+  );
+
   /**
    * 用 rollout 里持久化的上下文占用补回占用视图。
    * 本地缓存可能缺失（换会话时被覆盖 / 清理过 / 换设备），后端快照才是事实源；
@@ -1179,64 +1239,12 @@ export function useChatSession({
     }
     if (persistClientState && isChatCleared()) return;
 
-    const stored = persistClientState ? loadChatSession() : null;
-    if (stored && !isWelcomeOnly(stored.messages)) {
-      applyRestoredHistory(
-        stored.sessionId,
-        stored.messages,
-        stored.pendingInterrupts ?? [],
-      );
-      if (stored.sessionId) {
-        void invoke<ResponseItemHistoryDto>("get_chat_history", {
-          sessionId: stored.sessionId,
-          limit: 1,
-        })
-          .then((h) => {
-            setSessionEphemeral(!!h.ephemeral);
-            setSideParentSessionId(
-              h.ephemeral ? (h.parentSessionId ?? null) : null,
-            );
-            setSideExcludedTurnCount(
-              h.ephemeral ? (h.excludedTurnCount ?? 0) : 0,
-            );
-            if (h.endReason) {
-              setSessionReadOnly(true);
-              setSessionEndReason(h.endReason);
-            }
-          })
-          .catch(() => {
-            if (!stored.ephemeral) return;
-            if (persistClientState) clearChatSession();
-            setMessages([]);
-            setSessionId(null);
-            setSessionEphemeral(false);
-            setSideParentSessionId(null);
-            setSideExcludedTurnCount(0);
-            setEmptyMode("chat");
-          });
-      }
-      return;
-    }
-
     try {
       const history = await invoke<ResponseItemHistoryDto>("get_chat_history", {
-        sessionId: sessionId ?? stored?.sessionId ?? null,
+        sessionId,
         limit: 200,
       });
-      setSessionEphemeral(!!history.ephemeral);
-      setSideParentSessionId(
-        history.ephemeral ? (history.parentSessionId ?? null) : null,
-      );
-      setSideExcludedTurnCount(
-        history.ephemeral ? (history.excludedTurnCount ?? 0) : 0,
-      );
-      if (history.ephemeral && history.sessionId && persistClientState) {
-        saveEphemeralSessionMeta(
-          history.sessionId,
-          history.parentSessionId,
-          history.excludedTurnCount ?? 0,
-        );
-      }
+      applySessionMetaFromHistory(history);
       if (!history.items?.length) return;
       const restored = projectResponseItemsToEntries(history.items);
       if (restored.length === 0) return;
@@ -1246,11 +1254,33 @@ export function useChatSession({
     }
   }, [
     applyRestoredHistory,
+    applySessionMetaFromHistory,
     messages,
     sessionId,
     streaming,
     persistClientState,
   ]);
+
+  /**
+   * 首屏消息可能是本地快照（崩溃残留 / 其它窗口写入 / 压缩前旧态），
+   * 这里在挂载后回读一次 DB 校正；后端不可用时保留快照继续用。
+   */
+  useEffect(() => {
+    const sid = initialStored?.sessionId;
+    if (!persistClientState || !sid) return;
+    if (isChatCleared()) return;
+    void reconcileHistoryFromBackend(sid).then((ok) => {
+      if (ok || !initialStored?.ephemeral) return;
+      // 临时会话（Side）在后端已不存在：清掉本地痕迹回到欢迎页。
+      clearChatSession();
+      setMessages([]);
+      setSessionId(null);
+      setSessionEphemeral(false);
+      setSideParentSessionId(null);
+      setSideExcludedTurnCount(0);
+      setEmptyMode("chat");
+    });
+  }, [initialStored, persistClientState, reconcileHistoryFromBackend]);
 
   const discardCurrentSide = useCallback(
     async (nextSessionId?: string | null) => {

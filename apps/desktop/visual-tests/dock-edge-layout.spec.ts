@@ -1,4 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+/** 展开/还原/拖拽都有过渡动画：等外框连续两次量到同一尺寸再断言贴合。 */
+async function settledBox(locator: Locator) {
+  let previous = "";
+  await expect
+    .poll(
+      async () => {
+        const box = await locator.boundingBox();
+        const key = box
+          ? [box.x, box.y, box.width, box.height]
+              .map((value) => Math.round(value))
+              .join(",")
+          : "none";
+        const stable = key !== "none" && key === previous;
+        previous = key;
+        return stable;
+      },
+      { timeout: 5000 },
+    )
+    .toBe(true);
+  return (await locator.boundingBox())!;
+}
 
 for (const theme of ["light", "dark"]) {
   for (const [story, panelSelector, headerSelector] of [
@@ -44,8 +66,8 @@ test("browser native viewport fills both edges while expand/restore and resize r
   const viewport = page.locator(".browser-native-viewport");
   await expect(dock).toHaveClass(/is-open/);
   const checkEdges = async () => {
-    const outer = await dock.boundingBox();
-    const inner = await viewport.boundingBox();
+    const outer = await settledBox(dock);
+    const inner = await settledBox(viewport);
     expect(Math.abs(inner!.x - outer!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(inner!.x + inner!.width - outer!.x - outer!.width)).toBeLessThanOrEqual(1);
   };
