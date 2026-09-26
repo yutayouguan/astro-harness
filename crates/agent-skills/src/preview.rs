@@ -52,7 +52,6 @@ mod tests {
     use crate::install::scoped_skills_dir;
     use crate::models::SkillOriginRecord;
     use crate::origins::upsert_origin;
-    use crate::ENV_TEST_LOCK;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -82,9 +81,8 @@ mod tests {
 
     #[test]
     fn preview_no_baseline_digest_reports_no_local_changes() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let skills_dir = scoped_skills_dir("global", None).unwrap();
         write_skill_md(&skills_dir.join("demo-skill"), "# Demo");
@@ -101,9 +99,8 @@ mod tests {
 
     #[test]
     fn preview_equal_digests_reports_no_local_changes() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");
@@ -122,9 +119,8 @@ mod tests {
 
     #[test]
     fn preview_different_digests_reports_local_changes() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");

@@ -133,7 +133,6 @@ pub fn reveal_skill_backup(path: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
 
     fn mkdir_backup(base: &Path, agent: &str, folder: &str, timestamp: &str) {
@@ -147,9 +146,8 @@ mod tests {
 
     #[test]
     fn list_skill_backups_filters_and_sorts() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         mkdir_backup(dir.path(), "workspace", "skill-a", "1000");
         mkdir_backup(dir.path(), "workspace", "skill-a", "2000");
@@ -176,9 +174,8 @@ mod tests {
 
     #[test]
     fn list_skill_backups_empty_when_missing_root() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let list = list_skill_backups(Some("workspace")).unwrap();
         assert!(list.is_empty());
@@ -186,9 +183,8 @@ mod tests {
 
     #[test]
     fn reveal_skill_backup_rejects_outside_root() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         mkdir_backup(dir.path(), "workspace", "demo", "123");
         let outside = dir.path().join("outside");

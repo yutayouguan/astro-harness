@@ -304,14 +304,12 @@ mod tests {
     use super::*;
     use crate::models::SkillOriginRecord;
     use crate::seed::seed_bundled_into;
-    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
 
     #[test]
     fn ensure_known_skillhub_origins_adds_aihot_once() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         seed_bundled_into(dir.path());
 
         ensure_known_skillhub_origins(Some("workspace")).unwrap();
@@ -332,9 +330,8 @@ mod tests {
 
     #[test]
     fn ensure_known_skillhub_origins_preserves_existing_origin() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         seed_bundled_into(dir.path());
         upsert_origin(SkillOriginRecord {
             folder: "aihot".into(),
@@ -365,9 +362,8 @@ mod tests {
 
     #[test]
     fn ensure_known_skillhub_origins_claims_locked_upstream_skills() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         for folder in [
             "find-skills",
             "brainstorming",
@@ -429,9 +425,8 @@ mod tests {
 
     #[test]
     fn ensure_known_skillhub_origins_rejects_mismatched_lock_source() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let skill_dir = dir.path().join("skills/find-skills");
         fs::create_dir_all(&skill_dir).unwrap();
         fs::write(skill_dir.join("SKILL.md"), "# custom").unwrap();
@@ -448,9 +443,8 @@ mod tests {
 
     #[test]
     fn upsert_same_folder_updates_not_duplicates() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         upsert_origin(SkillOriginRecord {
             folder: "ppt-generator-skill".into(),
@@ -489,9 +483,8 @@ mod tests {
 
     #[test]
     fn concurrent_upserts_preserve_every_origin() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let threads = (0..8)
             .map(|index| {
@@ -526,9 +519,8 @@ mod tests {
 
     #[test]
     fn same_folder_in_global_and_project_keeps_distinct_origins() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         for scope in ["global", "project"] {
             upsert_origin(SkillOriginRecord {
@@ -560,9 +552,8 @@ mod tests {
 
     #[test]
     fn missing_file_returns_empty_origins() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let file = load_origins().unwrap();
         assert_eq!(file.version, ORIGINS_VERSION);
@@ -571,9 +562,8 @@ mod tests {
 
     #[test]
     fn upsert_default_agent_matches_legacy_workspace_alias() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         upsert_origin(SkillOriginRecord {
             folder: "demo".into(),
@@ -614,9 +604,8 @@ mod tests {
 
     #[test]
     fn load_origins_removes_non_skillhub_history() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         save_origins(&SkillOriginsFile {
             version: 1,
             records: vec![
@@ -761,9 +750,8 @@ mod tests {
 
     #[tokio::test]
     async fn fill_origin_remote_baseline_fetch_failure_leaves_remote_none() {
-        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         upsert_origin(SkillOriginRecord {
             folder: "demo-skill".into(),
@@ -796,9 +784,8 @@ mod tests {
     async fn record_after_install_upserts() {
         use crate::install::{record_after_install_in_dir, scoped_skills_dir, InstallOriginHint};
 
-        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let skills_dir = scoped_skills_dir("global", None).unwrap();
         record_after_install_in_dir(
@@ -826,9 +813,8 @@ mod tests {
         use crate::install::{record_after_install_in_dir, scoped_skills_dir, InstallOriginHint};
         use std::io::Write;
 
-        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let skills_dir = scoped_skills_dir("global", None).unwrap();
         let skill_dir = skills_dir.join("demo-skill");

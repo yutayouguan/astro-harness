@@ -761,10 +761,7 @@ pub fn persist_discovered_layered(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn mcp_writes_preserve_desktop_settings_and_foreign_comments() {
@@ -834,9 +831,8 @@ url = "https://example.invalid/mcp"
 
     #[test]
     fn roundtrip_and_defaults() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let _ = ensure_default_workspace_dirs();
         let servers = vec![McpServerConfig {
             id: "s1".into(),
@@ -872,9 +868,8 @@ url = "https://example.invalid/mcp"
 
     #[test]
     fn save_updates_only_mcp_table_in_unified_config() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         fs::write(
             mcp_config_path_global(),
@@ -905,9 +900,8 @@ url = "https://example.invalid/mcp"
 
     #[test]
     fn approval_modes_and_legacy_boolean_tools_coexist() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         fs::write(
             mcp_config_path_global(),
@@ -963,9 +957,8 @@ tools = { read = true, write = false }
 
     #[test]
     fn persist_discovered_preserves_disk_tool_gates() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         let _ = ensure_default_workspace_dirs();
         let servers = vec![McpServerConfig {
             id: "s1".into(),
@@ -1019,9 +1012,8 @@ tools = { read = true, write = false }
 
     #[test]
     fn persist_discovered_does_not_flatten_project_server_into_global_layer() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         let project = dir.path().join("project");
         fs::create_dir_all(project.join(".astro")).unwrap();
@@ -1146,9 +1138,8 @@ command = "project-command"
 
     #[test]
     fn environment_reference_fields_roundtrip_in_toml() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         fs::write(
             mcp_config_path_global(),
@@ -1226,9 +1217,8 @@ env_http_headers = { X-API-Key = "MCP_API_KEY" }
 
     #[test]
     fn layered_toml_uses_trusted_project_and_whole_server_overrides() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         let project = dir.path().join("project");
         fs::create_dir_all(project.join(".astro")).unwrap();
@@ -1276,9 +1266,8 @@ url = "https://example.com/mcp"
 
     #[test]
     fn untrusted_project_config_is_ignored() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         let project = dir.path().join("project");
         fs::create_dir_all(project.join(".astro")).unwrap();
@@ -1304,9 +1293,8 @@ command = "must-not-load"
 
     #[test]
     fn dotcodex_and_agent_private_config_paths_are_not_inputs() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         let project = dir.path().join("project");
         fs::create_dir_all(project.join(".codex")).unwrap();
@@ -1341,9 +1329,8 @@ command = "must-not-load"
 
     #[test]
     fn toml_rejects_legacy_sse_transport_field() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         fs::write(
             mcp_config_path_global(),
@@ -1360,9 +1347,8 @@ url = "http://localhost:3000/sse"
 
     #[test]
     fn http_server_rejects_stdio_only_cwd() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         fs::write(
             mcp_config_path_global(),
@@ -1379,9 +1365,8 @@ cwd = "packages/server"
 
     #[test]
     fn legacy_json_is_not_a_configuration_input() {
-        let _guard = ENV_LOCK.lock().unwrap();
         let dir = TempDir::new().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         ensure_default_workspace_dirs().unwrap();
         let legacy_path = default_memory_dir().join("mcp.json");
         fs::write(

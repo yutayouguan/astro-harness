@@ -1,6 +1,5 @@
 #![allow(clippy::disallowed_methods)] // 测试直接开原始 pool，生产路径必须走 agent-db
 
-use std::sync::Mutex;
 use tempfile::TempDir;
 use usage::db::{
     usage_db_path, NewUsageEvent, UsageDb, UsageGranularity, UsageInsightsQuery, UsagePeriod,
@@ -9,8 +8,6 @@ use usage::db::{
 
 use agent_db::sqlx;
 use agent_db::{AstroDb, DbSpec};
-
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 struct ZeroBillingEvent<'a> {
     ts: &'a str,
@@ -129,11 +126,9 @@ async fn usage_db_rejects_current_marker_with_incomplete_schema() {
 
 #[test]
 fn usage_db_path_under_memory_dir() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
-    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+    let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
     assert_eq!(usage_db_path(), dir.path().join("usage/usage.db"));
-    std::env::remove_var("ASTRO_MEMORY_DIR");
 }
 
 #[tokio::test]
@@ -399,16 +394,20 @@ fn estimate_usage_cost_official_snapshot_and_unknown() {
 
 #[test]
 fn estimate_usage_cost_reads_openrouter_cache_file() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     use usage::{estimate_usage_cost, CostStatus, UsageTokens};
     let dir = tempfile::tempdir().unwrap();
-    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
-    let cache_dir = home::models_cache_dir(dir.path());
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    let cache = cache_dir.join("openrouter-model-pricing.json");
-    std::fs::write(
-        &cache,
-        r#"{"fetched_at":"2099-01-01T00:00:00Z","models":{"test/or-model":{"prompt":0.000001,"completion":0.000002}}}"#,
+    let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+    // 必须走 cache 层写入：文件是「identity 指纹 + 信封（written_at/TTL）」格式，
+    // 手写裸 JSON 不会被 cache::read 命中。fetched_at 需为当前时间（未来时间判为无效）。
+    let cache_body = serde_json::json!({
+        "fetched_at": chrono::Utc::now().to_rfc3339(),
+        "models": {"test/or-model": {"prompt": 0.000001, "completion": 0.000002}},
+    });
+    home::cache::write(
+        dir.path(),
+        home::cache::Domain::Models,
+        &"openrouter-model-pricing",
+        &cache_body,
     )
     .unwrap();
     let usage = UsageTokens {
@@ -426,5 +425,4 @@ fn estimate_usage_cost_reads_openrouter_cache_file() {
     );
     assert_eq!(result.status, CostStatus::Estimated);
     assert!((result.amount_usd.unwrap() - 3.0).abs() < 1e-6);
-    std::env::remove_var("ASTRO_MEMORY_DIR");
 }

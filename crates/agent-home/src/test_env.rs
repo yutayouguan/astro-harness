@@ -18,10 +18,10 @@ pub struct AstroMemoryDirGuard {
 }
 
 impl AstroMemoryDirGuard {
-    pub fn set(path: &Path) -> Self {
+    pub fn set(path: impl AsRef<Path>) -> Self {
         let _lock = lock_astro_memory_dir();
         let prev = std::env::var("ASTRO_MEMORY_DIR").ok();
-        std::env::set_var("ASTRO_MEMORY_DIR", path);
+        std::env::set_var("ASTRO_MEMORY_DIR", path.as_ref());
         Self { _lock, prev }
     }
 }

@@ -143,7 +143,6 @@ mod tests {
     use super::*;
     use crate::models::SkillUpdateStatus;
     use crate::origins::{load_origins, upsert_origin};
-    use crate::ENV_TEST_LOCK;
     use tempfile::tempdir;
 
     fn sample_origin(
@@ -348,9 +347,8 @@ mod tests {
 
     #[tokio::test]
     async fn check_updates_skips_orphan_without_origin_mutation() {
-        let _guard = ENV_TEST_LOCK.lock().await;
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         upsert_origin(SkillOriginRecord {
             folder: "ghost-skill".into(),

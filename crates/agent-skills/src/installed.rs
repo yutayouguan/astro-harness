@@ -1154,9 +1154,27 @@ pub fn open_skill_file_externally(name: &str, relative_path: &str, id: Option<&s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ENV_TEST_LOCK;
     use std::fs;
     use tempfile::tempdir;
+
+    /// 复原进程级 workspace 覆盖：设置它的用例退出时必须清掉，
+    /// 否则同二进制内后续用例会把已删除的临时目录当成 skill 根目录。
+    struct WorkspaceOverrideGuard(Option<std::path::PathBuf>);
+
+    impl WorkspaceOverrideGuard {
+        fn capture() -> Self {
+            Self(crate::workspace_override())
+        }
+    }
+
+    impl Drop for WorkspaceOverrideGuard {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(path) => crate::set_workspace_override(&path),
+                None => crate::clear_workspace_override(),
+            }
+        }
+    }
 
     #[test]
     fn explicit_skill_switches_live_in_global_toml() {
@@ -1227,9 +1245,8 @@ mod tests {
 
     #[test]
     fn configured_skill_layer_is_ephemeral_and_enforced() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path().join("astro"));
         std::env::remove_var("ASTRO_WORKSPACE");
         let skill_dir = dir.path().join("external/reviewer");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1259,9 +1276,8 @@ mod tests {
 
     #[test]
     fn later_config_entry_can_disable_an_external_skill() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path().join("astro"));
         std::env::remove_var("ASTRO_WORKSPACE");
         let skill_dir = dir.path().join("external/reviewer");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1280,9 +1296,10 @@ mod tests {
 
     #[test]
     fn prompt_index_workspace_does_not_mutate_process_override() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path().join("astro"));
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path().join("astro"));
+        // override 与 env 同锁：声明顺序保证 override 先在锁内复原。
+        let _override = WorkspaceOverrideGuard::capture();
         let existing_workspace = dir.path().join("existing-workspace");
         let snapshot_workspace = dir.path().join("snapshot-workspace");
         fs::create_dir_all(&existing_workspace).unwrap();
@@ -1306,7 +1323,6 @@ mod tests {
 
     #[test]
     fn scan_and_load_skill_by_name() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/demo-skill-xyz");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1315,7 +1331,7 @@ mod tests {
             "---\nname: demo-skill-xyz\ndescription: test desc\n---\n# Hello\n",
         )
         .unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
 
         let list = list_installed_for_agent(Some("workspace"), Some("astro"));
@@ -1331,7 +1347,6 @@ mod tests {
 
     #[test]
     fn load_skill_by_name_rejects_disabled() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/off-skill");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1340,7 +1355,7 @@ mod tests {
             "---\nname: off-skill\ndescription: off\n---\n",
         )
         .unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
         fs::create_dir_all(dir.path().join("agents")).unwrap();
         fs::write(home::active_agent_path(dir.path()), r#"{"id":"workspace"}"#).unwrap();
@@ -1357,7 +1372,6 @@ mod tests {
 
     #[test]
     fn list_skill_files_groups_categories() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let skill_dir = dir.path().join("skills/bundle-skill");
         fs::create_dir_all(skill_dir.join("scripts")).unwrap();
@@ -1370,7 +1384,7 @@ mod tests {
         fs::write(skill_dir.join("scripts/run.py"), "print(1)\n").unwrap();
         fs::write(skill_dir.join("references/notes.md"), "# notes\n").unwrap();
         fs::write(skill_dir.join("logo.png"), [0u8, 1, 2, 3]).unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
         std::env::remove_var("ASTRO_WORKSPACE");
         fs::create_dir_all(dir.path().join("agents")).unwrap();
         fs::write(home::active_agent_path(dir.path()), r#"{"id":"workspace"}"#).unwrap();
@@ -1404,7 +1418,6 @@ mod tests {
 
     #[test]
     fn machine_scope_excludes_astro_skills() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
         let astro_skill = dir.path().join("skills/astro-only");
         fs::create_dir_all(&astro_skill).unwrap();
@@ -1413,7 +1426,7 @@ mod tests {
             "---\nname: astro-only\ndescription: a\n---\n",
         )
         .unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let astro = list_installed_for_agent(Some("workspace"), Some("astro"));
         assert!(astro.iter().any(|s| s.name == "astro-only"));
@@ -1436,9 +1449,8 @@ mod tests {
 
     #[test]
     fn bundled_skills_are_reported_as_read_only() {
-        let _guard = ENV_TEST_LOCK.blocking_lock();
         let dir = tempdir().unwrap();
-        std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
         let bundled = list_installed_scoped_for_agent(None, Some("builtin"), None);
 
