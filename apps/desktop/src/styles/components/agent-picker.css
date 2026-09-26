@@ -35,7 +35,7 @@
     0 6px 16px
     color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03);
-  --agent-glass-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+  --agent-glass-blur: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.2));
   --agent-avatar-fill:
     radial-gradient(
@@ -230,9 +230,9 @@
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.48),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
-  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.45));
-  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.45));
   max-height: 300px;
   overflow: auto;
@@ -425,9 +425,9 @@ html[data-theme="dark"] .agent-picker-menu {
     0 18px 48px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-30)
     saturate(var(--glass-saturate, 1.5));
-  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-30)
     saturate(var(--glass-saturate, 1.5));
 }
 
@@ -526,9 +526,9 @@ html[data-theme="dark"] .agent-picker-option.is-active {
     0 6px 16px
     color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   transition:
     color 0.12s ease,
@@ -576,9 +576,9 @@ html[data-theme="dark"] .agent-picker-option.is-active {
   box-shadow:
     0 6px 18px color-mix(in srgb, var(--tone, #64748b) 12%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
 }
 

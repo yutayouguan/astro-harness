@@ -83,7 +83,7 @@
   );
   --model-intel-switcher-filter: var(
     --model-market-switcher-filter,
-    blur(calc(12px * var(--glass-blur-scale, 1)))
+    var(--glass-blur-12)
       saturate(var(--glass-saturate, 1.1))
   );
   --model-intel-card-border: var(
@@ -100,7 +100,7 @@
   );
   --model-intel-card-filter: var(
     --model-market-card-filter,
-    blur(calc(12px * var(--glass-blur-scale, 1)))
+    var(--glass-blur-12)
       saturate(var(--glass-saturate, 1.1))
   );
   min-height: 0;

@@ -141,6 +141,7 @@
   color: var(--ink-secondary, var(--color-text-secondary));
   background: color-mix(in srgb, var(--color-bg-base) 68%, transparent);
   backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
   cursor: pointer;
   transition:
     color 160ms ease,
@@ -387,6 +388,7 @@
     0 4px 12px -6px color-mix(in srgb, black 12%, transparent),
     inset 0 1px color-mix(in srgb, white 18%, transparent);
   backdrop-filter: blur(32px) saturate(155%);
+  -webkit-backdrop-filter: blur(32px) saturate(155%);
 }
 
 .onboarding-root--loading .onboarding-card {
@@ -1230,6 +1232,7 @@
   .onboarding-skip {
     background: var(--color-bg-base);
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

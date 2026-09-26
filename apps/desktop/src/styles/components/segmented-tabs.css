@@ -8,11 +8,11 @@
   background: var(--surface-panel-background, rgba(255, 255, 255, 0.24));
   backdrop-filter: var(
     --seg-shell-blur,
-    blur(calc(14px * var(--glass-blur-scale, 1)))
+    var(--glass-blur-14)
   );
   -webkit-backdrop-filter: var(
     --seg-shell-blur,
-    blur(calc(14px * var(--glass-blur-scale, 1)))
+    var(--glass-blur-14)
   );
 }
 

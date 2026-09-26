@@ -229,7 +229,7 @@ html[data-theme="dark"] .fs-cat-icon {
     0 6px 16px
     color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     0 1px 3px rgba(15, 23, 42, 0.03), var(--glass-rim);
-  --fs-ctrl-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+  --fs-ctrl-blur: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   display: flex;
   align-items: center;
@@ -579,9 +579,9 @@ html[data-theme="dark"] .fs-layout-btn:hover {
   box-shadow:
     0 1px 3px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.25));
   transition:
     background 0.12s ease,
@@ -1135,9 +1135,9 @@ html[data-theme="dark"] .fs-preview-img {
     0 2px 8px rgba(15, 23, 42, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     0 0 0 1px color-mix(in srgb, var(--tone, transparent) 6%, transparent);
-  backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.45));
-  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.45));
   color: var(--ink);
   isolation: isolate;
@@ -1240,9 +1240,9 @@ html[data-theme="dark"] .fs-ctx-menu {
     0 18px 48px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-30)
     saturate(var(--glass-saturate, 1.5));
-  -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-30)
     saturate(var(--glass-saturate, 1.5));
 }
 
@@ -1301,9 +1301,9 @@ html[data-theme="dark"] .fs-glass-ctx.fs-ctx-menu {
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 1px 3px rgba(15, 23, 42, 0.04),
     var(--glass-rim);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
 }
@@ -1417,9 +1417,9 @@ html[data-theme="dark"] .fs-batch-bar {
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-22)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-22)
     saturate(var(--glass-saturate, 1.35));
 }
 
@@ -1468,7 +1468,8 @@ html[data-theme="dark"] .fs-batch-bar button.is-danger:hover:not(:disabled) {
   background: rgba(0, 0, 0, 0.45);
   display: grid;
   place-items: center;
-  backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-8);
+  -webkit-backdrop-filter: var(--glass-blur-8);
 }
 
 .fs-confirm {
@@ -1482,9 +1483,9 @@ html[data-theme="dark"] .fs-batch-bar button.is-danger:hover:not(:disabled) {
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-22)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-22)
     saturate(var(--glass-saturate, 1.35));
   color: var(--ink);
 }

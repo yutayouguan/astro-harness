@@ -1474,9 +1474,9 @@ html[data-theme="dark"] .mem-view-rail {
     0 4px 14px
     color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.3));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.3));
   color: var(--ink-soft);
 }
@@ -1539,9 +1539,9 @@ html[data-theme="dark"] .mem-stat {
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.25));
   color: var(--ink-soft);
 }
@@ -1661,9 +1661,9 @@ html[data-theme="dark"] .mem-stat-label {
       rgba(15, 23, 42, 0.06)
     ),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.3));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.3));
 }
 
@@ -1716,9 +1716,9 @@ html[data-theme="dark"] .memory-panel .mem-cal-header .ws-tool-btn {
   box-shadow:
     0 2px 10px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.25));
 }
 
@@ -2183,9 +2183,9 @@ html[data-theme="dark"]
   box-shadow:
     0 3px 10px color-mix(in srgb, var(--tone-green) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
   cursor: pointer;
   transition:
@@ -2321,9 +2321,9 @@ html[data-theme="dark"] .mem-empty-chat {
     0 12px 28px
     color-mix(in srgb, var(--tone, var(--tone-green)) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.2));
 }
 

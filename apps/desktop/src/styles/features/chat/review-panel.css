@@ -353,6 +353,7 @@
     border-radius: 12px;
     box-shadow: 0 6px 18px rgba(var(--shadow-ink), 0.1);
     backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
 }
 

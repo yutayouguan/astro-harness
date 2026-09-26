@@ -158,9 +158,9 @@ html[data-theme="light"] .bubble.assistant .msg-activity-io {
   box-shadow:
     inset 0 2px 5px rgba(71, 85, 105, 0.1),
     inset 0 -1px 0 rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(min(var(--glass-saturate, 1.25), 1.3));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(min(var(--glass-saturate, 1.25), 1.3));
 }
 

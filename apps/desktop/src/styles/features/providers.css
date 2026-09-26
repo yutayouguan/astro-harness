@@ -360,8 +360,8 @@
   box-shadow:
     0 12px 28px rgba(0, 0, 0, 0.35),
     0 0 0 1px color-mix(in srgb, var(--tone) 25%, transparent);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-12);
+  -webkit-backdrop-filter: var(--glass-blur-12);
   opacity: 1;
   cursor: grabbing;
 }
@@ -784,9 +784,9 @@ html[data-theme="dark"]
   color: inherit;
   font-size: 13px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   transition:
     border-color 0.14s ease,
@@ -1036,9 +1036,9 @@ html[data-theme="dark"]
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.02em;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   transition:
     border-color 0.14s ease,
@@ -1285,9 +1285,9 @@ html[data-theme="dark"]
     0 6px 16px
     color-mix(in srgb, var(--tone, transparent) 8%, rgba(15, 23, 42, 0.05)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   transition:
     color 0.12s ease,
@@ -1461,9 +1461,9 @@ html[data-theme="dark"]
   font-size: 12px;
   outline: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
   transition:
     border-color 0.14s ease,
@@ -2113,9 +2113,9 @@ html[data-theme="dark"] .providers-models-block {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 4px 16px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.4));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.4));
 }
 

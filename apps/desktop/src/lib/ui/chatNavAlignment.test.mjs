@@ -85,6 +85,13 @@ test("chat anchor labels use a translucent blurred surface", async () => {
     /linear-gradient\(/,
     "the glass label must not add a gradient overlay",
   );
-  assert.match(labelRule.groups.body, /backdrop-filter:\s*blur\(/);
-  assert.match(labelRule.groups.body, /-webkit-backdrop-filter:\s*blur\(/);
+  // 模糊半径统一走 --glass-blur-* 档位。
+  assert.match(
+    labelRule.groups.body,
+    /backdrop-filter:\s*var\(--glass-blur-\d+\)/,
+  );
+  assert.match(
+    labelRule.groups.body,
+    /-webkit-backdrop-filter:\s*var\(--glass-blur-\d+\)/,
+  );
 });

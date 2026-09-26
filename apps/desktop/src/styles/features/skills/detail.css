@@ -1477,9 +1477,9 @@ html[data-theme="dark"] .skills-detail-body {
   box-shadow:
     0 6px 18px color-mix(in srgb, var(--tone) 10%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
   transition:
     border-color 0.14s ease,
@@ -1601,9 +1601,9 @@ html[data-theme="dark"] .skills-header-search-input:focus {
     0 8px 22px color-mix(in srgb, var(--tone) 14%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.95),
     inset 0 0 0 1px color-mix(in srgb, var(--tone) 10%, transparent);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
 }
 
@@ -1772,6 +1772,7 @@ html[data-theme="dark"] .skills-end-hint {
   );
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent);
   backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .skills-update-metric {
@@ -2046,8 +2047,8 @@ html[data-theme="dark"] .skills-update-filter.active {
     color-mix(in srgb, var(--tone-soft) 50%, transparent);
   box-shadow: 0 2px 8px
     color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-10);
+  -webkit-backdrop-filter: var(--glass-blur-10);
   transition:
     color 0.14s ease,
     background 0.14s ease,
@@ -2182,6 +2183,7 @@ html[data-theme="dark"] .skills-action-btn.primary {
     background: var(--bg);
     border-color: var(--border);
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
@@ -2189,6 +2191,7 @@ html[data-theme="dark"] .skills-action-btn.primary {
   .skills-update-overview {
     background: var(--bg);
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

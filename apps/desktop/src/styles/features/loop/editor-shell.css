@@ -220,8 +220,8 @@
   border-radius: 12px;
   background: var(--glass-panel);
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-20);
+  -webkit-backdrop-filter: var(--glass-blur-20);
 }
 .loop-editor-more-menu button {
   display: flex;
@@ -330,9 +330,9 @@
   width: 208px;
   border-right: 1px solid var(--border);
   background: color-mix(in srgb, var(--glass-panel) 82%, transparent);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.18));
   overflow-y: auto;
   flex-shrink: 0;
@@ -345,8 +345,8 @@
   z-index: 2;
   padding: 11px 12px 9px;
   background: color-mix(in srgb, var(--glass-panel) 92%, transparent);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-16);
+  -webkit-backdrop-filter: var(--glass-blur-16);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 
@@ -521,7 +521,8 @@
   background: var(--glass-panel);
   border: 1.5px solid var(--tone, #ec4899);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-12);
+  -webkit-backdrop-filter: var(--glass-blur-12);
   font-size: 12px;
   font-weight: 500;
   color: var(--ink);
@@ -538,8 +539,8 @@
   border-radius: 14px;
   background: var(--glass-panel);
   border: 1px solid var(--border);
-  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-20);
+  -webkit-backdrop-filter: var(--glass-blur-20);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.12),
     0 2px 8px rgba(0, 0, 0, 0.06);

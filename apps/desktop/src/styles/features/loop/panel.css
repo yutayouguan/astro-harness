@@ -104,9 +104,9 @@
   background: var(--plugins-shell-bg);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
 }
 
@@ -173,9 +173,9 @@
   color: var(--ink);
   border: 1px solid var(--plugins-shell-border);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
 }
 .loop-btn--secondary:hover {
@@ -262,9 +262,9 @@
     ),
     var(--glass-panel, var(--bg0));
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.18));
   overflow: hidden;
 }
@@ -358,7 +358,8 @@
   border-radius: 12px;
   background: var(--glass-panel);
   border: 1px solid var(--border);
-  backdrop-filter: blur(calc(20px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-20);
+  -webkit-backdrop-filter: var(--glass-blur-20);
   transition:
     border-color 0.15s,
     transform 0.15s;
@@ -539,7 +540,8 @@
   border-radius: 12px;
   background: var(--glass-panel);
   border: 1px solid var(--border);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-14);
+  -webkit-backdrop-filter: var(--glass-blur-14);
   transition:
     transform 0.1s,
     box-shadow 0.15s;

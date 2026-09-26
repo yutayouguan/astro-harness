@@ -10,9 +10,9 @@
     var(--color-bg-base, #0f172a) 48%,
     transparent
   );
-  backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-8)
     saturate(var(--glass-saturate, 1.12));
-  -webkit-backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-8)
     saturate(var(--glass-saturate, 1.12));
   animation: ui-overlay-fade-in var(--duration-fast, 140ms)
     var(--ease-out, ease-out);
@@ -58,9 +58,9 @@
     0 24px 64px
     color-mix(in srgb, var(--color-bg-base, #0f172a) 28%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.24));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.24));
   outline: none;
 }

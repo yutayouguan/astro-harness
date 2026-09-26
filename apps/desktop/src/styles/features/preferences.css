@@ -242,9 +242,9 @@ html[data-theme="dark"] .morphicon-selection-indicator {
     ),
     color-mix(in srgb, var(--tone-soft) 24%, var(--glass-panel, transparent));
   box-shadow: var(--shadow-card), var(--glass-rim);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.2));
 }
 
@@ -1069,9 +1069,9 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   border: 1px solid rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.2));
 }
 
@@ -1124,6 +1124,7 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   text-overflow: ellipsis;
   white-space: nowrap;
   backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
 }
 
 .wallpaper-empty-preview {
@@ -1383,6 +1384,7 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   padding: 24px;
   background: rgba(21, 21, 39, 0.24);
   backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
   animation: prefs-fade-in 180ms ease both;
 }
 
@@ -1930,9 +1932,9 @@ html[data-theme="dark"] .prefs-conversation-preview-group {
   text-align: left;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.29);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.15));
   transition:
     border-color 0.15s ease,

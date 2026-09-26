@@ -516,6 +516,7 @@
   background: var(--titlebar-menu-bg);
   box-shadow: var(--header-chip-shadow);
   backdrop-filter: var(--titlebar-menu-blur);
+  -webkit-backdrop-filter: var(--titlebar-menu-blur);
 }
 
 .browser-spin {

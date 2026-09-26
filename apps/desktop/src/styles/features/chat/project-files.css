@@ -491,6 +491,7 @@
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .project-file-editor-body

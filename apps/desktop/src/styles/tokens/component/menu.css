@@ -22,7 +22,7 @@ html[data-theme="dark"] {
   --menu-glass-shadow:
     0 16px 40px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --menu-glass-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
+  --menu-glass-blur: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.4));
   --menu-overlay-bg:
     linear-gradient(
@@ -42,13 +42,13 @@ html[data-theme="dark"] {
   );
   --menu-overlay-shadow:
     0 14px 34px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
+  --menu-overlay-blur: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.35));
   --titlebar-menu-bg: var(--composer-bg, rgba(12, 10, 24, 0.42));
   --titlebar-menu-border: rgba(255, 255, 255, 0.1);
   --titlebar-menu-shadow:
     0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+  --titlebar-menu-blur: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.2));
 }
 
@@ -73,7 +73,7 @@ html[data-theme="light"] {
     0 16px 40px rgba(var(--shadow-ink), 0.14),
     0 2px 8px rgba(var(--shadow-ink), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
-  --menu-glass-blur: blur(calc(24px * var(--glass-blur-scale, 1)))
+  --menu-glass-blur: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.35));
   --menu-overlay-bg:
     linear-gradient(
@@ -95,7 +95,7 @@ html[data-theme="light"] {
     0 12px 30px
     color-mix(in srgb, var(--tone, #6366f1) 8%, rgba(15, 23, 42, 0.14)),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  --menu-overlay-blur: blur(calc(28px * var(--glass-blur-scale, 1)))
+  --menu-overlay-blur: var(--glass-blur-28)
     saturate(var(--glass-saturate, 1.35));
   --titlebar-menu-bg: var(--composer-bg, #fff);
   --titlebar-menu-border: color-mix(
@@ -105,6 +105,6 @@ html[data-theme="light"] {
   );
   --titlebar-menu-shadow:
     0 8px 28px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
-  --titlebar-menu-blur: blur(calc(16px * var(--glass-blur-scale, 1)))
+  --titlebar-menu-blur: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.2));
 }

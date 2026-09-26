@@ -93,9 +93,9 @@
   border-radius: 16px;
   border: 1px solid var(--nav-label-border);
   background: var(--nav-label-bg);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.35));
   color: var(--nav-label-fg);
   font-size: 13px;

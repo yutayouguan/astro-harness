@@ -107,7 +107,8 @@ test("menu glass stays responsive and respects motion and transparency preferenc
   assert.match(css, /backdrop-filter:\s*var\(--menu-overlay-blur\)/);
   assert.match(tokens, /--menu-overlay-bg:/);
   assert.match(tokens, /var\(--bg1\) 92%/);
-  assert.match(tokens, /--menu-overlay-blur:\s*blur\(calc\(28px/);
+  // 模糊半径统一走 --glass-blur-* 档位。
+  assert.match(tokens, /--menu-overlay-blur:\s*var\(--glass-blur-28\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /prefers-reduced-transparency: reduce/);
 });

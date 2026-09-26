@@ -37,9 +37,9 @@
     -18px 0 52px color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.08)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
     var(--glass-rim);
-  backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-34)
     saturate(var(--glass-saturate, 1.55));
-  -webkit-backdrop-filter: blur(calc(34px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-34)
     saturate(var(--glass-saturate, 1.55));
   animation: agent-icon-drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -92,9 +92,9 @@
     var(--glass-panel, rgba(255, 255, 255, 0.22)) 35%,
     transparent
   );
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
 }
 
@@ -122,9 +122,9 @@
     var(--glass-panel, rgba(255, 255, 255, 0.2)) 40%,
     transparent
   );
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.25));
 }
 
@@ -158,9 +158,9 @@ html[data-theme="dark"] .agent-icon-drawer {
     -18px 0 56px color-mix(in srgb, var(--tone) 8%, rgba(0, 0, 0, 0.4)),
     inset 0 1px 0 color-mix(in srgb, var(--tone) 12%, rgba(255, 255, 255, 0.08)),
     inset 0 -1px 0 rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(calc(36px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-36)
     saturate(var(--glass-saturate, 1.55));
-  -webkit-backdrop-filter: blur(calc(36px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-36)
     saturate(var(--glass-saturate, 1.55));
 }
 

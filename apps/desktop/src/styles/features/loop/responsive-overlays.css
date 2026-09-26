@@ -188,7 +188,8 @@
   padding: 3px 12px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg0, #fff) 85%, transparent);
-  backdrop-filter: blur(calc(6px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-6);
+  -webkit-backdrop-filter: var(--glass-blur-6);
   border: 1px solid var(--border);
   font-size: 11px;
   color: var(--ink-tertiary);
@@ -236,7 +237,8 @@
   align-items: center;
   justify-content: center;
   z-index: 50;
-  backdrop-filter: blur(calc(2px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-2);
+  -webkit-backdrop-filter: var(--glass-blur-2);
 }
 .loop-shortcuts-panel {
   background: var(--bg0, #fff);

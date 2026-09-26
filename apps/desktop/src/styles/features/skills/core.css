@@ -156,9 +156,9 @@
   border-radius: 12px;
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
 }
 
@@ -282,9 +282,9 @@ html[data-theme="dark"] .skills-pane {
     color-mix(in srgb, var(--tone-soft) 55%, transparent);
   box-shadow: 0 2px 8px
     color-mix(in srgb, var(--tone) 10%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
 }
 
@@ -371,9 +371,9 @@ html[data-theme="dark"] .skills-tab-pill {
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
 }
 
@@ -464,9 +464,9 @@ html[data-theme="dark"] .skills-tab-shell .agent-picker-chip.is-open {
     var(--tone-soft);
   box-shadow: 0 2px 10px
     color-mix(in srgb, var(--tone) 12%, rgba(15, 23, 42, 0.04));
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.15));
 }
 
@@ -715,9 +715,9 @@ html[data-theme="dark"] .skills-store-category-tag.is-active {
   color: var(--tone, var(--ink-soft));
   background: var(--plugins-shell-bg);
   box-shadow: var(--plugins-shell-shadow);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.18));
   cursor: pointer;
   line-height: 1;

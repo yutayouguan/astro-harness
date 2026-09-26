@@ -89,9 +89,9 @@
     color-mix(in srgb, var(--tl-tone) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--tl-tone) 32%, var(--glass-edge));
   box-shadow: var(--glass-rim, 0 0 0 1px transparent);
-  backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-10)
     saturate(var(--glass-saturate, 1.2));
   z-index: 1;
 }
@@ -1553,9 +1553,9 @@ html[data-theme="dark"]
     inset 0 1px 0 rgba(255, 255, 255, 0.58),
     inset 0 -1px 0 color-mix(in srgb, var(--ink) 4%, transparent),
     0 1px 3px color-mix(in srgb, var(--ink) 4%, transparent);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(min(var(--glass-saturate, 1.25), 1.3));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(min(var(--glass-saturate, 1.25), 1.3));
 }
 
@@ -1588,9 +1588,9 @@ html[data-theme="dark"] .msg-activity {
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.14),
     0 8px 22px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.55));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.55));
 }
 
@@ -1967,9 +1967,9 @@ html[data-theme="dark"] .msg-activity-io-label {
     );
   border: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
   box-shadow: var(--glass-rim);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.2));
   overflow: hidden;
 }
@@ -1996,9 +1996,9 @@ html[data-theme="dark"] .msg-reasoning {
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     inset 0 -0.5px 0 rgba(0, 0, 0, 0.14),
     0 8px 22px rgba(0, 0, 0, 0.14);
-  backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.55));
-  -webkit-backdrop-filter: blur(calc(24px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-24)
     saturate(var(--glass-saturate, 1.55));
 }
 

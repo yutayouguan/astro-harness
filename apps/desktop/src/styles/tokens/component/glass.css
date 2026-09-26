@@ -1,4 +1,26 @@
 /* Shared glass surfaces and compatibility names. */
+:root {
+  /* 玻璃模糊档位：统一按 --glass-blur-scale（外观里的玻璃强度）缩放，
+     调用方只引用档位，不再内联 blur(calc(Npx * …))。数值即档位，便于比对。 */
+  --glass-blur-2: blur(calc(2px * var(--glass-blur-scale, 1)));
+  --glass-blur-4: blur(calc(4px * var(--glass-blur-scale, 1)));
+  --glass-blur-6: blur(calc(6px * var(--glass-blur-scale, 1)));
+  --glass-blur-8: blur(calc(8px * var(--glass-blur-scale, 1)));
+  --glass-blur-10: blur(calc(10px * var(--glass-blur-scale, 1)));
+  --glass-blur-12: blur(calc(12px * var(--glass-blur-scale, 1)));
+  --glass-blur-14: blur(calc(14px * var(--glass-blur-scale, 1)));
+  --glass-blur-16: blur(calc(16px * var(--glass-blur-scale, 1)));
+  --glass-blur-18: blur(calc(18px * var(--glass-blur-scale, 1)));
+  --glass-blur-20: blur(calc(20px * var(--glass-blur-scale, 1)));
+  --glass-blur-22: blur(calc(22px * var(--glass-blur-scale, 1)));
+  --glass-blur-24: blur(calc(24px * var(--glass-blur-scale, 1)));
+  --glass-blur-28: blur(calc(28px * var(--glass-blur-scale, 1)));
+  --glass-blur-30: blur(calc(30px * var(--glass-blur-scale, 1)));
+  --glass-blur-34: blur(calc(34px * var(--glass-blur-scale, 1)));
+  --glass-blur-36: blur(calc(36px * var(--glass-blur-scale, 1)));
+  --glass-blur-40: blur(calc(40px * var(--glass-blur-scale, 1)));
+}
+
 html[data-theme="dark"] {
   --glass: rgba(255, 255, 255, 0.045);
   --glass-strong: rgba(255, 255, 255, 0.07);

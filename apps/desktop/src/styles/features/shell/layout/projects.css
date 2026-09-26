@@ -373,8 +373,8 @@ html[data-theme="dark"] .sidebar-new-chat {
   box-shadow:
     0 4px 12px color-mix(in srgb, var(--tone, transparent) 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1))) saturate(1.16);
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14) saturate(1.16);
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(1.16);
   color: color-mix(in srgb, var(--tone, var(--tone-blue)) 58%, var(--ink));
   transition:
@@ -577,8 +577,8 @@ html[data-theme="dark"] .sidebar-new-chat {
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--tone, transparent) 7%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.18);
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16) saturate(1.18);
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(1.18);
   transition:
     background 140ms ease,
@@ -1162,8 +1162,8 @@ html[data-theme="dark"] .sidebar-settings-nav .settings-sidebar-item.is-active {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(calc(4px * var(--glass-blur-scale, 1)));
-  -webkit-backdrop-filter: blur(calc(4px * var(--glass-blur-scale, 1)));
+  backdrop-filter: var(--glass-blur-4);
+  -webkit-backdrop-filter: var(--glass-blur-4);
 }
 
 html[data-theme="dark"] .settings-overlay {
@@ -1178,9 +1178,9 @@ html[data-theme="dark"] .settings-overlay {
   max-height: 800px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--glass-fill, #fff) 97%, transparent);
-  backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-40)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(40px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-40)
     saturate(var(--glass-saturate, 1.2));
   border: 1px solid
     color-mix(

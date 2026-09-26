@@ -11,7 +11,7 @@
     var(--glass-panel, rgba(255, 255, 255, 0.35)) 78%,
     transparent
   );
-  --model-market-switcher-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  --model-market-switcher-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
   --model-market-card-border: var(--settings-panel-border, var(--glass-edge));
   --model-market-card-background: var(
@@ -63,9 +63,9 @@
     var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
     transparent
   );
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
   transition:
     border-color 0.16s ease,
@@ -130,9 +130,9 @@
     var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
     transparent
   );
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
   flex-shrink: 0;
 }
@@ -183,9 +183,9 @@
     var(--glass-panel, rgba(255, 255, 255, 0.35)) 88%,
     transparent
   );
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.1));
   flex-shrink: 0;
 }

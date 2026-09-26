@@ -538,9 +538,9 @@
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--tone-blue, #2563eb) 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.18));
-  -webkit-backdrop-filter: blur(calc(18px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-18)
     saturate(var(--glass-saturate, 1.18));
 }
 
@@ -628,9 +628,9 @@
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.035),
     inset 0 1px 0 rgba(255, 255, 255, 0.49);
-  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.14));
-  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-16)
     saturate(var(--glass-saturate, 1.14));
 }
 
@@ -1208,9 +1208,9 @@ html[data-theme="dark"] .chat-agent-preview {
     color-mix(in srgb, var(--tone-blue, #2563eb) 6%, rgba(15, 23, 42, 0.04)),
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.15));
-  -webkit-backdrop-filter: blur(calc(12px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-12)
     saturate(var(--glass-saturate, 1.15));
 }
 
@@ -1305,9 +1305,9 @@ html[data-theme="dark"] .chat-agent-preview {
     color-mix(in srgb, var(--tone-blue, #2563eb) 8%, rgba(15, 23, 42, 0.06)),
     inset 0 1px 0 rgba(255, 255, 255, 0.32),
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: blur(calc(14px * var(--glass-blur-scale, 1)))
+  -webkit-backdrop-filter: var(--glass-blur-14)
     saturate(var(--glass-saturate, 1.2));
 }
 
