@@ -827,34 +827,67 @@ fn find_playwright_browser() -> Option<PathBuf> {
     #[cfg(not(target_os = "macos"))]
     let roots = [home.join(".cache/ms-playwright")];
 
-    fn visit(dir: &Path, depth: usize) -> Option<PathBuf> {
-        if depth == 0 {
-            return None;
-        }
-        let entries = std::fs::read_dir(dir).ok()?;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(found) = visit(&path, depth - 1) {
-                    return Some(found);
-                }
-            } else if path.is_file() {
-                let name = path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("");
-                if matches!(
-                    name,
-                    "Chromium" | "chrome" | "headless_shell" | "chrome-headless-shell"
-                ) {
-                    return Some(path);
-                }
-            }
-        }
-        None
-    }
+    roots.iter().find_map(|root| playwright_browser_in(root))
+}
 
-    roots.iter().find_map(|root| visit(root, 6))
+/// Playwright 缓存中 Chromium 家族可执行文件相对 `<rev>/` 的候选路径（按优先级）。
+#[cfg(target_os = "macos")]
+const PLAYWRIGHT_BROWSER_CANDIDATES: &[&str] = &[
+    "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+    "chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium",
+    "chrome-mac-x64/Chromium.app/Contents/MacOS/Chromium",
+    "chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chrome-headless-shell-mac-arm64/chrome-headless-shell",
+    "chrome-headless-shell-mac-x64/chrome-headless-shell",
+    "chrome-mac/headless_shell",
+    "chrome-mac-arm64/headless_shell",
+    "chrome-mac-x64/headless_shell",
+];
+#[cfg(target_os = "linux")]
+const PLAYWRIGHT_BROWSER_CANDIDATES: &[&str] = &[
+    "chrome-linux/chrome",
+    "chrome-linux64/chrome",
+    "chrome-headless-shell-linux64/chrome-headless-shell",
+    "chrome-linux/headless_shell",
+];
+#[cfg(target_os = "windows")]
+const PLAYWRIGHT_BROWSER_CANDIDATES: &[&str] = &[
+    r"chrome-win\chrome.exe",
+    r"chrome-win64\chrome.exe",
+    r"chrome-headless-shell-win64\chrome-headless-shell.exe",
+    r"chrome-win\headless_shell.exe",
+];
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+const PLAYWRIGHT_BROWSER_CANDIDATES: &[&str] = &[];
+
+/// 在 Playwright 缓存根目录里定向查找 Chromium 家族可执行文件。
+///
+/// 只列一层 revision 目录再拼已知相对路径，不做递归扫描：Chrome for Testing 的
+/// `.app/Contents/Frameworks` 有上万条目，递归探测一次要 100ms 以上；而本函数由工具
+/// 可用性 `check_fn` 在每次 Step 构建时同步调用（16 个 browser 工具各一次），
+/// 递归版本会让每轮凭空阻塞约 2 秒，并让任务取消/替换在阻塞期间无法生效。
+fn playwright_browser_in(root: &Path) -> Option<PathBuf> {
+    let mut revisions: Vec<PathBuf> = std::fs::read_dir(root)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("chromium"))
+        })
+        .collect();
+    // 同一候选路径下 revision 号越大越新。
+    revisions.sort_by(|a, b| b.cmp(a));
+
+    PLAYWRIGHT_BROWSER_CANDIDATES.iter().find_map(|relative| {
+        revisions
+            .iter()
+            .map(|revision| revision.join(relative))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 fn session_dir_for(memory_dir: &Path, session_id: &str) -> PathBuf {
@@ -2230,6 +2263,84 @@ impl BrowserSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn playwright_lookup_finds_candidate_binary_without_recursing() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let Some(relative) = PLAYWRIGHT_BROWSER_CANDIDATES.first() else {
+            return;
+        };
+        let binary = root.join("chromium-1234").join(relative);
+        std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        std::fs::write(&binary, "").unwrap();
+
+        assert_eq!(playwright_browser_in(root), Some(binary));
+    }
+
+    #[test]
+    fn playwright_lookup_ignores_unrelated_cache_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("webkit-2336/whatever")).unwrap();
+        std::fs::write(root.join("ffmpeg-1011"), "").unwrap();
+
+        assert_eq!(playwright_browser_in(root), None);
+    }
+
+    #[test]
+    fn playwright_lookup_does_not_walk_browser_bundles() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        // 深层同名文件不应命中：递归扫描正是每轮多花约 2 秒的原因。
+        let decoy = root.join("chromium-1234/chrome-mac-arm64/Chromium.app/Contents/MacOS/deep/x");
+        std::fs::create_dir_all(&decoy).unwrap();
+        std::fs::write(decoy.join("Chromium"), "").unwrap();
+
+        assert_eq!(playwright_browser_in(root), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn playwright_lookup_prefers_full_browser_over_headless_shell() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let headless = root.join("chromium_headless_shell-1234/chrome-headless-shell-mac-arm64");
+        std::fs::create_dir_all(&headless).unwrap();
+        std::fs::write(headless.join("chrome-headless-shell"), "").unwrap();
+        let testing = root
+            .join("chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS");
+        std::fs::create_dir_all(&testing).unwrap();
+        std::fs::write(testing.join("Google Chrome for Testing"), "").unwrap();
+
+        assert_eq!(
+            playwright_browser_in(root),
+            Some(testing.join("Google Chrome for Testing")),
+            "完整 Chromium 优先于 headless shell"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn playwright_lookup_prefers_newest_revision() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        for revision in ["chromium-1122", "chromium-1234"] {
+            let macos = root
+                .join(revision)
+                .join("chrome-mac/Chromium.app/Contents/MacOS");
+            std::fs::create_dir_all(&macos).unwrap();
+            std::fs::write(macos.join("Chromium"), "").unwrap();
+        }
+
+        assert_eq!(
+            playwright_browser_in(root),
+            Some(
+                root.join("chromium-1234/chrome-mac/Chromium.app/Contents/MacOS")
+                    .join("Chromium")
+            )
+        );
+    }
 
     #[test]
     fn accepts_public_and_loopback_urls() {

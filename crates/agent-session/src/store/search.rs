@@ -470,8 +470,7 @@ impl SessionStore {
                         title,
                         started_at,
                         preview: preview.and_then(|p| {
-                            let title =
-                                types::derive_preview_title(&p, PREVIEW_TITLE_MAX_CHARS);
+                            let title = types::derive_preview_title(&p, PREVIEW_TITLE_MAX_CHARS);
                             (!title.is_empty()).then_some(title)
                         }),
                         ended_at,
