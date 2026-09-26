@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const [panelSource, iconSource, marketCss, rankingsCss, messagesSource] =
   await Promise.all([
@@ -23,7 +24,7 @@ const [panelSource, iconSource, marketCss, rankingsCss, messagesSource] =
       new URL("../../styles/features/model-rankings.css", import.meta.url),
       "utf8",
     ),
-    readFile(new URL("../../i18n/messages.ts", import.meta.url), "utf8"),
+    readI18nCatalogs(),
   ]);
 
 test("task rankings expose composition and redundant change direction", () => {

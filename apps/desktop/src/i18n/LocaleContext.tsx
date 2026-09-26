@@ -9,7 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { translate, type Locale, type MessageKey } from "./messages";
+import {
+  loadLocaleMessages,
+  translate,
+  zh,
+  type Locale,
+  type MessageCatalog,
+  type MessageKey,
+} from "./messages";
 
 const STORAGE_KEY = "astro-locale";
 
@@ -38,10 +45,36 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+/**
+ * 启动就预取当前语言字典：中文常驻内存，英文走独立 chunk，
+ * 首次渲染若还没到就用中文兜底，切过来后立即替换。
+ */
+function prefetchLocale(locale: Locale) {
+  void loadLocaleMessages(locale).catch(() => {});
+}
+
+// 模块加载即开始取当前语言字典（英文是独立 chunk），避免首屏与切换时的等待。
+if (typeof window !== "undefined") prefetchLocale(readStoredLocale());
+
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() =>
     typeof window === "undefined" ? "zh" : readStoredLocale(),
   );
+  const [catalog, setCatalog] = useState<MessageCatalog>(zh);
+
+  useEffect(() => {
+    let disposed = false;
+    void loadLocaleMessages(locale)
+      .then((next) => {
+        if (!disposed) setCatalog(next);
+      })
+      .catch(() => {
+        // 加载失败时保持当前字典
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [locale]);
 
   useEffect(() => {
     try {
@@ -62,8 +95,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback(
     (key: MessageKey, vars?: Record<string, string>) =>
-      translate(locale, key, vars),
-    [locale],
+      translate(catalog, key, vars),
+    [catalog],
   );
 
   const value = useMemo(

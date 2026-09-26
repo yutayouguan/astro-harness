@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { en, zh, type MessageKey } from "../../i18n/messages.ts";
+import { en } from "../../i18n/catalogs/en.ts";
+import { zh, type MessageKey } from "../../i18n/messages.ts";
 import {
   listPromptTemplateSegments,
   nextEmptyPromptTemplateSlot,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const projectStyles = await readFile(
   new URL("../../styles/features/shell/layout/projects.css", import.meta.url),
@@ -42,10 +43,7 @@ const appSource = await readFile(
   new URL("../../App.tsx", import.meta.url),
   "utf8",
 );
-const messagesSource = await readFile(
-  new URL("../../i18n/messages.ts", import.meta.url),
-  "utf8",
-);
+const messagesSource = await readI18nCatalogs();
 
 function rule(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

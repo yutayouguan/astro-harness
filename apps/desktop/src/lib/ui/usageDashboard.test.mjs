@@ -1,21 +1,22 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
-const [panel, dashboard, styles, messages, commands, usageDb] =
-  await Promise.all(
-    [
-      "../../components/settings/InsightsPanel.tsx",
-      "../../components/settings/UsageDashboard.tsx",
-      "../../styles/features/usage-dashboard.css",
-      "../../i18n/messages.ts",
-      "../../../src-tauri/src/commands/providers/config.rs",
-      "../../../../../crates/agent-usage/src/db.rs",
-    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
-  );
+const [panel, dashboard, styles, commands, usageDb] = await Promise.all(
+  [
+    "../../components/settings/InsightsPanel.tsx",
+    "../../components/settings/UsageDashboard.tsx",
+    "../../styles/features/usage-dashboard.css",
+    "../../../src-tauri/src/commands/providers/config.rs",
+    "../../../../../crates/agent-usage/src/db.rs",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+);
+// 字典已拆到 catalogs/{zh,en}.ts（英文按需加载）。
+const catalogs = await readI18nCatalogs();
 
 test("usage settings expose rolling periods and a dedicated overview", () => {
-  assert.match(messages, /"settings\.sidebar\.tab\.insights": "用量统计"/);
+  assert.match(catalogs, /"settings\.sidebar\.tab\.insights": "用量统计"/);
   assert.match(panel, /type Period = "days30" \| "days90" \| "days365"/);
   assert.match(
     panel,

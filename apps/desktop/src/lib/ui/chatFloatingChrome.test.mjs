@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const headerStyles = await readFile(
   new URL("../../styles/features/shell/header.css", import.meta.url),
@@ -46,10 +47,7 @@ const chatView = await readFile(
   new URL("../../components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
-const messages = await readFile(
-  new URL("../../i18n/messages.ts", import.meta.url),
-  "utf8",
-);
+const messages = await readI18nCatalogs();
 const app = await readFile(new URL("../../App.tsx", import.meta.url), "utf8");
 
 function rule(css, selector) {

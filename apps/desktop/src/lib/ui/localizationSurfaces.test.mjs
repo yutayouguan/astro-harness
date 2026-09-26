@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const source = async (relativePath) =>
   readFile(new URL(`../../${relativePath}`, import.meta.url), "utf8");
@@ -21,7 +22,7 @@ test("screenshot surfaces use locale keys instead of hardcoded Chinese copy", as
       source("components/chat/ChatAgentInfo.tsx"),
       source("components/chat/ProjectFilesPanel.tsx"),
       source("App.tsx"),
-      source("i18n/messages.ts"),
+      readI18nCatalogs(),
       source("i18n/catalogs/settings.ts"),
     ]);
   const catalogs = `${messages}\n${settingsMessages}`;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const panelUrl = new URL(
   "../../components/settings/SkillsPanel.tsx",
@@ -20,7 +21,7 @@ const mcpToolsUrl = new URL(
   "../../hooks/providers/useMcpTools.ts",
   import.meta.url,
 );
-const messagesUrl = new URL("../../i18n/messages.ts", import.meta.url);
+// 字典已拆到 catalogs/{zh,en}.ts（英文按需加载）
 const publicMcpCatalogUrl = new URL(
   "../../config/mcp-public-catalog.json",
   import.meta.url,
@@ -53,7 +54,7 @@ const tabs = await readFile(tabsCssUrl, "utf8");
 const toolsCss = await readFile(toolsCssUrl, "utf8");
 const mcpSection = await readFile(mcpSectionUrl, "utf8");
 const mcpTools = await readFile(mcpToolsUrl, "utf8");
-const messages = await readFile(messagesUrl, "utf8");
+const messages = await readI18nCatalogs();
 const publicMcpCatalog = JSON.parse(
   await readFile(publicMcpCatalogUrl, "utf8"),
 );

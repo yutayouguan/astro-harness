@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { readChatCss } from "./chatCssSource.mjs";
+import { readI18nCatalogs } from "./i18nCatalogSource.mjs";
 
 const chatViewUrl = new URL(
   "../../components/chat/ChatView.tsx",
@@ -11,7 +12,7 @@ const contextUsagePopoverUrl = new URL(
   "../../components/chat/ContextUsagePopover.tsx",
   import.meta.url,
 );
-const messagesUrl = new URL("../../i18n/messages.ts", import.meta.url);
+// 字典已拆到 catalogs/{zh,en}.ts（英文按需加载）。
 const chatSessionUrl = new URL(
   "../../hooks/chat/useChatSession.ts",
   import.meta.url,
@@ -34,7 +35,7 @@ test("hover actions exclude deletion and only the latest user question can be ed
     readFile(chatViewUrl, "utf8"),
     readFile(chatMessageRowUrl, "utf8"),
     readFile(chatSessionUrl, "utf8"),
-    readFile(messagesUrl, "utf8"),
+    readI18nCatalogs(),
     readFile(coreCssUrl, "utf8"),
   ]);
   const source = `${chatView}\n${chatRow}`;
@@ -107,7 +108,7 @@ test("assistant actions do not expose side-effecting regeneration", async () => 
 
 test("chat surface exposes realtime voice without restoring legacy ASR or read-aloud controls", async () => {
   const source = await readFile(chatViewUrl, "utf8");
-  const messages = await readFile(messagesUrl, "utf8");
+  const messages = await readI18nCatalogs();
   const realtime = await readFile(
     new URL("../../hooks/chat/useRealtimeConversation.ts", import.meta.url),
     "utf8",
@@ -167,7 +168,7 @@ test("composer does not expose a reasoning control", async () => {
 
 test("composer approval selector keeps the three supported permission choices", async () => {
   const source = await readFile(chatViewUrl, "utf8");
-  const messages = await readFile(messagesUrl, "utf8");
+  const messages = await readI18nCatalogs();
   const styles = await readChatCss();
   const presets = source.match(
     /const PERMISSION_PRESETS:[\s\S]*?= \[(?<items>[\s\S]*?)\];/,
@@ -221,7 +222,7 @@ test("composer keeps context usage available at every occupancy level", async ()
 
 test("composer exposes an accessible hover-revealed input height control", async () => {
   const source = await readFile(chatViewUrl, "utf8");
-  const messages = await readFile(messagesUrl, "utf8");
+  const messages = await readI18nCatalogs();
   const styles = await readChatCss();
 
   assert.match(source, /className="composer-expand-btn"/);

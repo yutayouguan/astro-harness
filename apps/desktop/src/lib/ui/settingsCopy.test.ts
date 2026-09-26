@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { settingsMessages } from "../../i18n/catalogs/settings.ts";
-import { zh, en } from "../../i18n/messages.ts";
+import { en } from "../../i18n/catalogs/en.ts";
+import { zh } from "../../i18n/messages.ts";
 
 const conciseKeys = [
   "prefs.appearance.theme.sub",
