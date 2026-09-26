@@ -1,5 +1,5 @@
 /** 思考过程折叠块。 */
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Lightbulb } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
@@ -27,7 +27,7 @@ type Props = {
   forcedOpen?: boolean;
 };
 
-export default function MsgReasoning({
+function MsgReasoningImpl({
   reasoning,
   active,
   outcome = "done",
@@ -119,3 +119,6 @@ export default function MsgReasoning({
     </div>
   );
 }
+
+// 思考块 props 全是原始值：流式 flush 时历史块跳过重渲染。
+export default memo(MsgReasoningImpl);

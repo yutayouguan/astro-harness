@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
@@ -23,7 +23,7 @@ type Props = {
   onOpenUrl?: (url: string) => void | Promise<void>;
 };
 
-export default function MsgActivityGroup({
+function MsgActivityGroupImpl({
   activities,
   defaultOpen = false,
   forcedOpen,
@@ -167,3 +167,6 @@ function activityGroupSummaryLabel(
 ): string {
   return t(`chat.activityGroup.summary.${summary}`);
 }
+
+// 活动组只吃 activities 数组 + 原始 props：历史分组在流式 flush 时跳过重渲染。
+export default memo(MsgActivityGroupImpl);

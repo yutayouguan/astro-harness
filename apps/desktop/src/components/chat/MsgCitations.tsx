@@ -1,5 +1,5 @@
 /** Anthropic citations 引用折叠块，带手风琴展开动画。 */
-import { useState } from "react";
+import { memo, useState } from "react";
 import { BookOpen } from "lucide-react";
 
 type Citation = Record<string, unknown>;
@@ -8,7 +8,7 @@ type Props = {
   citations: Citation[];
 };
 
-export default function MsgCitations({ citations }: Props) {
+function MsgCitationsImpl({ citations }: Props) {
   const [open, setOpen] = useState(false);
 
   if (!citations.length) return null;
@@ -53,3 +53,6 @@ export default function MsgCitations({ citations }: Props) {
     </div>
   );
 }
+
+// 流式 flush 只替换当前消息对象，历史引用块保持引用不变，避免整棵聊天树重渲染。
+export default memo(MsgCitationsImpl);

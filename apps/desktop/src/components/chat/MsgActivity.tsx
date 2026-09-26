@@ -1,5 +1,5 @@
 /** 单条聊天活动卡：kind 图标 + 可折叠 IO / 生成媒体。 */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   BookOpenText,
@@ -96,7 +96,7 @@ export function ActivityIcon({
   }
 }
 
-export default function MsgActivity({
+function MsgActivityImpl({
   activity,
   defaultOpen,
   showTimestamp,
@@ -356,3 +356,6 @@ function resolveActivityTitle(
     ? t(presentation.key, { target: presentation.target })
     : t(presentation.key);
 }
+
+// 活动卡只吃单条 activity + 原始 props：历史卡片在流式 flush 时跳过重渲染。
+export default memo(MsgActivityImpl);
