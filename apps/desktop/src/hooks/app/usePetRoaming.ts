@@ -74,7 +74,12 @@ export function usePetRoaming(state: DesktopPetState, blocked: () => boolean) {
         .catch(() => {});
     report();
     document.addEventListener("visibilitychange", report);
-    const heartbeat = window.setInterval(report, 250);
+    // 隐藏时不再每 250ms 走一次 native：切换可见性的瞬间已经上报过 blocked，
+    // 重复上报没有新信息，只会白占 IPC 与电量。
+    const heartbeat = window.setInterval(() => {
+      if (document.hidden) return;
+      report();
+    }, 250);
     const schedule = (delay: number) => {
       timer = window.setTimeout(() => void walk(), delay);
     };

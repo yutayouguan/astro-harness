@@ -4,6 +4,20 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
+test("roaming guard heartbeat pauses while the window is hidden", () => {
+  const roaming = read("../../hooks/app/usePetRoaming.ts");
+
+  // 隐藏瞬间已经由 visibilitychange 上报 blocked，隐藏期间无需每 250ms 再问一次 native。
+  assert.match(
+    roaming,
+    /document\.addEventListener\("visibilitychange", report\)/,
+  );
+  assert.match(
+    roaming,
+    /setInterval\(\(\) => \{\s*if \(document\.hidden\) return;\s*report\(\);\s*\}, 250\)/,
+  );
+});
+
 test("chat-driven desktop pet chain is wired from bundled skill to native window", () => {
   const skill = read(
     "../../../../../crates/agent-skills/bundled/desktop-pet-creator/SKILL.md",
