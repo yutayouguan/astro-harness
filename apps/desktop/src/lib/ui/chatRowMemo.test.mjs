@@ -33,3 +33,29 @@ test("streaming flushes skip unchanged chat rows", async () => {
     assert.match(source, new RegExp(`export default memo\\(${name}Impl\\);`));
   }
 });
+
+test("the whole message row is a memo component driven by primitive props", async () => {
+  const row = await readFile(new URL("ChatMessageRow.tsx", chatDir), "utf8");
+  const view = await readFile(new URL("ChatView.tsx", chatDir), "utf8");
+
+  assert.match(row, /export default memo\(ChatMessageRowImpl\);/);
+  // 逐条派生值由 ChatView 算好传入，行内不再直接读 messages/overrides 这类容器。
+  for (const prop of [
+    "isLastMessage",
+    "isParallelRunning",
+    "isLastUserMessage",
+    "answerLayout",
+    "forcedProcessOpen",
+  ]) {
+    assert.match(row, new RegExp(`\\b${prop}\\b`), prop);
+  }
+  assert.doesNotMatch(row, /pendingAsyncQuestionsAt\(messages, index\)/);
+  assert.doesNotMatch(row, /messageLayoutOverrides\[/);
+  assert.doesNotMatch(row, /parallelRunningIds\.has/);
+
+  assert.match(view, /<ChatMessageRow/);
+  assert.match(
+    view,
+    /pendingAsyncQuestions=\{pendingAsyncQuestionsAt\(messages, index\)\}/,
+  );
+});

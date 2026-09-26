@@ -8,10 +8,11 @@ import MsgActivity from "../components/chat/MsgActivity";
 import MsgActivityGroup from "../components/chat/MsgActivityGroup";
 import MsgReasoning from "../components/chat/MsgReasoning";
 import { MsgTimeline, MsgTimelineStep } from "../components/chat/MsgTimeline";
-import ChatView, {
+import ChatView from "../components/chat/ChatView";
+import {
   MessageActions,
   MessageTokenStats,
-} from "../components/chat/ChatView";
+} from "../components/chat/ChatMessageRow";
 import type { ChatActivity, ConversationEntry } from "../types";
 
 const terminalActivity: ChatActivity = {

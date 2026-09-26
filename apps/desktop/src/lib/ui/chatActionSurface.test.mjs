@@ -24,14 +24,20 @@ const markdownCssUrl = new URL(
   "../../styles/features/chat/markdown.css",
   import.meta.url,
 );
+const chatMessageRowUrl = new URL(
+  "../../components/chat/ChatMessageRow.tsx",
+  import.meta.url,
+);
 
 test("hover actions exclude deletion and only the latest user question can be edited", async () => {
-  const [source, session, messages, styles] = await Promise.all([
+  const [chatView, chatRow, session, messages, styles] = await Promise.all([
     readFile(chatViewUrl, "utf8"),
+    readFile(chatMessageRowUrl, "utf8"),
     readFile(chatSessionUrl, "utf8"),
     readFile(messagesUrl, "utf8"),
     readFile(coreCssUrl, "utf8"),
   ]);
+  const source = `${chatView}\n${chatRow}`;
   const messageActions = source.match(
     /export function MessageActions[\s\S]*?\n}\n\nfunction InlineUserMessageEditor/,
   )?.[0];

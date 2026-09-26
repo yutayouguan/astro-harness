@@ -8,9 +8,11 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
+import { readChatRenderSource } from "./chatRenderSource.mjs";
+
 test("assistant answers expose one accessible context menu from pointer and toolbar", async () => {
   const [chatView, menu] = await Promise.all([
-    source("components/chat/ChatView.tsx"),
+    readChatRenderSource(),
     source("components/chat/AssistantTurnContextMenu.tsx"),
   ]);
 
@@ -45,7 +47,7 @@ test("per-answer layout overrides remain separate from the global default", asyn
 
 test("copy actions are disabled when an answer has no text", async () => {
   const [chatView, menu] = await Promise.all([
-    source("components/chat/ChatView.tsx"),
+    readChatRenderSource(),
     source("components/chat/AssistantTurnContextMenu.tsx"),
   ]);
 
@@ -75,7 +77,7 @@ test("side chat can promote a per-answer layout to the global default", async ()
 
 test("full-process controls reach reasoning and tool groups", async () => {
   const [chatView, reasoning, activities] = await Promise.all([
-    source("components/chat/ChatView.tsx"),
+    readChatRenderSource(),
     source("components/chat/MsgReasoning.tsx"),
     source("components/chat/MsgActivityGroup.tsx"),
   ]);

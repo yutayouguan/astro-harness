@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readChatRenderSource } from "./chatRenderSource.mjs";
 
 const root = new URL("../../", import.meta.url);
 
@@ -58,7 +59,7 @@ test("TODO updates stay out of answers and use a compact centered composer statu
   const [activity, progress, chatView, css] = await Promise.all([
     source("components/chat/MsgActivity.tsx"),
     source("components/chat/TodoProgress.tsx"),
-    source("components/chat/ChatView.tsx"),
+    readChatRenderSource(),
     source("styles/features/chat/activity-surfaces.css"),
   ]);
 
@@ -102,7 +103,7 @@ test("web activity targets open in Astro's built-in browser", async () => {
   const [app, chatView, activity, presentation, send, parallel, history, css] =
     await Promise.all([
       source("App.tsx"),
-      source("components/chat/ChatView.tsx"),
+      readChatRenderSource(),
       source("components/chat/MsgActivity.tsx"),
       source("lib/chat/activityPresentation.ts"),
       source("hooks/chat/useSend.ts"),

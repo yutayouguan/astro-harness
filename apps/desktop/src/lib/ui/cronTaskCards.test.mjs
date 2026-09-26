@@ -23,6 +23,10 @@ const overlayUrl = new URL(
   import.meta.url,
 );
 const chatUrl = new URL("../../components/chat/ChatView.tsx", import.meta.url);
+const chatRowUrl = new URL(
+  "../../components/chat/ChatMessageRow.tsx",
+  import.meta.url,
+);
 const runDetailUrl = new URL(
   "../../components/schedule/CronRunDetailDrawer.tsx",
   import.meta.url,
@@ -37,7 +41,7 @@ const cards = await readFile(cardsUrl, "utf8");
 const drawer = await readFile(drawerUrl, "utf8");
 const dialog = await readFile(dialogUrl, "utf8");
 const overlay = await readFile(overlayUrl, "utf8");
-const chat = await readFile(chatUrl, "utf8");
+const chat = `${await readFile(chatUrl, "utf8")}\n${await readFile(chatRowUrl, "utf8")}`;
 const runDetail = await readFile(runDetailUrl, "utf8");
 const command = await readFile(commandUrl, "utf8");
 
