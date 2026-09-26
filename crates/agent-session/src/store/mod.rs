@@ -20,7 +20,6 @@ use agent_db::sqlx::{self, Row};
 use agent_db::{AstroDb, DbSpec, SqlitePool};
 pub use agent_protocol::ResponseItem;
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -412,11 +411,6 @@ impl crate::ConversationStore for SessionStore {
         compressed: Option<&str>,
     ) -> Result<()> {
         SessionStore::update_response_item_compressed_content(self, message_id, compressed).await
-    }
-
-    #[allow(refining_impl_trait)]
-    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
-        SessionStore::patch_last_assistant_metadata(self, session_id, details).await
     }
 
     #[allow(refining_impl_trait)]

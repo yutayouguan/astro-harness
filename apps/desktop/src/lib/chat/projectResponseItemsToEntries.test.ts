@@ -239,6 +239,9 @@ test("normalizeProjectedEntries restores interleaved text timeline segments", ()
       id: "a1",
       role: "assistant",
       content: "beforeafter",
+      activities: [
+        { id: "tool-1", kind: "tool", title: "read_file", status: "done" },
+      ],
       segments: [
         { type: "text", id: "txt-1", text: "before", at: 100 },
         { type: "activity", id: "tool-1", at: 200 },
@@ -489,4 +492,234 @@ test("normalizeProjectedEntries restores tool batch execution metadata", () => {
 
   assert.equal(message?.activities?.[0]?.batchId, "batch-1");
   assert.equal(message?.activities?.[0]?.executionMode, "parallel");
+});
+
+test("projectResponseItemsToEntries keeps timeline whose activities are in the same bubble", () => {
+  const messages = projectResponseItemsToEntries([
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "跑一下" }],
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "reasoning",
+        content: [{ type: "reasoning_text", text: "先看看" }],
+        internal_chat_message_metadata_passthrough: {
+          astro_timeline_v1: [
+            { type: "reasoning", id: "r-1", text: "先看看", at: 1_000 },
+            { type: "activity", id: "call_1", at: 3_000 },
+            { type: "text", id: "txt-1", text: "好了", at: 5_000 },
+          ],
+        },
+      },
+    },
+    {
+      id: "3",
+      timestamp: 3,
+      item: {
+        type: "function_call",
+        call_id: "call_1",
+        name: "terminal",
+        arguments: '{"command":"pwd"}',
+      },
+    },
+    {
+      id: "4",
+      timestamp: 4,
+      item: {
+        type: "function_call_output",
+        call_id: "call_1",
+        name: "terminal",
+        output: "ok",
+      },
+    },
+    {
+      id: "5",
+      timestamp: 5,
+      item: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "好了" }],
+      },
+    },
+  ]);
+
+  const assistant = messages[1];
+  assert.deepEqual(
+    assistant?.segments?.map((segment) => segment.type),
+    ["reasoning", "activity", "text"],
+  );
+  assert.equal(assistant?.activities?.[0]?.id, "call_1");
+});
+
+function misplacedTimelineItems() {
+  // 旧落盘实现把本轮时间线回写到上一条 assistant 消息行：气泡拿到下一轮的
+  // 时间线，activity 段在本气泡内全无对应活动，只会渲染成一串「思考完成」。
+  return [
+    {
+      id: "1",
+      timestamp: 1,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "第一轮" }],
+      },
+    },
+    {
+      id: "2",
+      timestamp: 2,
+      item: {
+        type: "reasoning",
+        content: [{ type: "reasoning_text", text: "第一轮思考" }],
+      },
+    },
+    {
+      id: "3",
+      timestamp: 3,
+      item: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "第一轮回答" }],
+        internal_chat_message_metadata_passthrough: {
+          astro_timeline_v1: [
+            { type: "reasoning", id: "r-2", text: "第二轮思考", at: 20_000 },
+            { type: "activity", id: "call_2", at: 21_000 },
+          ],
+        },
+      },
+    },
+    {
+      id: "4",
+      timestamp: 4,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "第二轮" }],
+      },
+    },
+    {
+      id: "5",
+      timestamp: 5,
+      item: {
+        type: "function_call",
+        call_id: "call_2",
+        name: "terminal",
+        arguments: '{"command":"ls"}',
+      },
+    },
+    {
+      id: "6",
+      timestamp: 6,
+      item: {
+        type: "function_call_output",
+        call_id: "call_2",
+        name: "terminal",
+        output: "ok",
+      },
+    },
+  ];
+}
+
+test("projectResponseItemsToEntries moves a timeline back to the turn that owns its activities", () => {
+  const messages = projectResponseItemsToEntries(misplacedTimelineItems());
+
+  assert.equal(messages.length, 4);
+  assert.equal(messages[1]?.content, "第一轮回答");
+  assert.equal(messages[1]?.segments, undefined);
+  assert.equal(messages[3]?.activities?.[0]?.id, "call_2");
+  assert.deepEqual(
+    messages[3]?.segments?.map((segment) => segment.type),
+    ["reasoning", "activity"],
+  );
+});
+
+test("projectResponseItemsToEntries drops a timeline whose activities are gone", () => {
+  const items = misplacedTimelineItems();
+  // 抹掉拥有该时间线的工具行（例如历史被截断），时间线找不到归属。
+  const messages = projectResponseItemsToEntries([
+    ...items.slice(0, 4),
+    {
+      id: "5",
+      timestamp: 5,
+      item: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "第二轮回答" }],
+      },
+    },
+  ]);
+
+  assert.equal(messages[1]?.segments, undefined);
+  assert.equal(messages[3]?.segments, undefined);
+});
+
+test("projectResponseItemsToEntries moves a misplaced A2UI surface with its timeline", () => {
+  const items = misplacedTimelineItems();
+  // 与时间线同批落盘的 surfaces 也挂在错行上：跟随时间线一起还给拥有者。
+  const misplaced = items[2];
+  assert.ok(misplaced);
+  misplaced.item.internal_chat_message_metadata_passthrough = {
+    astro_timeline_v1: [
+      { type: "reasoning", id: "r-2", text: "第二轮思考", at: 20_000 },
+      { type: "activity", id: "call_2", at: 21_000 },
+      { type: "surface", id: "a2ui-surface-call_2", at: 21_500 },
+    ],
+    astro_surfaces_v1: [
+      {
+        messageId: "a2ui-surface-call_2",
+        activityType: "a2ui-surface",
+        operations: [{ type: "text", value: "卡片" }],
+        status: "active",
+      },
+    ],
+  };
+
+  const messages = projectResponseItemsToEntries(items);
+
+  assert.equal(messages[1]?.uiSurfaces, undefined);
+  assert.equal(messages[3]?.uiSurfaces?.[0]?.messageId, "a2ui-surface-call_2");
+  assert.deepEqual(
+    messages[3]?.segments?.map((segment) => segment.type),
+    ["reasoning", "activity", "surface"],
+  );
+});
+
+test("normalizeProjectedEntries keeps a partially matching timeline in place", () => {
+  // 只有「本气泡一个 activity 都对不上」才判定为写错行；个别段对不齐不搬家。
+  const [first, second] = normalizeProjectedEntries([
+    {
+      id: "a1",
+      role: "assistant",
+      content: "one",
+      activities: [
+        { id: "call_own", kind: "tool", title: "read_file", status: "done" },
+      ],
+      segments: [
+        { type: "activity", id: "call_own", at: 10 },
+        { type: "activity", id: "call_other", at: 20 },
+      ],
+    },
+    { id: "u1", role: "user", content: "next" },
+    {
+      id: "a2",
+      role: "assistant",
+      content: "two",
+      activities: [
+        { id: "call_other", kind: "tool", title: "read_file", status: "done" },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    first?.segments?.map((segment) => segment.id),
+    ["call_own", "call_other"],
+  );
+  assert.equal(second?.segments, undefined);
 });

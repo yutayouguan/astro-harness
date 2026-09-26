@@ -200,33 +200,6 @@ impl SessionStore {
         Ok(())
     }
 
-    pub async fn patch_last_assistant_metadata(
-        &self,
-        session_id: &str,
-        details: &Value,
-    ) -> Result<()> {
-        let row = sqlx::query(
-            "SELECT id FROM response_items
-             WHERE session_id = ?1 AND role = 'assistant'
-               AND json_extract(item_json, '$.type') = 'message'
-             ORDER BY id DESC LIMIT 1",
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        let Some(row) = row else {
-            return Ok(());
-        };
-        let item_id: i64 = row.get(0);
-        if let Value::Object(values) = details {
-            for (key, value) in values {
-                self.patch_response_item_metadata(item_id, key, Some(value.clone()))
-                    .await?;
-            }
-        }
-        Ok(())
-    }
-
     pub async fn fork_session(
         &self,
         source_id: &str,

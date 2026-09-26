@@ -2875,6 +2875,124 @@ mod tests {
         assert_eq!(second.turn(), 2);
     }
 
+    fn timeline_details() -> serde_json::Value {
+        serde_json::json!({
+            "astro_timeline_v1": [
+                {"type": "reasoning", "id": "r-1", "text": "think", "at": 1},
+                {"type": "activity", "id": "call_1", "at": 2},
+            ],
+        })
+    }
+
+    fn native_round_items(with_message: bool) -> Vec<agent_protocol::ResponseItem> {
+        let mut items = vec![agent_protocol::ResponseItem::Reasoning {
+            id: None,
+            summary: Vec::new(),
+            content: Some(vec![serde_json::json!({
+                "type": "reasoning_text",
+                "text": "think",
+            })]),
+            encrypted_content: None,
+            internal_chat_message_metadata_passthrough: None,
+        }];
+        if with_message {
+            items.push(agent_protocol::ResponseItem::assistant_text("done"));
+        }
+        items.push(agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_1".into()),
+            name: "terminal".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            encrypted_function_args: None,
+            call_id: "call_1".into(),
+            internal_chat_message_metadata_passthrough: None,
+        });
+        items
+    }
+
+    fn timeline_metadata(item: &agent_protocol::ResponseItem) -> Option<&serde_json::Value> {
+        item.metadata()?.get("astro_timeline_v1")
+    }
+
+    #[tokio::test]
+    async fn native_assistant_items_carry_astro_timeline_metadata() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+
+        session
+            .record_assistant_response_items(
+                "done",
+                None,
+                Some("think"),
+                Some(timeline_details()),
+                native_round_items(true),
+            )
+            .await
+            .unwrap();
+
+        let stored = session
+            .services
+            .sessions
+            .get_response_items(session.session_id())
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 3);
+        // 时间线落在本轮 assistant message 上，不会漏到工具行。
+        assert!(timeline_metadata(&stored[1].item).is_some());
+        assert!(timeline_metadata(&stored[0].item).is_none());
+        assert!(stored[2].item.metadata().is_none());
+    }
+
+    #[tokio::test]
+    async fn native_tool_only_round_falls_back_to_reasoning_item() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::new(test_config(&dir)).await.unwrap();
+
+        session
+            .record_assistant_response_items(
+                "",
+                None,
+                Some("think"),
+                Some(timeline_details()),
+                native_round_items(false),
+            )
+            .await
+            .unwrap();
+
+        let stored = session
+            .services
+            .sessions
+            .get_response_items(session.session_id())
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 2);
+        assert!(timeline_metadata(&stored[0].item).is_some());
+        assert!(stored[1].item.metadata().is_none());
+
+        // 既没有 message 也没有 reasoning 的轮次不改动 items（不伪造新行）。
+        let bare = vec![agent_protocol::ResponseItem::FunctionCall {
+            id: Some("item_2".into()),
+            name: "terminal".into(),
+            namespace: None,
+            arguments: "{}".into(),
+            encrypted_function_args: None,
+            call_id: "call_2".into(),
+            internal_chat_message_metadata_passthrough: None,
+        }];
+        session
+            .record_assistant_response_items("", None, None, Some(timeline_details()), bare)
+            .await
+            .unwrap();
+        let stored = session
+            .services
+            .sessions
+            .get_response_items(session.session_id())
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 3);
+        assert!(stored[2].item.metadata().is_none());
+    }
+
     #[tokio::test]
     async fn token_usage_accumulates_and_restores_from_rollout_records() {
         let dir = TempDir::new().unwrap();

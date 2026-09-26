@@ -1818,6 +1818,90 @@ async fn cold_start_preserves_native_responses_media_content() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn assistant_timeline_stays_on_the_turn_that_owns_its_activities() {
+    let (dir, session, _thread, _recorder, _path) = common::new_thread().await;
+    let responses_fn = scripted_responses(vec![
+        // 第一轮：纯文本回答，没有工具。
+        vec![
+            StreamChunk::Thinking("plain answer".into()),
+            StreamChunk::Text("hello".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+        // 第二轮：思考 → 工具调用。
+        vec![
+            StreamChunk::Thinking("need the tool".into()),
+            StreamChunk::ToolCallStart {
+                index: 0,
+                id: "call_timeline".into(),
+                name: "echo".into(),
+                signature: None,
+            },
+            StreamChunk::ToolCallDelta {
+                index: 0,
+                arguments: r#"{"text":"hi"}"#.into(),
+            },
+            StreamChunk::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ],
+        // 第二轮收尾。
+        vec![
+            StreamChunk::Thinking("summarize".into()),
+            StreamChunk::Text("ok".into()),
+            StreamChunk::Done {
+                finish_reason: "stop".into(),
+            },
+        ],
+    ]);
+
+    for (turn_id, content) in [("timeline-turn-1", "first"), ("timeline-turn-2", "second")] {
+        let turn_context = session.create_turn_context(turn_id.into()).await;
+        run_multi_turn_stream_with_responses_fn(
+            Arc::clone(&session),
+            turn_context,
+            vec![TurnInput {
+                content: content.into(),
+                image_data_urls: Vec::new(),
+                client_message_id: None,
+            }],
+            responses_fn.clone(),
+        )
+        .await
+        .unwrap();
+    }
+
+    let store = session::SessionStore::open(&home::session_db_path(dir.path()))
+        .await
+        .unwrap();
+    let hist = store.get_response_items("thread-event-test").await.unwrap();
+    let timeline_of = |text: &str| {
+        hist.iter()
+            .find(|item| {
+                matches!(
+                    &item.item,
+                    agent_protocol::ResponseItem::Message { role, .. } if role == "assistant"
+                ) && item.text() == text
+            })
+            .and_then(|item| item.item.metadata())
+            .and_then(|metadata| metadata.get("astro_timeline_v1"))
+            .map(ToString::to_string)
+    };
+
+    let second = timeline_of("ok").expect("第二轮回答必须带上本轮时间线");
+    assert!(
+        second.contains("call_timeline"),
+        "时间线要引用本轮的 activity：{second}"
+    );
+    let first = timeline_of("hello").unwrap_or_default();
+    assert!(
+        !first.contains("call_timeline"),
+        "上一轮气泡不能拿到下一轮的时间线：{first}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_turn_persists_reasoning_and_tool_activities() {
     let dir = tempfile::tempdir().unwrap();
     let config = AgentConfig::with_defaults(dir.path().to_path_buf());

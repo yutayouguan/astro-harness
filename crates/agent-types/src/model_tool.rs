@@ -23,11 +23,17 @@ pub struct ToolCall {
 pub const GOOGLE_THOUGHT_SIGNATURE_KEY: &str = "google_thought_signature";
 
 /// 将 `thought.signature` 合并进 `reasoning_details`（供会话落盘）。
+///
+/// 没有 Google `thought.signature` 时原样返回 `details`：这里的 `details` 同时承载
+/// Astro 自己的时间线（`astro_timeline_v1` / `astro_surfaces_v1`），不能因为不是
+/// Google 模型就把整份 metadata 丢掉。
 pub fn merge_google_thought_signature(
     details: Option<serde_json::Value>,
     signature: Option<&str>,
 ) -> Option<serde_json::Value> {
-    let sig = signature.map(str::trim).filter(|s| !s.is_empty())?;
+    let Some(sig) = signature.map(str::trim).filter(|s| !s.is_empty()) else {
+        return details;
+    };
     let mut obj = match details {
         Some(serde_json::Value::Object(obj)) => obj,
         _ => serde_json::Map::new(),
@@ -62,6 +68,18 @@ mod tests {
         assert_eq!(
             google_thought_signature_from_details(&details).as_deref(),
             Some("sig-1")
+        );
+    }
+
+    #[test]
+    fn non_google_providers_keep_astro_metadata() {
+        let details = Some(serde_json::json!({"astro_timeline_v1": [{"type": "text"}]}));
+        let merged = merge_google_thought_signature(details.clone(), None);
+        assert_eq!(merged, details);
+        assert_eq!(merge_google_thought_signature(None, None), None);
+        assert_eq!(
+            merge_google_thought_signature(None, Some("  ")).map(|value| value.to_string()),
+            None
         );
     }
 }

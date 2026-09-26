@@ -168,10 +168,11 @@ impl AgentLoop {
         _content: &str,
         _tool_calls: Option<Vec<types::model_tool::ToolCall>>,
         _reasoning: Option<&str>,
-        _reasoning_details: Option<serde_json::Value>,
+        reasoning_details: Option<serde_json::Value>,
         response_items: Vec<ResponseItem>,
     ) -> anyhow::Result<()> {
         let _write_guard = self.conversation_write_lock.lock().await;
+        let response_items = attach_assistant_timeline_metadata(response_items, reasoning_details);
         self.persist_response_items(&response_items).await?;
         self.record_response_items_unlocked(response_items);
         Ok(())
@@ -204,17 +205,6 @@ impl AgentLoop {
             )
         };
         self.record_assistant_message_with_tools(text, tc, reasoning, reasoning_details)
-            .await
-    }
-
-    /// 工具执行后回写最近一条 assistant 的 timeline/surfaces（避免历史丢 A2UI 卡）。
-    pub async fn patch_last_assistant_timeline(
-        &self,
-        reasoning_details: serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.services
-            .sessions
-            .patch_last_assistant_metadata(&self.session_id, &reasoning_details)
             .await
     }
 
@@ -472,6 +462,46 @@ fn attach_response_item_metadata(
         .insert(key.to_string(), value);
     *item = serde_json::from_value(encoded)?;
     Ok(())
+}
+
+/// 把 Astro 时间线元数据挂到本轮 assistant 原生 item 上。
+///
+/// 原生 Responses 路径直接落盘 provider 返回的 items（`reasoning_details` 不会自己
+/// 进 metadata），必须在这里补齐本轮 `astro_timeline_v1` / `astro_surfaces_v1`；
+/// 否则历史回放只能捡到别的行上的旧时间线，气泡会错配（activity 段找不到活动，
+/// 只剩一串「思考完成」）。
+///
+/// 目标行取本轮最后一条 assistant message；本轮没有 message（纯工具轮）时退化到
+/// 最后一条 reasoning，两者都没有则不改动 items。
+fn attach_assistant_timeline_metadata(
+    items: Vec<ResponseItem>,
+    reasoning_details: Option<serde_json::Value>,
+) -> Vec<ResponseItem> {
+    let Some(serde_json::Value::Object(details)) = reasoning_details else {
+        return items;
+    };
+    if details.is_empty() {
+        return items;
+    }
+    let mut items = items;
+    let target = items
+        .iter()
+        .rposition(|item| matches!(item, ResponseItem::Message { role, .. } if role == "assistant"))
+        .or_else(|| {
+            items
+                .iter()
+                .rposition(|item| matches!(item, ResponseItem::Reasoning { .. }))
+        });
+    let Some(index) = target else {
+        return items;
+    };
+    for (key, value) in details {
+        if let Err(error) = attach_response_item_metadata(&mut items[index], &key, value) {
+            tracing::warn!(error = %error, key = %key, "attach assistant timeline metadata failed");
+            break;
+        }
+    }
+    items
 }
 
 fn response_items_for_assistant(

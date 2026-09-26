@@ -197,42 +197,6 @@ async fn compression_changes_only_response_item_metadata() {
 }
 
 #[tokio::test]
-async fn assistant_metadata_patch_targets_message_not_following_tool_call() {
-    let (_dir, store) = test_store().await;
-    store.ensure_session("s1", "test").await.unwrap();
-    store
-        .append_response_items(
-            "s1",
-            &[
-                ResponseItem::assistant_text("working"),
-                ResponseItem::FunctionCall {
-                    id: None,
-                    name: "exec_command".into(),
-                    namespace: None,
-                    arguments: "{}".into(),
-                    encrypted_function_args: None,
-                    call_id: "call_1".into(),
-                    internal_chat_message_metadata_passthrough: None,
-                },
-            ],
-        )
-        .await
-        .unwrap();
-
-    store
-        .patch_last_assistant_metadata("s1", &serde_json::json!({"astro_timeline": []}))
-        .await
-        .unwrap();
-    let stored = store.get_response_items("s1").await.unwrap();
-    assert!(stored[0]
-        .item
-        .metadata()
-        .and_then(|metadata| metadata.get("astro_timeline"))
-        .is_some());
-    assert!(stored[1].item.metadata().is_none());
-}
-
-#[tokio::test]
 async fn fork_and_truncate_preserve_complete_response_item_groups() {
     let (_dir, store) = test_store().await;
     store.ensure_session("source", "test").await.unwrap();

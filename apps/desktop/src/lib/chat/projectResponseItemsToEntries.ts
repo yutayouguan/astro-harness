@@ -598,6 +598,64 @@ function mapActivity(a: HistoryActivityProjection): ChatActivity {
 }
 
 /**
+ * 把「写错行」的时间线还给真正拥有它的助手回合。
+ *
+ * 旧落盘实现把本轮时间线回写到上一条 assistant 消息行，气泡因此拿到下一轮的
+ * 时间线——activity 段全部找不到活动、渲染时被静默丢弃，回放只剩一串「思考完成」。
+ * 时间线本质是「助手回合」的属性，这里按 activity id 归属重新安置：只有「本气泡一个
+ * activity 都对不上、另一个气泡全对得上」才搬家，避免误伤只在个别段上对不齐的正常
+ * 时间线；找不到唯一归属就丢弃，让气泡回退到分组视图。`astro_surfaces_v1` 与时间线
+ * 同批落盘，跟随一起搬家。完全不含 activity 段的时间线无法据此判定，原样保留。
+ */
+function reassignForeignTimelines(entries: ProjectedEntry[]): ProjectedEntry[] {
+  const out = entries.map((entry) => ({ ...entry }));
+  const activityIdsOf = (owner: ProjectedEntry): Set<string> =>
+    new Set((owner.activities ?? []).map((activity) => activity.id));
+  const orphans: {
+    owner: number;
+    source: number;
+    segments: ChatTimelineSegment[];
+    uiSurfaces: ProjectedEntry["uiSurfaces"];
+  }[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const segments = asTimelineSegments(entry.segments);
+    if (!segments) continue;
+    const activityIds = segments
+      .filter((segment) => segment.type === "activity")
+      .map((segment) => segment.id);
+    if (activityIds.length === 0) continue;
+    const local = activityIdsOf(entry);
+    if (activityIds.some((id) => local.has(id))) continue;
+    out[index] = { ...out[index], segments: undefined };
+    const owner = entries.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex !== index &&
+        candidate.role === "assistant" &&
+        activityIds.every((id) => activityIdsOf(candidate).has(id)),
+    );
+    if (owner >= 0) {
+      orphans.push({
+        owner,
+        source: index,
+        segments,
+        uiSurfaces: entry.uiSurfaces,
+      });
+    }
+  }
+  for (const { owner, source, segments, uiSurfaces } of orphans) {
+    const current = out[owner]?.segments;
+    if (current && current.length >= segments.length) continue;
+    out[owner] = {
+      ...out[owner],
+      segments,
+      uiSurfaces: uiSurfaces ?? out[owner]?.uiSurfaces,
+    };
+    if (uiSurfaces) out[source] = { ...out[source], uiSurfaces: undefined };
+  }
+  return out;
+}
+
+/**
  * 历史快照中的 running 已经失去对应的当前进程执行实例。
  * 将其收敛为终态并冻结耗时，避免应用重启后继续显示和累计“运行中”。
  */
@@ -635,7 +693,7 @@ export function settleRestoredActivities(
 export function normalizeProjectedEntries(
   messages: ProjectedEntry[],
 ): ConversationEntry[] {
-  return coalesceConsecutiveAssistants(messages)
+  return reassignForeignTimelines(coalesceConsecutiveAssistants(messages))
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => {
       let segments = asTimelineSegments(m.segments);

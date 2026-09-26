@@ -180,12 +180,6 @@ impl ConversationStore for SharedConversationStore {
             .await
     }
 
-    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
-        self.inner
-            .patch_last_assistant_metadata(session_id, details)
-            .await
-    }
-
     async fn ensure_session(&self, id: &str, source: &str) -> Result<()> {
         self.inner.ensure_session(id, source).await
     }
@@ -319,24 +313,6 @@ impl ConversationStore for EphemeralConversationStore {
                 "astro_compressed_output",
                 compressed.map(Value::from),
             )?;
-        }
-        Ok(())
-    }
-
-    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()> {
-        if let Some(message) = self
-            .messages
-            .lock()
-            .expect("ephemeral conversation mutex poisoned")
-            .iter_mut()
-            .rev()
-            .find(|message| message.session_id == session_id && message.role() == Some("assistant"))
-        {
-            if let Value::Object(values) = details {
-                for (key, value) in values {
-                    patch_item_metadata(&mut message.item, key, Some(value.clone()))?;
-                }
-            }
         }
         Ok(())
     }

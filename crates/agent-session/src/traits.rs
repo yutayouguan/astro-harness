@@ -2,7 +2,6 @@
 
 use agent_protocol::ResponseItem;
 use anyhow::Result;
-use serde_json::Value;
 
 use crate::{BillingDelta, NewResponseItem, ScrolledResponseItem, SearchHit, StoredResponseItem};
 
@@ -90,9 +89,6 @@ pub trait ConversationStore: Send + Sync {
         message_id: i64,
         compressed: Option<&str>,
     ) -> Result<()>;
-
-    /// 回写本会话最近一条 assistant 的 reasoning_details。
-    async fn patch_last_assistant_metadata(&self, session_id: &str, details: &Value) -> Result<()>;
 
     // ── 会话生命周期 ──
 
