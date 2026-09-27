@@ -77,7 +77,7 @@ export type WallpaperController = {
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
   /** 已生成但还没确认应用的壁纸；确认前不改变当前壁纸。 */
   pending: WallpaperAsset | null;
-  /** 上一次被替换掉的壁纸，供「恢复上一张」使用。 */
+  /** 上一次被替换掉的壁纸，供「撤销上一张」使用。 */
   previous: WallpaperAsset | null;
   generate: (prompt: string) => Promise<WallpaperAsset>;
   applyPending: () => WallpaperAsset | null;

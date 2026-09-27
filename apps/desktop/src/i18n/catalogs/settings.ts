@@ -124,7 +124,7 @@ export const settingsMessages = {
     "prefs.wallpaper.pendingToast": "AI 壁纸已生成，等待确认",
     "prefs.wallpaper.viewResult": "查看",
     "prefs.wallpaper.discard": "放弃",
-    "prefs.wallpaper.undoApply": "恢复上一张",
+    "prefs.wallpaper.undoApply": "撤销上一张",
     "prefs.wallpaper.fromConversation": "当前样式来自对话「{name}」",
     "prefs.wallpaper.detachConversation": "停用",
 
@@ -491,7 +491,7 @@ export const settingsMessages = {
       "AI wallpaper generated, waiting for review",
     "prefs.wallpaper.viewResult": "Review",
     "prefs.wallpaper.discard": "Discard",
-    "prefs.wallpaper.undoApply": "Restore previous",
+    "prefs.wallpaper.undoApply": "Undo previous",
     "prefs.wallpaper.fromConversation":
       'Current style comes from the chat "{name}"',
     "prefs.wallpaper.detachConversation": "Detach",
