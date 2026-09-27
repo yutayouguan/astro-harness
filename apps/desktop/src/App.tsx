@@ -152,6 +152,7 @@ import {
   clearShellGradientVars,
 } from "./lib/ui/shellGradient";
 import type {
+  InstalledSkill,
   ModelCapabilities,
   ModelInfo,
   ModelPricingMeta,
@@ -159,6 +160,7 @@ import type {
   ProjectDto,
   ProviderModelsResult,
 } from "./types";
+import type { WallpaperChatHandoff } from "./components/settings/WallpaperSettingsCard";
 
 // 首屏只保留聊天主链路，重面板按需加载（局部打开的文件/终端/浏览器同样处理）。
 const TerminalDock = lazy(() => import("./components/chat/TerminalTabsDock"));
@@ -515,6 +517,65 @@ export default function App() {
       setInput(starterPrompt);
     });
   }, [setInput, startNewChat]);
+
+  /** 把刚生成的壁纸交给对话继续微调：输入框带上下文指令，已安装 ui-style-designer 时附带技能标签。 */
+  const continueWallpaperInChat = useCallback(
+    async (handoff: WallpaperChatHandoff) => {
+      let skill: InstalledSkill | null = null;
+      try {
+        const installed = await invoke<InstalledSkill[]>("list_installed_skills");
+        skill =
+          installed.find(
+            (item) => item.name === "ui-style-designer" && item.enabled,
+          ) ?? null;
+      } catch {
+        skill = null;
+      }
+      setComposerContextPrefill(
+        skill
+          ? {
+              id: skill.id,
+              kind: "skill",
+              name: skill.name,
+              description: skill.description,
+              path: skill.path,
+            }
+          : null,
+      );
+      setInput(
+        t("prefs.wallpaper.refinePrompt", {
+          path: handoff.referencePath,
+          theme: t(
+            handoff.theme === "light" ? "prefs.theme.light" : "prefs.theme.dark",
+          ),
+        }),
+      );
+      setNav("chat");
+      showTransientToast(t("prefs.wallpaper.refineReady"));
+    },
+    [setInput, showTransientToast, t],
+  );
+
+  const pendingWallpaperId = wallpaper.pending?.id ?? null;
+  const notifiedWallpaperRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingWallpaperId) return;
+    if (notifiedWallpaperRef.current === pendingWallpaperId) return;
+    notifiedWallpaperRef.current = pendingWallpaperId;
+    if (nav === "settings" && settingsTab === "preferences:appearance") return;
+    showTransientToast(t("prefs.wallpaper.pendingToast"), {
+      actionLabel: t("prefs.wallpaper.viewResult"),
+      onAction: () => openSettingsTab("preferences:appearance"),
+    });
+  }, [
+    pendingWallpaperId,
+    nav,
+    settingsTab,
+    openSettingsTab,
+    showTransientToast,
+    t,
+  ]);
+
   const firstMeeting = useFirstMeeting({
     locale,
     providerReady: providerIsReady(activeProvider),
@@ -2190,6 +2251,11 @@ export default function App() {
                         onCancelCustomGradient={cancelGradientEdit}
                         onReshuffleDynamic={reshuffleDynamic}
                         wallpaper={wallpaper}
+                        onWallpaperContinueInChat={(handoff) =>
+                          void continueWallpaperInChat(handoff)
+                        }
+                        activeUiStyle={activeUiStyle.style}
+                        onClearActiveUiStyle={() => void activeUiStyle.reset()}
                         tone={shellTone}
                         chatDisplayPrefs={chatDisplayPrefs}
                         onChatVerbosityChange={setVerbosity}

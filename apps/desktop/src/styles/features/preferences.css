@@ -1503,6 +1503,98 @@ html[data-theme="dark"] .wallpaper-preview-shade {
   margin-top: 17px;
 }
 
+.wallpaper-result-preview {
+  aspect-ratio: 3 / 2;
+  margin-top: 16px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 12%, var(--glass-edge));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glass-fill) 72%, transparent);
+  color: var(--ink-mute);
+}
+
+.wallpaper-result-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wallpaper-result-prompt {
+  margin-top: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink-mute);
+  font-size: 11.5px;
+}
+
+.wallpaper-source-note,
+.wallpaper-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone-soft) 42%, transparent);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.wallpaper-source-note svg,
+.wallpaper-pending svg {
+  flex: 0 0 auto;
+  color: var(--tone);
+}
+
+.wallpaper-source-note > span,
+.wallpaper-pending > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.wallpaper-source-note button,
+.wallpaper-pending button {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 18%, var(--glass-edge));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--glass-fill) 80%, transparent);
+  color: var(--tone);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.wallpaper-pending button.wallpaper-pending-view {
+  color: var(--tone);
+}
+
+.wallpaper-pending button.wallpaper-pending-discard {
+  color: var(--ink-mute);
+}
+
+.wallpaper-undo-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--tone) 14%, var(--glass-edge));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--glass-fill) 70%, transparent);
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-size: 10.5px;
+}
+
+.wallpaper-undo-button:hover {
+  color: var(--tone);
+}
+
 .wallpaper-generating {
   display: grid;
   justify-items: center;

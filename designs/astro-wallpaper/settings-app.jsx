@@ -50,10 +50,11 @@ function NavRow({ item, active, onClick }) {
   );
 }
 
-function GenerateDialog({ open, onClose, onFinish }) {
+function GenerateDialog({ open, onClose, onFinish, onRefine }) {
   const [prompt, setPrompt] = useState("宁静的未来山谷，柔和晨雾与紫蓝色天光，画面干净克制，适合作为桌面应用背景");
   const [style, setStyle] = useState("natural");
   const [generating, setGenerating] = useState(false);
+  const [candidate, setCandidate] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -71,7 +72,7 @@ function GenerateDialog({ open, onClose, onFinish }) {
     setGenerating(true);
     window.setTimeout(() => {
       setGenerating(false);
-      onFinish(WALLPAPERS.iridescence);
+      setCandidate(WALLPAPERS.iridescence);
     }, 1500);
   }
 
@@ -81,9 +82,24 @@ function GenerateDialog({ open, onClose, onFinish }) {
         {generating ? (
           <div className="progress-box" role="status">
             <div className="spinner" aria-hidden></div>
-            <div><h2 id="generate-title">正在生成壁纸</h2><p>当前壁纸会一直保留，生成成功后再自动替换。</p></div>
+            <div><h2 id="generate-title">正在生成壁纸</h2><p>当前壁纸会一直保留，确认后才会替换。</p></div>
             <div className="progress-line"><i></i></div>
           </div>
+        ) : candidate ? (
+          <>
+            <div className="dialog-head">
+              <div className="card-icon" aria-hidden>✦</div>
+              <div className="dialog-head-copy"><h2 id="generate-title">壁纸已生成</h2><p>确认后应用到界面，也可以继续调整。</p></div>
+              <Button className="icon-button" variant="ghost" aria-label="关闭" onClick={onClose}>×</Button>
+            </div>
+            <div className="wallpaper-preview" style={{ backgroundImage: `url('${candidate.src}')`, backgroundSize: "cover", aspectRatio: "3 / 2" }} />
+            <div className="detail-panel" style={{ marginTop: 12 }}><p>「{prompt.trim()}」</p></div>
+            <div className="dialog-actions">
+              <Button onClick={() => setCandidate(null)}>再生成一张</Button>
+              <Button onClick={() => onRefine?.(candidate)}>在对话中微调</Button>
+              <Button variant="primary" onClick={() => onFinish(candidate)}>应用为壁纸</Button>
+            </div>
+          </>
         ) : (
           <>
             <div className="dialog-head">
@@ -101,8 +117,8 @@ function GenerateDialog({ open, onClose, onFinish }) {
                 onChange={setStyle}
               />
             </div>
-            <div className="detail-panel" style={{ marginTop: 12 }}><p>生成成功后自动应用；生成失败时保留当前壁纸。</p></div>
-            <div className="dialog-actions"><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!prompt.trim()} onClick={generate}>生成并应用</Button></div>
+            <div className="detail-panel" style={{ marginTop: 12 }}><p>生成后先预览，确认再应用；生成失败时保留当前壁纸。</p></div>
+            <div className="dialog-actions"><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!prompt.trim()} onClick={generate}>生成</Button></div>
           </>
         )}
       </section>
@@ -321,7 +337,12 @@ function App() {
           {surface === "settings" ? <section className="content" ref={contentRef}>{pages[activeTab]}</section> : <HomePage key={homeSessionKey} notify={notify} />}
         </div>
         {dirty && surface === "settings" ? <div className="save-bar" role="status" aria-live="polite" aria-atomic="true"><div className="save-copy"><strong>你有未保存的更改</strong><small>可以继续切换页面，草稿不会丢失。</small></div><Button variant="ghost" onClick={reset}>撤销</Button><Button variant="primary" onClick={save}>保存设置</Button></div> : null}
-        <GenerateDialog open={generateOpen} onClose={() => setGenerateOpen(false)} onFinish={(wallpaper) => { patch({ wallpaper, backgroundMode: "wallpaper" }); setGenerateOpen(false); notify("AI 壁纸已生成，保存后应用"); }} />
+        <GenerateDialog
+          open={generateOpen}
+          onClose={() => setGenerateOpen(false)}
+          onFinish={(wallpaper) => { patch({ wallpaper, backgroundMode: "wallpaper" }); setGenerateOpen(false); notify("AI 壁纸已生成，保存后应用"); }}
+          onRefine={(wallpaper) => { patch({ wallpaper, backgroundMode: "wallpaper" }); setGenerateOpen(false); setSurface("home"); notify("已在对话里继续微调这张壁纸"); }}
+        />
         {toast ? <div className="toast" role="status"><span className="toast-mark">✓</span><span>{toast}</span></div> : null}
       </section>
     </main>

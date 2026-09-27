@@ -728,6 +728,55 @@ pub fn cancel_wallpaper_generation(request_id: String) -> Result<bool, String> {
     cancel_generation(request_id)
 }
 
+/// 删除一张未被采用的 AI 壁纸候选。
+///
+/// 只接受受管壁纸目录内、由 `store_wallpaper_at` 命名的 `wallpaper-<id>.<ext>` 文件，
+/// 避免把任意路径交给前端删除。
+#[tauri::command]
+pub async fn discard_wallpaper(path: String) -> Result<bool, String> {
+    discard_wallpaper_at(&home::default_memory_dir(), Path::new(path.trim()))
+}
+
+fn discard_wallpaper_at(base: &Path, candidate: &Path) -> Result<bool, String> {
+    let dir = wallpapers_dir_at(base);
+    let dir = dir
+        .canonicalize()
+        .map_err(|_| "壁纸目录不存在".to_string())?;
+    let target = match candidate.canonicalize() {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err("壁纸文件不存在".to_string()),
+    };
+    if target.parent() != Some(dir.as_path()) {
+        return Err("只能删除受管壁纸目录下的文件".to_string());
+    }
+    let name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if !is_generated_wallpaper_name(name) {
+        return Err("只能删除 AI 生成的壁纸文件".to_string());
+    }
+    match fs::remove_file(&target) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("无法删除壁纸：{error}")),
+    }
+}
+
+/// `wallpaper-<32 hex>.<ext>`，与 `store_wallpaper_at` 的落盘命名保持一致。
+fn is_generated_wallpaper_name(name: &str) -> bool {
+    let Some((stem, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    if !matches!(extension, "png" | "jpg" | "webp" | "bmp") {
+        return false;
+    }
+    stem.strip_prefix("wallpaper-").is_some_and(|id| {
+        id.len() == 32 && id.chars().all(|character| character.is_ascii_hexdigit())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -784,6 +833,39 @@ mod tests {
         assert!(asset.id.starts_with("system-"));
         assert!(Path::new(&asset.path).starts_with(wallpapers_dir_at(temp.path())));
         assert!(Path::new(&asset.path).is_file());
+    }
+
+    #[test]
+    fn discards_only_managed_generated_wallpapers() {
+        let temp = tempfile::tempdir().unwrap();
+        let generated = store_wallpaper_at(
+            temp.path(),
+            &tiny_png(),
+            "candidate.png".to_string(),
+            "ai",
+            None,
+            None,
+        )
+        .unwrap();
+        let generated_path = PathBuf::from(&generated.path);
+
+        assert!(discard_wallpaper_at(temp.path(), &generated_path).unwrap());
+        assert!(!generated_path.exists());
+        assert!(!discard_wallpaper_at(temp.path(), &generated_path).unwrap());
+        assert!(is_generated_wallpaper_name(&format!(
+            "wallpaper-{}.png",
+            generated.id
+        )));
+        assert!(!is_generated_wallpaper_name("wallpaper-short.png"));
+        assert!(!is_generated_wallpaper_name("system-wallpaper.png"));
+
+        let outside = temp
+            .path()
+            .join("wallpaper-00112233445566778899aabbccddeeff.png");
+        fs::write(&outside, tiny_png()).unwrap();
+        let error = discard_wallpaper_at(temp.path(), &outside).unwrap_err();
+        assert!(error.contains("受管壁纸目录"));
+        assert!(outside.exists());
     }
 
     #[test]

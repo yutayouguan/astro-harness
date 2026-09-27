@@ -54,6 +54,7 @@ import {
 } from "../../lib/chat/chatMode";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { Locale, MessageKey } from "../../i18n/messages";
+import type { ActiveUiStyle } from "../../lib/ui/activeUiStyle";
 import { ONBOARDING_RESET_EVENT } from "../../lib/ui/onboarding";
 import { interfaceTourCopy, requestInterfaceTour } from "../../lib/ui/interfaceTour";
 import {
@@ -80,7 +81,9 @@ import { AppMorphIcon } from "../icons/MorphIcon";
 import { IconGlobe, IconChat, IconAtom, IconZap } from "../icons/NavIcons";
 import CompressionSettingsCard from "./CompressionSettingsCard";
 import ShellGradientEditor from "./ShellGradientEditor";
-import WallpaperSettingsCard from "./WallpaperSettingsCard";
+import WallpaperSettingsCard, {
+  type WallpaperChatHandoff,
+} from "./WallpaperSettingsCard";
 
 type AppUpdateInfo = {
   configured: boolean;
@@ -197,6 +200,11 @@ type Props = {
   onCancelCustomGradient: () => void;
   onReshuffleDynamic: () => void;
   wallpaper: WallpaperController;
+  /** 把刚生成的壁纸交给对话继续微调。 */
+  onWallpaperContinueInChat?: (handoff: WallpaperChatHandoff) => void;
+  /** 当前生效的对话样式（存在时覆盖手动壁纸设置）。 */
+  activeUiStyle?: ActiveUiStyle | null;
+  onClearActiveUiStyle?: () => void;
   tone?: string;
   chatDisplayPrefs: ChatDisplayPrefs;
   onChatVerbosityChange: (verbosity: ChatVerbosity) => void;
@@ -372,6 +380,9 @@ export default function PreferencesPanel({
   onCancelCustomGradient,
   onReshuffleDynamic,
   wallpaper,
+  onWallpaperContinueInChat,
+  activeUiStyle,
+  onClearActiveUiStyle,
   tone = "twilight",
   chatDisplayPrefs: prefs,
   onChatVerbosityChange,
@@ -982,6 +993,9 @@ className={`prefs-page ${section ? "is-embedded" : ""}${activeCategory === "diag
           <WallpaperSettingsCard
             controller={wallpaper}
             tone={tone}
+            onContinueInChat={onWallpaperContinueInChat}
+            activeStyle={activeUiStyle}
+            onClearActiveStyle={onClearActiveUiStyle}
             colorControls={
               <div className="appearance-control-list">
                 <div className="appearance-control-row">

@@ -5,11 +5,14 @@ import {
   Image as ImageIcon,
   Images,
   Loader2,
+  MessageSquare,
   Minimize2,
   MonitorUp,
   Palette,
   Plus,
+  RefreshCw,
   Upload,
+  Undo2,
   X,
 } from "lucide-react";
 import { AIActionIcon } from "../icons/AIActionIcon";
@@ -18,16 +21,29 @@ import type { WallpaperController } from "../../hooks/app/useWallpaper";
 import { useTheme } from "../../hooks/app/useTheme";
 import { useI18n } from "../../i18n/LocaleContext";
 import { resolveMediaSrc } from "../../lib/media/resolveMediaSrc";
+import type { ActiveUiStyle } from "../../lib/ui/activeUiStyle";
 import {
   DEFAULT_WALLPAPER_HIGHLIGHT_COLOR,
   DEFAULT_WALLPAPER_THEME_COLOR,
   resolveWallpaperPalette,
 } from "../../lib/ui/wallpaper";
 
+/** 交给对话继续微调时携带的上下文。 */
+export type WallpaperChatHandoff = {
+  prompt: string;
+  referencePath: string;
+  theme: "light" | "dark";
+};
+
 type Props = {
   controller: WallpaperController;
   tone: string;
   colorControls?: ReactNode;
+  /** 把生成结果交给对话做自然语言微调。 */
+  onContinueInChat?: (handoff: WallpaperChatHandoff) => void;
+  /** 当前生效的对话样式；存在时覆盖手动壁纸设置。 */
+  activeStyle?: ActiveUiStyle | null;
+  onClearActiveStyle?: () => void;
 };
 
 const STYLE_PROMPTS: Record<string, string> = {
@@ -83,10 +99,13 @@ export default function WallpaperSettingsCard({
   controller,
   tone,
   colorControls,
+  onContinueInChat,
+  activeStyle,
+  onClearActiveStyle,
 }: Props) {
   const { t } = useI18n();
   const { resolved } = useTheme();
-  const { prefs, busy, error } = controller;
+  const { prefs, busy, error, pending, previous } = controller;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("natural");
@@ -108,6 +127,7 @@ export default function WallpaperSettingsCard({
   const themeColor = palette?.themeColor ?? DEFAULT_WALLPAPER_THEME_COLOR;
   const highlightColor =
     palette?.highlightColor ?? DEFAULT_WALLPAPER_HIGHLIGHT_COLOR;
+  const resultSrc = pending ? resolveMediaSrc(pending.path) : null;
 
   useEffect(() => {
     if (!applied) return;
@@ -156,13 +176,33 @@ export default function WallpaperSettingsCard({
 
   async function generate() {
     if (!prompt.trim() || busy) return;
+    setDialogOpen(true);
     try {
       await controller.generate(generatedPrompt);
-      setDialogOpen(false);
-      setApplied(true);
     } catch {
-      // 保留当前壁纸并在卡片/对话框中显示 controller.error。
+      // 未确认前不替换壁纸；保留 controller.error 给卡片/对话框展示。
     }
+  }
+
+  function applyResult() {
+    if (!controller.applyPending()) return;
+    setDialogOpen(false);
+    setApplied(true);
+  }
+
+  function regenerate() {
+    controller.clearError();
+    controller.discardPending();
+  }
+
+  function refineInChat() {
+    if (!pending || !onContinueInChat) return;
+    onContinueInChat({
+      prompt: generatedPrompt,
+      referencePath: pending.path,
+      theme: resolved,
+    });
+    setDialogOpen(false);
   }
 
   async function cancelGeneration() {
@@ -234,6 +274,70 @@ export default function WallpaperSettingsCard({
                   </button>
                 </footer>
               </div>
+            ) : pending ? (
+              <>
+                <header className="wallpaper-dialog-head">
+                  <span
+                    className="prefs-icon-badge"
+                    data-tone={tone}
+                    aria-hidden
+                  >
+                    <AIActionIcon size={20} />
+                  </span>
+                  <div>
+                    <h2 id="wallpaper-dialog-title">
+                      {t("prefs.wallpaper.resultTitle")}
+                    </h2>
+                    <p>{t("prefs.wallpaper.resultSub")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="wallpaper-dialog-close"
+                    aria-label={t("common.close")}
+                    onClick={() => setDialogOpen(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                </header>
+                <div className="wallpaper-result-preview">
+                  {resultSrc ? (
+                    <img src={resultSrc} alt="" />
+                  ) : (
+                    <ImageIcon size={26} aria-hidden />
+                  )}
+                </div>
+                {prompt.trim() ? (
+                  <p className="wallpaper-result-prompt">{prompt.trim()}</p>
+                ) : null}
+                {error ? <p className="wallpaper-error">{error}</p> : null}
+                <footer className="wallpaper-dialog-actions">
+                  <button
+                    type="button"
+                    className="wallpaper-secondary-button"
+                    onClick={regenerate}
+                  >
+                    <RefreshCw size={15} />
+                    {t("prefs.wallpaper.regenerate")}
+                  </button>
+                  <button
+                    type="button"
+                    className="wallpaper-secondary-button"
+                    disabled={!onContinueInChat}
+                    onClick={refineInChat}
+                  >
+                    <MessageSquare size={15} />
+                    {t("prefs.wallpaper.refineInChat")}
+                  </button>
+                  <button
+                    type="button"
+                    className="wallpaper-primary-button"
+                    onClick={applyResult}
+                  >
+                    <Check size={15} />
+                    {t("prefs.wallpaper.apply")}
+                  </button>
+                </footer>
+              </>
             ) : (
               <>
                 <header className="wallpaper-dialog-head">
@@ -288,8 +392,8 @@ export default function WallpaperSettingsCard({
                   ))}
                 </div>
                 <div className="wallpaper-auto-apply">
-                  <Check size={15} aria-hidden />
-                  <span>{t("prefs.wallpaper.autoApply")}</span>
+                  <RefreshCw size={15} aria-hidden />
+                  <span>{t("prefs.wallpaper.generateHint")}</span>
                   <small>{t("prefs.wallpaper.failureKeepsCurrent")}</small>
                 </div>
                 {error ? <p className="wallpaper-error">{error}</p> : null}
@@ -308,7 +412,7 @@ export default function WallpaperSettingsCard({
                     onClick={() => void generate()}
                   >
                     <AIActionIcon size={15} />
-                    {t("prefs.wallpaper.generateAndApply")}
+                    {t("prefs.wallpaper.generate")}
                   </button>
                 </footer>
               </>
@@ -380,6 +484,22 @@ export default function WallpaperSettingsCard({
             <span className="theme-option-check" aria-hidden />
           </button>
         </div>
+
+        {activeStyle?.wallpaper ? (
+          <p className="wallpaper-source-note" role="status">
+            <AIActionIcon size={14} aria-hidden />
+            <span>
+              {t("prefs.wallpaper.fromConversation", {
+                name: activeStyle.name,
+              })}
+            </span>
+            {onClearActiveStyle ? (
+              <button type="button" onClick={onClearActiveStyle}>
+                {t("prefs.wallpaper.detachConversation")}
+              </button>
+            ) : null}
+          </p>
+        ) : null}
 
         <div className="wallpaper-color-editor" hidden={prefs.mode !== "color"}>
           {colorControls}
@@ -480,7 +600,9 @@ export default function WallpaperSettingsCard({
                 {t(
                   busy === "generate"
                     ? "prefs.wallpaper.generatingInBackground"
-                    : "prefs.wallpaper.aiGenerate",
+                    : pending
+                      ? "prefs.wallpaper.viewResult"
+                      : "prefs.wallpaper.aiGenerate",
                 )}
               </button>
             </div>
@@ -593,7 +715,18 @@ export default function WallpaperSettingsCard({
 
             <div className="wallpaper-control-group wallpaper-recent-group">
               <span className="wallpaper-control-label">
-                {t("prefs.wallpaper.recent")}
+                <span>{t("prefs.wallpaper.recent")}</span>
+                {previous ? (
+                  <button
+                    type="button"
+                    className="wallpaper-undo-button"
+                    title={previous.name}
+                    onClick={() => controller.undoApply()}
+                  >
+                    <Undo2 size={12} aria-hidden />
+                    {t("prefs.wallpaper.undoApply")}
+                  </button>
+                ) : null}
               </span>
               <div className="wallpaper-recent-list">
                 {prefs.recent.slice(0, 2).map((asset) => {
@@ -626,6 +759,27 @@ export default function WallpaperSettingsCard({
             </div>
           </div>
         </div>
+
+        {pending && !dialogOpen ? (
+          <div className="wallpaper-pending" role="status">
+            <AIActionIcon size={14} aria-hidden />
+            <span>{t("prefs.wallpaper.pendingReady")}</span>
+            <button
+              type="button"
+              className="wallpaper-pending-view"
+              onClick={() => setDialogOpen(true)}
+            >
+              {t("prefs.wallpaper.viewResult")}
+            </button>
+            <button
+              type="button"
+              className="wallpaper-pending-discard"
+              onClick={() => controller.discardPending()}
+            >
+              {t("prefs.wallpaper.discard")}
+            </button>
+          </div>
+        ) : null}
 
         {error && !dialogOpen ? (
           <p className="wallpaper-error">{error}</p>

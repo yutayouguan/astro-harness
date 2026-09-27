@@ -264,6 +264,7 @@ pub fn run() {
             commands::wallpaper::import_wallpaper,
             commands::wallpaper::generate_wallpaper,
             commands::wallpaper::cancel_wallpaper_generation,
+            commands::wallpaper::discard_wallpaper,
             commands::wallpaper::analyze_wallpaper,
             commands::wallpaper::get_system_wallpaper,
             commands::desktop_pet::get_desktop_pet_state,

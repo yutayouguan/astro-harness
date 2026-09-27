@@ -75,7 +75,14 @@ export type WallpaperController = {
   select: (asset: WallpaperAsset) => void;
   cycleRecent: () => void;
   importImage: (sourcePath: string) => Promise<WallpaperAsset>;
+  /** 已生成但还没确认应用的壁纸；确认前不改变当前壁纸。 */
+  pending: WallpaperAsset | null;
+  /** 上一次被替换掉的壁纸，供「恢复上一张」使用。 */
+  previous: WallpaperAsset | null;
   generate: (prompt: string) => Promise<WallpaperAsset>;
+  applyPending: () => WallpaperAsset | null;
+  discardPending: () => void;
+  undoApply: () => boolean;
   cancelGeneration: () => Promise<boolean>;
   clearError: () => void;
   markCurrentUnavailable: () => void;
@@ -96,6 +103,12 @@ export function useWallpaper(): WallpaperController {
   );
   const [busy, setBusy] = useState<WallpaperController["busy"]>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<WallpaperAsset | null>(null);
+  const [previous, setPrevious] = useState<WallpaperAsset | null>(null);
+  const pendingRef = useRef<WallpaperAsset | null>(null);
+  pendingRef.current = pending;
+  const previousRef = useRef<WallpaperAsset | null>(null);
+  previousRef.current = previous;
   const analysisRequests = useRef(new Set<string>());
   const systemSyncInFlight = useRef(false);
   const generationRequest = useRef<string | null>(null);
@@ -119,12 +132,26 @@ export function useWallpaper(): WallpaperController {
     [],
   );
 
+  /** 未被采用的候选壁纸做一次尽力清理；失败只留下受管目录里的孤儿文件。 */
+  const discardCandidate = useCallback((asset: WallpaperAsset | null) => {
+    if (!asset) return;
+    void invoke<boolean>("discard_wallpaper", { path: asset.path }).catch(() => {});
+  }, []);
+
   const applyAsset = useCallback(
-    (asset: WallpaperAsset) => {
+    (asset: WallpaperAsset, options?: { rememberPrevious?: boolean }) => {
       setError(null);
+      const abandoned = pendingRef.current;
+      setPending(null);
+      if (abandoned && abandoned.id !== asset.id) discardCandidate(abandoned);
+      const remember = options?.rememberPrevious ?? true;
+      const outgoing = prefsRef.current.current;
+      if (remember && outgoing && outgoing.id !== asset.id) {
+        setPrevious(outgoing);
+      }
       update((current) => addRecentWallpaper(current, asset));
     },
-    [update],
+    [discardCandidate, update],
   );
 
   useEffect(() => {
@@ -289,8 +316,14 @@ export function useWallpaper(): WallpaperController {
   );
   const cycleRecent = useCallback(() => {
     setError(null);
+    setPending(null);
+    const outgoing = prefsRef.current.current;
+    const next = cycleRecentWallpaper(prefsRef.current);
+    if (outgoing && next.current && next.current.id !== outgoing.id) {
+      setPrevious(outgoing);
+    }
     deactivateGeneratedStyle();
-    update(cycleRecentWallpaper);
+    update(() => next);
   }, [update]);
 
   const importImage = useCallback(
@@ -315,40 +348,59 @@ export function useWallpaper(): WallpaperController {
     [applyAsset],
   );
 
-  const generate = useCallback(
-    async (prompt: string) => {
-      const requestId = `wallpaper-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      generationRequest.current = requestId;
-      setBusy("generate");
-      setError(null);
-      try {
-        const asset = await invoke<WallpaperAsset>("generate_wallpaper", {
-          prompt,
-          requestId,
-        });
-        if (cancelledGenerationRequests.current.has(requestId)) {
-          throw new Error("壁纸生成已取消");
-        }
-        deactivateGeneratedStyle();
-        applyAsset(asset);
-        return asset;
-      } catch (cause) {
-        const cancelled = cancelledGenerationRequests.current.delete(requestId);
-        if (!cancelled) {
-          const message =
-            cause instanceof Error ? cause.message : String(cause);
-          setError(message);
-        }
-        throw cause;
-      } finally {
-        if (generationRequest.current === requestId) {
-          generationRequest.current = null;
-          setBusy(null);
-        }
+  const generate = useCallback(async (prompt: string) => {
+    const requestId = `wallpaper-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    generationRequest.current = requestId;
+    setBusy("generate");
+    setError(null);
+    try {
+      const asset = await invoke<WallpaperAsset>("generate_wallpaper", {
+        prompt,
+        requestId,
+      });
+      if (cancelledGenerationRequests.current.has(requestId)) {
+        throw new Error("壁纸生成已取消");
       }
-    },
-    [applyAsset],
-  );
+      // 生成只产出预览；由用户确认后调用 applyPending 才会替换当前壁纸。
+      discardCandidate(pendingRef.current);
+      setPending(asset);
+      return asset;
+    } catch (cause) {
+      const cancelled = cancelledGenerationRequests.current.delete(requestId);
+      if (!cancelled) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setError(message);
+      }
+      throw cause;
+    } finally {
+      if (generationRequest.current === requestId) {
+        generationRequest.current = null;
+        setBusy(null);
+      }
+    }
+  }, [discardCandidate]);
+
+  const applyPending = useCallback(() => {
+    const asset = pendingRef.current;
+    if (!asset) return null;
+    deactivateGeneratedStyle();
+    applyAsset(asset);
+    return asset;
+  }, [applyAsset]);
+
+  const discardPending = useCallback(() => {
+    const asset = pendingRef.current;
+    setPending(null);
+    discardCandidate(asset);
+  }, [discardCandidate]);
+
+  const undoApply = useCallback(() => {
+    const target = previousRef.current;
+    if (!target) return false;
+    applyAsset(target, { rememberPrevious: false });
+    setPrevious(null);
+    return true;
+  }, [applyAsset]);
 
   const cancelGeneration = useCallback(async () => {
     const requestId = generationRequest.current;
@@ -516,7 +568,12 @@ export function useWallpaper(): WallpaperController {
     select,
     cycleRecent,
     importImage,
+    pending,
+    previous,
     generate,
+    applyPending,
+    discardPending,
+    undoApply,
     cancelGeneration,
     clearError,
     markCurrentUnavailable,

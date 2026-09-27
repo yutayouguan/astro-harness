@@ -59,6 +59,7 @@ test("wallpaper commands are registered and the settings card calls each source"
   assert.match(commands, /commands::wallpaper::import_wallpaper/);
   assert.match(commands, /commands::wallpaper::generate_wallpaper/);
   assert.match(commands, /commands::wallpaper::cancel_wallpaper_generation/);
+  assert.match(commands, /commands::wallpaper::discard_wallpaper/);
   assert.match(commands, /commands::wallpaper::analyze_wallpaper/);
   assert.match(commands, /commands::wallpaper::get_system_wallpaper/);
   assert.match(commands, /commands::ui_style::get_active_ui_style/);
@@ -79,6 +80,44 @@ test("wallpaper commands are registered and the settings card calls each source"
   assert.match(panel, /className="wallpaper-preview-toggles"/);
   assert.match(panel, /prefs\.recent\.slice\(0, 2\)/);
   assert.match(panel, /className="wallpaper-recent-add"/);
+});
+
+test("AI wallpaper previews before applying and hands the result to chat", () => {
+  const generateBlock = hook.slice(
+    hook.indexOf("const generate = useCallback"),
+    hook.indexOf("const applyPending = useCallback"),
+  );
+  assert.match(generateBlock, /setPending\(asset\)/);
+  assert.doesNotMatch(generateBlock, /applyAsset\(/);
+  assert.doesNotMatch(generateBlock, /deactivateGeneratedStyle\(/);
+  assert.match(hook, /const applyPending = useCallback/);
+  assert.match(hook, /const discardPending = useCallback/);
+  assert.match(hook, /const undoApply = useCallback/);
+  assert.match(hook, /invoke<boolean>\("discard_wallpaper", \{ path: asset\.path \}\)/);
+  assert.match(
+    panel,
+    /const \{ prefs, busy, error, pending, previous \} = controller;/,
+  );
+  assert.match(panel, /prefs\.wallpaper\.resultTitle/);
+  assert.match(panel, /prefs\.wallpaper\.apply/);
+  assert.match(panel, /prefs\.wallpaper\.regenerate/);
+  assert.match(panel, /prefs\.wallpaper\.refineInChat/);
+  assert.match(panel, /onContinueInChat\(\{/);
+  assert.match(panel, /prefs\.wallpaper\.pendingReady/);
+  assert.match(panel, /prefs\.wallpaper\.undoApply/);
+  assert.match(panel, /prefs\.wallpaper\.fromConversation/);
+  assert.match(panel, /controller\.applyPending\(\)/);
+  assert.match(panel, /controller\.discardPending\(\)/);
+  assert.match(panel, /controller\.undoApply\(\)/);
+  assert.match(app, /const continueWallpaperInChat = useCallback/);
+  assert.match(
+    app,
+    /invoke<InstalledSkill\[\]>\(\s*"list_installed_skills",?\s*\)/,
+  );
+  assert.match(app, /prefs\.wallpaper\.refinePrompt/);
+  assert.match(app, /prefs\.wallpaper\.pendingToast/);
+  assert.match(app, /activeUiStyle=\{activeUiStyle\.style\}/);
+  assert.match(app, /onWallpaperContinueInChat=\{/);
 });
 
 test("app renders wallpaper behind shell chrome and fails closed on missing files", () => {
