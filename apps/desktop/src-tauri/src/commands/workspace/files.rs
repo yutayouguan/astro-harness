@@ -1445,31 +1445,6 @@ pub async fn move_paths(
     Ok(out)
 }
 
-/// Tauri 命令：delete_path。
-#[tauri::command]
-pub async fn delete_path(path: String) -> Result<(), String> {
-    let p = resolve_memory_path(&path)?;
-    let memory = memory_root();
-    if paths_equal(&p, &memory) {
-        return Err("不能删除数据根目录".into());
-    }
-    // 不能删除任一 Agent 工作区根目录
-    for agent in home::list_agents(&memory) {
-        if paths_equal(&p, std::path::Path::new(&agent.path)) {
-            return Err("不能删除 Agent 工作区根目录".into());
-        }
-    }
-    if !p.exists() {
-        return Err("路径不存在".into());
-    }
-    if p.is_dir() {
-        std::fs::remove_dir_all(&p).map_err(|e| e.to_string())?;
-    } else {
-        std::fs::remove_file(&p).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod project_path_tests {
     use super::{

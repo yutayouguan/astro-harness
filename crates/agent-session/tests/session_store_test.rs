@@ -302,12 +302,16 @@ async fn bubble_operations_coalesce_consecutive_assistant_response_items() {
     assert_eq!(branch.len(), 4);
     assert_eq!(branch.last().unwrap().text(), "final");
 
-    store.remove_chat_bubbles("source", 1, 2).await.unwrap();
+    // 保留前两个气泡：连续 assistant item 属于同一气泡，所以会一起留下。
+    store
+        .truncate_session_to_bubbles("source", 2)
+        .await
+        .unwrap();
     let remaining = store.get_response_items("source").await.unwrap();
-    assert_eq!(remaining.len(), 3);
+    assert_eq!(remaining.len(), 4);
     assert_eq!(remaining[0].text(), "u1");
-    assert_eq!(remaining[1].text(), "u2");
-    assert_eq!(remaining[2].text(), "a2");
+    assert_eq!(remaining[2].text(), "commentary");
+    assert_eq!(remaining[3].text(), "final");
 }
 
 #[tokio::test]

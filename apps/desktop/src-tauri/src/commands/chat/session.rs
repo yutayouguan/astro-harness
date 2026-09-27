@@ -384,25 +384,6 @@ pub async fn fork_chat_session(
     Ok(new_id)
 }
 
-/// 删除当前会话聊天气泡半开区间 `[start, end)`（0-based，仅计 user/assistant）。
-#[tauri::command]
-pub async fn remove_chat_bubbles(session_id: String, start: i32, end: i32) -> Result<(), String> {
-    let sid = session_id.trim();
-    if sid.is_empty() {
-        return Err("session_id 不能为空".into());
-    }
-    let start = start.max(0) as usize;
-    let end = end.max(0) as usize;
-    if start >= end {
-        return Ok(());
-    }
-    let store = open_sessions().await?;
-    store
-        .remove_chat_bubbles(sid, start, end)
-        .await
-        .map_err(|e| e.to_string())
-}
-
 /// 按 active / archived 筛选会话供侧栏展示。
 /// `project_id` 优先；兼容旧调用仍支持 `project_root`。
 #[tauri::command]

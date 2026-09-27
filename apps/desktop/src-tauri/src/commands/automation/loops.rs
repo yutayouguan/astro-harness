@@ -269,14 +269,6 @@ pub async fn get_loop_run(run_id: String) -> Result<Option<WorkflowRunRow>, Stri
 }
 
 #[tauri::command]
-pub async fn delete_loop_run(run_id: String) -> Result<bool, String> {
-    let db = WorkflowRunDb::open_default()
-        .await
-        .map_err(|e| e.to_string())?;
-    db.delete_run(&run_id).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub async fn list_loop_step_logs(run_id: String) -> Result<Vec<WorkflowStepLogRow>, String> {
     let db = WorkflowRunDb::open_default()
         .await

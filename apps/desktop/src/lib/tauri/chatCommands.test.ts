@@ -26,11 +26,6 @@ test("chat command gateway preserves canonical Tauri command envelopes", async (
     payload: { path: "a.png" },
   });
   await commands.listThreadAttachments({ threadId: "s1", limit: 20 });
-  await commands.removeThreadAttachment({
-    threadId: "s1",
-    attachmentType: "workspace_file",
-    identityKey: "a.png",
-  });
   await commands.start({
     content: "hello",
     provider: "openai",
@@ -54,11 +49,10 @@ test("chat command gateway preserves canonical Tauri command envelopes", async (
       "save_chat_upload",
       "add_thread_attachment",
       "list_thread_attachments",
-      "remove_thread_attachment",
       "start_chat",
     ],
   );
-  assert.deepEqual(calls[7]?.args, {
+  assert.deepEqual(calls[6]?.args, {
     request: {
       content: "hello",
       provider: "openai",

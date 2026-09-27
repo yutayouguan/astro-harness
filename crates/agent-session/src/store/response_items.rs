@@ -382,29 +382,6 @@ impl SessionStore {
         Ok(())
     }
 
-    pub async fn remove_chat_bubbles(
-        &self,
-        session_id: &str,
-        start: usize,
-        end: usize,
-    ) -> Result<()> {
-        if start >= end {
-            return Ok(());
-        }
-        let items = self.get_response_items(session_id).await?;
-        let ids = response_item_ids_in_bubble_range(&items, start, end);
-        let mut tx = self.pool.begin().await?;
-        for id in ids {
-            sqlx::query("DELETE FROM response_items WHERE id = ?1")
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        refresh_counts(&mut *tx, session_id).await?;
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn compact_and_split(
         &self,
         old_id: &str,
@@ -668,22 +645,6 @@ fn end_inclusive_for_bubbles(items: &[StoredResponseItem], keep: usize) -> Optio
         return Some(items.len() - 1);
     }
     Some(starts[keep] - 1)
-}
-
-fn response_item_ids_in_bubble_range(
-    items: &[StoredResponseItem],
-    start: usize,
-    end: usize,
-) -> Vec<i64> {
-    let starts = response_item_bubble_starts(items);
-    let Some(&item_start) = starts.get(start) else {
-        return Vec::new();
-    };
-    let item_end = starts.get(end).copied().unwrap_or(items.len());
-    items[item_start..item_end]
-        .iter()
-        .map(|item| item.id)
-        .collect()
 }
 
 fn response_item_bubble_starts(items: &[StoredResponseItem]) -> Vec<usize> {

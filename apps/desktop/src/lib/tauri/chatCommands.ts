@@ -89,11 +89,6 @@ export function createChatCommands(invokeFn: InvokeFn = invoke) {
       limit?: number;
     }) =>
       invokeFn<ThreadAttachmentPage>("list_thread_attachments", args),
-    removeThreadAttachment: (args: {
-      threadId: string;
-      attachmentType: string;
-      identityKey: string;
-    }) => invokeFn<boolean>("remove_thread_attachment", args),
     start: (request: StartChatRequest) =>
       invokeFn<string>("start_chat", { request }),
   };

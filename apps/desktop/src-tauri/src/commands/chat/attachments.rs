@@ -121,36 +121,3 @@ pub async fn list_thread_attachments(
         next_cursor: (!response.next_cursor.is_empty()).then_some(response.next_cursor),
     })
 }
-
-#[tauri::command]
-pub async fn remove_thread_attachment(
-    app: AppHandle,
-    thread_id: String,
-    attachment_type: String,
-    identity_key: String,
-) -> Result<bool, String> {
-    let mut client = client().await?;
-    let response = client
-        .remove_thread_attachment(proto::RemoveThreadAttachmentRequest {
-            thread_id: thread_id.clone(),
-            attachment_type: attachment_type.clone(),
-            identity_key: identity_key.clone(),
-        })
-        .await
-        .map_err(|error| error.message().to_string())?
-        .into_inner();
-    if response.removed {
-        let attachment = response.attachment.ok_or("missing removed attachment")?;
-        let _ = app.emit(
-            "thread-attachments-changed",
-            ThreadAttachmentChangedDto {
-                thread_id,
-                attachment_type,
-                identity_key,
-                attachment_id: attachment.id,
-                operation: "deleted".into(),
-            },
-        );
-    }
-    Ok(response.removed)
-}
