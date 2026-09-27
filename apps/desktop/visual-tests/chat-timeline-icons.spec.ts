@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// 时间线节点是唯一的图标位：行内不再重复一个图标（历史上思考行会出现两个灯泡，
-// 工具行会出现「轨道扳手 + 行内终端/图层」两套语义打架的图标）。
+// 图标只由行内图标位承担：思考 💡、连续工具调用成组用组图标、单独调用用各自的
+// 细分图标；时间线节点只画分类色点，不再重复一个图标（历史上节点与行内各画一份）。
 const SESSION_KEY = "astro.chat.session";
 const SESSION_ID = "sess-timeline-icons";
 
@@ -199,7 +199,9 @@ async function boot(page: Page) {
   await expect(page.locator(".sidebar")).toBeVisible({ timeout: 30000 });
 }
 
-test("timeline steps carry exactly one icon, on the rail", async ({ page }) => {
+test("timeline keeps one icon per row and a plain dot on the rail", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await boot(page);
 
@@ -207,15 +209,21 @@ test("timeline steps carry exactly one icon, on the rail", async ({ page }) => {
   const steps = page.locator(".msg-timeline-step");
   await expect(steps).toHaveCount(5, { timeout: 15000 });
 
-  // 行内不再有图标位（历史 bug：思考行两个灯泡、工具行两套图标）。
-  await expect(
-    page.locator(
-      ".msg-timeline-body .msg-reasoning-icon, .msg-timeline-body .msg-activity-kind-icon, .msg-timeline-body .msg-activity-group-icon",
-    ),
-  ).toHaveCount(0);
+  // 节点不再画图标（重复的那一份）。
+  await expect(page.locator(".msg-timeline-dot svg")).toHaveCount(0);
 
-  // 每个节点恰好一个图标：思考、工具组、单个工具、思考、回复。
-  for (let index = 0; index < 5; index += 1) {
-    await expect(steps.nth(index).locator(".msg-timeline-dot svg")).toHaveCount(1);
-  }
+  // 行内图标位保留：思考灯泡 / 工具组图层 / 单独工具各自的细分图标（run → 终端）。
+  const rowIcon = (index: number, selector: string) =>
+    steps.nth(index).locator(`.msg-timeline-body ${selector}`);
+  await expect(rowIcon(0, "svg.msg-reasoning-icon.lucide-lightbulb")).toHaveCount(1);
+  await expect(rowIcon(1, ".msg-activity-group-icon svg.lucide-layers")).toHaveCount(
+    1,
+  );
+  await expect(rowIcon(2, "svg.msg-reasoning-icon.lucide-lightbulb")).toHaveCount(1);
+  await expect(
+    rowIcon(3, ".msg-activity-kind-icon svg.lucide-square-terminal"),
+  ).toHaveCount(1);
+  await expect(
+    rowIcon(4, "svg.msg-reasoning-icon, .msg-activity-kind-icon"),
+  ).toHaveCount(0);
 });

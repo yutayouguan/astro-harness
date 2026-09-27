@@ -200,6 +200,16 @@
   margin-top: 4px;
 }
 
+/* Keep semantic color on the rail/icon; completed surfaces stay neutral. */
+.bubble.assistant .msg-reasoning:not(.is-active) .msg-reasoning-icon,
+.bubble.assistant .msg-activity:not(.is-running) .msg-activity-kind-icon {
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, var(--accent))) 58%,
+    var(--ink-mute)
+  );
+}
+
 .bubble.assistant .msg-reasoning.is-active {
   animation: none;
 }

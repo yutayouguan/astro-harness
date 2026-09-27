@@ -75,10 +75,6 @@ html[data-theme] .bubble:is(.assistant, .user):focus-within {
 .bubble.assistant .msg-timeline-dot {
   width: 24px;
   height: 24px;
-  border-radius: 9px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.54),
-    0 2px 7px color-mix(in srgb, var(--tl-tone) 11%, transparent);
 }
 
 .bubble.assistant .msg-timeline-line {
@@ -286,7 +282,6 @@ html[data-theme] .bubble.assistant .msg-activity-detail {
   .bubble.assistant .msg-timeline-dot {
     width: 22px;
     height: 22px;
-    border-radius: 8px;
   }
 
   .bubble.assistant

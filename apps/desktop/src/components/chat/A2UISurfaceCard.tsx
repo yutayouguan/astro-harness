@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import {
+  AlertCircle,
+  BarChart3,
+  CheckCircle,
+  Info,
+  Music2,
+} from "lucide-react";
+import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
 } from "lucide";
@@ -75,6 +82,21 @@ function extractStatusBadge(surface: UiSurface) {
   return { text: badge.text.trim(), variant };
 }
 
+function KindIcon({ kind }: { kind: SurfaceKind }) {
+  switch (kind) {
+    case "metrics":
+      return <BarChart3 size={14} strokeWidth={2} aria-hidden />;
+    case "callout":
+      return <AlertCircle size={14} strokeWidth={2} aria-hidden />;
+    case "result":
+      return <CheckCircle size={14} strokeWidth={2} aria-hidden />;
+    case "media":
+      return <Music2 size={14} strokeWidth={2} aria-hidden />;
+    default:
+      return <Info size={14} strokeWidth={2} aria-hidden />;
+  }
+}
+
 export default function A2UISurfaceCard({
   surface,
   mediaBaseDir,
@@ -99,6 +121,9 @@ export default function A2UISurfaceCard({
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
           >
+            <span className="msg-activity-kind-icon">
+              <KindIcon kind={kind} />
+            </span>
             <span className="msg-activity-title">{title}</span>
             {statusBadge ? (
               <span

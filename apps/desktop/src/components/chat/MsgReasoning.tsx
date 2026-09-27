@@ -1,5 +1,6 @@
 /** 思考过程折叠块。 */
 import { memo, useEffect, useRef, useState } from "react";
+import { Lightbulb } from "lucide-react";
 import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
@@ -88,6 +89,12 @@ function MsgReasoningImpl({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
+        <Lightbulb
+          size={15}
+          strokeWidth={1.75}
+          className="msg-reasoning-icon"
+          aria-hidden
+        />
         <span className="msg-reasoning-label">{label}</span>
         {elapsedSec != null ? (
           <span

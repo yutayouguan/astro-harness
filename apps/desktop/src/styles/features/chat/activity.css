@@ -74,44 +74,22 @@
 .msg-timeline-dot {
   width: 22px;
   height: 22px;
-  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--tl-tone);
-  background:
-    linear-gradient(
-      155deg,
-      color-mix(in srgb, #fff 14%, transparent) 0%,
-      transparent 100%
-    ),
-    color-mix(in srgb, var(--tl-tone) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--tl-tone) 32%, var(--glass-edge));
-  box-shadow: var(--glass-rim, 0 0 0 1px transparent);
-  backdrop-filter: var(--glass-blur-10)
-    saturate(var(--glass-saturate, 1.2));
-  -webkit-backdrop-filter: var(--glass-blur-10)
-    saturate(var(--glass-saturate, 1.2));
   z-index: 1;
 }
 
-html[data-theme="dark"] .msg-timeline-dot {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.02) 100%
-    ),
-    color-mix(in srgb, var(--tl-tone) 22%, rgba(8, 6, 18, 0.55));
-  border-color: color-mix(
-    in srgb,
-    var(--tl-tone) 42%,
-    rgba(255, 255, 255, 0.1)
-  );
-  box-shadow:
-    var(--glass-rim),
-    0 4px 12px color-mix(in srgb, var(--tl-tone) 18%, rgba(0, 0, 0, 0.35));
+/* 节点只画一个分类色点：图标由行内图标位承担，这里再画一个就会重复。 */
+.msg-timeline-dot::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tl-tone) 82%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tl-tone) 14%, transparent);
+  transition: box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html[data-theme="dark"] .msg-timeline-line {
@@ -122,11 +100,8 @@ html[data-theme="dark"] .msg-timeline-line {
   );
 }
 
-.msg-timeline-step.is-active .msg-timeline-dot {
-  border-color: color-mix(in srgb, var(--tl-tone) 55%, var(--glass-edge));
-  box-shadow:
-    var(--glass-rim, 0 0 0 1px transparent),
-    0 0 0 3px color-mix(in srgb, var(--tl-tone) 18%, transparent);
+.msg-timeline-step.is-active .msg-timeline-dot::after {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--tl-tone) 22%, transparent);
   animation: msg-timeline-dot-pulse 1.4s ease-in-out infinite;
 }
 
@@ -180,7 +155,7 @@ html[data-theme="dark"] .msg-timeline-line {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg-timeline-step.is-active .msg-timeline-dot,
+  .msg-timeline-step.is-active .msg-timeline-dot::after,
   .msg-timeline-spin {
     animation: none;
   }
@@ -1606,6 +1581,13 @@ html[data-theme="dark"] .msg-activity-chevron {
   color: color-mix(in srgb, var(--ink-mute) 72%, #fff);
 }
 
+html[data-theme="dark"] .msg-activity-kind-icon {
+  color: color-mix(
+    in srgb,
+    var(--tl-tone, var(--tone, #a78bfa)) 70%,
+    var(--ink-mute)
+  );
+}
 
 html[data-theme="dark"] .msg-activity-detail {
   color: var(--ink-soft);
@@ -1737,6 +1719,10 @@ html[data-theme="dark"] .msg-activity-detail {
   flex-shrink: 0;
   margin-left: auto;
   color: var(--ink-mute);
+}
+
+.msg-activity-kind-icon {
+  display: none;
 }
 
 .msg-activity-summary {
@@ -1926,12 +1912,17 @@ html[data-theme="dark"] .msg-activity-io-label {
   animation: msg-text-sheen 2s linear infinite;
 }
 
+.msg-activity:is(.is-running, .is-retrying) .msg-activity-kind-icon {
+  color: color-mix(in srgb, var(--tone, #60a5fa) 70%, var(--ink-mute));
+  animation: msg-live-glow 1.8s ease-in-out infinite;
+}
+
 .msg-activity:is(.is-waiting, .is-partial, .is-declined, .is-interrupted)
-  .msg-activity-duration {
+  :is(.msg-activity-kind-icon, .msg-activity-duration) {
   color: var(--tone-amber, #d97706);
 }
 
-.msg-activity.is-error .msg-activity-duration {
+.msg-activity.is-error :is(.msg-activity-kind-icon, .msg-activity-duration) {
   color: var(--danger, #ef4444);
 }
 
@@ -2016,6 +2007,11 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   color: var(--ink-soft, var(--ink));
 }
 
+.msg-reasoning-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .msg-reasoning-label {
   min-width: 0;
 }
@@ -2048,11 +2044,19 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   animation: msg-text-sheen 2.2s linear infinite;
 }
 
-.msg-reasoning.is-error :is(.msg-reasoning-label, .msg-reasoning-duration) {
+.msg-reasoning.is-active .msg-reasoning-icon {
+  opacity: 1;
+  color: color-mix(in srgb, var(--tone, #60a5fa) 75%, var(--ink));
+  animation: msg-live-glow 1.8s ease-in-out infinite;
+}
+
+.msg-reasoning.is-error
+  :is(.msg-reasoning-icon, .msg-reasoning-label, .msg-reasoning-duration) {
   color: var(--danger, #ef4444);
 }
 
-.msg-reasoning.is-interrupted :is(.msg-reasoning-label, .msg-reasoning-duration) {
+.msg-reasoning.is-interrupted
+  :is(.msg-reasoning-icon, .msg-reasoning-label, .msg-reasoning-duration) {
   color: var(--tone-amber, #d97706);
 }
 
@@ -2060,6 +2064,9 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
   .msg-reasoning.is-active,
   .msg-activity.is-running,
   .msg-activity.is-retrying,
+  .msg-reasoning.is-active .msg-reasoning-icon,
+  .msg-activity.is-running .msg-activity-kind-icon,
+  .msg-activity.is-retrying .msg-activity-kind-icon,
   .msg-activity.is-running .msg-activity-title::after,
   .msg-activity.is-retrying .msg-activity-title::after,
   .msg-reasoning.is-active .msg-reasoning-label,
@@ -2086,6 +2093,12 @@ html[data-theme="dark"] .msg-reasoning-toggle:hover {
       var(--ink-soft)
     );
     color: color-mix(in srgb, var(--tone, #60a5fa) 48%, var(--ink-soft));
+  }
+
+  .msg-reasoning.is-active .msg-reasoning-icon,
+  .msg-activity:is(.is-running, .is-retrying) .msg-activity-kind-icon {
+    filter: none;
+    opacity: 1;
   }
 
   .msg-activity-detail,

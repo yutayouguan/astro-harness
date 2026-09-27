@@ -80,6 +80,8 @@ html[data-theme="dark"]
     );
 }
 
+.bubble.assistant .msg-reasoning-icon,
+.bubble.assistant .msg-activity-kind-icon,
 .bubble.assistant .msg-reasoning-chevron,
 .bubble.assistant .msg-activity-chevron,
 .bubble.assistant .msg-activity-meta {
@@ -88,6 +90,13 @@ html[data-theme="dark"]
   align-items: center;
   justify-content: center;
   line-height: 1;
+}
+
+.bubble.assistant .msg-reasoning-icon,
+.bubble.assistant .msg-activity-kind-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
 }
 
 .bubble.assistant .msg-reasoning-label,

@@ -923,7 +923,6 @@ function ChatMessageRowImpl({
                         <MsgTimelineStep
                           key={step.key}
                           kind={step.items[0]?.kind ?? "tool"}
-                          grouped
                           active={activities.some(
                             (activity) => activity.status === "running",
                           )}
@@ -944,7 +943,6 @@ function ChatMessageRowImpl({
                       <MsgTimelineStep
                         key={step.key}
                         kind={step.kind}
-                        activity={step.activity}
                         active={step.active}
                         isLast={isLast}
                       >

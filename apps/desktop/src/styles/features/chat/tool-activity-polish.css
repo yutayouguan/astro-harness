@@ -117,6 +117,14 @@
   -webkit-text-fill-color: currentcolor;
 }
 
+.bubble.assistant
+  .msg-timeline-body
+  > .msg-activity.is-running
+  .msg-activity-kind-icon {
+  animation: none;
+  filter: none;
+}
+
 html[data-theme="dark"] .bubble.assistant .msg-timeline-body > .msg-activity {
   border-color: color-mix(
     in srgb,
