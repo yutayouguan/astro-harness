@@ -1955,6 +1955,11 @@ export const en: Record<MessageKey, string> = {
   "chat.side.exit": "Return to main thread and discard",
   "chat.side.open": "Open side chat",
   "chat.side.close": "Close and discard side chat",
+  "chat.side.closeConfirmTitle": "Discard this side chat?",
+  "chat.side.closeConfirm":
+    "The side chat is its own session; closing it throws away its content and cannot be undone.",
+  "chat.side.closeConfirmAction": "Discard and close",
+  "chat.side.closeKeep": "Keep it",
   "chat.side.panel": "Ephemeral side chat",
   "chat.side.title": "Side chat",
   "chat.side.subtitle": "Uses current context and disappears when closed",

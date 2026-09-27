@@ -51,3 +51,43 @@ test("side chat keeps backend context but never overwrites the primary client sn
   );
   assert.match(sessionHook, /persistContextUsage: persistClientState/);
 });
+
+test("discarding the side chat always asks the user first", async () => {
+  const [app, zh, en] = await Promise.all([
+    source("App.tsx"),
+    source("i18n/catalogs/zh.ts"),
+    source("i18n/catalogs/en.ts"),
+  ]);
+
+  // 唯一的 discard 入口带确认，取消时只让位、不结束会话
+  assert.match(app, /const discardSideChat = useCallback\(async \(\) => \{/);
+  assert.match(
+    app,
+    /const confirmed = await confirm\(\{[\s\S]*?"chat\.side\.closeConfirmTitle"[\s\S]*?variant: "danger",[\s\S]*?\}\);\s*\n\s*if \(!confirmed\) return;\s*\n\s*await closeSideChat\(\);/,
+  );
+
+  const discards = app.match(/closeSideChat\(\)/g) ?? [];
+  assert.equal(
+    discards.length,
+    1,
+    "侧边会话只允许在确认后的 helper 里被丢弃",
+  );
+
+  // 所有入口（右侧坞切换与显式关闭）都走确认
+  assert.match(app, /void discardSideChat\(\);/);
+  assert.match(
+    app,
+    /void \(sideSessionId \? discardSideChat\(\) : startSideChat\(\)\)/,
+  );
+  assert.match(app, /onClose=\{\(\) => void discardSideChat\(\)\}/);
+
+  for (const key of [
+    "chat.side.closeConfirmTitle",
+    "chat.side.closeConfirm",
+    "chat.side.closeConfirmAction",
+    "chat.side.closeKeep",
+  ]) {
+    assert.ok(zh.includes(`"${key}":`), `zh missing ${key}`);
+    assert.ok(en.includes(`"${key}":`), `en missing ${key}`);
+  }
+});

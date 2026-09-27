@@ -654,6 +654,30 @@ export default function App() {
   const closeSideChat = sideChat.close;
   const startSideChat = sideChat.start;
 
+  /**
+   * 丢弃侧边聊天前先确认：侧边聊天是真实会话，`closeSideChat` 会把它整条
+   * discard 掉且无法恢复。用户不确认时只让位，不结束会话。
+   */
+  const sideChatClosePendingRef = useRef(false);
+  const discardSideChat = useCallback(async () => {
+    // 同一轮里可能有多处同时要求让位（按钮与面板 effect），只弹一次。
+    if (!sideSessionId || sideChatClosePendingRef.current) return;
+    sideChatClosePendingRef.current = true;
+    try {
+      const confirmed = await confirm({
+        title: t("chat.side.closeConfirmTitle"),
+        message: t("chat.side.closeConfirm"),
+        confirmLabel: t("chat.side.closeConfirmAction"),
+        cancelLabel: t("chat.side.closeKeep"),
+        variant: "danger",
+      });
+      if (!confirmed) return;
+      await closeSideChat();
+    } finally {
+      sideChatClosePendingRef.current = false;
+    }
+  }, [closeSideChat, confirm, sideSessionId, t]);
+
   useEffect(() => {
     void cleanupStaleBrowserLiveWebviews();
   }, []);
@@ -663,16 +687,15 @@ export default function App() {
       setBrowserDockOpen(false);
       setReviewState(null);
       projectFiles.setPanelOpen(false);
-      if (sideSessionId) void closeSideChat();
+      void discardSideChat();
       if (tab) setChatRightTab(tab);
       setChatRightOpen(true);
     },
     [
-      closeSideChat,
+      discardSideChat,
       projectFiles.setPanelOpen,
       setChatRightOpen,
       setChatRightTab,
-      sideSessionId,
     ],
   );
 
@@ -697,14 +720,12 @@ export default function App() {
     setChatRightOpen(false);
     setBrowserDockOpen(false);
     setReviewState(null);
-    if (sideSessionId) void closeSideChat();
+    // 让位与确认统一交给 projectFiles.panelOpen 的 effect，避免重复弹窗
     projectFiles.setPanelOpen(true);
   }, [
-    closeSideChat,
     projectFiles.panelOpen,
     projectFiles.setPanelOpen,
     setChatRightOpen,
-    sideSessionId,
   ]);
 
   const openFileReview = useCallback(
@@ -712,10 +733,10 @@ export default function App() {
       projectFiles.setPanelOpen(false);
       setBrowserDockOpen(false);
       setChatRightOpen(false);
-      if (sideSessionId) void closeSideChat();
+      void discardSideChat();
       setReviewState({ files, selectedPath: file.path });
     },
-    [closeSideChat, projectFiles.setPanelOpen, setChatRightOpen, sideSessionId],
+    [discardSideChat, projectFiles.setPanelOpen, setChatRightOpen],
   );
 
   useEffect(() => {
@@ -730,8 +751,8 @@ export default function App() {
     if (!justOpened) return;
     setBrowserDockOpen(false);
     setChatRightOpen(false);
-    if (sideSessionId) void closeSideChat();
-  }, [closeSideChat, projectFiles.panelOpen, setChatRightOpen, sideSessionId]);
+    void discardSideChat();
+  }, [discardSideChat, projectFiles.panelOpen, setChatRightOpen]);
 
   const toggleBrowserDock = useCallback(() => {
     if (browserDockOpen) {
@@ -2578,7 +2599,7 @@ export default function App() {
                       type="button"
                       className={`header-icon-btn ${activeChatRightDock === "side-chat" ? "is-active" : ""}`}
                       onClick={() =>
-                        void (sideSessionId ? closeSideChat() : startSideChat())
+                        void (sideSessionId ? discardSideChat() : startSideChat())
                       }
                       title={
                         sideSessionId
@@ -2891,7 +2912,7 @@ export default function App() {
                             onOpenContext={() => openChatRightDock("context")}
                             onOpenFileReview={openFileReview}
                             onOpenActivityUrl={openActivityUrlInBrowser}
-                            onClose={closeSideChat}
+                            onClose={() => void discardSideChat()}
                           />
                         )}
                     </AnimatePresence>

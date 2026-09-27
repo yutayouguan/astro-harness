@@ -1837,6 +1837,11 @@ export const zh = {
   "chat.side.exit": "返回主线并丢弃",
   "chat.side.open": "打开侧边聊天",
   "chat.side.close": "关闭并丢弃侧边聊天",
+  "chat.side.closeConfirmTitle": "丢弃这条侧边聊天？",
+  "chat.side.closeConfirm":
+    "侧边聊天是独立会话，关闭会连同它的全部内容一起丢弃，之后无法恢复。",
+  "chat.side.closeConfirmAction": "丢弃并关闭",
+  "chat.side.closeKeep": "保留",
   "chat.side.panel": "临时侧边聊天",
   "chat.side.title": "侧边聊天",
   "chat.side.subtitle": "继承当前上下文，关闭后自动消失",
