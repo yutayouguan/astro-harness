@@ -1045,8 +1045,10 @@ mod tests {
 
     #[test]
     fn api_mode_override() {
-        let mut chat_config = ProviderConfig::default();
-        chat_config.api_mode = "chat".to_string();
+        let mut chat_config = ProviderConfig {
+            api_mode: "chat".to_string(),
+            ..Default::default()
+        };
         assert!(
             !use_responses("openai", &chat_config),
             "api_mode=chat forces ChatCompletions"
@@ -1058,8 +1060,10 @@ mod tests {
             "persisted api_mode=chat_completions forces ChatCompletions"
         );
 
-        let mut resp_config = ProviderConfig::default();
-        resp_config.api_mode = "responses".to_string();
+        let resp_config = ProviderConfig {
+            api_mode: "responses".to_string(),
+            ..Default::default()
+        };
         assert!(
             use_responses("ollama", &resp_config),
             "api_mode=responses forces Responses"

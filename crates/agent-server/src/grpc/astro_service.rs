@@ -23,9 +23,9 @@ use proto::{
     RealtimeConversationSpeechRequest, RealtimeConversationStartRequest,
     RealtimeConversationTextRequest, RealtimeOperationResponse, RealtimeVoicesResponse,
     ResolveElicitationRequest, RunUserShellCommandRequest, RunUserShellCommandResponse,
+    SessionPermissionGrantsRequest, SessionPermissionGrantsResponse,
     SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
-    SessionPermissionGrantsRequest, SessionPermissionGrantsResponse, SteerChatRequest,
-    SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
+    SteerChatRequest, SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
     TerminalReadRequest, TerminalReadResponse, TerminalResizeRequest, TerminalSessionResponse,
     TerminalWriteRequest, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };

@@ -1,4 +1,6 @@
 #![warn(clippy::unwrap_used)]
+// 测试里的 unwrap 噪声不参与生产告警统计（生产代码仍然是 warn 级）。
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 //! 多供应商 AI 能力统一封装。
 //!

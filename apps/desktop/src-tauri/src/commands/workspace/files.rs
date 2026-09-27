@@ -1601,8 +1601,8 @@ mod project_path_tests {
                 .join("..")
                 .join("note.md"),
         ] {
-            let error =
-                project_review_path(&[root.clone()], &target.to_string_lossy()).unwrap_err();
+            let error = project_review_path(std::slice::from_ref(&root), &target.to_string_lossy())
+                .unwrap_err();
             assert!(error.contains("路径不属于该项目"), "{error}");
         }
     }

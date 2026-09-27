@@ -1152,10 +1152,12 @@ mod tests {
 
     #[test]
     fn live_pet_scale_changes_only_size_and_rejects_stale_pet() {
-        let mut state = types::DesktopPetState::default();
-        state.active_pet_id = Some("naitang".into());
-        state.active_scene_id = Some("forest".into());
-        state.follow_wallpaper = true;
+        let mut state = types::DesktopPetState {
+            active_pet_id: Some("naitang".into()),
+            active_scene_id: Some("forest".into()),
+            follow_wallpaper: true,
+            ..Default::default()
+        };
         let mut expected = serde_json::to_value(&state).unwrap();
         apply_pet_scale(&mut state, "naitang", 0.25).unwrap();
         expected["scale"] = serde_json::json!(0.25);
@@ -1225,8 +1227,10 @@ mod tests {
 
     #[test]
     fn quiet_hiding_does_not_override_user_visibility_and_tray_can_restore_fullscreen() {
-        let mut state = DesktopPetStateDto::default();
-        state.enabled = true;
+        let mut state = DesktopPetStateDto {
+            enabled: true,
+            ..Default::default()
+        };
         assert!(desired_visibility(&state, false, false));
         assert!(!desired_visibility(&state, true, false));
         assert!(desired_visibility(&state, true, true));

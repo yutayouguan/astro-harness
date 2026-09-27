@@ -357,6 +357,34 @@ pub async fn respond(
     snapshot(service).await
 }
 
+pub fn watch(
+    service: AstroServiceImpl,
+) -> tokio_stream::wrappers::ReceiverStream<Result<proto::PendingInteractionsJson, Status>> {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let mut changes = types::pending_interaction::changes();
+    tokio::spawn(async move {
+        let mut previous = None;
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+        loop {
+            let value = match snapshot(&service).await {
+                Ok(value) => value,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    break;
+                }
+            };
+            if previous != Some(value.revision) {
+                previous = Some(value.revision);
+                if tx.send(encode(value)).await.is_err() {
+                    break;
+                }
+            }
+            tokio::select! { _=tx.closed()=>break, result=changes.changed()=>{if result.is_err(){break;}}, _=tick.tick()=>{} }
+        }
+    });
+    tokio_stream::wrappers::ReceiverStream::new(rx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,32 +625,4 @@ mod tests {
         assert!(response.content.is_none());
         assert!(snapshot(&service).await.unwrap().requests.is_empty());
     }
-}
-
-pub fn watch(
-    service: AstroServiceImpl,
-) -> tokio_stream::wrappers::ReceiverStream<Result<proto::PendingInteractionsJson, Status>> {
-    let (tx, rx) = tokio::sync::mpsc::channel(8);
-    let mut changes = types::pending_interaction::changes();
-    tokio::spawn(async move {
-        let mut previous = None;
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
-        loop {
-            let value = match snapshot(&service).await {
-                Ok(value) => value,
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    break;
-                }
-            };
-            if previous != Some(value.revision) {
-                previous = Some(value.revision);
-                if tx.send(encode(value)).await.is_err() {
-                    break;
-                }
-            }
-            tokio::select! { _=tx.closed()=>break, result=changes.changed()=>{if result.is_err(){break;}}, _=tick.tick()=>{} }
-        }
-    });
-    tokio_stream::wrappers::ReceiverStream::new(rx)
 }

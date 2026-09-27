@@ -271,7 +271,9 @@ mod tests {
         .unwrap();
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
         assert!(
-            policy.writable_roots.contains(&shared.canonicalize().unwrap()),
+            policy
+                .writable_roots
+                .contains(&shared.canonicalize().unwrap()),
             "{:?}",
             policy.writable_roots
         );
@@ -307,7 +309,9 @@ mod tests {
         .unwrap();
         assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
         assert!(
-            policy.writable_roots.contains(&shared.canonicalize().unwrap()),
+            policy
+                .writable_roots
+                .contains(&shared.canonicalize().unwrap()),
             "{:?}",
             policy.writable_roots
         );
@@ -346,7 +350,9 @@ mod tests {
             "{:?}",
             policy.writable_roots
         );
-        assert!(policy.writable_roots.contains(&workspace.canonicalize().unwrap()));
+        assert!(policy
+            .writable_roots
+            .contains(&workspace.canonicalize().unwrap()));
     }
 
     #[test]

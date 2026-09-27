@@ -1967,7 +1967,8 @@ impl Session {
                 .expect("permission grants mutex poisoned");
             std::mem::take(&mut *current)
         };
-        if !revoked.is_empty() && self.config.thread_memory_mode != types::ThreadMemoryMode::Disabled
+        if !revoked.is_empty()
+            && self.config.thread_memory_mode != types::ThreadMemoryMode::Disabled
         {
             let settings = memory::load_permission_settings(self.memory_dir());
             let profile_id = settings.selection.profile_id.clone();

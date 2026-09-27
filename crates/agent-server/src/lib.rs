@@ -1,4 +1,6 @@
 #![deny(clippy::unwrap_used)]
+// 测试里 `unwrap` 是失败信号，按仓库惯例放行；生产路径仍然禁止。
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 // 每个 gRPC handler 都返回 `Result<_, tonic::Status>`：Status 本身较胖是该框架的
 // 约定（boxing 会改变 tonic/tower 的服务签名），这里统一放行 result_large_err。
 #![allow(clippy::result_large_err)]

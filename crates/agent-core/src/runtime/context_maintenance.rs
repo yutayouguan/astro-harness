@@ -253,15 +253,17 @@ mod tests {
     #[tokio::test]
     async fn automatic_maintenance_fires_pre_and_post_compact() {
         let dir = tempfile::tempdir().unwrap();
-        let mut compression = memory::CompressionConfig::default();
-        compression.soft_ratio = 0.0;
-        compression.medium_ratio = 0.5;
-        compression.hard_ratio = 0.9;
-        compression.soft_max_chars = 12;
-        compression.soft_head_chars = 5;
-        compression.soft_tail_chars = 5;
-        compression.protect_last_n = 1;
-        compression.protect_first_messages = 0;
+        let compression = memory::CompressionConfig {
+            soft_ratio: 0.0,
+            medium_ratio: 0.5,
+            hard_ratio: 0.9,
+            soft_max_chars: 12,
+            soft_head_chars: 5,
+            soft_tail_chars: 5,
+            protect_last_n: 1,
+            protect_first_messages: 0,
+            ..Default::default()
+        };
         memory::set_compression_config(dir.path(), &compression).unwrap();
         let session = AgentLoop::new(super::super::Config::with_defaults(
             dir.path().to_path_buf(),

@@ -2168,12 +2168,10 @@ mod tests {
         // 清空后字段被移除，回到 profile 自身边界。
         let cleared = set_extra_write_roots(dir.path(), &[]).unwrap();
         assert!(cleared.permissions.extra_writable_roots.is_empty());
-        assert!(
-            cleared
-                .permissions
-                .extra_writable_roots_for(":workspace")
-                .is_empty()
-        );
+        assert!(cleared
+            .permissions
+            .extra_writable_roots_for(":workspace")
+            .is_empty());
         // 失败写入不能把之前的值留在文件里。
         assert!(!fs::read_to_string(dir.path().join("config.toml"))
             .unwrap()

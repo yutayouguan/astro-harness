@@ -772,7 +772,6 @@ async fn billing_token_count_total_includes_cached_tokens() {
         cache_read_reported: true,
         cache_write_reported: true,
         reasoning_reported: true,
-        ..Default::default()
     };
     let chat = scripted_responses(vec![vec![
         StreamChunk::Text("done".into()),
@@ -1058,8 +1057,9 @@ async fn namespaced_tool_round_trips_from_prompt_to_runtime_and_history() {
     run.await.unwrap();
 
     assert_eq!(executions.load(Ordering::SeqCst), 1);
-    let first_tools = seen_tools.lock().unwrap();
-    assert!(first_tools[0].iter().any(|spec| {
+    // 锁只在断言期间持有：把内容拷出来，避免 guard 跨过下面的 await（clippy::await_holding_lock）。
+    let first_tools = seen_tools.lock().unwrap()[0].clone();
+    assert!(first_tools.iter().any(|spec| {
         spec.get("type").and_then(serde_json::Value::as_str) == Some("namespace")
             && spec.get("name").and_then(serde_json::Value::as_str) == Some("clock")
             && spec
@@ -1071,8 +1071,6 @@ async fn namespaced_tool_round_trips_from_prompt_to_runtime_and_history() {
                     })
                 })
     }));
-    drop(first_tools);
-
     let history = session.clone_history().await;
     assert!(history.iter().any(|item| matches!(
         item,

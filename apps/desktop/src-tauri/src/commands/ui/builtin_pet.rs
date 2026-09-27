@@ -613,7 +613,7 @@ mod tests {
         for i in 0..49 {
             for y in 0..208 {
                 for x in 0..192 {
-                    if x >= 72 || y < 125 || y >= 188 {
+                    if x >= 72 || !(125..188).contains(&y) {
                         assert_eq!(
                             tail.get_pixel((i % 4) * 192 + x, (i / 4) * 208 + y),
                             atlas.get_pixel(x, y),
@@ -797,8 +797,10 @@ mod tests {
     #[test]
     fn builtin_installs_both_assets_and_repairs_missing_files() {
         let root = tempfile::tempdir().unwrap();
-        let mut state = types::DesktopPetState::default();
-        state.scale = 0.25;
+        let mut state = types::DesktopPetState {
+            scale: 0.25,
+            ..Default::default()
+        };
         install_into_state(root.path(), &mut state).unwrap();
         let original = state.pet_path.clone();
         assert_eq!(state.sprite_version_number, Some(2));

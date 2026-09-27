@@ -11,9 +11,9 @@ use crate::runtime::{
     AgentLoop, StepContext, ToolCallRuntime, ToolExecutionGrants, ToolInvocation, TurnContext,
 };
 
-use agent_protocol::{ControlRequestEvent, EventMsg};
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl, ConfirmPresentation};
 use super::lifecycle::{emit, emit_async_agent_message};
+use agent_protocol::{ControlRequestEvent, EventMsg};
 
 use crate::control::smart_approval::{SmartApprovalContext, TurnSummary};
 
@@ -249,7 +249,7 @@ fn build_network_approval_decider(
                         &profile_id,
                         &turn_context,
                         &tool_call_id,
-                        &protocol_name,
+                        protocol_name,
                         &request.host,
                         request.port,
                         command_preview.as_deref(),
@@ -900,16 +900,16 @@ async fn preflight_read_only_write(
 
 /// 可授权的写入根：净化规则见 `memory::permission_audit::sanitize_write_root`
 /// （会话级授权与设置页的永久可写目录共用同一套规则）。
-fn sanitize_grant_path(raw: &str, memory_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+fn sanitize_grant_path(
+    raw: &str,
+    memory_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
     memory::permission_audit::sanitize_write_root(raw, memory_dir)
 }
 
 /// 路径是否落在任一根之内（含相等）。两侧都尝试 canonicalize，避免 macOS 上
 /// `/tmp` 与 `/private/tmp` 这类同一目录的两种写法被当成越界。
-fn path_is_within_any(
-    path: &std::path::Path,
-    roots: &[std::path::PathBuf],
-) -> bool {
+fn path_is_within_any(path: &std::path::Path, roots: &[std::path::PathBuf]) -> bool {
     let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     roots.iter().any(|root| {
         let root = root.canonicalize().unwrap_or_else(|_| root.clone());
@@ -993,8 +993,7 @@ async fn preflight_request_permissions(
                 .to_string(),
         ));
     }
-    let mut allowed_roots: Vec<std::path::PathBuf> =
-        turn_context.workspace_roots().to_vec();
+    let mut allowed_roots: Vec<std::path::PathBuf> = turn_context.workspace_roots().to_vec();
     if let Some(root) = turn_context.project_root() {
         allowed_roots.push(root.to_path_buf());
     }
@@ -1055,7 +1054,12 @@ async fn preflight_request_permissions(
         },
         session.config.thread_memory_mode,
     );
-    audit.record(memory::PermissionAuditKind::Requested, None, Some("model"), None);
+    audit.record(
+        memory::PermissionAuditKind::Requested,
+        None,
+        Some("model"),
+        None,
+    );
     // Codex 对齐事件：权限请求在 rollout/观察者侧也留痕（回答仍走 confirm HITL）。
     emit(
         session,
@@ -1083,9 +1087,8 @@ async fn preflight_request_permissions(
             "Permission request NOT applied: 需要用户批准（{listed}），但当前没有可用的确认通道。"
         )));
     };
-    let mut body = format!(
-        "Agent 请求在本会话内额外写入以下目录（会话级，结束即失效）：\n\n{listed}"
-    );
+    let mut body =
+        format!("Agent 请求在本会话内额外写入以下目录（会话级，结束即失效）：\n\n{listed}");
     if !requested_reads.is_empty() {
         body.push_str(&format!("\n\n请求读取：{}", requested_reads.join("、")));
     }
@@ -3104,10 +3107,7 @@ mod tests {
         }
     }
 
-    async fn park_and_resolve(
-        gate: &Arc<HitlGate>,
-        approved: bool,
-    ) -> tokio::task::JoinHandle<()> {
+    async fn park_and_resolve(gate: &Arc<HitlGate>, approved: bool) -> tokio::task::JoinHandle<()> {
         let gate = Arc::clone(gate);
         tokio::spawn(async move {
             for _ in 0..400 {
@@ -3175,7 +3175,10 @@ mod tests {
         let PermissionPreflight::Handled(text) = outcome else {
             panic!("expected handled permission request");
         };
-        assert!(text.contains("Permission granted for this session"), "{text}");
+        assert!(
+            text.contains("Permission granted for this session"),
+            "{text}"
+        );
         // 安全审计：请求 + 批准各一条。
         let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
             .expect("permission audit written");
@@ -3256,7 +3259,10 @@ mod tests {
         assert!(text.contains("Permission already granted"), "{text}");
         assert!(text.contains("shared-out"), "{text}");
         assert!(session.permission_grants().is_empty(), "不该写入会话授权");
-        assert!(gate.pending_interrupts().await.is_empty(), "不该 park 审批卡");
+        assert!(
+            gate.pending_interrupts().await.is_empty(),
+            "不该 park 审批卡"
+        );
         assert!(
             !memory::permission_audit_path(dir.path()).exists(),
             "无需为已授权路径写审计"
@@ -3376,7 +3382,12 @@ mod tests {
             receipt.request.reason,
             types::PermissionReason::NetworkDisabled
         );
-        receipt.record(memory::PermissionAuditKind::Granted, None, Some("resolved"), None);
+        receipt.record(
+            memory::PermissionAuditKind::Granted,
+            None,
+            Some("resolved"),
+            None,
+        );
 
         let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
             .expect("network audit written");

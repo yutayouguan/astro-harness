@@ -241,54 +241,6 @@ fn parse_image_size(size: &str) -> Result<(u32, u32)> {
     Ok((width, height))
 }
 
-#[cfg(test)]
-mod image_tests {
-    use std::collections::HashMap;
-
-    use super::{build_media_config, parse_image_size};
-    use crate::engine::variables::{RuntimeProviderConfig, VariableContext};
-    use crate::model::{NodeType, Position, WorkflowNode};
-
-    #[test]
-    fn image_size_requires_two_positive_dimensions() {
-        assert_eq!(parse_image_size("1536x1024").unwrap(), (1536, 1024));
-        assert!(parse_image_size("1024").is_err());
-        assert!(parse_image_size("0x1024").is_err());
-        assert!(parse_image_size("wide x tall").is_err());
-    }
-
-    #[test]
-    fn runtime_provider_uses_image_model_instead_of_chat_model() {
-        let ctx = VariableContext::default().with_provider_configs(HashMap::from([(
-            "azure-record".into(),
-            RuntimeProviderConfig {
-                backend_id: "azure".into(),
-                config: providers::ProviderConfig {
-                    api_key: "secret".into(),
-                    model: "gpt-5.6-sol".into(),
-                    ..providers::ProviderConfig::default()
-                },
-                image_model: "gpt-image-2".into(),
-                video_model: String::new(),
-                tts_model: String::new(),
-                music_model: String::new(),
-            },
-        )]));
-        let node = WorkflowNode {
-            id: "image".into(),
-            node_type: NodeType::ImageGeneration,
-            label: "Image".into(),
-            position: Position { x: 0.0, y: 0.0 },
-            config: serde_json::json!({"provider_id": "azure-record"}),
-            disabled: false,
-        };
-
-        let (backend, config) = build_media_config(&node, &ctx).expect("provider config");
-        assert_eq!(backend, "azure");
-        assert_eq!(config.model, "gpt-image-2");
-    }
-}
-
 // ── Video Generation ────────────────────────────────────────────────
 
 pub struct VideoGenExec;
@@ -737,5 +689,53 @@ impl NodeExecutor for TranslationExec {
             "source_lang": source,
             "target_lang": target,
         })))
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    use std::collections::HashMap;
+
+    use super::{build_media_config, parse_image_size};
+    use crate::engine::variables::{RuntimeProviderConfig, VariableContext};
+    use crate::model::{NodeType, Position, WorkflowNode};
+
+    #[test]
+    fn image_size_requires_two_positive_dimensions() {
+        assert_eq!(parse_image_size("1536x1024").unwrap(), (1536, 1024));
+        assert!(parse_image_size("1024").is_err());
+        assert!(parse_image_size("0x1024").is_err());
+        assert!(parse_image_size("wide x tall").is_err());
+    }
+
+    #[test]
+    fn runtime_provider_uses_image_model_instead_of_chat_model() {
+        let ctx = VariableContext::default().with_provider_configs(HashMap::from([(
+            "azure-record".into(),
+            RuntimeProviderConfig {
+                backend_id: "azure".into(),
+                config: providers::ProviderConfig {
+                    api_key: "secret".into(),
+                    model: "gpt-5.6-sol".into(),
+                    ..providers::ProviderConfig::default()
+                },
+                image_model: "gpt-image-2".into(),
+                video_model: String::new(),
+                tts_model: String::new(),
+                music_model: String::new(),
+            },
+        )]));
+        let node = WorkflowNode {
+            id: "image".into(),
+            node_type: NodeType::ImageGeneration,
+            label: "Image".into(),
+            position: Position { x: 0.0, y: 0.0 },
+            config: serde_json::json!({"provider_id": "azure-record"}),
+            disabled: false,
+        };
+
+        let (backend, config) = build_media_config(&node, &ctx).expect("provider config");
+        assert_eq!(backend, "azure");
+        assert_eq!(config.model, "gpt-image-2");
     }
 }
