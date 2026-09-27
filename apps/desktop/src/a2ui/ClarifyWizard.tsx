@@ -76,6 +76,7 @@ type ApprovalChoice =
   | "allow_once"
   | "allow_session"
   | "allow_always"
+  | "retry_with_command"
   | "deny";
 type Direction = "forward" | "backward";
 
@@ -119,6 +120,7 @@ export default function ClarifyWizard({
   );
   const [approvalCopied, setApprovalCopied] = useState(false);
   const [approveSecondThought, setApproveSecondThought] = useState(false);
+  const [commandDraft, setCommandDraft] = useState<string | null>(null);
   const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
 
@@ -267,9 +269,12 @@ export default function ClarifyWizard({
   if (!steps.length || !step) return null;
 
   if (collapsed && variant === "approval" && approvalChoice) {
+    // 「编辑后重试」也是已处理态（会拒绝原请求并发出新命令），所以用绿勾。
     const approved = approvalChoice !== "deny";
     const label =
-      approvalChoice === "approve_always" || approvalChoice === "allow_always"
+      approvalChoice === "retry_with_command"
+        ? t("chat.a2ui.approvalRetryApproved")
+        : approvalChoice === "approve_always" || approvalChoice === "allow_always"
         ? t("chat.a2ui.approvalAlwaysApproved")
         : approvalChoice === "approve_type"
           ? t("chat.a2ui.approvalTypeApproved", {
@@ -602,6 +607,21 @@ export default function ClarifyWizard({
             <div className="a2ui-approval-command-label">
               <TerminalSquare size={14} aria-hidden />
               <span>{commandLabel}</span>
+              {isSandboxRetry ? (
+                <button
+                  type="button"
+                  className="a2ui-approval-copy"
+                  onClick={() =>
+                    setCommandDraft((current) =>
+                      current == null ? commandText : null,
+                    )
+                  }
+                  aria-label={t("chat.a2ui.approvalEditCommand")}
+                  title={t("chat.a2ui.approvalEditCommand")}
+                >
+                  <PencilLine size={13} strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="a2ui-approval-copy"
@@ -616,9 +636,52 @@ export default function ClarifyWizard({
                 )}
               </button>
             </div>
-            <pre>
-              <code>{commandText}</code>
-            </pre>
+            {commandDraft != null ? (
+              <div className="a2ui-approval-command-editor">
+                <textarea
+                  className="a2ui-approval-command-input"
+                  value={commandDraft}
+                  rows={3}
+                  spellCheck={false}
+                  aria-label={t("chat.a2ui.approvalEditCommand")}
+                  onChange={(event) => setCommandDraft(event.target.value)}
+                />
+                <div className="a2ui-approval-command-edit-actions">
+                  <button
+                    type="button"
+                    className="a2ui-approval-action is-ghost"
+                    onClick={() => setCommandDraft(null)}
+                  >
+                    <span className="a2ui-approval-action-copy">
+                      <strong>{t("chat.a2ui.approvalRetryCancel")}</strong>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="a2ui-approval-action is-approve"
+                    disabled={disabled || !commandDraft.trim()}
+                    onClick={() => {
+                      const command = commandDraft.trim();
+                      if (!command) return;
+                      setCommandDraft(null);
+                      setApprovalChoice("retry_with_command");
+                      setCollapsed(true);
+                      onAction("retry_with_command", { command });
+                    }}
+                  >
+                    <PencilLine size={16} strokeWidth={2.2} aria-hidden />
+                    <span className="a2ui-approval-action-copy">
+                      <strong>{t("chat.a2ui.approvalRetry")}</strong>
+                      <small>{t("chat.a2ui.approvalRetryHint")}</small>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <pre>
+                <code>{commandText}</code>
+              </pre>
+            )}
           </div>
         ) : null}
 

@@ -120,6 +120,17 @@ test("sandbox retry authorization stays a one-shot decision", async ({
   // 卡片保持打开：这是旁路动作，不是批准/拒绝。
   await expect(card).toBeVisible();
   await expect(page.locator(".a2ui-approval-result")).toHaveCount(0);
+
+  // 编辑后重试：改好命令 → 拒绝原请求并按新命令重试。
+  await card.getByRole("button", { name: "编辑命令" }).click();
+  const editor = card.locator(".a2ui-approval-command-input");
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue(/cat \/Users\/me\/project\/in\/report\.md/);
+  await editor.fill("cat in/report.md > out/report.md");
+  await card.getByRole("button", { name: /编辑后重试/ }).click();
+  await expect(page.locator(".a2ui-approval-result")).toHaveText(
+    "已拒绝原操作，按修改后的命令重试",
+  );
 });
 
 test("dangerous approvals show a risk label and require a second confirmation", async ({

@@ -757,6 +757,40 @@ html[data-theme="light"] .a2ui-surface {
   outline-offset: 1px;
 }
 
+.a2ui-approval-command-editor {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px 12px;
+}
+
+.a2ui-approval-command-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  max-height: 12rem;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+  color: color-mix(in srgb, var(--ink) 92%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.a2ui-approval-command-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--approval-accent-strong) 65%, #fff);
+  outline-offset: 1px;
+}
+
+.a2ui-approval-command-edit-actions {
+  display: grid;
+  grid-template-columns: var(--approval-grid);
+  gap: 8px;
+}
+
 .a2ui-approval-command pre {
   max-height: 12rem;
   margin: 0;

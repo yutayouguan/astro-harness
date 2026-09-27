@@ -1761,6 +1761,27 @@ export function useChatSession({
       name: string,
       context: Record<string, unknown>,
     ) => {
+      // 「编辑后重试」= 拒绝原请求 + 把改好的命令作为下一条用户消息发出。
+      let retryCommand: string | null = null;
+      if (name === "retry_with_command") {
+        const command =
+          typeof context.command === "string" ? context.command.trim() : "";
+        if (!command) {
+          showTransientToast(t("chat.a2ui.approvalRetryCancel"), {
+            tone: "warning",
+          });
+          return;
+        }
+        retryCommand = command;
+        name = "deny";
+      }
+      const finishRetry = () => {
+        if (!retryCommand) return;
+        void send({
+          text: t("chat.a2ui.approvalRetryMessage", { command: retryCommand }),
+          sendMode: "queue",
+        });
+      };
       // 「在终端打开」只是把被拒命令预填给用户自己跑，不回答卡片上的请求。
       if (name === "open_in_terminal") {
         const command = typeof context.command === "string" ? context.command : "";
@@ -1814,6 +1835,7 @@ export function useChatSession({
             response.payload,
             response.persistent,
           );
+          finishRetry();
         } catch (error) {
           showTransientToast(String(error), { tone: "error" });
         }
@@ -1994,6 +2016,7 @@ export function useChatSession({
 
       if (parallelTask) {
         await resumeParallelHitl(messageId, payload, name);
+        finishRetry();
         return;
       }
 
@@ -2031,6 +2054,7 @@ export function useChatSession({
                 },
           ),
         );
+        finishRetry();
       } catch (e) {
         setStreaming(false);
         showTransientToast(
@@ -2046,6 +2070,7 @@ export function useChatSession({
       sessionPendingInterrupts,
       sessionId,
       showTransientToast,
+      send,
       t,
       setStreaming,
       setStreamPaused,
