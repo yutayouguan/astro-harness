@@ -34,6 +34,7 @@ import {
   saveTerminalTabLayout,
   type TerminalTab,
 } from "../../lib/terminal/terminalTabs";
+import type { TerminalPrefillRequest } from "../../lib/chat/terminalPrefill";
 
 type TerminalSessionDto = {
   id: number;
@@ -59,6 +60,8 @@ type Props = {
   projectId: string;
   projectName: string;
   projectRoot: string;
+  /** 外部（审批卡「在终端打开」）请求：新开一个预填命令的标签页。 */
+  prefill?: TerminalPrefillRequest | null;
   onClose: () => void;
 };
 
@@ -374,6 +377,7 @@ export default function TerminalTabsDock({
   projectId,
   projectName,
   projectRoot,
+  prefill = null,
   onClose,
 }: Props) {
   const { t } = useI18n();
@@ -414,6 +418,8 @@ export default function TerminalTabsDock({
   const removedTokensRef = useRef(new Set<string>());
   const resizeDragCleanupRef = useRef<(() => void) | null>(null);
   const startupHostRef = useRef<HTMLDivElement>(null);
+  const prefilledTabsRef = useRef(new Set<string>());
+  const handledPrefillRef = useRef(0);
 
   tabsRef.current = tabs;
   sessionsRef.current = sessions;
@@ -437,6 +443,9 @@ export default function TerminalTabsDock({
         removedTokensRef.current.has(tab.clientId) ||
         !tabsRef.current.some((c) => c.clientId === tab.clientId);
       let lastError: unknown;
+      const sendPrefill =
+        Boolean(tab.prefill) && !prefilledTabsRef.current.has(tab.clientId);
+      if (sendPrefill) prefilledTabsRef.current.add(tab.clientId);
       for (let attempt = 0; attempt <= OPEN_RETRY_DELAYS.length; attempt++) {
         if (wasRemoved()) break;
         if (attempt > 0) {
@@ -460,6 +469,8 @@ export default function TerminalTabsDock({
                 executionMode: tab.executionMode,
                 clientToken: tab.clientId,
                 agentDefault: tab.agentDefault,
+                // 预填只发一次：重试/重连不得把命令再打一遍。
+                initialInput: sendPrefill ? tab.prefill : undefined,
               },
             }),
             TERMINAL_START_TIMEOUT_MS,
@@ -502,6 +513,33 @@ export default function TerminalTabsDock({
     if (!open) return;
     if (activeTab && !activeSession && !activeError) void openTab(activeTab);
   }, [activeError, activeSession, activeTab, open, openTab]);
+
+  useEffect(() => {
+    if (!prefill || prefill.token === handledPrefillRef.current) return;
+    handledPrefillRef.current = prefill.token;
+    const current = tabsRef.current;
+    if (current.length >= MAX_TERMINAL_TABS) {
+      setErrors((errors) => ({
+        ...errors,
+        [activeClientId]: t("chat.terminal.tab.limit", {
+          count: String(MAX_TERMINAL_TABS),
+        }),
+      }));
+      return;
+    }
+    const tab: TerminalTab = {
+      clientId: createTerminalClientId(),
+      title: t("chat.terminal.tab.number", {
+        number: String(current.length + 1),
+      }),
+      cwd: projectRoot,
+      executionMode: settings.executionMode,
+      agentDefault: false,
+      prefill: prefill.command,
+    };
+    setTabs((tabs) => [...tabs, tab]);
+    setActiveClientId(tab.clientId);
+  }, [activeClientId, prefill, projectRoot, settings.executionMode, t]);
 
   const createTab = useCallback(() => {
     if (tabsRef.current.length >= MAX_TERMINAL_TABS) {

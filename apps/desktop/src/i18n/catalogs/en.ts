@@ -1306,6 +1306,7 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.approvalAlwaysHint": "Skip prompts when this rule matches",
   "chat.a2ui.approvalType": "Always allow similar {type} commands",
   "chat.a2ui.approvalTypeHint": "Only the same program and low-risk reason",
+  "chat.a2ui.approvalOpenInTerminal": "Open in terminal (prefilled, not run)",
   "chat.a2ui.approvalRiskDangerous": "High risk",
   "chat.a2ui.approvalRiskSensitive": "Sensitive",
   "chat.a2ui.approvalRiskConfirmTitle": "Confirm again",

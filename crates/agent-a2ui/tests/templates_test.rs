@@ -153,6 +153,7 @@ fn sandbox_retry_template_uses_semantic_metadata_without_user_facing_copy() {
     let ops = a2ui::templates::build_sandbox_retry_surface(
         "surf-sandbox-retry",
         "sh: /tmp/demo.md: Operation not permitted",
+        Some("cat /tmp/demo.md > out.txt"),
     );
     let wizard = ops
         .iter()
@@ -169,6 +170,8 @@ fn sandbox_retry_template_uses_semantic_metadata_without_user_facing_copy() {
     );
     assert!(wizard.get("title").is_none());
     assert!(wizard.get("body").is_none());
+    // 被拒命令要下发给卡片：既能展示，也供「在终端打开」预填。
+    assert_eq!(wizard["approvalCommand"], "cat /tmp/demo.md > out.txt");
     validate_operations(&ops).unwrap();
 }
 

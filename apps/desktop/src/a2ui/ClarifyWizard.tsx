@@ -446,10 +446,20 @@ export default function ClarifyWizard({
       .join("\n");
 
     const content = isSandboxRetry
-      ? {
-          description: t("chat.a2ui.sandboxRetryDescription"),
-          command: approvalDetail ?? "",
-        }
+      ? approvalCommand
+        ? {
+            description: [
+              t("chat.a2ui.sandboxRetryDescription"),
+              approvalDetail ?? "",
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            command: approvalCommand,
+          }
+        : {
+            description: t("chat.a2ui.sandboxRetryDescription"),
+            command: approvalDetail ?? "",
+          }
       : isNetwork
         ? { description: networkDescription, command: approvalDetail ?? "" }
         : parseApprovalContent(approvalBody ?? step.question);
@@ -460,7 +470,9 @@ export default function ClarifyWizard({
         : approvalTitle || step.question;
     const commandText = content.command ?? "";
     const commandLabel = isSandboxRetry
-      ? t("chat.a2ui.sandboxRetryDetail")
+      ? approvalCommand
+        ? t("chat.a2ui.approvalCommand")
+        : t("chat.a2ui.sandboxRetryDetail")
       : isNetwork
         ? t("chat.a2ui.networkTarget")
         : t("chat.a2ui.approvalCommand");
@@ -608,6 +620,24 @@ export default function ClarifyWizard({
               <code>{commandText}</code>
             </pre>
           </div>
+        ) : null}
+
+        {isSandboxRetry && approvalCommand ? (
+          <button
+            type="button"
+            className="a2ui-approval-open-terminal"
+            onClick={() =>
+              onAction("open_in_terminal", { command: approvalCommand })
+            }
+          >
+            <TerminalSquare size={15} strokeWidth={2} aria-hidden />
+            <span>{t("chat.a2ui.approvalOpenInTerminal")}</span>
+            <ArrowRight
+              className="a2ui-approval-always-arrow"
+              size={16}
+              aria-hidden
+            />
+          </button>
         ) : null}
 
         <div className="a2ui-approval-footer">

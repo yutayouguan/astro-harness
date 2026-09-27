@@ -20,7 +20,12 @@ const meta = {
     let terminal: Terminal | undefined;
     let nextId = 1;
     const sessions = new Map<number, number[]>();
-    const requests: { command: string; cols?: number; rows?: number }[] = [];
+    const requests: {
+      command: string;
+      cols?: number;
+      rows?: number;
+      initialInput?: string;
+    }[] = [];
     const originalOpen = Terminal.prototype.open;
     Terminal.prototype.open = function (parent: HTMLElement) {
       terminal = this;
@@ -47,12 +52,18 @@ const meta = {
             cursor: number;
             scope: string;
             cwd: string;
+            initialInput?: string;
           };
         }
       )?.request;
       if (command === "set_app_menu_locale") return null;
       if (command === "terminal_open") {
-        requests.push({ command, cols: request!.cols, rows: request!.rows });
+        requests.push({
+          command,
+          cols: request!.cols,
+          rows: request!.rows,
+          initialInput: request!.initialInput,
+        });
         const id = nextId++;
         const data = Array.from(
           new TextEncoder().encode(startup(request!.cols)),
@@ -126,3 +137,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Narrow: Story = {};
 export const SplitOutput: Story = {};
+// 审批卡「在终端打开」：dock 收到外部 prefill 请求时新开一个预填命令的标签页。
+export const Prefilled: Story = {
+  args: {
+    prefill: { token: 1, command: "cat README.md" },
+  },
+};

@@ -789,6 +789,39 @@ html[data-theme="light"] .a2ui-surface {
   background-clip: content-box;
 }
 
+.a2ui-approval-open-terminal {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 2px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: var(--approval-radius);
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.a2ui-approval-open-terminal:hover {
+  border-color: color-mix(in srgb, var(--ink) 22%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.a2ui-approval-open-terminal:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--approval-accent-strong) 65%, #fff);
+  outline-offset: 2px;
+}
+
 .a2ui-approval-footer {
   display: flex;
   flex-direction: column;

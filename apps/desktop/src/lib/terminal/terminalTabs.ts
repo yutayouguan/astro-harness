@@ -9,6 +9,8 @@ export type TerminalTab = {
   cwd: string;
   executionMode: TerminalExecutionMode;
   agentDefault: boolean;
+  /** 首次打开时预填到 shell 的命令（不执行）；发送后清空，重连不重复。 */
+  prefill?: string;
 };
 
 type StoredLayout = {

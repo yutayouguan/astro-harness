@@ -67,6 +67,8 @@ pub(crate) enum ConfirmPresentation<'a> {
     },
     SandboxRetry {
         denial_detail: &'a str,
+        /// 被沙箱拒绝的那条命令：卡片展示 + 「在终端打开」预填用。
+        command: Option<&'a str>,
     },
 }
 
@@ -95,9 +97,12 @@ pub(crate) async fn park_confirm(
                 risk,
             ),
         ),
-        ConfirmPresentation::SandboxRetry { denial_detail } => (
+        ConfirmPresentation::SandboxRetry {
+            denial_detail,
+            command,
+        } => (
             "sandbox_retry",
-            a2ui::templates::build_sandbox_retry_surface(&surface_id, denial_detail),
+            a2ui::templates::build_sandbox_retry_surface(&surface_id, denial_detail, command),
         ),
     };
     let ops_value = serde_json::Value::Array(operations);

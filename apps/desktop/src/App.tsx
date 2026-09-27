@@ -164,6 +164,10 @@ import type { WallpaperChatHandoff } from "./components/settings/WallpaperSettin
 
 // 首屏只保留聊天主链路，重面板按需加载（局部打开的文件/终端/浏览器同样处理）。
 const TerminalDock = lazy(() => import("./components/chat/TerminalTabsDock"));
+import {
+  TERMINAL_PREFILL_EVENT,
+  type TerminalPrefillRequest,
+} from "./lib/chat/terminalPrefill";
 const BrowserDock = lazy(() => import("./components/chat/BrowserDock"));
 const ChatReviewPanel = lazy(() => import("./components/chat/ChatReviewPanel"));
 const ProjectFileEditor = lazy(
@@ -622,6 +626,8 @@ export default function App() {
   const [browserComposerOverlayOpen, setBrowserComposerOverlayOpen] =
     useState(false);
   const [terminalDockOpen, setTerminalDockOpen] = useState(false);
+  const [terminalPrefill, setTerminalPrefill] =
+    useState<TerminalPrefillRequest | null>(null);
   const [reviewState, setReviewState] = useState<{
     files: FileChangeItem[];
     selectedPath: string;
@@ -940,6 +946,18 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [activeProjectRoot, nav]);
+
+  // ── 审批卡「在终端打开」：打开 dock 并预填命令（不执行） ──────────────
+  useEffect(() => {
+    const onPrefill = (event: Event) => {
+      const detail = (event as CustomEvent<TerminalPrefillRequest>).detail;
+      if (!detail?.command) return;
+      setTerminalPrefill(detail);
+      setTerminalDockOpen(true);
+    };
+    window.addEventListener(TERMINAL_PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(TERMINAL_PREFILL_EVENT, onPrefill);
+  }, []);
 
   // ── macOS open-preferences / open-about listener ─────────────────────────
   useEffect(() => {
@@ -2787,6 +2805,7 @@ export default function App() {
                           projectId={activeProject.id}
                           projectName={activeProject.name}
                           projectRoot={activeProjectRoot}
+                          prefill={terminalPrefill}
                           onClose={() => setTerminalDockOpen(false)}
                         />
                       </Suspense>

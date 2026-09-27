@@ -29,3 +29,24 @@ test(`zsh startup stays on row zero at font size ${fontSize} (${story})`, async 
   expect(reopened[1].cols).toBe((await screen()).cols);
 });
 }
+
+test("prefill request opens a tab whose shell gets the command without running it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 720, height: 500 });
+  await page.goto(`/iframe.html?id=chat-terminalstartup--prefilled&viewMode=story`);
+  await expect(page.locator(".xterm")).toBeVisible();
+
+  const opened = await page.evaluate(() =>
+    (window as any).terminalStartupPreview.requests.filter(
+      (r: any) => r.command === "terminal_open",
+    ),
+  );
+  // 预填只随首次打开下发：命令只是被写进 shell，不追加换行（不执行）。
+  expect(
+    opened.some((r: any) => r.initialInput === "cat README.md"),
+  ).toBeTruthy();
+  expect(
+    opened.filter((r: any) => r.initialInput === "cat README.md"),
+  ).toHaveLength(1);
+});

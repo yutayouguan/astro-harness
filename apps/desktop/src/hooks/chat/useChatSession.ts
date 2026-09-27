@@ -60,6 +60,7 @@ import {
 } from "../../lib/chat/projectResponseItemsToEntries";
 import { findLastUserEntryIndex } from "../../lib/chat/turnEditing";
 import { dispatchSessionsChanged } from "../../lib/chat/sessionManagement";
+import { openCommandInTerminal } from "../../lib/chat/terminalPrefill";
 import type {
   ArtifactDto,
   ChatAttachment,
@@ -1760,6 +1761,14 @@ export function useChatSession({
       name: string,
       context: Record<string, unknown>,
     ) => {
+      // 「在终端打开」只是把被拒命令预填给用户自己跑，不回答卡片上的请求。
+      if (name === "open_in_terminal") {
+        const command = typeof context.command === "string" ? context.command : "";
+        if (command && !openCommandInTerminal(command)) {
+          showTransientToast("命令为空，无法预填到终端", { tone: "warning" });
+        }
+        return;
+      }
       const parallelTask = parallelTasks.find(
         (t) =>
           t.assistantMessageId === messageId &&

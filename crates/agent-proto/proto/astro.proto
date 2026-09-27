@@ -545,6 +545,9 @@ message TerminalOpenRequest {
   string client_token = 7;
   // Marks a project-sandbox tab as the implicit target for AI terminal tools.
   bool agent_default = 8;
+  // Prefill written to the fresh shell without executing it (no trailing newline).
+  // Used by "open in terminal" affordances so the user can review before running.
+  string initial_input = 9;
 }
 
 message TerminalIdRequest { uint64 id = 1; }

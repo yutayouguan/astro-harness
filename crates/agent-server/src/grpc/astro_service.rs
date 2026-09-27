@@ -110,6 +110,16 @@ fn mcp_server_info(status: mcp::ServerStatus) -> proto::McpServerInfo {
     }
 }
 
+/// 终端预填内容只允许"尚未执行的命令行"：去掉结尾换行后若仍含换行就放弃预填，
+/// 避免把多行脚本的前几行喂给 shell 执行。
+fn terminal_prefill_bytes(initial_input: &str) -> Option<Vec<u8>> {
+    let trimmed = initial_input.trim_end_matches(['\n', '\r']);
+    if trimmed.is_empty() || trimmed.contains(['\n', '\r']) {
+        return None;
+    }
+    Some(trimmed.as_bytes().to_vec())
+}
+
 fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessionResponse {
     TerminalSessionResponse {
         id: info.id,
@@ -2687,6 +2697,12 @@ impl AstroService for AstroServiceImpl {
         .await
         .map_err(|error| Status::internal(format!("terminal startup task failed: {error}")))?
         .map_err(|error| Status::invalid_argument(error.to_string()))?;
+        if let Some(prefill) = terminal_prefill_bytes(&req.initial_input) {
+            // 预填失败不影响开会话：用户仍可手动输入。
+            if let Err(error) = tools::shared_terminal_sessions().write(info.id, &prefill) {
+                tracing::warn!(error = %error, terminal = info.id, "terminal prefill failed");
+            }
+        }
         Ok(Response::new(terminal_session_response(info)))
     }
 

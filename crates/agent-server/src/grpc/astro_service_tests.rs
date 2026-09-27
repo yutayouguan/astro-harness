@@ -2492,3 +2492,16 @@ async fn thread_attachment_rpcs_round_trip_and_remove() {
     assert!(removed.removed);
     assert_eq!(removed.attachment.unwrap().identity_key, "notes.md");
 }
+
+#[test]
+fn terminal_prefill_only_accepts_a_single_unexecuted_line() {
+    assert_eq!(
+        terminal_prefill_bytes("cat README.md\n"),
+        Some(b"cat README.md".to_vec())
+    );
+    assert_eq!(terminal_prefill_bytes("  ls  "), Some(b"  ls  ".to_vec()));
+    assert_eq!(terminal_prefill_bytes(""), None);
+    assert_eq!(terminal_prefill_bytes("\n"), None);
+    // 多行脚本不能预填：否则前几行会立刻执行。
+    assert_eq!(terminal_prefill_bytes("rm -rf /\necho done"), None);
+}

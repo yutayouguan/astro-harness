@@ -234,6 +234,8 @@ const sandboxRetrySurface: UiSurface = {
             approvalKind: "sandbox_retry",
             approvalDetail:
               "sandbox denied write to /Users/me/project/out/report.md (read-only profile)",
+            approvalCommand:
+              "cat /Users/me/project/in/report.md > /Users/me/project/out/report.md",
             steps: [
               {
                 id: "confirm",

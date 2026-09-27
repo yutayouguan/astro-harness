@@ -97,12 +97,29 @@ test("sandbox retry authorization stays a one-shot decision", async ({
 
   await expect(card.locator(".a2ui-approval-eyebrow")).toHaveText("需要授权");
   await expect(card.locator(".a2ui-approval-title")).toHaveText("在沙箱外重试");
+  // 有被拒命令时命令块放命令本身，拒绝详情进描述。
   await expect(card.locator(".a2ui-approval-command-label")).toContainText(
-    "沙箱拒绝详情",
+    "待执行命令",
+  );
+  await expect(card.locator(".a2ui-approval-description")).toContainText(
+    "sandbox denied write to /Users/me/project/out/report.md",
   );
   // 只授予本次：没有长期授权行。
   await expect(card.locator(".a2ui-approval-actions button")).toHaveCount(2);
   await expect(card.locator(".a2ui-approval-persistent-actions")).toHaveCount(0);
+
+  // 被拒命令要能看见，并且能一键预填到终端（不执行、也不算回答请求）。
+  await expect(card.locator(".a2ui-approval-command code")).toContainText(
+    "cat /Users/me/project/in/report.md",
+  );
+  const openInTerminal = card.getByRole("button", {
+    name: /在终端打开/,
+  });
+  await expect(openInTerminal).toBeVisible();
+  await openInTerminal.click();
+  // 卡片保持打开：这是旁路动作，不是批准/拒绝。
+  await expect(card).toBeVisible();
+  await expect(page.locator(".a2ui-approval-result")).toHaveCount(0);
 });
 
 test("dangerous approvals show a risk label and require a second confirmation", async ({

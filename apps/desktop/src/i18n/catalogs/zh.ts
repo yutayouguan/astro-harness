@@ -1212,6 +1212,7 @@ export const zh = {
   "chat.a2ui.approvalAlwaysHint": "以后匹配此规则时不再询问",
   "chat.a2ui.approvalType": "始终允许 {type} 同类命令",
   "chat.a2ui.approvalTypeHint": "仅限相同程序与相同低风险原因",
+  "chat.a2ui.approvalOpenInTerminal": "在终端打开（预填不执行）",
   "chat.a2ui.approvalRiskDangerous": "高风险",
   "chat.a2ui.approvalRiskSensitive": "敏感",
   "chat.a2ui.approvalRiskConfirmTitle": "再次确认",

@@ -24,6 +24,8 @@ pub struct CronJobDto {
     pub show_in_chat: bool,
     /// 归档时间；非空表示任务已归档（不参与调度，可恢复）
     pub archived_at: Option<String>,
+    /// 是否有正在执行的运行记录；运行中不允许删除或归档
+    pub running: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,8 +134,8 @@ fn default_agent() -> String {
     home::DEFAULT_AGENT_ID.into()
 }
 
-/// CronJob → 前端任务 DTO。
-fn job_to_dto(j: cron::CronJob) -> CronJobDto {
+/// CronJob → 前端任务 DTO；`running` 由调用方按运行记录给出。
+fn job_to_dto(j: cron::CronJob, running: bool) -> CronJobDto {
     CronJobDto {
         id: j.id,
         schedule: j.schedule,
@@ -148,7 +150,35 @@ fn job_to_dto(j: cron::CronJob) -> CronJobDto {
         next_run_at: j.next_run_at,
         show_in_chat: j.show_in_chat,
         archived_at: j.archived_at,
+        running,
     }
+}
+
+/// 正在执行的运行记录对应的任务 id 集合。
+///
+/// 先回收孤儿 running 行，避免进程退出留下的记录把任务永久锁在「运行中」。
+async fn running_job_ids() -> Result<std::collections::HashSet<String>, String> {
+    let _ = agent::exec::cron::reconcile_orphaned_runs().await;
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(db
+        .list_running()
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|row| row.job_id)
+        .collect())
+}
+
+/// 单个任务的运行状态（供 add / update / archive 返回 DTO 时使用）。
+async fn is_job_running(job_id: &str) -> Result<bool, String> {
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    db.has_running_for_job(job_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// CronRun → 前端运行记录 DTO。
@@ -224,7 +254,14 @@ pub async fn list_cron_jobs() -> Result<Vec<CronJobDto>, String> {
     bootstrap_workspace()?;
     let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
     let jobs = store.list().map_err(|e| e.to_string())?;
-    Ok(jobs.into_iter().map(job_to_dto).collect())
+    let running = running_job_ids().await.unwrap_or_default();
+    Ok(jobs
+        .into_iter()
+        .map(|job| {
+            let is_running = running.contains(&job.id);
+            job_to_dto(job, is_running)
+        })
+        .collect())
 }
 
 /// 用 Extractor 从自然语言提炼 schedule/task/title（不落库，仅填表）。
@@ -322,7 +359,7 @@ pub async fn add_cron_job(args: AddCronJobArgs) -> Result<CronJobDto, String> {
             show_in_chat: args.show_in_chat,
         })
         .map_err(|e| e.to_string())?;
-    Ok(job_to_dto(j))
+    Ok(job_to_dto(j, false))
 }
 
 /// 更新定时任务。
@@ -345,7 +382,8 @@ pub async fn update_cron_job(args: UpdateCronJobArgs) -> Result<CronJobDto, Stri
         )
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "未找到定时任务".to_string())?;
-    Ok(job_to_dto(j))
+    let running = is_job_running(&j.id).await.unwrap_or(false);
+    Ok(job_to_dto(j, running))
 }
 
 /// 归档 / 恢复定时任务。
@@ -386,7 +424,8 @@ pub async fn archive_cron_job(id: String, archived: bool) -> Result<CronJobDto, 
             let _ = sessions.archive_session(&session_id).await;
         }
     }
-    Ok(job_to_dto(job))
+    // 归档路径在运行中会提前返回，恢复路径不会有在跑的记录
+    Ok(job_to_dto(job, false))
 }
 
 /// 删除定时任务。

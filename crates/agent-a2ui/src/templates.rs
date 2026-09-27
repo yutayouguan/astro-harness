@@ -75,7 +75,11 @@ pub fn build_confirm_surface_with_rule(
 
 /// 沙箱重试审批表面。面向用户的文案由前端 locale 解析；
 /// 后端仅发送语义类型和原始拒绝详情。
-pub fn build_sandbox_retry_surface(surface_id: &str, denial_detail: &str) -> Vec<Value> {
+pub fn build_sandbox_retry_surface(
+    surface_id: &str,
+    denial_detail: &str,
+    command: Option<&str>,
+) -> Vec<Value> {
     let components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
@@ -89,6 +93,7 @@ pub fn build_sandbox_retry_surface(surface_id: &str, denial_detail: &str) -> Vec
             "variant": "approval",
             "approvalKind": "sandbox_retry",
             "approvalDetail": denial_detail,
+            "approvalCommand": command,
             "steps": [{
                 "id": "confirm",
                 "question": "sandbox_retry",

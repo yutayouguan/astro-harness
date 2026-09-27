@@ -36,6 +36,8 @@ pub struct TerminalOpenDto {
     pub execution_mode: Option<String>,
     pub client_token: Option<String>,
     pub agent_default: Option<bool>,
+    /// 预填到新 shell 的命令（不执行）：见「在终端打开」。
+    pub initial_input: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,6 +104,7 @@ pub async fn terminal_open(request: TerminalOpenDto) -> Result<TerminalSessionDt
             replace_mode_mismatch: client_token.trim().is_empty(),
             client_token,
             agent_default: request.agent_default.unwrap_or(false),
+            initial_input: request.initial_input.unwrap_or_default(),
         }),
     )
     .await

@@ -1079,6 +1079,7 @@ async fn review_sandbox_denial(
         .chars()
         .take(800)
         .collect::<String>();
+    let command_preview = request.command_preview.clone();
     let audit = PermissionAuditReceipt::new(
         session.memory_dir().to_path_buf(),
         &settings,
@@ -1095,6 +1096,7 @@ async fn review_sandbox_denial(
         "surface=permission reason=sandbox_denied",
         ConfirmPresentation::SandboxRetry {
             denial_detail: &denial_detail,
+            command: command_preview.as_deref(),
         },
     )
     .await
