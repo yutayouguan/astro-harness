@@ -133,6 +133,11 @@ pub enum Op {
         id: String,
         response: RequestUserInputResponse,
     },
+    /// Codex 对齐：权限请求的应答通道。
+    ///
+    /// 生产侧已由 `request_permissions` 工具的 confirm preflight 发出
+    /// `EventMsg::RequestPermissions`；但答复目前走 confirm 的 HITL resume，
+    /// 还没有客户端卡片会产生这个 op——保留为协议对齐位。
     RequestPermissionsResponse {
         id: String,
         response: RequestPermissionsResponse,

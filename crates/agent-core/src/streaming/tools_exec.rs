@@ -11,8 +11,9 @@ use crate::runtime::{
     AgentLoop, StepContext, ToolCallRuntime, ToolExecutionGrants, ToolInvocation, TurnContext,
 };
 
+use agent_protocol::{ControlRequestEvent, EventMsg};
 use super::hitl_bridge::{park_astro_hitl, park_confirm, parse_astro_hitl, ConfirmPresentation};
-use super::lifecycle::emit_async_agent_message;
+use super::lifecycle::{emit, emit_async_agent_message};
 
 use crate::control::smart_approval::{SmartApprovalContext, TurnSummary};
 
@@ -892,6 +893,7 @@ fn sanitize_grant_path(raw: &str, memory_dir: &std::path::Path) -> Result<std::p
 /// workspace-write + 额外可写根记到会话上，由 `sandbox_policy_for_call` 生效。
 async fn preflight_request_permissions(
     session: &Arc<AgentLoop>,
+    profile: Option<&str>,
     call: &types::ParsedToolCall,
     turn_context: &TurnContext,
     hitl_gate: Option<&Arc<HitlGate>>,
@@ -953,6 +955,65 @@ async fn preflight_request_permissions(
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>()
         .join("、");
+    // 安全审计：请求、批准、拒绝各记一条，和命令类审批保持一致。
+    let settings = memory::load_permission_settings(session.memory_dir());
+    let profile_id = profile
+        .unwrap_or(settings.selection.profile_id.as_str())
+        .to_string();
+    let audit = PermissionAuditReceipt::new(
+        session.memory_dir().to_path_buf(),
+        &settings,
+        profile_id.clone(),
+        types::PermissionRequest {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            session_id: session.session_id().to_string(),
+            turn_id: Some(turn_context.sub_id().to_string()),
+            tool_call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            summary: format!(
+                "Session write access requested for {} path(s)",
+                writable_roots.len()
+            ),
+            capabilities: vec![types::PermissionCapability::FileWrite {
+                paths: writable_roots
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+            }],
+            reason: types::PermissionReason::OutsideWritableRoots,
+            requested_scope: types::GrantScope::Session,
+            command_preview: None,
+            affected_paths: writable_roots
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect(),
+            network_hosts: Vec::new(),
+        },
+        session.config.thread_memory_mode,
+    );
+    audit.record(memory::PermissionAuditKind::Requested, None, Some("model"), None);
+    // Codex 对齐事件：权限请求在 rollout/观察者侧也留痕（回答仍走 confirm HITL）。
+    emit(
+        session,
+        turn_context,
+        EventMsg::RequestPermissions(ControlRequestEvent {
+            turn_id: turn_context.sub_id().to_string(),
+            item_id: call.id.clone(),
+            request_id: format!("permission-{}", call.id),
+            payload: serde_json::json!({
+                "reason": "outside_writable_roots",
+                "scope": "session",
+                "profile": profile_id.clone(),
+                "paths": writable_roots
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>(),
+                "rejected": rejected,
+                "network_requested": network_requested,
+            }),
+        }),
+    )
+    .await;
     let Some(gate) = hitl_gate else {
         return Some(PermissionPreflight::Handled(format!(
             "Permission request NOT applied: 需要用户批准（{listed}），但当前没有可用的确认通道。"
@@ -985,10 +1046,22 @@ async fn preflight_request_permissions(
     )
     .await?;
     if !confirm.approved {
+        audit.record(
+            memory::PermissionAuditKind::Denied,
+            None,
+            Some("user_denied"),
+            None,
+        );
         return Some(PermissionPreflight::Handled(format!(
             "Permission request NOT applied: 用户拒绝了对 {listed} 的会话级写入授权。不要重试同一路径，改用工作区内路径或请用户调整权限预设。"
         )));
     }
+    audit.record(
+        memory::PermissionAuditKind::Granted,
+        None,
+        Some("user_approved_session"),
+        None,
+    );
     session.grant_permissions(crate::runtime::PermissionGrants {
         workspace_write: true,
         writable_roots: writable_roots.clone(),
@@ -1880,7 +1953,15 @@ async fn authorize_tool_call(
         return Some(ToolAuthorization::Authorized(authorization));
     }
 
-    match preflight_request_permissions(session, call, turn_context, hitl_gate).await? {
+    match preflight_request_permissions(
+        session,
+        step_context.turn.permission_profile(),
+        call,
+        turn_context,
+        hitl_gate,
+    )
+    .await?
+    {
         PermissionPreflight::NotRequired => {}
         PermissionPreflight::Handled(text) => {
             return Some(ToolAuthorization::Completed(text.into()));
@@ -2978,7 +3059,7 @@ mod tests {
         let gate = HitlGate::new(session.session_id().to_string());
         let responder = park_and_resolve(&gate, true).await;
 
-        let outcome = preflight_request_permissions(&session, &call, &turn, Some(&gate))
+        let outcome = preflight_request_permissions(&session, None, &call, &turn, Some(&gate))
             .await
             .expect("permission preflight outcome");
         responder.await.unwrap();
@@ -2987,6 +3068,12 @@ mod tests {
             panic!("expected handled permission request");
         };
         assert!(text.contains("Permission granted for this session"), "{text}");
+        // 安全审计：请求 + 批准各一条。
+        let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
+            .expect("permission audit written");
+        assert!(audit.contains("permission.requested"), "{audit}");
+        assert!(audit.contains("permission.granted"), "{audit}");
+        assert!(audit.contains("shared-out"), "{audit}");
         // 相对路径被净化掉：授权结果里只出现绝对根。
         assert!(!text.contains("relative/path"), "{text}");
 
@@ -3032,7 +3119,7 @@ mod tests {
         let gate = HitlGate::new(session.session_id().to_string());
         let responder = park_and_resolve(&gate, false).await;
 
-        let outcome = preflight_request_permissions(&session, &call, &turn, Some(&gate))
+        let outcome = preflight_request_permissions(&session, None, &call, &turn, Some(&gate))
             .await
             .expect("permission preflight outcome");
         responder.await.unwrap();
@@ -3042,6 +3129,10 @@ mod tests {
         };
         assert!(text.contains("用户拒绝"), "{text}");
         assert!(session.permission_grants().is_empty());
+        let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
+            .expect("permission audit written");
+        assert!(audit.contains("permission.denied"), "{audit}");
+        assert!(!audit.contains("permission.granted"), "{audit}");
     }
 
     #[tokio::test]
