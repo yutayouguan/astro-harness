@@ -16,6 +16,7 @@ const approval: PendingInteraction = {
   requestId: "r1",
   toolCallId: "call1",
   kind: "approval",
+  reason: "confirmation",
   message: "读取项目文件",
   operations: [
     {
@@ -64,6 +65,7 @@ const question: PendingInteraction = {
   requestId: "r2",
   toolCallId: "call2",
   kind: "question",
+  reason: "input_required",
   message: "请选择部署环境",
   operations: [],
   actions: [],

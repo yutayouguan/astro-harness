@@ -38,6 +38,9 @@ pub struct PendingInteraction {
     pub request_id: String,
     pub tool_call_id: String,
     pub kind: String,
+    /// HITL 挂起原因（`confirmation` / `network_approval` / `input_required` …）。
+    /// 消费端据此区分授权语义，不要再用动作 id 猜。
+    pub reason: String,
     pub message: String,
     pub operations: Value,
     pub response_schema: Value,

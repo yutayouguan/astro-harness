@@ -93,6 +93,7 @@ fn confirm_template_exposes_persistent_approval_without_ui_copy_in_protocol() {
         "批准危险命令",
         "检测到潜在危险操作\n\n```\necho ok\n```",
         true,
+        Some("dangerous"),
     );
     let wizard = ops
         .iter()
@@ -110,6 +111,11 @@ fn confirm_template_exposes_persistent_approval_without_ui_copy_in_protocol() {
         wizard.pointer("/steps/0/options"),
         Some(&serde_json::json!(["approve", "deny", "approve_always"]))
     );
+    // 风险档位随表面下发：前端据此显示风险标签并追加确认。
+    assert_eq!(
+        wizard.get("approvalRisk").and_then(Value::as_str),
+        Some("dangerous")
+    );
 }
 
 #[test]
@@ -120,6 +126,7 @@ fn confirm_template_can_expose_a_scoped_command_type_rule() {
         "dynamic shell expansion",
         true,
         Some("curl"),
+        None,
     );
     let wizard = ops
         .iter()

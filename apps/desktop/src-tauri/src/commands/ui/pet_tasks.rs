@@ -762,6 +762,7 @@ mod tests {
                     request_id: (*id).into(),
                     tool_call_id: "call".into(),
                     kind: "question".into(),
+                    reason: "input_required".into(),
                     message: "question".into(),
                     operations: serde_json::Value::Null,
                     response_schema: serde_json::Value::Null,

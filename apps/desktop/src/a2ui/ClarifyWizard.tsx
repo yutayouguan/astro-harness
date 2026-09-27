@@ -49,6 +49,8 @@ type Props = {
   approvalProfile?: string;
   /** network 授权：触发连接的命令预览。 */
   approvalCommand?: string;
+  /** 风险档位（`dangerous` / `sensitive`）：高风险会在批准前追加一道内联确认。 */
+  approvalRisk?: string;
   disabled?: boolean;
   deferCommit?: boolean;
   initialDraft?: {
@@ -90,6 +92,7 @@ export default function ClarifyWizard({
   approvalHost,
   approvalProfile,
   approvalCommand,
+  approvalRisk,
   disabled = false,
   deferCommit = false,
   initialDraft,
@@ -115,6 +118,7 @@ export default function ClarifyWizard({
     null,
   );
   const [approvalCopied, setApprovalCopied] = useState(false);
+  const [approveSecondThought, setApproveSecondThought] = useState(false);
   const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
 
@@ -461,6 +465,15 @@ export default function ClarifyWizard({
         ? t("chat.a2ui.networkTarget")
         : t("chat.a2ui.approvalCommand");
 
+    const riskLabel =
+      approvalRisk === "dangerous"
+        ? t("chat.a2ui.approvalRiskDangerous")
+        : approvalRisk === "sensitive"
+          ? t("chat.a2ui.approvalRiskSensitive")
+          : null;
+    // 高风险操作：主批准按钮先落到一道内联确认，避免误击直接执行。
+    const needsApproveConfirm = approvalRisk === "dangerous";
+
     // 长期/会话级动作：网络授权是 会话 → 主机，其余是 永久 → 同类命令。
     const persistentActions: {
       key: string;
@@ -547,10 +560,20 @@ export default function ClarifyWizard({
               )}
             </span>
             <div className="a2ui-approval-heading">
-              <span className="a2ui-approval-eyebrow">
-                {authorization
-                  ? t("chat.a2ui.approvalAuthorization")
-                  : t("chat.a2ui.approvalRequired")}
+              <span className="a2ui-approval-labels">
+                <span className="a2ui-approval-eyebrow">
+                  {authorization
+                    ? t("chat.a2ui.approvalAuthorization")
+                    : t("chat.a2ui.approvalRequired")}
+                </span>
+                {riskLabel ? (
+                  <span
+                    className={`a2ui-approval-risk is-${approvalRisk}`}
+                    title={riskLabel}
+                  >
+                    {riskLabel}
+                  </span>
+                ) : null}
               </span>
               <h3 id={approvalTitleId} className="a2ui-approval-title">
                 {renderedTitle}
@@ -588,32 +611,69 @@ export default function ClarifyWizard({
         ) : null}
 
         <div className="a2ui-approval-footer">
-          <div className="a2ui-approval-actions">
-            <button
-              type="button"
-              className="a2ui-approval-action is-deny"
-              disabled={disabled}
-              onClick={() => submitApproval(actions.deny.id)}
+          {needsApproveConfirm && approveSecondThought ? (
+            <div
+              className="a2ui-approval-second-thoughts"
+              role="group"
+              aria-label={t("chat.a2ui.approvalRiskConfirmTitle")}
             >
-              <X size={17} strokeWidth={2.2} aria-hidden />
-              <span className="a2ui-approval-action-copy">
-                <strong>{actions.deny.label}</strong>
-                <small>{actions.deny.hint}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="a2ui-approval-action is-approve"
-              disabled={disabled}
-              onClick={() => submitApproval(actions.once.id)}
-            >
-              <Check size={17} strokeWidth={2.3} aria-hidden />
-              <span className="a2ui-approval-action-copy">
-                <strong>{actions.once.label}</strong>
-                <small>{actions.once.hint}</small>
-              </span>
-            </button>
-          </div>
+              <p>{t("chat.a2ui.approvalRiskConfirmBody")}</p>
+              <div className="a2ui-approval-second-thoughts-actions">
+                <button
+                  type="button"
+                  className="a2ui-approval-action is-ghost"
+                  onClick={() => setApproveSecondThought(false)}
+                >
+                  <span className="a2ui-approval-action-copy">
+                    <strong>{t("chat.a2ui.approvalRiskBack")}</strong>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="a2ui-approval-action is-approve"
+                  disabled={disabled}
+                  onClick={() => submitApproval(actions.once.id)}
+                >
+                  <Check size={17} strokeWidth={2.3} aria-hidden />
+                  <span className="a2ui-approval-action-copy">
+                    <strong>{t("chat.a2ui.approvalRiskConfirm")}</strong>
+                    <small>{actions.once.label}</small>
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="a2ui-approval-actions">
+              <button
+                type="button"
+                className="a2ui-approval-action is-deny"
+                disabled={disabled}
+                onClick={() => submitApproval(actions.deny.id)}
+              >
+                <X size={17} strokeWidth={2.2} aria-hidden />
+                <span className="a2ui-approval-action-copy">
+                  <strong>{actions.deny.label}</strong>
+                  <small>{actions.deny.hint}</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="a2ui-approval-action is-approve"
+                disabled={disabled}
+                onClick={() =>
+                  needsApproveConfirm
+                    ? setApproveSecondThought(true)
+                    : submitApproval(actions.once.id)
+                }
+              >
+                <Check size={17} strokeWidth={2.3} aria-hidden />
+                <span className="a2ui-approval-action-copy">
+                  <strong>{actions.once.label}</strong>
+                  <small>{actions.once.hint}</small>
+                </span>
+              </button>
+            </div>
+          )}
 
           {persistentActions.length > 0 ? (
             <div className="a2ui-approval-persistent-actions">

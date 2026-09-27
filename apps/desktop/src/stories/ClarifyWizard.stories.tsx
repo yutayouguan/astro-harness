@@ -251,3 +251,48 @@ const sandboxRetrySurface: UiSurface = {
 export const ApprovalSandboxRetry: Story = {
   render: () => <ClarifyWizardPreview previewSurface={sandboxRetrySurface} />,
 };
+
+// 与危险命令路径同形：`build_confirm_surface_with_rule(..., risk = Some("dangerous"))`。
+const dangerousApprovalSurface: UiSurface = {
+  ...approvalSurface,
+  messageId: "dangerous-approval-preview",
+  operations: [
+    {
+      createSurface: {
+        surfaceId: "dangerous-approval-preview",
+        catalogId: "astro://a2ui/catalog/v2",
+      },
+    },
+    {
+      updateComponents: {
+        surfaceId: "dangerous-approval-preview",
+        components: [
+          { id: "root", component: "Card", child: "col" },
+          { id: "col", component: "Column", children: ["wizard"] },
+          {
+            id: "wizard",
+            component: "ClarifyWizard",
+            variant: "approval",
+            title: "批准危险命令",
+            body:
+              '检测到潜在危险操作（dynamic shell expansion）：\n\n```sh\nUA="aihot-skill/0.3.6" curl -sS "https://aihot.virxact.com/api/public/items?mode=selected&take=10"\n```',
+            allowAlways: true,
+            approvalTypeLabel: "curl",
+            approvalRisk: "dangerous",
+            steps: [
+              {
+                id: "confirm",
+                question: "批准危险命令",
+                options: ["approve", "deny", "approve_always", "approve_type"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+export const ApprovalDangerous: Story = {
+  render: () => <ClarifyWizardPreview previewSurface={dangerousApprovalSurface} />,
+};

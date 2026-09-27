@@ -104,3 +104,27 @@ test("sandbox retry authorization stays a one-shot decision", async ({
   await expect(card.locator(".a2ui-approval-actions button")).toHaveCount(2);
   await expect(card.locator(".a2ui-approval-persistent-actions")).toHaveCount(0);
 });
+
+test("dangerous approvals show a risk label and require a second confirmation", async ({
+  page,
+}) => {
+  const card = await openApprovalStory(
+    page,
+    "clarify-wizard--approval-dangerous",
+  );
+
+  await expect(card.locator(".a2ui-approval-risk")).toHaveText("高风险");
+  // 第一次点击只落到内联确认，不会被当成批准。
+  await card.locator(".a2ui-approval-action.is-approve").click();
+  await expect(card.locator(".a2ui-approval-second-thoughts")).toBeVisible();
+  await expect(page.locator(".a2ui-approval-result")).toHaveCount(0);
+
+  // 返回后可重新选择；再次批准需要显式确认。
+  await card.getByRole("button", { name: "返回", exact: true }).click();
+  await expect(card.locator(".a2ui-approval-second-thoughts")).toHaveCount(0);
+  await card.locator(".a2ui-approval-action.is-approve").click();
+  await card.getByRole("button", { name: "确认批准" }).click();
+  await expect(page.locator(".a2ui-approval-result")).toHaveText(
+    "已批准本次操作",
+  );
+});

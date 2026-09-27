@@ -4,7 +4,7 @@ use crate::catalog::ASTRO_CATALOG_ID;
 
 /// 构建确认（approve / deny）HITL 表面的 A2UI 操作。
 pub fn build_confirm_surface(surface_id: &str, title: &str, body: &str) -> Vec<Value> {
-    build_confirm_surface_ex(surface_id, title, body, false)
+    build_confirm_surface_ex(surface_id, title, body, false, None)
 }
 
 /// 使用 ClarifyWizard 的 approval 变体构建确认表面，使其在
@@ -14,8 +14,9 @@ pub fn build_confirm_surface_ex(
     title: &str,
     body: &str,
     allow_always: bool,
+    risk: Option<&str>,
 ) -> Vec<Value> {
-    build_confirm_surface_with_rule(surface_id, title, body, allow_always, None)
+    build_confirm_surface_with_rule(surface_id, title, body, allow_always, None, risk)
 }
 
 /// 带可选低风险命令族规则的审批确认表面。
@@ -25,6 +26,7 @@ pub fn build_confirm_surface_with_rule(
     body: &str,
     allow_always: bool,
     command_family: Option<&str>,
+    risk: Option<&str>,
 ) -> Vec<Value> {
     let mut options = vec![json!("approve"), json!("deny")];
     if allow_always {
@@ -50,6 +52,7 @@ pub fn build_confirm_surface_with_rule(
             "body": body,
             "allowAlways": allow_always,
             "approvalTypeLabel": command_family,
+            "approvalRisk": risk,
             "steps": [{
                 "id": "confirm",
                 "question": question,

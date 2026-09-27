@@ -194,6 +194,7 @@ pub async fn snapshot(service: &AstroServiceImpl) -> Result<InteractionSnapshot,
                     request_id: pending.id,
                     tool_call_id: pending.tool_call_id,
                     kind: kind.into(),
+                    reason: pending.reason.clone(),
                     message: pending.message,
                     operations,
                     response_schema,
@@ -240,6 +241,7 @@ pub async fn snapshot(service: &AstroServiceImpl) -> Result<InteractionSnapshot,
                     pending.server_name, pending.request_id
                 ),
                 kind: kind.into(),
+                reason: "elicitation".into(),
                 message: pending
                     .params
                     .get("message")
@@ -366,6 +368,7 @@ mod tests {
             request_id: "id".into(),
             tool_call_id: "call".into(),
             kind: "approval".into(),
+            reason: "confirmation".into(),
             message: "approve".into(),
             operations: Value::Null,
             response_schema: json!({"type":"object","properties":{"approved":{"type":"boolean"}}}),

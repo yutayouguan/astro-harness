@@ -57,6 +57,7 @@ const request: PendingInteraction = {
   requestId: "r",
   toolCallId: "call",
   kind: "question",
+  reason: "input_required",
   message: "原始问题",
   operations: [],
   responseSchema: {

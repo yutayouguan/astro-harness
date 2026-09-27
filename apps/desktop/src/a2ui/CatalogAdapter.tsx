@@ -418,6 +418,11 @@ function CatalogNode({ node, ctx }: { node: A2uiComponent; ctx: RenderCtx }) {
               ? node.approvalCommand
               : undefined
           }
+          approvalRisk={
+            typeof node.approvalRisk === "string"
+              ? node.approvalRisk
+              : undefined
+          }
           disabled={ctx.disabled}
           onAction={ctx.onAction}
         />

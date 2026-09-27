@@ -60,10 +60,9 @@ export default function InteractionCard({
   const steps = wizardSteps(request),
     schema = simpleSchema(request);
   const approval = request.kind === "approval";
-  // 网络类授权（allow_*）与工具批准共用一张卡，只是 eyebrow 与动作作用域不同。
-  const networkScoped = request.actions.some((action) =>
-    action.id.startsWith("allow_"),
-  );
+  // 网络类授权与工具批准共用一张卡，只是 eyebrow 与动作作用域不同；
+  // 用挂起原因判定，不再靠动作 id 猜。
+  const networkScoped = request.reason === "network_approval";
   const details = approval ? parseApprovalContent(approvalDetails(request)) : null;
   const primaryAction = request.actions.find(
     (action) => !action.persistent && action.id !== "deny",

@@ -843,6 +843,7 @@ async fn preflight_read_only_write(
         ConfirmPresentation::Text {
             title: "批准本次写入",
             body: &body,
+            risk: Some("sensitive"),
         },
     )
     .await
@@ -921,6 +922,7 @@ async fn preflight_workflow_tool(
         ConfirmPresentation::Text {
             title: "批准智能工作流",
             body: &body,
+            risk: Some("sensitive"),
         },
     )
     .await
@@ -1021,6 +1023,7 @@ async fn preflight_mcp_tool_approval(
         ConfirmPresentation::Text {
             title: "批准 MCP 工具调用",
             body: &body,
+            risk: None,
         },
     )
     .await
@@ -1587,7 +1590,11 @@ async fn preflight_browser_action(
         session.as_ref(),
         turn_context,
         &call.id,
-        ConfirmPresentation::Text { title, body: &body },
+        ConfirmPresentation::Text {
+            title,
+            body: &body,
+            risk: Some("sensitive"),
+        },
         allow_always,
         None,
     )
@@ -2212,7 +2219,11 @@ async fn execute_tools_serial_inner(
                                     session.as_ref(),
                                     turn_context,
                                     &call.id,
-                                    ConfirmPresentation::Text { title, body: &body },
+                                    ConfirmPresentation::Text {
+                                        title,
+                                        body: &body,
+                                        risk: Some("dangerous"),
+                                    },
                                     true,
                                     command_type_rule
                                         .as_ref()
@@ -3113,6 +3124,7 @@ mod tests {
             ConfirmPresentation::Text {
                 title: "title",
                 body: "body",
+                risk: None,
             },
         )
         .await;
@@ -3150,6 +3162,7 @@ mod tests {
             ConfirmPresentation::Text {
                 title: "title",
                 body: "body",
+                risk: None,
             },
         )
         .await;

@@ -58,8 +58,16 @@ pub(crate) struct ConfirmOutcome {
 }
 
 pub(crate) enum ConfirmPresentation<'a> {
-    Text { title: &'a str, body: &'a str },
-    SandboxRetry { denial_detail: &'a str },
+    Text {
+        title: &'a str,
+        body: &'a str,
+        /// 风险档位（`dangerous` / `sensitive`）：前端据此显示风险标签，
+        /// 并在 `dangerous` 时对"仅本次批准"追加一道内联确认。
+        risk: Option<&'a str>,
+    },
+    SandboxRetry {
+        denial_detail: &'a str,
+    },
 }
 
 /// 弹出 confirm 型 HITL surface，等待用户批准/拒绝。
@@ -76,7 +84,7 @@ pub(crate) async fn park_confirm(
 ) -> Option<ConfirmOutcome> {
     let surface_id = format!("confirm-{}", uuid::Uuid::new_v4());
     let (message, operations) = match presentation {
-        ConfirmPresentation::Text { title, body } => (
+        ConfirmPresentation::Text { title, body, risk } => (
             title,
             a2ui::templates::build_confirm_surface_with_rule(
                 &surface_id,
@@ -84,6 +92,7 @@ pub(crate) async fn park_confirm(
                 body,
                 allow_always,
                 command_family,
+                risk,
             ),
         ),
         ConfirmPresentation::SandboxRetry { denial_detail } => (

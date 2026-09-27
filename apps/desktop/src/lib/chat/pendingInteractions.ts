@@ -17,6 +17,8 @@ export type PendingInteraction = {
   requestId: string;
   toolCallId: string;
   kind: string;
+  /** HITL 挂起原因（`confirmation` / `network_approval` / `input_required` …）。 */
+  reason: string;
   message: string;
   operations: unknown;
   responseSchema: unknown;

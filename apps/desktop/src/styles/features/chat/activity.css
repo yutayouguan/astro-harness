@@ -626,6 +626,59 @@ html[data-theme="light"] .a2ui-surface {
   min-width: 0;
 }
 
+.a2ui-approval-labels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.a2ui-approval-labels .a2ui-approval-eyebrow {
+  margin-bottom: 0;
+}
+
+.a2ui-approval-risk {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--approval-accent-strong) 34%, transparent);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--approval-accent-strong) 86%, var(--ink));
+  background: color-mix(in srgb, var(--approval-accent) 16%, transparent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.a2ui-approval-risk.is-dangerous {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 38%, transparent);
+  color: color-mix(in srgb, var(--danger, #ef4444) 82%, var(--ink));
+  background: color-mix(in srgb, var(--danger, #ef4444) 12%, transparent);
+}
+
+/* 高风险：批准前先落到这一层，避免误击直接执行。 */
+.a2ui-approval-second-thoughts {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 26%, transparent);
+  border-radius: var(--approval-radius);
+  background: color-mix(in srgb, var(--danger, #ef4444) 7%, transparent);
+}
+
+.a2ui-approval-second-thoughts p {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 84%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.a2ui-approval-second-thoughts-actions {
+  display: grid;
+  grid-template-columns: var(--approval-grid);
+  gap: 8px;
+}
+
 .a2ui-approval-eyebrow {
   display: block;
   margin-bottom: 2px;
@@ -795,6 +848,17 @@ html[data-theme="light"] .a2ui-surface {
   color: var(--ink-mute);
   font-size: 0.7rem;
   line-height: 1.35;
+}
+
+.a2ui-approval-action.is-ghost {
+  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink-mute);
+  background: transparent;
+}
+
+.a2ui-approval-action.is-ghost:hover:not(:disabled) {
+  color: var(--ink-soft, var(--ink));
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .a2ui-approval-action.is-deny:hover:not(:disabled) {
