@@ -151,7 +151,7 @@ AstroThread::submit(Op)
 | `apply_patch` (Freeform) | `apply_patch` (Freeform) | Lark 语法 diff 补丁，支持多文件批量增删改 |
 | `exec_command` | `exec_command` | Shell 命令执行，含 session 管理（`yield_time_ms`、`session_id`） |
 | `write_stdin` | `write_stdin` (stub) | 向运行中 session 写入 stdin |
-| `request_permissions` | `request_permissions` (stub) | 运行时请求额外权限 |
+| `request_permissions` | `request_permissions` (advisory) | 记录模型的权限请求但**不授予**任何权限；协议侧 `EventMsg::RequestPermissions` 尚无生产者、桌面端也无对应卡片 |
 | _(无)_ | _(原 file_ops 已移除)_ | 读/搜索/列目录归入 `exec_command` |
 | _(无)_ | _(原 terminal 已重命名)_ | → `exec_command` |
 
