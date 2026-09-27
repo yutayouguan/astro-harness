@@ -284,6 +284,8 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 7. **交互模式**：`interaction_mode` 经 Agent turn 下传；行为说明只进 Responses `instructions`，用户 item 不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。
 
+9. **工具可用性回调**：`ToolEntry::check_fn` 在每次 Step 构建模型可见 schema 时被**同步**求值，必须是 O(1) 探测（列一层目录、读环境变量、查内存状态）；禁止递归遍历、全盘扫描、子进程或网络调用。历史事故：浏览器探测递归扫 `~/Library/Caches/ms-playwright`，16 个工具每轮约 1.8s 同步阻塞异步 worker，任务取消/替换因此无法在预算内生效。
+
 8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。
 
 ## Data Flow: cron.rs → background.rs
@@ -297,3 +299,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 ## Test Organization
 
 集成测试在各 crate `tests/` 目录下，覆盖核心路径：`crates/agent-core`、`crates/agent-subagents`、`crates/agent-providers`、`crates/agent-tools`、`crates/agent-a2ui`、`crates/agent-cron`、`crates/agent-server`、`crates/agent-session`、`crates/agent-artifacts`、`crates/agent-usage`。测试环境工具：`crates/agent-home/src/test_env.rs`。前端测试在 `apps/desktop/src/a2ui/`。
+
+改动进程级环境变量（`ASTRO_MEMORY_DIR` 等）的测试必须使用 `home::test_env::AstroMemoryDirGuard`：它持有跨 crate 共享的锁并在 Drop 时还原。禁止裸 `std::env::set_var` + 手动清理，也不要再新增 crate 私有的 env 锁——同一个测试二进制里存在多把锁等于没有锁（曾导致 mcp/skills/usage 三个 crate 稳定失败或间歇失败）。
+
+基线命令：`cargo test --workspace --no-fail-fast`（期望 0 失败）、`cd apps/desktop && node scripts/run-tests.mjs`、`npx tsc --noEmit`、`npx playwright test`。可用 `node tools/verify-tests.mjs` 一次跑完（默认 quick：workspace 测试 + 前端单测 + 类型检查；`--full` 追加 Playwright 全量）。

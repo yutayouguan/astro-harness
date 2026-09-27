@@ -142,7 +142,8 @@ fn mcp_disabled_tools_not_in_schemas_for_api() {
 #[test]
 fn reload_uses_agent_specific_tools_enabled() {
     let dir = TempDir::new().unwrap();
-    std::env::set_var("ASTRO_MEMORY_DIR", dir.path());
+    // 进程级 env 覆盖必须走共享 guard：串行化 + Drop 还原。
+    let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
 
     let mut global = HashMap::new();
     global.insert("memory".into(), true);

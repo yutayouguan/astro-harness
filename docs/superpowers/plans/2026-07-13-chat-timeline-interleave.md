@@ -648,6 +648,8 @@ timeline.upsert_surface(json!({
 - **仅在最终成功/中断结束前的最后一次 assistant 文本落盘**带完整 timeline；带 `tool_calls` 的中间 assistant 行 `reasoning_details` 可为阶段性快照或 `None`。  
 - **推荐：** 每次 `record_assistant_message_with_tools` 都写入 **当前** `into_reasoning_details` 克隆，history 折叠时取 **该会话最后一条带 `astro_timeline_v1` 的 assistant** 的 timeline 挂到最终气泡（见 Task 5）。
 
+  > **勘误（705ddb5f）：** 上面「history 折叠时取最后一条带 `astro_timeline_v1` 的 assistant 挂到最终气泡」已废弃。按此实现出的 `patch_last_assistant_timeline`（工具循环后回写「最近一条 assistant message 行」）会把**本轮**时间线写到**上一轮**回答行：回放时 activity 段全部找不到活动，只剩一串「思考完成」。现行实现：每轮记录时把本轮时间线写进本轮 assistant item（原生 Responses 路径由 `runtime::recording::attach_assistant_timeline_metadata` 补挂；`types::model_tool::merge_google_thought_signature` 在无 Google 签名时不再丢弃整份 `reasoning_details`）；前端对历史错行时间线按 activity 归属重新安置，找不到归属才回退分组视图。
+
 - [x] **Step 5: Commit**
 
 ```bash

@@ -201,8 +201,7 @@ async fn park_astro_hitl_resolution(
     Some(resolution)
 }
 
-/// 网络主机审批请求参数。
-#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
+/// 网络主机审批请求参数。由受管网络代理回调（`tools_exec`）构造。
 pub(crate) struct NetworkApprovalRequest {
     pub host: String,
     pub protocol: String,
@@ -212,7 +211,6 @@ pub(crate) struct NetworkApprovalRequest {
 }
 
 /// 网络审批 HITL 交互的结果。
-#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) struct NetworkApprovalOutcome {
     pub decision: crate::control::network_approval::PendingApprovalDecision,
     pub status: String,
@@ -221,7 +219,6 @@ pub(crate) struct NetworkApprovalOutcome {
 /// 弹出网络主机审批界面，等待用户决定。
 ///
 /// 返回带作用域的决定（once/session/persistent/deny），若事件通道关闭则返回 `None`。
-#[allow(dead_code)] // 在 inline-managed-network-approval 的 Task 5 中接入
 pub(crate) async fn park_network_approval(
     gate: &Arc<HitlGate>,
     session: &Session,
