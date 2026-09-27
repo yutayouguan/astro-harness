@@ -1363,6 +1363,16 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   cursor: pointer;
 }
 
+/* 胶囊提示点：有永久可写目录时不打开菜单也看得出来。 */
+.composer-policy-permanent-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--success, #2f9e67);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #2f9e67) 22%, transparent);
+}
+
 /* 胶囊角标：不用打开菜单也能看到本会话有额外权限。 */
 .composer-policy-grants-badge {
   display: inline-flex;

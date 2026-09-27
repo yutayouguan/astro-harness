@@ -311,6 +311,9 @@ test("permanent writable folders stay visible in the policy menu and can be remo
   await page.setViewportSize({ width: 1100, height: 900 });
   await boot(page);
 
+  // 不用打开菜单：绿色小圆点提示存在永久可写目录。
+  await expect(page.locator(".composer-policy-permanent-dot")).toHaveCount(1);
+
   await page.locator(".composer-policy-pill").click();
   const permanent = page.locator(".composer-policy-grants.is-permanent");
   await expect(permanent).toBeVisible();

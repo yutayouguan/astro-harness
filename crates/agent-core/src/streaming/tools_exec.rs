@@ -904,6 +904,27 @@ fn sanitize_grant_path(raw: &str, memory_dir: &std::path::Path) -> Result<std::p
     memory::permission_audit::sanitize_write_root(raw, memory_dir)
 }
 
+/// 路径是否落在任一根之内（含相等）。两侧都尝试 canonicalize，避免 macOS 上
+/// `/tmp` 与 `/private/tmp` 这类同一目录的两种写法被当成越界。
+fn path_is_within_any(
+    path: &std::path::Path,
+    roots: &[std::path::PathBuf],
+) -> bool {
+    let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    roots.iter().any(|root| {
+        let root = root.canonicalize().unwrap_or_else(|_| root.clone());
+        path.starts_with(root)
+    })
+}
+
+fn render_paths(paths: &[std::path::PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("、")
+}
+
 /// `request_permissions` 的 preflight：park 用户批准，批准后落**会话级**授权。
 ///
 /// 该工具自己不执行任何东西，所以这里直接产出工具结果文本（`Handled`），并把
@@ -956,6 +977,40 @@ async fn preflight_request_permissions(
         .as_ref()
         .is_some_and(|net| net.enabled);
 
+    // 去重：已经在当前可写范围内的路径不该再弹卡（工作区根、本会话授权、profile 的
+    // 永久可写目录，以及完全访问模式）。只对真正越界、还没被授权的根发起请求。
+    let settings = memory::load_permission_settings(session.memory_dir());
+    let profile_id = profile
+        .unwrap_or(settings.selection.profile_id.as_str())
+        .to_string();
+    let unrestricted = matches!(
+        settings.permissions.sandbox_mode_for(&profile_id),
+        Ok(types::SandboxMode::DangerFullAccess)
+    );
+    if unrestricted {
+        return Some(PermissionPreflight::Handled(
+            "Permission already granted: 当前是完全访问，文件系统没有沙箱边界，无需请求写入权限。"
+                .to_string(),
+        ));
+    }
+    let mut allowed_roots: Vec<std::path::PathBuf> =
+        turn_context.workspace_roots().to_vec();
+    if let Some(root) = turn_context.project_root() {
+        allowed_roots.push(root.to_path_buf());
+    }
+    allowed_roots.extend(session.permission_grants().writable_roots.iter().cloned());
+    allowed_roots.extend(settings.permissions.extra_writable_roots_for(&profile_id));
+    let (already_allowed, still_pending): (Vec<_>, Vec<_>) = writable_roots
+        .into_iter()
+        .partition(|path| path_is_within_any(path, &allowed_roots));
+    if !already_allowed.is_empty() && still_pending.is_empty() {
+        return Some(PermissionPreflight::Handled(format!(
+            "Permission already granted: {} 已在当前可写范围内（工作区 / 本会话授权 / 永久可写目录），无需再次请求，直接继续执行即可。",
+            render_paths(&already_allowed)
+        )));
+    }
+    let writable_roots = still_pending;
+
     if writable_roots.is_empty() {
         let suffix = if rejected.is_empty() {
             String::new()
@@ -967,16 +1022,8 @@ async fn preflight_request_permissions(
         )));
     }
 
-    let listed = writable_roots
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join("、");
+    let listed = render_paths(&writable_roots);
     // 安全审计：请求、批准、拒绝各记一条，和命令类审批保持一致。
-    let settings = memory::load_permission_settings(session.memory_dir());
-    let profile_id = profile
-        .unwrap_or(settings.selection.profile_id.as_str())
-        .to_string();
     let audit = PermissionAuditReceipt::new(
         session.memory_dir().to_path_buf(),
         &settings,
@@ -1041,6 +1088,12 @@ async fn preflight_request_permissions(
     );
     if !requested_reads.is_empty() {
         body.push_str(&format!("\n\n请求读取：{}", requested_reads.join("、")));
+    }
+    if !already_allowed.is_empty() {
+        body.push_str(&format!(
+            "\n\n已在当前可写范围内（无需授权）：{}",
+            render_paths(&already_allowed)
+        ));
     }
     if network_requested {
         body.push_str("\n\n网络默认放开，不需要额外授权。");
@@ -3146,6 +3199,140 @@ mod tests {
         let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
             .expect("permission audit written");
         assert!(audit.contains("permission.revoked"), "{audit}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn request_permissions_reuses_permanent_roots_without_a_card() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let project = tempfile::tempdir().unwrap();
+        let grant_dir = tempfile::tempdir().unwrap();
+        let permanent_root = grant_dir.path().join("shared-out");
+        std::fs::create_dir_all(&permanent_root).unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":workspace", "extra_writable_roots" = ["{}"] }}
+"#,
+                permanent_root.display()
+            ),
+        )
+        .unwrap();
+
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(TurnContext::new(
+            "permission-permanent".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::WORKSPACE_PROFILE.into()),
+            Some(project.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+
+        let call = types::ParsedToolCall::new(
+            "request_permissions",
+            json!({
+                "reason": "写报告",
+                "permissions": {
+                    "file_system": { "write": [permanent_root.display().to_string()] }
+                }
+            }),
+        );
+        let gate = HitlGate::new(session.session_id().to_string());
+        let outcome = preflight_request_permissions(&session, None, &call, &turn, Some(&gate))
+            .await
+            .expect("permission preflight outcome");
+
+        let PermissionPreflight::Handled(text) = outcome else {
+            panic!("expected handled permission request");
+        };
+        // 已经永久可写的根不必再弹卡，也不再落会话级授权。
+        assert!(text.contains("Permission already granted"), "{text}");
+        assert!(text.contains("shared-out"), "{text}");
+        assert!(session.permission_grants().is_empty(), "不该写入会话授权");
+        assert!(gate.pending_interrupts().await.is_empty(), "不该 park 审批卡");
+        assert!(
+            !memory::permission_audit_path(dir.path()).exists(),
+            "无需为已授权路径写审计"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn request_permissions_asks_only_for_paths_still_outside_the_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let project = tempfile::tempdir().unwrap();
+        let grant_dir = tempfile::tempdir().unwrap();
+        let permanent_root = grant_dir.path().join("permanent-out");
+        let pending_dir = tempfile::tempdir().unwrap();
+        let pending_root = pending_dir.path().join("pending-out");
+        std::fs::create_dir_all(&permanent_root).unwrap();
+        std::fs::create_dir_all(&pending_root).unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":workspace", "extra_writable_roots" = ["{}"] }}
+"#,
+                permanent_root.display()
+            ),
+        )
+        .unwrap();
+
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(TurnContext::new(
+            "permission-partial".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::WORKSPACE_PROFILE.into()),
+            Some(project.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+
+        let call = types::ParsedToolCall::new(
+            "request_permissions",
+            json!({
+                "reason": "跨两个目录写报告",
+                "permissions": {
+                    "file_system": { "write": [
+                        permanent_root.display().to_string(),
+                        pending_root.display().to_string()
+                    ] }
+                }
+            }),
+        );
+        let gate = HitlGate::new(session.session_id().to_string());
+        let responder = park_and_resolve(&gate, true).await;
+        let outcome = preflight_request_permissions(&session, None, &call, &turn, Some(&gate))
+            .await
+            .expect("permission preflight outcome");
+        responder.await.unwrap();
+
+        let PermissionPreflight::Handled(text) = outcome else {
+            panic!("expected handled permission request");
+        };
+        // 只对仍未授权的根记账：永久根不重复出现在授权结果里。
+        assert!(!text.contains("permanent-out"), "{text}");
+        let grants = session.permission_grants();
+        assert_eq!(
+            grants.writable_roots,
+            vec![pending_root.canonicalize().unwrap()]
+        );
+        let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
+            .expect("permission audit written");
+        assert!(audit.contains("pending-out"), "{audit}");
+        assert!(!audit.contains("permanent-out"), "{audit}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

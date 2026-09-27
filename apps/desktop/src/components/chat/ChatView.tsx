@@ -1192,9 +1192,9 @@ export default function ChatView({
     };
   }, [modeMenuOpen, sessionId]);
 
-  // 永久可写目录：打开菜单时读一次，菜单里可直接移除。
+  // 永久可写目录：菜单里可直接移除，胶囊上用一个小圆点提示它的存在。
+  // 它是用户级配置（和会话无关），所以跟着菜单与会话切换读一次就够。
   useEffect(() => {
-    if (!modeMenuOpen) return;
     let cancelled = false;
     void invoke<PermissionWriteRootsDto>("get_permission_write_roots")
       .then((state) => {
@@ -1206,7 +1206,7 @@ export default function ChatView({
     return () => {
       cancelled = true;
     };
-  }, [modeMenuOpen]);
+  }, [modeMenuOpen, sessionId]);
 
   const revokeSessionGrants = useCallback(async () => {
     if (!sessionId) return;
@@ -3391,6 +3391,14 @@ export default function ChatView({
                             >
                               +{sessionGrants.writableRoots.length}
                             </span>
+                          ) : null}
+                          {permanentRoots && permanentRoots.length > 0 ? (
+                            <span
+                              className="composer-policy-permanent-dot"
+                              role="img"
+                              aria-label={t("chat.approval.permanentRoots")}
+                              title={t("chat.approval.permanentRootsHint")}
+                            />
                           ) : null}
                           <span
                             className="composer-policy-separator"
