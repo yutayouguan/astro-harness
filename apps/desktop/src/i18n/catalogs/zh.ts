@@ -1225,6 +1225,7 @@ export const zh = {
   "chat.a2ui.approvalRetryMessage": "我用修改后的命令重试：\n\n```sh\n{command}\n```\n\n请直接执行这一条。",
   "chat.a2ui.approvalOpenInTerminal": "在终端打开（预填不执行）",
   "chat.a2ui.approvalRiskDangerous": "高风险",
+  "chat.a2ui.approvalRiskShortcut": "高风险操作：点击按钮，或按 ⌘/Ctrl+Enter 才会批准",
   "chat.a2ui.approvalRiskSensitive": "敏感",
   "chat.a2ui.approvalRiskConfirmTitle": "再次确认",
   "chat.a2ui.approvalRiskConfirmBody": "这是高风险操作，批准后会立即执行。确认要批准吗？",

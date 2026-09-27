@@ -142,6 +142,25 @@ test("dangerous approvals show a risk label and require a second confirmation", 
   );
 
   await expect(card.locator(".a2ui-approval-risk")).toHaveText("高风险");
+  // 键盘收口：高风险审批把焦点带进卡片（不抢输入框），普通 Enter 不批准。
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (document.activeElement as HTMLElement | null)?.className ?? "",
+      ),
+    )
+    .toContain("a2ui-clarify-wizard");
+  await card.locator(".a2ui-approval-action.is-approve").focus();
+  await page.keyboard.press("Enter");
+  await expect(card.locator(".a2ui-approval-second-thoughts")).toHaveCount(0);
+  await page.keyboard.press("Control+Enter");
+  await expect(card.locator(".a2ui-approval-second-thoughts")).toBeVisible();
+  // Esc 只关掉二阶确认，不代替拒绝。
+  await page.keyboard.press("Escape");
+  await expect(card.locator(".a2ui-approval-second-thoughts")).toHaveCount(0);
+  await expect(page.locator(".a2ui-approval-result")).toHaveCount(0);
+
   // 第一次点击只落到内联确认，不会被当成批准。
   await card.locator(".a2ui-approval-action.is-approve").click();
   await expect(card.locator(".a2ui-approval-second-thoughts")).toBeVisible();

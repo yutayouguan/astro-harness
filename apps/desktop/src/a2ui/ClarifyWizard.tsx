@@ -108,6 +108,14 @@ export default function ClarifyWizard({
   const [customDrafts, setCustomDrafts] = useState<Record<string, string>>(
     initialDraft?.customDrafts ?? {},
   );
+  // 高风险审批：把键盘用户带进卡片，但并不抢走输入框/编辑器的焦点。
+  useEffect(() => {
+    if (variant !== "approval" || approvalRisk !== "dangerous") return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest("input, textarea, [contenteditable='true']")) return;
+    approvalSectionRef.current?.focus();
+  }, [variant, approvalRisk]);
+
   useEffect(() => {
     onDraftChange?.({ answers, customDrafts, index });
   }, [answers, customDrafts, index, onDraftChange]);
@@ -121,6 +129,27 @@ export default function ClarifyWizard({
   const [approvalCopied, setApprovalCopied] = useState(false);
   const [approveSecondThought, setApproveSecondThought] = useState(false);
   const [commandDraft, setCommandDraft] = useState<string | null>(null);
+  const approvalSectionRef = useRef<HTMLElement>(null);
+
+  // Esc 只关闭"二阶确认 / 命令编辑"（不代替拒绝）。挂在 document 上：
+  // 二阶确认会把主按钮换成面板，焦点可能已经落到卡片之外。
+  useEffect(() => {
+    if (variant !== "approval") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (approveSecondThought) {
+        event.preventDefault();
+        setApproveSecondThought(false);
+        return;
+      }
+      if (commandDraft != null) {
+        event.preventDefault();
+        setCommandDraft(null);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [variant, approveSecondThought, commandDraft]);
   const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
 
@@ -547,6 +576,28 @@ export default function ClarifyWizard({
       setCollapsed(true);
       onAction(choice, {});
     };
+    // 键盘收口：Esc 只关闭"二阶确认/命令编辑"，不代替拒绝；高风险操作必须
+    // 点击或 ⌘/Ctrl+Enter 才批准（普通 Enter 不触发）。
+    const onApprovalKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key !== "Enter") return;
+      if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        if (approveSecondThought || !needsApproveConfirm) {
+          submitApproval(actions.once.id);
+        } else {
+          setApproveSecondThought(true);
+        }
+        return;
+      }
+      if (
+        approvalRisk === "dangerous" &&
+        (event.target as HTMLElement | null)?.closest?.(
+          ".a2ui-approval-action.is-approve",
+        )
+      ) {
+        event.preventDefault();
+      }
+    };
     const copyCommand = () => {
       void navigator.clipboard
         ?.writeText(commandText)
@@ -566,6 +617,9 @@ export default function ClarifyWizard({
         }`}
         data-a2ui-id="wizard"
         aria-labelledby={approvalTitleId}
+        ref={approvalSectionRef}
+        tabIndex={-1}
+        onKeyDown={onApprovalKeyDown}
       >
         <div className="a2ui-approval-intro">
           <div className="a2ui-approval-header">
@@ -725,7 +779,16 @@ export default function ClarifyWizard({
                   type="button"
                   className="a2ui-approval-action is-approve"
                   disabled={disabled}
-                  onClick={() => submitApproval(actions.once.id)}
+                  onClick={(event) => {
+                    if (
+                      event.detail === 0 &&
+                      !event.metaKey &&
+                      !event.ctrlKey
+                    ) {
+                      return;
+                    }
+                    submitApproval(actions.once.id);
+                  }}
                 >
                   <Check size={17} strokeWidth={2.3} aria-hidden />
                   <span className="a2ui-approval-action-copy">
@@ -753,10 +816,24 @@ export default function ClarifyWizard({
                 type="button"
                 className="a2ui-approval-action is-approve"
                 disabled={disabled}
-                onClick={() =>
+                onClick={(event) => {
+                  // 高风险操作：键盘"回车/空格"这类 detail=0 的激活不算数，
+                  // 必须显式点击（detail>=1）或 ⌘/Ctrl+Enter。
+                  if (
+                    needsApproveConfirm &&
+                    event.detail === 0 &&
+                    !event.metaKey &&
+                    !event.ctrlKey
+                  ) {
+                    return;
+                  }
+                  if (needsApproveConfirm) setApproveSecondThought(true);
+                  else submitApproval(actions.once.id);
+                }}
+                title={
                   needsApproveConfirm
-                    ? setApproveSecondThought(true)
-                    : submitApproval(actions.once.id)
+                    ? t("chat.a2ui.approvalRiskShortcut")
+                    : undefined
                 }
               >
                 <Check size={17} strokeWidth={2.3} aria-hidden />

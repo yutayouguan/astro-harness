@@ -1319,6 +1319,7 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.approvalRetryMessage": "Retry with my edited command:\n\n```sh\n{command}\n```\n\nRun exactly this one.",
   "chat.a2ui.approvalOpenInTerminal": "Open in terminal (prefilled, not run)",
   "chat.a2ui.approvalRiskDangerous": "High risk",
+  "chat.a2ui.approvalRiskShortcut": "High-risk action: approve by clicking, or with Cmd/Ctrl+Enter",
   "chat.a2ui.approvalRiskSensitive": "Sensitive",
   "chat.a2ui.approvalRiskConfirmTitle": "Confirm again",
   "chat.a2ui.approvalRiskConfirmBody": "This is a high-risk action and runs immediately once approved. Approve it anyway?",
