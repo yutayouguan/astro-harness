@@ -28,5 +28,7 @@ test("native browser surfaces are hidden before close and stale instances are sw
   assert.match(hook, /void retireBrowserLiveWebview\(entry\.webview\)/);
 
   assert.match(app, /void cleanupStaleBrowserLiveWebviews\(\);/);
-  assert.match(app, /if \(nav !== "chat"\) setBrowserDockOpen\(false\);/);
+  // 网页链接默认在内置浏览器打开后，browser dock 允许跨 nav 保持挂载
+  // （离开 chat 不再强制关闭）；这里改为断言挂载策略本身。
+  assert.match(app, /browserDockPresence\.mounted && nav !== "chat"/);
 });
