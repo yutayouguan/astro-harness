@@ -3061,6 +3061,8 @@ export const en: Record<MessageKey, string> = {
     "Irreversible: run history and results are erased",
   "cron.archive": "Archive task",
   "cron.restore": "Restore task",
+  "cron.runningHintDelete": "This task is running — you can delete it once the run finishes",
+  "cron.runningHintArchive": "This task is running — you can archive it once the run finishes",
   "cron.statusArchived": "Archived",
   "cron.archiveFilter": "Archived",
   "cron.archiveFilterHint": "Show archived scheduled tasks only",

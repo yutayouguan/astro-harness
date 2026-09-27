@@ -677,7 +677,26 @@ pub async fn list_cron_job_runs(id: String) -> Result<Vec<CronRunDto>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::RemoveCronJobArgs;
+    use super::{job_to_dto, RemoveCronJobArgs};
+    use cron::CronJob;
+
+    fn job() -> CronJob {
+        CronJob {
+            id: "job-1".into(),
+            schedule: "every:1d".into(),
+            task: "task".into(),
+            title: "title".into(),
+            agent_id: home::DEFAULT_AGENT_ID.into(),
+            provider_id: None,
+            model: None,
+            enabled: true,
+            created_at: "2026-09-27T00:00:00Z".into(),
+            last_run_at: None,
+            next_run_at: None,
+            show_in_chat: false,
+            archived_at: None,
+        }
+    }
 
     #[test]
     fn remove_args_decode_frontend_camel_case() {
@@ -699,5 +718,21 @@ mod tests {
         // 默认归档会话、保留运行记录：会话里是 Agent 的真实产出，误删代价最高。
         assert!(args.archive_session);
         assert!(!args.delete_runs);
+    }
+
+    #[test]
+    fn job_dto_exposes_running_state_to_the_frontend() {
+        let dto = job_to_dto(job(), true);
+        assert!(dto.running);
+
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(
+            json.get("running").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            json.get("archived_at").map(|value| value.is_null()),
+            Some(true)
+        );
     }
 }

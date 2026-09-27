@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
 import { useConfirm, useConfirmDetailed } from "../../hooks/ui/DialogContext";
+import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
@@ -533,6 +534,7 @@ export default function CronPanel({
   const { t, locale } = useI18n();
   const confirm = useConfirm();
   const confirmDetailed = useConfirmDetailed();
+  const { showToast, toastHost } = useTransientToast();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
   const agentId = "default";
   const [search, setSearch] = useState("");
@@ -805,6 +807,16 @@ export default function CronPanel({
     void loadDrawerJobRuns(drawerJobId);
   }, [drawerJobId, loadDrawerJobRuns]);
 
+  // 只要有任务在跑就轻量轮询任务列表，让「运行中」标注和删除/归档拦截及时解除。
+  const anyJobRunning = useMemo(() => jobs.some((job) => job.running), [jobs]);
+  useEffect(() => {
+    if (!anyJobRunning || !isTauri()) return;
+    const timer = window.setInterval(() => {
+      void loadJobs();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [anyJobRunning, loadJobs]);
+
   const providerName = useCallback(
     (id: string | null) => {
       if (!id) return "—";
@@ -892,6 +904,11 @@ export default function CronPanel({
 
   const setJobArchived = async (job: CronJobDto, archived: boolean) => {
     if (!isTauri()) return;
+    if (archived && job.running) {
+      closeMenu();
+      showToast(t("cron.runningHintArchive"), { tone: "warning" });
+      return;
+    }
     setBusyId(job.id);
     closeMenu();
     setError(null);
@@ -917,6 +934,11 @@ export default function CronPanel({
 
   const removeJob = async (job: CronJobDto) => {
     if (!isTauri()) return;
+    if (job.running) {
+      closeMenu();
+      showToast(t("cron.runningHintDelete"), { tone: "warning" });
+      return;
+    }
     const outcome = await confirmDetailed({
       title: t("dialog.deleteTitle"),
       message: t("cron.removeConfirm"),
@@ -1192,8 +1214,21 @@ export default function CronPanel({
             </span>
             <div className="cron-card-heading">
               <h3 className="cron-card-title">{job.title}</h3>
-              <span className={`cron-card-status ${jobStatusClass(job)}`}>
-                {jobStatusLabel(job)}
+              <span className="cron-card-status-row">
+                <span className={`cron-card-status ${jobStatusClass(job)}`}>
+                  {jobStatusLabel(job)}
+                </span>
+                {job.running ? (
+                  <span className="cron-card-running">
+                    <LoaderCircle
+                      size={10}
+                      strokeWidth={2.4}
+                      className="is-spin"
+                      aria-hidden
+                    />
+                    {t("cron.run.statusRunning")}
+                  </span>
+                ) : null}
               </span>
             </div>
             <div className="cron-card-actions-cluster">
@@ -1266,6 +1301,17 @@ export default function CronPanel({
           <span className={`cron-card-status ${jobStatusClass(job)}`}>
             {jobStatusLabel(job)}
           </span>
+          {job.running ? (
+            <span className="cron-card-running">
+              <LoaderCircle
+                size={10}
+                strokeWidth={2.4}
+                className="is-spin"
+                aria-hidden
+              />
+              {t("cron.run.statusRunning")}
+            </span>
+          ) : null}
           {renderJobActions(job)}
         </article>
       ))}
@@ -1303,6 +1349,17 @@ export default function CronPanel({
                 >
                   {jobStatusLabel(selectedDetailJob)}
                 </span>
+                {selectedDetailJob.running ? (
+                  <span className="cron-card-running">
+                    <LoaderCircle
+                      size={10}
+                      strokeWidth={2.4}
+                      className="is-spin"
+                      aria-hidden
+                    />
+                    {t("cron.run.statusRunning")}
+                  </span>
+                ) : null}
               </div>
               {renderJobActions(selectedDetailJob)}
             </header>
@@ -1931,8 +1988,12 @@ export default function CronPanel({
                   </button>
                   <button
                     type="button"
-                    className="cron-more-item"
+                    className={`cron-more-item ${job.running ? "is-blocked" : ""}`}
                     role="menuitem"
+                    data-blocked={job.running || undefined}
+                    title={
+                      job.running ? t("cron.runningHintArchive") : undefined
+                    }
                     onClick={() => void setJobArchived(job, true)}
                   >
                     <Archive size={15} strokeWidth={2.2} aria-hidden />
@@ -1940,8 +2001,14 @@ export default function CronPanel({
                   </button>
                   <button
                     type="button"
-                    className="cron-more-item is-danger"
+                    className={`cron-more-item is-danger ${
+                      job.running ? "is-blocked" : ""
+                    }`}
                     role="menuitem"
+                    data-blocked={job.running || undefined}
+                    title={
+                      job.running ? t("cron.runningHintDelete") : undefined
+                    }
                     onClick={() => void removeJob(job)}
                   >
                     <IconTrash />
@@ -1983,6 +2050,8 @@ export default function CronPanel({
           onDelete={() => void deleteRun(drawerRun)}
         />
       )}
+
+      {createPortal(toastHost, document.body)}
     </div>
   );
 }

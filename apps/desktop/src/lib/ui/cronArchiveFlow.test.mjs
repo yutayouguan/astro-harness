@@ -71,6 +71,17 @@ test("deleting a task asks what happens to its session and run records", () => {
 });
 
 test("a running task refuses delete and archive keeps definition and history", () => {
+  // 运行中拦截：后端给出 running 状态，前端菜单/抽屉就地提示
+  assert.match(command, /pub running: bool/);
+  assert.match(command, /async fn running_job_ids\(\)/);
+  assert.match(panel, /if \(archived && job\.running\)/);
+  assert.match(panel, /if \(job\.running\) \{/);
+  assert.match(panel, /t\("cron\.runningHintDelete"\)/);
+  assert.match(panel, /t\("cron\.runningHintArchive"\)/);
+  assert.match(panel, /data-blocked=\{job\.running \|\| undefined\}/);
+  assert.match(panel, /cron-card-running/);
+  assert.match(drawer, /cron-job-drawer-hint/);
+  assert.match(dialogStyles, /\.app-dialog-option\s*\{/);
   assert.match(command, /has_running_for_job\(&job\.id\)/);
   assert.match(command, /任务正在执行/);
   assert.match(cronStore, /pub fn set_archived/);

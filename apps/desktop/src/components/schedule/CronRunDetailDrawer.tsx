@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -59,6 +59,8 @@ export type CronJobDto = {
   show_in_chat: boolean;
   /** 归档时间；非空表示任务已归档（不参与调度，可恢复） */
   archived_at: string | null;
+  /** 是否有正在执行的运行记录；运行中不允许删除或归档 */
+  running: boolean;
 };
 
 export function cronRunStatusKind(
@@ -219,6 +221,12 @@ export function CronTaskDetailDrawer({
   const titleId = useId();
   const statusLabel = useCronRunStatusLabel();
   const archived = Boolean(job.archived_at);
+  const [blockedHint, setBlockedHint] = useState<string | null>(null);
+
+  // 任务跑完后收起拦截提示；面板与聊天抽屉共用这一套。
+  useEffect(() => {
+    if (!job.running) setBlockedHint(null);
+  }, [job.running]);
 
   return (
     <Drawer
@@ -259,6 +267,17 @@ export function CronTaskDetailDrawer({
                   ? t("cron.statusOn")
                   : t("cron.statusOff")}
             </span>
+            {job.running ? (
+              <span className="cron-card-running">
+                <LoaderCircle
+                  size={10}
+                  strokeWidth={2.4}
+                  className="is-spin"
+                  aria-hidden
+                />
+                {t("cron.run.statusRunning")}
+              </span>
+            ) : null}
           </div>
         </div>
         <button
@@ -330,9 +349,20 @@ export function CronTaskDetailDrawer({
               </button>
               <button
                 type="button"
-                className="cron-job-drawer-action"
+                className={`cron-job-drawer-action ${
+                  job.running ? "is-blocked" : ""
+                }`}
                 disabled={busy}
-                onClick={onToggleArchived}
+                data-blocked={job.running || undefined}
+                title={job.running ? t("cron.runningHintArchive") : undefined}
+                onClick={() => {
+                  if (job.running) {
+                    setBlockedHint(t("cron.runningHintArchive"));
+                    return;
+                  }
+                  setBlockedHint(null);
+                  onToggleArchived();
+                }}
               >
                 <Archive size={15} strokeWidth={2.2} aria-hidden />
                 <span>{t("cron.archive")}</span>
@@ -354,6 +384,12 @@ export function CronTaskDetailDrawer({
             </>
           )}
         </div>
+
+        {blockedHint ? (
+          <p className="cron-job-drawer-hint" role="status">
+            {blockedHint}
+          </p>
+        ) : null}
 
         <section className="cron-job-drawer-history">
           <div className="cron-job-drawer-section-head">

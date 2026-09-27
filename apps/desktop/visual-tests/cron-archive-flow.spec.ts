@@ -5,6 +5,8 @@ const STORY =
   "/iframe.html?id=pages-cronpanel--cards-with-detail-drawer&viewMode=story";
 const SIDEBAR_STORY =
   "/iframe.html?id=sidebar-session-states--cron-owner-states-story&viewMode=story";
+const RUNNING_STORY =
+  "/iframe.html?id=pages-cronpanel--running-task-guards&viewMode=story";
 
 type CronCall = { command: string; payload: unknown };
 
@@ -125,4 +127,54 @@ test("sidebar labels cron sessions whose task is archived or deleted", async ({
     hasText: "每日 8 点舆情早报",
   });
   await expect(activeRow.locator(".sidebar-session-cron-owner")).toHaveCount(0);
+});
+
+test("a running task refuses delete and archive with a friendly hint", async ({
+  page,
+}) => {
+  await page.goto(RUNNING_STORY);
+
+  const card = page.locator(".cron-card", { hasText: "每日 AI 新闻推送" });
+  await expect(card.locator(".cron-card-running")).toHaveText(/运行中/);
+
+  await card.getByRole("button", { name: "更多操作" }).click();
+  const removeItem = page.getByRole("menuitem", { name: "删除任务" });
+  await expect(removeItem).toHaveAttribute("data-blocked", "true");
+  await removeItem.click();
+
+  // 不弹确认框，只提示，也不产生任何删除调用
+  await expect(page.locator(".app-dialog")).toHaveCount(0);
+  await expect(page.locator(".astro-toast-msg")).toHaveText(
+    /任务正在执行，等这次跑完就可以删除/,
+  );
+  expect(await callsFor(page, "remove_cron_job")).toEqual([]);
+
+  await card.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "归档任务" }).click();
+  await expect(page.locator(".astro-toast-msg")).toHaveText(
+    /任务正在执行，等这次跑完就可以归档/,
+  );
+  expect(await callsFor(page, "archive_cron_job")).toEqual([]);
+
+  // 详情抽屉里的归档按钮同样被拦截，改为就地提示
+  await card.locator(".cron-card-detail-btn").click();
+  const drawer = page.locator(".cron-job-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: "归档任务" }).click();
+  await expect(drawer.locator(".cron-job-drawer-hint")).toHaveText(
+    "任务正在执行，等这次跑完就可以归档",
+  );
+  expect(await callsFor(page, "archive_cron_job")).toEqual([]);
+  await drawer.getByRole("button", { name: "取消" }).click();
+
+  // 没有在跑的任务不受影响，仍可正常进入删除确认
+  const idleCard = page.locator(".cron-card", { hasText: "每周工作周报" });
+  await idleCard.getByRole("button", { name: "更多操作" }).click();
+  const idleRemove = page.getByRole("menuitem", { name: "删除任务" });
+  await expect(idleRemove).not.toHaveAttribute("data-blocked", "true");
+  await idleRemove.click();
+  const dialog = page.locator(".app-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(dialog).toHaveCount(0);
 });

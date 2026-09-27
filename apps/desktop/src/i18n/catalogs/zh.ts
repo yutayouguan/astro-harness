@@ -2896,6 +2896,8 @@ export const zh = {
   "cron.remove.deleteRunsHint": "不可恢复：运行历史与结果一并清除",
   "cron.archive": "归档任务",
   "cron.restore": "恢复任务",
+  "cron.runningHintDelete": "任务正在执行，等这次跑完就可以删除",
+  "cron.runningHintArchive": "任务正在执行，等这次跑完就可以归档",
   "cron.statusArchived": "已归档",
   "cron.archiveFilter": "已归档",
   "cron.archiveFilterHint": "只看已归档的定时任务",

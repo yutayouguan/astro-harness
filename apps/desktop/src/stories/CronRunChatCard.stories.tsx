@@ -44,6 +44,7 @@ const job: CronJobDto = {
   next_run_at: "2026-08-29T08:00:00+08:00",
   show_in_chat: true,
   archived_at: null,
+  running: false,
 };
 
 const messages: ConversationEntry[] = [

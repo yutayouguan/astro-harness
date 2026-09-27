@@ -282,6 +282,22 @@ html[data-theme="dark"] .chat-cron-run-card {
   transform: scale(0.98);
 }
 
+/* 任务运行中：归档被拦截，点击给出提示而不是静默失败 */
+.cron-job-drawer-action.is-blocked {
+  opacity: 0.6;
+}
+
+.cron-job-drawer-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, transparent);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  color: color-mix(in srgb, var(--tone) 78%, var(--ink));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .cron-job-drawer-action.is-primary {
   color: var(--tone);
   border-color: color-mix(in srgb, var(--tone) 30%, transparent);

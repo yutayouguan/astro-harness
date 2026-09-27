@@ -257,6 +257,11 @@ fn build_network_approval_decider(
 
                     match outcome {
                         Some(o) => {
+                            tracing::debug!(
+                                status = %o.status,
+                                host = %request.host,
+                                "network approval resolved"
+                            );
                             let decision = o.decision.clone();
                             owner.resolve(decision);
                             match o.decision {
@@ -303,12 +308,16 @@ fn sandbox_policy_for_call(
         .project_root()
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| session.memory().workspace_dir.clone());
+    // 会话级授权（`request_permissions` 批准后）并入本次策略：额外可写根 + workspace-write。
+    let grants = session.permission_grants();
+    let mut roots = step_context.turn.workspace_roots().to_vec();
+    roots.extend(grants.writable_roots.iter().cloned());
     let mut policy = tools::context::build_command_sandbox_policy_with_roots(
         session.memory_dir(),
         &execution_root,
-        step_context.turn.workspace_roots(),
+        &roots,
         step_context.turn.permission_profile(),
-        workspace_write_grant,
+        workspace_write_grant || grants.workspace_write,
         None,
     )
     .map_err(crate::runtime::ToolCallError::from)?;
@@ -405,6 +414,8 @@ async fn fire_post_permission_response(
 enum PermissionPreflight {
     NotRequired,
     Granted(Box<PermissionAuditReceipt>),
+    /// 该请求本身已由 preflight 处理完（不执行工具），这里的文本就是工具结果。
+    Handled(String),
     Denied(String),
 }
 
@@ -849,6 +860,144 @@ async fn preflight_read_only_write(
     .await
 }
 
+/// 可授权的写入根：必须是绝对路径、不在 Astro 自身目录、不是常见敏感目录。
+///
+/// 用户批准是唯一的放行来源，但敏感位置（私钥/凭据/钥匙串）连批准也不提供。
+fn sanitize_grant_path(raw: &str, memory_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("空路径".to_string());
+    }
+    let path = std::path::PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err(format!("{trimmed}：必须是绝对路径"));
+    }
+    let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
+    if normalized.starts_with(memory_dir) {
+        return Err(format!("{trimmed}：Astro 自身目录不可授予"));
+    }
+    if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        for sensitive in [".ssh", ".aws", ".gnupg", "Library/Keychains"] {
+            if normalized.starts_with(home.join(sensitive)) {
+                return Err(format!("{trimmed}：敏感目录不可授予"));
+            }
+        }
+    }
+    Ok(normalized)
+}
+
+/// `request_permissions` 的 preflight：park 用户批准，批准后落**会话级**授权。
+///
+/// 该工具自己不执行任何东西，所以这里直接产出工具结果文本（`Handled`），并把
+/// workspace-write + 额外可写根记到会话上，由 `sandbox_policy_for_call` 生效。
+async fn preflight_request_permissions(
+    session: &Arc<AgentLoop>,
+    call: &types::ParsedToolCall,
+    turn_context: &TurnContext,
+    hitl_gate: Option<&Arc<HitlGate>>,
+) -> Option<PermissionPreflight> {
+    if call.name != "request_permissions" || call.args_parse_error {
+        return Some(PermissionPreflight::NotRequired);
+    }
+    let args: tools::builtin::shell::request_permissions::RequestPermissionsArgs =
+        match serde_json::from_value(call.arguments.clone()) {
+            Ok(args) => args,
+            Err(error) => {
+                return Some(PermissionPreflight::Handled(format!(
+                    "Permission request NOT applied: 参数无法解析（{error}）。"
+                )))
+            }
+        };
+
+    let memory_dir = session.memory_dir().to_path_buf();
+    let mut writable_roots = Vec::new();
+    let mut rejected = Vec::new();
+    let mut requested_reads = Vec::new();
+    if let Some(fs) = args.permissions.file_system.as_ref() {
+        for raw in &fs.write {
+            match sanitize_grant_path(raw, &memory_dir) {
+                Ok(path) => {
+                    if !writable_roots.contains(&path) {
+                        writable_roots.push(path);
+                    }
+                }
+                Err(reason) => rejected.push(reason),
+            }
+        }
+        requested_reads = fs
+            .read
+            .iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect();
+    }
+    let network_requested = args
+        .permissions
+        .network
+        .as_ref()
+        .is_some_and(|net| net.enabled);
+
+    if writable_roots.is_empty() {
+        let suffix = if rejected.is_empty() {
+            String::new()
+        } else {
+            format!("（{}）", rejected.join("；"))
+        };
+        return Some(PermissionPreflight::Handled(format!(
+            "Permission request NOT applied: 没有可授权的写入路径{suffix}。请在当前沙箱允许的目录内工作，或请用户在设置里调整权限预设。"
+        )));
+    }
+
+    let listed = writable_roots
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("、");
+    let Some(gate) = hitl_gate else {
+        return Some(PermissionPreflight::Handled(format!(
+            "Permission request NOT applied: 需要用户批准（{listed}），但当前没有可用的确认通道。"
+        )));
+    };
+    let mut body = format!(
+        "Agent 请求在本会话内额外写入以下目录（会话级，结束即失效）：\n\n{listed}"
+    );
+    if !requested_reads.is_empty() {
+        body.push_str(&format!("\n\n请求读取：{}", requested_reads.join("、")));
+    }
+    if network_requested {
+        body.push_str("\n\n网络默认放开，不需要额外授权。");
+    }
+    if !rejected.is_empty() {
+        body.push_str(&format!("\n\n已拒绝：{}", rejected.join("；")));
+    }
+    let confirm = park_confirm(
+        gate,
+        session.as_ref(),
+        turn_context,
+        &call.id,
+        ConfirmPresentation::Text {
+            title: "批准额外权限",
+            body: &body,
+            risk: Some("sensitive"),
+        },
+        false,
+        None,
+    )
+    .await?;
+    if !confirm.approved {
+        return Some(PermissionPreflight::Handled(format!(
+            "Permission request NOT applied: 用户拒绝了对 {listed} 的会话级写入授权。不要重试同一路径，改用工作区内路径或请用户调整权限预设。"
+        )));
+    }
+    session.grant_permissions(crate::runtime::PermissionGrants {
+        workspace_write: true,
+        writable_roots: writable_roots.clone(),
+    });
+    Some(PermissionPreflight::Handled(format!(
+        "Permission granted for this session: write {listed}（会话级，结束即失效）。此后本会话的命令可在这些目录写入；网络默认放开，未做额外授权。"
+    )))
+}
+
 async fn preflight_workflow_tool(
     session: &Arc<AgentLoop>,
     step_context: &StepContext,
@@ -1106,6 +1255,8 @@ pub(crate) fn tool_may_require_permission(name: &str, args: &serde_json::Value) 
     match name {
         // 权限 profile 和命令规则都可能要求 park；统一走串行 preflight。
         "exec_command" | "code_exec" => true,
+        // 权限请求必须走串行 preflight（要 park 用户批准后才能落会话级授权）。
+        "request_permissions" => true,
         _ => {
             tools::browser::approval_class(name, args).is_some()
                 || tools::tool_requires_in_process_write(name, args)
@@ -1691,6 +1842,8 @@ struct AuthorizedToolCall {
 
 enum ToolAuthorization {
     Authorized(AuthorizedToolCall),
+    /// preflight 已产出最终结果：跳过工具执行，直接把文本作为结果。
+    Completed(types::ToolOutput),
     Denied(types::ToolOutput),
 }
 
@@ -1727,8 +1880,21 @@ async fn authorize_tool_call(
         return Some(ToolAuthorization::Authorized(authorization));
     }
 
+    match preflight_request_permissions(session, call, turn_context, hitl_gate).await? {
+        PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Handled(text) => {
+            return Some(ToolAuthorization::Completed(text.into()));
+        }
+        PermissionPreflight::Granted(audit) => authorization.permission_audits.push(*audit),
+        PermissionPreflight::Denied(message) => {
+            return Some(ToolAuthorization::Completed(message.into()));
+        }
+    }
     match preflight_workflow_tool(session, step_context, call, turn_context, hitl_gate).await? {
         PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Handled(text) => {
+            return Some(ToolAuthorization::Completed(text.into()));
+        }
         PermissionPreflight::Granted(audit) => {
             authorization.workspace_write_grant = true;
             authorization.permission_audits.push(*audit);
@@ -1744,6 +1910,9 @@ async fn authorize_tool_call(
     }
     match preflight_browser_action(session, step_context, call, turn_context, hitl_gate).await? {
         PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Handled(text) => {
+            return Some(ToolAuthorization::Completed(text.into()));
+        }
         PermissionPreflight::Granted(audit) => authorization.permission_audits.push(*audit),
         PermissionPreflight::Denied(message) => {
             return Some(ToolAuthorization::Denied(
@@ -1754,6 +1923,9 @@ async fn authorize_tool_call(
     }
     match preflight_mcp_tool_approval(session, step_context, call, turn_context, hitl_gate).await? {
         PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Handled(text) => {
+            return Some(ToolAuthorization::Completed(text.into()));
+        }
         PermissionPreflight::Granted(audit) => authorization.permission_audits.push(*audit),
         PermissionPreflight::Denied(message) => {
             return Some(ToolAuthorization::Denied(
@@ -1766,6 +1938,9 @@ async fn authorize_tool_call(
     }
     match preflight_read_only_write(session, step_context, call, turn_context, hitl_gate).await? {
         PermissionPreflight::NotRequired => {}
+        PermissionPreflight::Handled(text) => {
+            return Some(ToolAuthorization::Completed(text.into()));
+        }
         PermissionPreflight::Granted(audit) => {
             authorization.workspace_write_grant = true;
             authorization.permission_audits.push(*audit);
@@ -1816,6 +1991,10 @@ async fn execute_tools_serial_inner(
         } = match authorize_tool_call(session, &step_context, call, turn_context, hitl_gate).await?
         {
             ToolAuthorization::Authorized(authorization) => authorization,
+            ToolAuthorization::Completed(output) => {
+                out.push(output);
+                continue;
+            }
             ToolAuthorization::Denied(output) => {
                 out.push(output);
                 continue;
@@ -2446,6 +2625,10 @@ async fn execute_tools_serial_inner(
                         )
                         .await?
                         {
+                            PermissionPreflight::Handled(text) => {
+                                out.push(text.into());
+                                continue;
+                            }
                             PermissionPreflight::Granted(retry_audit) => {
                                 let execution_root = step_context
                                     .turn
@@ -2714,6 +2897,152 @@ pub(crate) async fn execute_tools_concurrent(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sanitize_grant_path_rejects_relative_astro_and_sensitive_paths() {
+        let memory = std::path::PathBuf::from("/tmp/astro-home-fixture");
+
+        assert!(sanitize_grant_path("", &memory).is_err());
+        assert!(sanitize_grant_path("out/report.md", &memory).is_err());
+        assert!(sanitize_grant_path("/tmp/astro-home-fixture/sessions", &memory).is_err());
+        assert_eq!(
+            sanitize_grant_path("/tmp/fixture-out", &memory).unwrap(),
+            std::path::PathBuf::from("/tmp/fixture-out")
+        );
+        if let Some(home) = std::env::var_os("HOME") {
+            let ssh = std::path::Path::new(&home).join(".ssh/id_rsa");
+            assert!(sanitize_grant_path(&ssh.display().to_string(), &memory).is_err());
+        }
+    }
+
+    async fn park_and_resolve(
+        gate: &Arc<HitlGate>,
+        approved: bool,
+    ) -> tokio::task::JoinHandle<()> {
+        let gate = Arc::clone(gate);
+        tokio::spawn(async move {
+            for _ in 0..400 {
+                let pending = gate.pending_interrupts().await;
+                if let Some(first) = pending.first() {
+                    gate.resolve(&[crate::control::interrupt::ResumeItem {
+                        interrupt_id: first.id.clone(),
+                        status: "resolved".into(),
+                        payload_json: json!({ "approved": approved }).to_string(),
+                    }])
+                    .await
+                    .unwrap();
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            panic!("permission request never parked");
+        })
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn request_permissions_grants_session_roots_only_after_user_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let grant_dir = tempfile::tempdir().unwrap();
+        let grant_root = grant_dir.path().join("shared-out");
+        std::fs::create_dir_all(&grant_root).unwrap();
+
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(TurnContext::new(
+            "permission-grant".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::READ_ONLY_PROFILE.into()),
+            Some(dir.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+
+        let call = types::ParsedToolCall::new(
+            "request_permissions",
+            json!({
+                "reason": "写报告",
+                "permissions": {
+                    "file_system": {
+                        "write": [grant_root.display().to_string(), "relative/path"],
+                        "read": ["/etc"]
+                    }
+                }
+            }),
+        );
+        let gate = HitlGate::new(session.session_id().to_string());
+        let responder = park_and_resolve(&gate, true).await;
+
+        let outcome = preflight_request_permissions(&session, &call, &turn, Some(&gate))
+            .await
+            .expect("permission preflight outcome");
+        responder.await.unwrap();
+
+        let PermissionPreflight::Handled(text) = outcome else {
+            panic!("expected handled permission request");
+        };
+        assert!(text.contains("Permission granted for this session"), "{text}");
+        // 相对路径被净化掉：授权结果里只出现绝对根。
+        assert!(!text.contains("relative/path"), "{text}");
+
+        let grants = session.permission_grants();
+        assert!(grants.workspace_write, "{grants:?}");
+        assert_eq!(
+            grants.writable_roots,
+            vec![grant_root.canonicalize().unwrap()]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn request_permissions_denial_leaves_the_session_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let grant_dir = tempfile::tempdir().unwrap();
+
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(TurnContext::new(
+            "permission-denied".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::READ_ONLY_PROFILE.into()),
+            Some(dir.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+
+        let call = types::ParsedToolCall::new(
+            "request_permissions",
+            json!({
+                "reason": "写报告",
+                "permissions": {
+                    "file_system": { "write": [grant_dir.path().display().to_string()] }
+                }
+            }),
+        );
+        let gate = HitlGate::new(session.session_id().to_string());
+        let responder = park_and_resolve(&gate, false).await;
+
+        let outcome = preflight_request_permissions(&session, &call, &turn, Some(&gate))
+            .await
+            .expect("permission preflight outcome");
+        responder.await.unwrap();
+
+        let PermissionPreflight::Handled(text) = outcome else {
+            panic!("expected handled permission request");
+        };
+        assert!(text.contains("用户拒绝"), "{text}");
+        assert!(session.permission_grants().is_empty());
+    }
 
     #[tokio::test]
     async fn code_mode_namespaced_tools_execute_through_frozen_step() {

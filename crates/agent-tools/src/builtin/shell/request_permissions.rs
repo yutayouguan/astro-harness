@@ -1,15 +1,13 @@
 //! 权限请求：向用户请求额外的文件系统或网络权限。
 //!
-//! **当前构建不授予任何权限。** 协议侧已经有 `EventMsg::RequestPermissions` 与
-//! `Op::RequestPermissionsResponse`，但接通这条链路还缺三段：
-//!   1. agent-core 的**生产者**：工具触发时发出 `EventMsg::RequestPermissions`
-//!      （现在没有任何地方 emit 该事件）；
-//!   2. Desktop 的授权卡片与响应：`thread_events` 已把该 control kind 透传并标记
-//!      `waitingOnPermissions`，但前端没有卡片/回执处理；
-//!   3. 会话级授权存储：`authorize_tool_call` 现在只有 per-attempt 的
-//!      `workspace_write_grant`（沙箱重试路径），没有"本会话额外可写根目录"的概念，
-//!      `build_command_sandbox_policy_with_roots` 也只读 permission profile。
-//! 在补齐之前，本工具只回报"未生效"，避免模型误以为已获授权后继续用错误假设执行。
+//! 授权由 **agent-core 的 preflight** 完成：`request_permissions` 被强制走串行
+//! preflight（`tool_may_require_permission`），在那里 park 用户批准，批准后把
+//! workspace-write + 额外可写根写进**会话级**授权（`Session::grant_permissions`），
+//! 由 `sandbox_policy_for_call` 生效；该路径直接产出工具结果，不再进入本模块的
+//! `dispatch`。
+//!
+//! 这里的 `dispatch` 是**兜底**（例如 code-mode 嵌套调用绕过了 preflight）：只回报
+//! 请求内容，明确说明本工具自己不授权，避免模型误以为已经拿到权限。
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -92,7 +90,7 @@ fn permission_request_message(args: &RequestPermissionsArgs) -> String {
         .unwrap_or("not provided");
 
     let mut parts = vec![format!(
-        "Permission request NOT applied: this build cannot grant extra filesystem or network access at runtime. Reason recorded: {reason}"
+        "Permission request NOT applied by this tool. The runtime asks the user when it routes this call through the approval flow; approved paths then apply to the current session only. Reason recorded: {reason}"
     )];
 
     if let Some(ref net) = args.permissions.network {
@@ -148,11 +146,11 @@ mod tests {
     fn permission_request_reports_that_nothing_was_granted() {
         let text = permission_request_message(&args_with("need to write a report"));
 
-        assert!(text.contains("NOT applied"), "{text}");
+        assert!(text.contains("NOT applied by this tool"), "{text}");
         assert!(text.contains("need to write a report"), "{text}");
         assert!(text.contains("/etc"), "{text}");
         assert!(text.contains("/tmp/out"), "{text}");
-        assert!(text.contains("permission preset"), "{text}");
+        assert!(text.contains("current session only"), "{text}");
     }
 
     #[test]

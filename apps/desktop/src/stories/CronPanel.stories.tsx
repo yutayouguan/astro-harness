@@ -20,6 +20,7 @@ const activeJobs: CronJobDto[] = [
     next_run_at: "2026-08-29T09:30:00+08:00",
     show_in_chat: true,
     archived_at: null,
+    running: false,
   },
   {
     id: "weekly-report",
@@ -35,6 +36,7 @@ const activeJobs: CronJobDto[] = [
     next_run_at: null,
     show_in_chat: false,
     archived_at: null,
+    running: false,
   },
 ];
 
@@ -52,6 +54,7 @@ const archivedJob: CronJobDto = {
   next_run_at: null,
   show_in_chat: true,
   archived_at: "2026-09-20T10:00:00+08:00",
+  running: false,
 };
 
 const jobs: CronJobDto[] = [...activeJobs, archivedJob];
@@ -194,3 +197,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const CardsWithDetailDrawer: Story = {};
+
+/** 任务运行中：删除与归档都被拦截，只给友好提示。 */
+export const RunningTaskGuards: Story = {
+  name: "Running Task Guards",
+  beforeEach: () => {
+    mockJobs = activeJobs.map((job) => ({
+      ...job,
+      running: job.id === "daily-ai-news",
+    }));
+  },
+};

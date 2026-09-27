@@ -192,6 +192,24 @@ impl Config {
 /// Session 运行时：拥有对话状态、记忆、工具与 Provider 凭证。
 ///
 /// 输入通过 `start_or_steer_turn` 进入；`SessionTask` 拥有模型/工具循环。
+/// 会话级额外权限（仅内存，随会话消亡）。
+///
+/// 由 `request_permissions` 的用户批准写入：批准后当前会话内的命令工具按
+/// workspace-write 运行，并把请求到的目录并入额外可写根。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PermissionGrants {
+    /// 会话内允许 workspace-write（而不是单次沙箱重试）。
+    pub workspace_write: bool,
+    /// 额外可写根（绝对路径，已通过净化）。
+    pub writable_roots: Vec<PathBuf>,
+}
+
+impl PermissionGrants {
+    pub fn is_empty(&self) -> bool {
+        !self.workspace_write && self.writable_roots.is_empty()
+    }
+}
+
 pub struct Session {
     pub(crate) config: Config,
     pub(crate) session_id: String,
@@ -212,6 +230,8 @@ pub struct Session {
     mcp_elicitation: Arc<mcp::McpElicitationBroker>,
     mcp_elicitation_bound: AtomicBool,
     pub(crate) guardian_retry: crate::control::guardian::GuardianRetryState,
+    /// 会话级额外权限：`request_permissions` 经用户批准后生效，会话结束即失效。
+    pub(crate) permission_grants: StdMutex<PermissionGrants>,
 
     // ── 注入的依赖 ─────────────────────────────────────────
     /// 共享的 Plugin/Gateway/Shell hook 运行时。
@@ -679,6 +699,7 @@ impl Session {
             mcp_elicitation,
             mcp_elicitation_bound: AtomicBool::new(false),
             guardian_retry: crate::control::guardian::GuardianRetryState::default(),
+            permission_grants: StdMutex::new(PermissionGrants::default()),
             hook_runtime: StdMutex::new(Arc::new(::hooks::HookRuntime::new())),
             hook_run_observer: StdMutex::new(None),
             subagent_hook_context: StdMutex::new(None),
@@ -1913,6 +1934,28 @@ impl Session {
     }
 
     /// 当前会话唯一标识符。
+    /// 合并一次用户批准的会话级权限（幂等）。
+    pub(crate) fn grant_permissions(&self, grants: PermissionGrants) {
+        let mut current = self
+            .permission_grants
+            .lock()
+            .expect("permission grants mutex poisoned");
+        current.workspace_write |= grants.workspace_write;
+        for root in grants.writable_roots {
+            if !current.writable_roots.contains(&root) {
+                current.writable_roots.push(root);
+            }
+        }
+    }
+
+    /// 当前会话已获批的额外权限快照。
+    pub(crate) fn permission_grants(&self) -> PermissionGrants {
+        self.permission_grants
+            .lock()
+            .expect("permission grants mutex poisoned")
+            .clone()
+    }
+
     pub fn session_id(&self) -> &str {
         &self.session_id
     }
