@@ -102,6 +102,7 @@ pub struct ListCronRunsArgs {
 /// 默认只删任务定义并把它的执行会话归档，运行记录保留——会话里是 Agent 的真实产出，
 /// 误删代价远高于留一条历史；要清记录必须显式勾选。
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoveCronJobArgs {
     pub id: String,
     /// 是否同时归档该任务的执行会话（默认 true）。
@@ -633,4 +634,31 @@ pub async fn list_cron_job_runs(id: String) -> Result<Vec<CronRunDto>, String> {
         limit: default_run_limit(),
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RemoveCronJobArgs;
+
+    #[test]
+    fn remove_args_decode_frontend_camel_case() {
+        let args: RemoveCronJobArgs = serde_json::from_value(serde_json::json!({
+            "id": "job-1",
+            "archiveSession": false,
+            "deleteRuns": true,
+        }))
+        .unwrap();
+        assert_eq!(args.id, "job-1");
+        assert!(!args.archive_session);
+        assert!(args.delete_runs);
+    }
+
+    #[test]
+    fn remove_args_default_to_safe_choices() {
+        let args: RemoveCronJobArgs =
+            serde_json::from_value(serde_json::json!({ "id": "job-1" })).unwrap();
+        // 默认归档会话、保留运行记录：会话里是 Agent 的真实产出，误删代价最高。
+        assert!(args.archive_session);
+        assert!(!args.delete_runs);
+    }
 }

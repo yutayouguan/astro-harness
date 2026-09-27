@@ -54,6 +54,10 @@ test("deleting a task asks what happens to its session and run records", () => {
   assert.match(command, /pub struct RemoveCronJobArgs/);
   assert.match(
     command,
+    /#\[serde\(rename_all = "camelCase"\)\]\s*\n\s*pub struct RemoveCronJobArgs/,
+  );
+  assert.match(
+    command,
     /#\[serde\(default = "default_true"\)\]\s*\n\s*pub archive_session/,
   );
   assert.match(command, /pub delete_runs: bool/);
