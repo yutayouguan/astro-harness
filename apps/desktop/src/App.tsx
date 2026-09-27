@@ -65,6 +65,7 @@ import { useWallpaper } from "./hooks/app/useWallpaper";
 import { useActiveUiStyle } from "./hooks/app/useActiveUiStyle";
 import { useTransientToast } from "./hooks/ui/useTransientToast";
 import { useDeferredPresence } from "./hooks/ui/useDeferredPresence";
+import { useInAppBrowserLinks } from "./hooks/ui/useInAppBrowserLinks";
 import { useWindowChrome } from "./hooks/app/useWindowChrome";
 import { useI18n } from "./i18n/LocaleContext";
 import type { MessageKey } from "./i18n/messages";
@@ -140,6 +141,7 @@ import { syncWindowUnderlay } from "./lib/ui/windowUnderlay";
 import { dynamicGradientForTab } from "./lib/ui/dynamicGradient";
 import { resolveMediaSrc } from "./lib/media/resolveMediaSrc";
 import { normalizeBrowserUrl } from "./lib/browser/browserUrl";
+import { isTauriRuntime } from "./lib/browser/inAppBrowserLink";
 import {
   applyWallpaperPaletteVars,
   clearWallpaperPaletteVars,
@@ -814,6 +816,27 @@ export default function App() {
       sideSessionId,
     ],
   );
+
+  /** 网页链接默认去向：打开内置浏览器坞并导航到该地址。 */
+  const openLinkInAppBrowser = useCallback(
+    (url: string) => {
+      // 浏览器坞显示优先级低于评审面板，点链接时先收起它，避免「点了没反应」。
+      setReviewState(null);
+      setBrowserDockOpen(true);
+      void chat
+        .controlBrowser("open", { url, new_tab: true })
+        .catch((error: unknown) => {
+          showTransientToast(String(error), { tone: "error" });
+        });
+    },
+    [chat.controlBrowser, showTransientToast],
+  );
+
+  // 内置浏览器坞是聊天页的右侧坞；其他页面没有坞可用，链接保持系统浏览器行为。
+  useInAppBrowserLinks({
+    enabled: nav === "chat" && isTauriRuntime(),
+    onOpen: openLinkInAppBrowser,
+  });
 
   useEffect(() => {
     if (!chat.browserPreview || chat.browserPreview.status === "closed") return;
