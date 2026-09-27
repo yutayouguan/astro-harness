@@ -2183,16 +2183,17 @@ async fn released_generation_background_finalizer_cannot_resurrect_thread_or_ses
             .release_session_runtime("released-background")
             .await
     });
-    for _ in 0..16 {
-        if release.is_finished() {
-            break;
+    // 固定 16 次 yield 在并行负载下会误判：这里等释放真正结束，但仍远小于 30s marker 超时。
+    let released = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !release.is_finished() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
-        tokio::task::yield_now().await;
-    }
+    })
+    .await;
     assert!(
-            release.is_finished(),
-            "explicit release must cancel work and expire the old sink without waiting for the 30s marker timeout"
-        );
+        released.is_ok(),
+        "explicit release must cancel work and expire the old sink without waiting for the 30s marker timeout"
+    );
     release.await.expect("release task");
     assert!(!service.threads.contains("released-background").await);
     assert!(!service

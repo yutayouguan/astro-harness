@@ -114,6 +114,7 @@ async fn terminal_can_switch_to_ai_tab_and_restart_without_timing_out() {
             replace_mode_mismatch: false,
             client_token: client_token.into(),
             agent_default,
+            initial_input: String::new(),
         };
 
     let user = tokio::time::timeout(
