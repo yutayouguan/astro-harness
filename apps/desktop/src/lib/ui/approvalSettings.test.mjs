@@ -32,8 +32,13 @@ test("approval UI and resume payload expose scoped command-type permission", asy
   );
 
   assert.match(wizard, /approvalTypeLabel/);
-  assert.match(wizard, /submitApproval\("approve_type"\)/);
+  // 动作 id 由 approvalKind 映射到同一套 submitApproval：确认/沙箱用 approve*，
+  // 网络授权用 allow*（会话级）。
+  assert.match(wizard, /id: "approve_type" as const/);
+  assert.match(wizard, /id: "allow_session" as const/);
+  assert.match(wizard, /submitApproval\((?:actions\.\w+\.id|action\.id)\)/);
   assert.match(session, /scope: "type"/);
+  assert.match(session, /scope: "allow_session"/);
 });
 
 test("command approval separates request, command, actions, and composer surfaces", async () => {

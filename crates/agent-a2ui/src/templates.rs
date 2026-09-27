@@ -534,6 +534,12 @@ pub fn build_form_surface(
 ///
 /// 显示目标主机、profile 以及四个操作按钮：
 /// 允许一次、允许本次会话、始终允许（持久化）和拒绝。
+/// 网络主机审批表面。
+///
+/// 与 confirm / sandbox_retry 共用 `ClarifyWizard` 的 approval 变体：面向用户的文案
+/// 由前端 locale 按 `approvalKind = "network"` 解析，后端只发送语义类型与原始目标
+/// （host / profile / 命令预览）。动作沿用 `allow_once` / `allow_session` /
+/// `allow_always` / `deny`，与 `park_network_approval` 的 `scope` 契约一致。
 pub fn build_network_approval_surface(
     surface_id: &str,
     host: &str,
@@ -547,66 +553,32 @@ pub fn build_network_approval_surface(
     } else {
         format!("{protocol}://{host}:{port}")
     };
-    let body = if let Some(cmd) = command_preview {
-        format!("Command `{cmd}` is trying to connect to **{target}**\n\nProfile: `{profile_id}`")
-    } else {
-        format!("A subprocess is trying to connect to **{target}**\n\nProfile: `{profile_id}`")
-    };
 
     let components = vec![
         json!({ "id": "root", "component": "Card", "child": "col" }),
         json!({
             "id": "col",
             "component": "Column",
-            "children": ["header", "body", "actions"]
+            "children": ["wizard"]
         }),
         json!({
-            "id": "header",
-            "component": "Row",
-            "children": ["avatar", "header_text", "badge"]
+            "id": "wizard",
+            "component": "ClarifyWizard",
+            "variant": "approval",
+            "approvalKind": "network",
+            "approvalDetail": target,
+            "approvalHost": host,
+            "approvalProfile": profile_id,
+            "approvalCommand": command_preview,
+            "allowSession": true,
+            "allowAlways": true,
+            "approvalTypeLabel": host,
+            "steps": [{
+                "id": "network",
+                "question": "network_approval",
+                "options": ["allow_once", "allow_session", "allow_always", "deny"],
+            }]
         }),
-        json!({ "id": "avatar", "component": "Avatar", "name": "globe" }),
-        json!({ "id": "header_text", "component": "Column", "children": ["title"] }),
-        json!({ "id": "title", "component": "Text", "text": "Network Access", "variant": "h2" }),
-        json!({ "id": "badge", "component": "Badge", "text": "Network", "variant": "warn" }),
-        json!({ "id": "body", "component": "Text", "text": body }),
-        json!({
-            "id": "actions",
-            "component": "Row",
-            "children": ["allow_once", "allow_session", "allow_always", "deny"]
-        }),
-        json!({
-            "id": "allow_once",
-            "component": "Button",
-            "child": "allow_once_label",
-            "variant": "primary",
-            "action": { "event": { "name": "allow_once" } }
-        }),
-        json!({ "id": "allow_once_label", "component": "Text", "text": "Allow once" }),
-        json!({
-            "id": "allow_session",
-            "component": "Button",
-            "child": "allow_session_label",
-            "variant": "secondary",
-            "action": { "event": { "name": "allow_session" } }
-        }),
-        json!({ "id": "allow_session_label", "component": "Text", "text": "Allow for session" }),
-        json!({
-            "id": "allow_always",
-            "component": "Button",
-            "child": "allow_always_label",
-            "variant": "secondary",
-            "action": { "event": { "name": "allow_always" } }
-        }),
-        json!({ "id": "allow_always_label", "component": "Text", "text": "Always allow" }),
-        json!({
-            "id": "deny",
-            "component": "Button",
-            "child": "deny_label",
-            "variant": "secondary",
-            "action": { "event": { "name": "deny" } }
-        }),
-        json!({ "id": "deny_label", "component": "Text", "text": "Deny" }),
     ];
 
     vec![

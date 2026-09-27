@@ -399,9 +399,23 @@ function CatalogNode({ node, ctx }: { node: A2uiComponent; ctx: RenderCtx }) {
               : undefined
           }
           allowAlways={node.allowAlways === true}
+          allowSession={node.allowSession === true}
           approvalTypeLabel={
             typeof node.approvalTypeLabel === "string"
               ? node.approvalTypeLabel
+              : undefined
+          }
+          approvalHost={
+            typeof node.approvalHost === "string" ? node.approvalHost : undefined
+          }
+          approvalProfile={
+            typeof node.approvalProfile === "string"
+              ? node.approvalProfile
+              : undefined
+          }
+          approvalCommand={
+            typeof node.approvalCommand === "string"
+              ? node.approvalCommand
               : undefined
           }
           disabled={ctx.disabled}

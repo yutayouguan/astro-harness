@@ -580,8 +580,18 @@ html[data-theme="light"] .a2ui-surface {
   width: 100%;
 }
 
-/* Approval is a decision surface, not a generic questionnaire. */
+/* Approval/authorization is a decision surface, not a generic questionnaire.
+   confirm / sandbox_retry / network 三种语义共用同一套视觉：
+   分类色点之外的图标只出现在这里，动作区两层（主决策 → 作用域更长的授权）。 */
 .a2ui-clarify-wizard.is-approval {
+  --approval-accent: var(--tone-amber, #f59e0b);
+  --approval-accent-strong: #d97706;
+  --approval-scoped: var(--tone-blue, #2563eb);
+  --approval-radius: 12px;
+  /* 动作区两行共用同一套列宽，保证按钮左右边界对齐。 */
+  --approval-grid: minmax(0, 0.82fr) minmax(0, 1fr);
+  /* 描述缩进对齐标题，而不是对齐图标。 */
+  --approval-inset: 47px;
   gap: 10px;
   padding: 0;
 }
@@ -589,8 +599,8 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-approval-intro {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 3px 4px 2px;
+  gap: 8px;
+  padding: 2px 2px 0;
 }
 
 .a2ui-approval-header {
@@ -605,10 +615,10 @@ html[data-theme="light"] .a2ui-surface {
   width: 36px;
   height: 36px;
   place-items: center;
-  border: 1px solid color-mix(in srgb, #d97706 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--approval-accent-strong) 30%, transparent);
   border-radius: 11px;
-  color: color-mix(in srgb, #d97706 88%, var(--ink));
-  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  color: color-mix(in srgb, var(--approval-accent-strong) 88%, var(--ink));
+  background: color-mix(in srgb, var(--approval-accent) 14%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
 }
 
@@ -619,7 +629,7 @@ html[data-theme="light"] .a2ui-surface {
 .a2ui-approval-eyebrow {
   display: block;
   margin-bottom: 2px;
-  color: color-mix(in srgb, #d97706 78%, var(--ink));
+  color: color-mix(in srgb, var(--approval-accent-strong) 78%, var(--ink));
   font-size: 0.68rem;
   font-weight: 720;
   letter-spacing: 0.055em;
@@ -637,28 +647,27 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-approval-description {
-  margin: 0 0 0 47px;
-  color: color-mix(in srgb, var(--ink) 76%, transparent);
+  margin: 0 0 0 var(--approval-inset);
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
   font-size: 0.84rem;
-  line-height: 1.55;
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
+/* 命令/目标：终端面板质感，保留原始换行、横向滚动，不在中途折行。 */
 .a2ui-approval-command {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent),
-    0 8px 24px color-mix(in srgb, var(--ink) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
+  border-radius: var(--approval-radius);
+  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
 }
 
 .a2ui-approval-command-label {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 11px;
+  padding: 7px 9px 7px 11px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink-mute);
   font-size: 0.7rem;
@@ -666,37 +675,82 @@ html[data-theme="light"] .a2ui-surface {
   letter-spacing: 0.025em;
 }
 
-.a2ui-approval-command pre {
-  max-height: 10.5rem;
-  margin: 0;
-  overflow: auto;
-  padding: 11px 13px 13px;
-  color: color-mix(in srgb, var(--ink) 90%, transparent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.76rem;
-  line-height: 1.55;
-  scrollbar-width: thin;
-  white-space: pre-wrap;
-  word-break: break-word;
+.a2ui-approval-copy {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--ink-mute);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
-.a2ui-approval-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
-  gap: 8px;
+.a2ui-approval-copy:hover {
+  border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink-soft, var(--ink));
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.a2ui-approval-copy:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--approval-accent-strong) 65%, #fff);
+  outline-offset: 1px;
+}
+
+.a2ui-approval-command pre {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 11px 13px;
+  color: color-mix(in srgb, var(--ink) 90%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.775rem;
+  line-height: 1.6;
+  tab-size: 2;
+  scrollbar-width: thin;
+  white-space: pre;
+}
+
+.a2ui-approval-command pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.a2ui-approval-command pre::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  background-clip: content-box;
+}
+
+.a2ui-approval-command pre::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+  background-clip: content-box;
 }
 
 .a2ui-approval-footer {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 2px 4px 0;
+  padding: 0;
+}
+
+.a2ui-approval-actions,
+.a2ui-approval-persistent-actions {
+  display: grid;
+  grid-template-columns: var(--approval-grid);
+  gap: 8px;
 }
 
 .a2ui-approval-persistent-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
   padding-top: 8px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
 }
@@ -706,12 +760,12 @@ html[data-theme="light"] .a2ui-surface {
   appearance: none;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
   min-height: 46px;
   border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  border-radius: 11px;
-  padding: 8px 11px;
+  border-radius: var(--approval-radius);
+  padding: 8px 12px;
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   font: inherit;
@@ -720,8 +774,7 @@ html[data-theme="light"] .a2ui-surface {
   transition:
     border-color 150ms ease,
     background 150ms ease,
-    box-shadow 150ms ease,
-    transform 100ms ease-out;
+    box-shadow 150ms ease;
 }
 
 .a2ui-approval-action-copy {
@@ -745,71 +798,79 @@ html[data-theme="light"] .a2ui-surface {
 }
 
 .a2ui-approval-action.is-deny:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #ef4444 30%, transparent);
-  background: color-mix(in srgb, #ef4444 7%, transparent);
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 30%, transparent);
+  background: color-mix(in srgb, var(--danger, #ef4444) 7%, transparent);
 }
 
 .a2ui-approval-action.is-approve {
-  border-color: color-mix(in srgb, #d97706 50%, transparent);
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 50%, transparent);
   color: #fff;
   background: linear-gradient(145deg, #e28a0a, #c66a03);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 5px 14px color-mix(in srgb, #d97706 20%, transparent);
+    0 5px 14px color-mix(in srgb, var(--approval-accent-strong) 20%, transparent);
 }
 
 .a2ui-approval-action.is-approve small {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .a2ui-approval-action.is-approve:hover:not(:disabled) {
   background: linear-gradient(145deg, #ec9411, #cf7107);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 7px 18px color-mix(in srgb, #d97706 28%, transparent);
+    0 7px 18px color-mix(in srgb, var(--approval-accent-strong) 28%, transparent);
 }
 
+/* 作用域更长的授权：有边界感的分行按钮，而不是裸文本。 */
 .a2ui-approval-always {
-  min-height: 42px;
-  border-color: transparent;
-  border-radius: 9px;
-  color: color-mix(in srgb, #d97706 70%, var(--ink));
-  background: transparent;
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 22%, transparent);
+  color: color-mix(in srgb, var(--approval-accent-strong) 74%, var(--ink));
+  background: color-mix(in srgb, var(--approval-accent) 7%, transparent);
 }
 
 .a2ui-approval-always:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #d97706 24%, transparent);
-  background: color-mix(in srgb, #f59e0b 7%, transparent);
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 34%, transparent);
+  background: color-mix(in srgb, var(--approval-accent) 12%, transparent);
 }
 
-.a2ui-approval-always.is-type {
-  color: color-mix(in srgb, #2563eb 72%, var(--ink));
-  background: transparent;
+.a2ui-approval-always.is-type,
+.a2ui-approval-always.is-session {
+  border-color: color-mix(in srgb, var(--approval-scoped) 22%, transparent);
+  color: color-mix(in srgb, var(--approval-scoped) 78%, var(--ink));
+  background: color-mix(in srgb, var(--approval-scoped) 7%, transparent);
 }
 
-.a2ui-approval-always.is-type:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #2563eb 38%, transparent);
-  background: color-mix(in srgb, #3b82f6 10%, transparent);
+.a2ui-approval-always.is-type:hover:not(:disabled),
+.a2ui-approval-always.is-session:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--approval-scoped) 36%, transparent);
+  background: color-mix(in srgb, var(--approval-scoped) 13%, transparent);
 }
 
 .a2ui-approval-always-arrow {
   flex: 0 0 auto;
-  color: var(--ink-mute);
+  margin-left: auto;
+  color: color-mix(in srgb, currentcolor 62%, transparent);
+  opacity: 0.72;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
 }
 
-.a2ui-approval-action:hover:not(:disabled),
-.a2ui-approval-always:hover:not(:disabled) {
-  transform: translateY(-1px);
+.a2ui-approval-always:hover:not(:disabled) .a2ui-approval-always-arrow {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .a2ui-approval-action:active:not(:disabled),
 .a2ui-approval-always:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.99);
 }
 
 .a2ui-approval-action:focus-visible,
-.a2ui-approval-always:focus-visible {
-  outline: 2px solid color-mix(in srgb, #d97706 65%, #fff);
+.a2ui-approval-always:focus-visible,
+.a2ui-approval-copy:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--approval-accent-strong) 65%, #fff);
   outline-offset: 2px;
 }
 
@@ -825,7 +886,7 @@ html[data-theme="light"] .a2ui-surface {
   gap: 9px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, #16a34a 24%, transparent);
-  border-radius: 12px;
+  border-radius: var(--approval-radius);
   color: color-mix(in srgb, #15803d 72%, var(--ink));
   background: color-mix(in srgb, #22c55e 8%, transparent);
   font-size: 0.82rem;
@@ -854,17 +915,46 @@ html[data-theme="light"] .a2ui-surface {
   background: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
+html[data-theme="dark"] .a2ui-approval-command {
+  background: color-mix(in srgb, #000 32%, var(--panel));
+  border-color: color-mix(in srgb, #fff 12%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+}
+
+html[data-theme="dark"] .a2ui-approval-command pre {
+  color: color-mix(in srgb, var(--ink) 88%, transparent);
+}
+
+html[data-theme="dark"] .a2ui-approval-action.is-approve {
+  border-color: color-mix(in srgb, var(--approval-accent) 46%, transparent);
+  background: linear-gradient(145deg, #d08410, #a75d05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 6px 16px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .a2ui-approval-action.is-approve:hover:not(:disabled) {
+  background: linear-gradient(145deg, #dd9218, #b5660a);
+}
+
 @media (max-width: 520px) {
   .a2ui-approval-description {
     margin-left: 0;
   }
 
-  .a2ui-approval-actions {
-    grid-template-columns: 1fr;
-  }
-
+  .a2ui-approval-actions,
   .a2ui-approval-persistent-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a2ui-approval-always-arrow {
+    transition: none;
+  }
+
+  .a2ui-approval-always:hover:not(:disabled) .a2ui-approval-always-arrow {
+    transform: none;
   }
 }
 

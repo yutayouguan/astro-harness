@@ -153,3 +153,101 @@ export const Default: Story = {};
 export const Approval: Story = {
   render: () => <ClarifyWizardPreview previewSurface={approvalSurface} />,
 };
+
+// 与 `a2ui::templates::build_network_approval_surface` 同形：网络授权走同一张卡，
+// 只是换成 allow_once / allow_session / allow_always / deny 四个作用域动作。
+const networkApprovalSurface: UiSurface = {
+  messageId: "network-approval-preview",
+  activityType: "confirmation",
+  status: "active",
+  operations: [
+    {
+      createSurface: {
+        surfaceId: "network-approval-preview",
+        catalogId: "astro://a2ui/catalog/v2",
+      },
+    },
+    {
+      updateComponents: {
+        surfaceId: "network-approval-preview",
+        components: [
+          { id: "root", component: "Card", child: "col" },
+          { id: "col", component: "Column", children: ["wizard"] },
+          {
+            id: "wizard",
+            component: "ClarifyWizard",
+            variant: "approval",
+            approvalKind: "network",
+            approvalDetail: "https://api.virxact.com:8443",
+            approvalHost: "api.virxact.com",
+            approvalProfile: "aihot",
+            approvalCommand:
+              'curl -sS --max-time 20 -H "User-Agent: aihot-skill/0.3.6" "https://api.virxact.com/api/public/items?mode=selected&take=10"',
+            allowSession: true,
+            allowAlways: true,
+            approvalTypeLabel: "api.virxact.com",
+            steps: [
+              {
+                id: "network",
+                question: "network_approval",
+                options: [
+                  "allow_once",
+                  "allow_session",
+                  "allow_always",
+                  "deny",
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+export const ApprovalNetwork: Story = {
+  render: () => <ClarifyWizardPreview previewSurface={networkApprovalSurface} />,
+};
+
+// 与 `a2ui::templates::build_sandbox_retry_surface` 同形：沙箱拒绝后的一次性提权授权。
+const sandboxRetrySurface: UiSurface = {
+  messageId: "sandbox-retry-preview",
+  activityType: "confirmation",
+  status: "active",
+  operations: [
+    {
+      createSurface: {
+        surfaceId: "sandbox-retry-preview",
+        catalogId: "astro://a2ui/catalog/v2",
+      },
+    },
+    {
+      updateComponents: {
+        surfaceId: "sandbox-retry-preview",
+        components: [
+          { id: "root", component: "Card", child: "col" },
+          { id: "col", component: "Column", children: ["wizard"] },
+          {
+            id: "wizard",
+            component: "ClarifyWizard",
+            variant: "approval",
+            approvalKind: "sandbox_retry",
+            approvalDetail:
+              "sandbox denied write to /Users/me/project/out/report.md (read-only profile)",
+            steps: [
+              {
+                id: "confirm",
+                question: "sandbox_retry",
+                options: ["approve", "deny"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+export const ApprovalSandboxRetry: Story = {
+  render: () => <ClarifyWizardPreview previewSurface={sandboxRetrySurface} />,
+};

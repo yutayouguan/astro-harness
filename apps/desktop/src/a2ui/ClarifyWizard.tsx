@@ -1,9 +1,19 @@
 /** 多题澄清叠层向导：Tab + 选项/自由输入 + 卡片切换动画。 */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowRight,
   Check,
+  Clock3,
+  Copy,
+  Globe2,
   PencilLine,
   ShieldAlert,
   ShieldCheck,
@@ -30,7 +40,15 @@ type Props = {
   approvalKind?: string;
   approvalDetail?: string;
   allowAlways?: boolean;
+  /** 额外提供「本次会话允许」（网络授权等会话级权限）。 */
+  allowSession?: boolean;
   approvalTypeLabel?: string;
+  /** network 授权：目标主机（用于「始终允许 <host>」）。 */
+  approvalHost?: string;
+  /** network 授权：命中的 profile 名称。 */
+  approvalProfile?: string;
+  /** network 授权：触发连接的命令预览。 */
+  approvalCommand?: string;
   disabled?: boolean;
   deferCommit?: boolean;
   initialDraft?: {
@@ -47,6 +65,16 @@ type Props = {
 };
 
 type Phase = "idle" | "exit" | "enter";
+
+/** 审批动作 id：与 `useChatSession.onUiAction` 的 payload 映射一一对应。 */
+type ApprovalChoice =
+  | "approve"
+  | "approve_always"
+  | "approve_type"
+  | "allow_once"
+  | "allow_session"
+  | "allow_always"
+  | "deny";
 type Direction = "forward" | "backward";
 
 export default function ClarifyWizard({
@@ -57,7 +85,11 @@ export default function ClarifyWizard({
   approvalKind,
   approvalDetail,
   allowAlways = false,
+  allowSession = false,
   approvalTypeLabel,
+  approvalHost,
+  approvalProfile,
+  approvalCommand,
   disabled = false,
   deferCommit = false,
   initialDraft,
@@ -79,9 +111,10 @@ export default function ClarifyWizard({
   const [direction, setDirection] = useState<Direction>("forward");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [approvalChoice, setApprovalChoice] = useState<
-    "approve" | "approve_always" | "approve_type" | "deny" | null
-  >(null);
+  const [approvalChoice, setApprovalChoice] = useState<ApprovalChoice | null>(
+    null,
+  );
+  const [approvalCopied, setApprovalCopied] = useState(false);
   const approvalTitleId = useId();
   const customInputRef = useRef<HTMLInputElement>(null);
 
@@ -232,15 +265,17 @@ export default function ClarifyWizard({
   if (collapsed && variant === "approval" && approvalChoice) {
     const approved = approvalChoice !== "deny";
     const label =
-      approvalChoice === "approve_always"
+      approvalChoice === "approve_always" || approvalChoice === "allow_always"
         ? t("chat.a2ui.approvalAlwaysApproved")
         : approvalChoice === "approve_type"
           ? t("chat.a2ui.approvalTypeApproved", {
               type: approvalTypeLabel ?? "",
             })
-          : approved
-            ? t("chat.a2ui.approvalApproved")
-            : t("chat.a2ui.approvalDenied");
+          : approvalChoice === "allow_session"
+            ? t("chat.a2ui.approvalSessionApproved")
+            : approved
+              ? t("chat.a2ui.approvalApproved")
+              : t("chat.a2ui.approvalDenied");
     return (
       <div
         className={`a2ui-clarify-wizard is-collapsed is-approval-result ${approved ? "is-approved" : "is-denied"}`}
@@ -339,40 +374,183 @@ export default function ClarifyWizard({
 
   if (variant === "approval") {
     const isSandboxRetry = approvalKind === "sandbox_retry";
+    const isNetwork = approvalKind === "network";
+    const authorization = isNetwork || isSandboxRetry;
+
+    // 动作 id 与文案按语义分档：确认/沙箱提权用 approve*，网络授权用 allow*（会话级）。
+    const actions = isNetwork
+      ? {
+          once: {
+            id: "allow_once" as const,
+            label: t("chat.a2ui.networkAllowOnce"),
+            hint: t("chat.a2ui.networkAllowOnceHint"),
+          },
+          session: {
+            id: "allow_session" as const,
+            label: t("chat.a2ui.networkAllowSession"),
+            hint: t("chat.a2ui.networkAllowSessionHint"),
+          },
+          always: {
+            id: "allow_always" as const,
+            label: t("chat.a2ui.networkAllowAlways", {
+              host: approvalHost ?? approvalTypeLabel ?? "",
+            }),
+            hint: t("chat.a2ui.networkAllowAlwaysHint"),
+          },
+          deny: {
+            id: "deny" as const,
+            label: t("chat.a2ui.networkDeny"),
+            hint: t("chat.a2ui.networkDenyHint"),
+          },
+        }
+      : {
+          once: {
+            id: "approve" as const,
+            label: t("chat.a2ui.approvalOnce"),
+            hint: t("chat.a2ui.approvalOnceHint"),
+          },
+          always: {
+            id: "approve_always" as const,
+            label: t("chat.a2ui.approvalAlways"),
+            hint: t("chat.a2ui.approvalAlwaysHint"),
+          },
+          type: {
+            id: "approve_type" as const,
+            label: t("chat.a2ui.approvalType", {
+              type: approvalTypeLabel ?? "",
+            }),
+            hint: t("chat.a2ui.approvalTypeHint"),
+          },
+          deny: {
+            id: "deny" as const,
+            label: t("chat.a2ui.approvalDeny"),
+            hint: t("chat.a2ui.approvalDenyHint"),
+          },
+        };
+
+    const networkDescription = [
+      approvalCommand
+        ? t("chat.a2ui.networkDescriptionWithCommand", {
+            command: approvalCommand,
+          })
+        : t("chat.a2ui.networkDescription"),
+      approvalProfile
+        ? t("chat.a2ui.networkProfile", { profile: approvalProfile })
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     const content = isSandboxRetry
       ? {
           description: t("chat.a2ui.sandboxRetryDescription"),
           command: approvalDetail ?? "",
         }
-      : parseApprovalContent(approvalBody ?? step.question);
+      : isNetwork
+        ? { description: networkDescription, command: approvalDetail ?? "" }
+        : parseApprovalContent(approvalBody ?? step.question);
     const renderedTitle = isSandboxRetry
       ? t("chat.a2ui.sandboxRetryTitle")
-      : approvalTitle || step.question;
+      : isNetwork
+        ? t("chat.a2ui.networkTitle")
+        : approvalTitle || step.question;
+    const commandText = content.command ?? "";
     const commandLabel = isSandboxRetry
       ? t("chat.a2ui.sandboxRetryDetail")
-      : t("chat.a2ui.approvalCommand");
-    const submitApproval = (
-      choice: "approve" | "approve_always" | "approve_type" | "deny",
-    ) => {
+      : isNetwork
+        ? t("chat.a2ui.networkTarget")
+        : t("chat.a2ui.approvalCommand");
+
+    // 长期/会话级动作：网络授权是 会话 → 主机，其余是 永久 → 同类命令。
+    const persistentActions: {
+      key: string;
+      id: ApprovalChoice;
+      label: string;
+      hint: string;
+      icon: ReactNode;
+    }[] = [];
+    if (isNetwork) {
+      if (allowSession) {
+        persistentActions.push({
+          key: "session",
+          id: "allow_session",
+          label: t("chat.a2ui.networkAllowSession"),
+          hint: t("chat.a2ui.networkAllowSessionHint"),
+          icon: <Clock3 size={17} strokeWidth={2} aria-hidden />,
+        });
+      }
+      if (allowAlways) {
+        persistentActions.push({
+          key: "always",
+          id: "allow_always",
+          label: t("chat.a2ui.networkAllowAlways", {
+            host: approvalHost ?? approvalTypeLabel ?? "",
+          }),
+          hint: t("chat.a2ui.networkAllowAlwaysHint"),
+          icon: <ShieldCheck size={17} strokeWidth={2} aria-hidden />,
+        });
+      }
+    } else {
+      if (allowAlways) {
+        persistentActions.push({
+          key: "always",
+          id: "approve_always",
+          label: t("chat.a2ui.approvalAlways"),
+          hint: t("chat.a2ui.approvalAlwaysHint"),
+          icon: <ShieldCheck size={17} strokeWidth={2} aria-hidden />,
+        });
+      }
+      if (approvalTypeLabel) {
+        persistentActions.push({
+          key: "type",
+          id: "approve_type",
+          label: t("chat.a2ui.approvalType", { type: approvalTypeLabel }),
+          hint: t("chat.a2ui.approvalTypeHint"),
+          icon: <TerminalSquare size={17} strokeWidth={2} aria-hidden />,
+        });
+      }
+    }
+
+    const submitApproval = (choice: ApprovalChoice) => {
       if (disabled) return;
       setApprovalChoice(choice);
       setCollapsed(true);
       onAction(choice, {});
     };
+    const copyCommand = () => {
+      void navigator.clipboard
+        ?.writeText(commandText)
+        .then(() => {
+          setApprovalCopied(true);
+          window.setTimeout(() => setApprovalCopied(false), 1600);
+        })
+        .catch(() => undefined);
+    };
+
     return (
       <section
-        className={`a2ui-clarify-wizard is-approval ${disabled ? "is-disabled" : ""}`}
+        className={`a2ui-clarify-wizard is-approval${
+          disabled ? " is-disabled" : ""
+        }${isNetwork ? " is-network" : ""}${
+          isSandboxRetry ? " is-sandbox-retry" : ""
+        }`}
         data-a2ui-id="wizard"
         aria-labelledby={approvalTitleId}
       >
         <div className="a2ui-approval-intro">
           <div className="a2ui-approval-header">
             <span className="a2ui-approval-mark" aria-hidden>
-              <ShieldAlert size={19} strokeWidth={2} />
+              {isNetwork ? (
+                <Globe2 size={19} strokeWidth={2} />
+              ) : (
+                <ShieldAlert size={19} strokeWidth={2} />
+              )}
             </span>
             <div className="a2ui-approval-heading">
               <span className="a2ui-approval-eyebrow">
-                {t("chat.a2ui.approvalRequired")}
+                {authorization
+                  ? t("chat.a2ui.approvalAuthorization")
+                  : t("chat.a2ui.approvalRequired")}
               </span>
               <h3 id={approvalTitleId} className="a2ui-approval-title">
                 {renderedTitle}
@@ -389,9 +567,22 @@ export default function ClarifyWizard({
             <div className="a2ui-approval-command-label">
               <TerminalSquare size={14} aria-hidden />
               <span>{commandLabel}</span>
+              <button
+                type="button"
+                className="a2ui-approval-copy"
+                onClick={copyCommand}
+                aria-label={t("chat.a2ui.approvalCopy")}
+                title={t("chat.a2ui.approvalCopy")}
+              >
+                {approvalCopied ? (
+                  <Check size={13} strokeWidth={2.4} aria-hidden />
+                ) : (
+                  <Copy size={13} strokeWidth={2} aria-hidden />
+                )}
+              </button>
             </div>
             <pre>
-              <code>{content.command}</code>
+              <code>{commandText}</code>
             </pre>
           </div>
         ) : null}
@@ -402,62 +593,42 @@ export default function ClarifyWizard({
               type="button"
               className="a2ui-approval-action is-deny"
               disabled={disabled}
-              onClick={() => submitApproval("deny")}
+              onClick={() => submitApproval(actions.deny.id)}
             >
               <X size={17} strokeWidth={2.2} aria-hidden />
               <span className="a2ui-approval-action-copy">
-                <strong>{t("chat.a2ui.approvalDeny")}</strong>
-                <small>{t("chat.a2ui.approvalDenyHint")}</small>
+                <strong>{actions.deny.label}</strong>
+                <small>{actions.deny.hint}</small>
               </span>
             </button>
             <button
               type="button"
               className="a2ui-approval-action is-approve"
               disabled={disabled}
-              onClick={() => submitApproval("approve")}
+              onClick={() => submitApproval(actions.once.id)}
             >
               <Check size={17} strokeWidth={2.3} aria-hidden />
               <span className="a2ui-approval-action-copy">
-                <strong>{t("chat.a2ui.approvalOnce")}</strong>
-                <small>{t("chat.a2ui.approvalOnceHint")}</small>
+                <strong>{actions.once.label}</strong>
+                <small>{actions.once.hint}</small>
               </span>
             </button>
           </div>
 
-          {allowAlways ? (
+          {persistentActions.length > 0 ? (
             <div className="a2ui-approval-persistent-actions">
-              <button
-                type="button"
-                className="a2ui-approval-always"
-                disabled={disabled}
-                onClick={() => submitApproval("approve_always")}
-              >
-                <ShieldCheck size={17} strokeWidth={2} aria-hidden />
-                <span className="a2ui-approval-action-copy">
-                  <strong>{t("chat.a2ui.approvalAlways")}</strong>
-                  <small>{t("chat.a2ui.approvalAlwaysHint")}</small>
-                </span>
-                <ArrowRight
-                  className="a2ui-approval-always-arrow"
-                  size={16}
-                  aria-hidden
-                />
-              </button>
-              {approvalTypeLabel ? (
+              {persistentActions.map((action) => (
                 <button
+                  key={action.key}
                   type="button"
-                  className="a2ui-approval-always is-type"
+                  className={`a2ui-approval-always is-${action.key}`}
                   disabled={disabled}
-                  onClick={() => submitApproval("approve_type")}
+                  onClick={() => submitApproval(action.id)}
                 >
-                  <TerminalSquare size={17} strokeWidth={2} aria-hidden />
+                  {action.icon}
                   <span className="a2ui-approval-action-copy">
-                    <strong>
-                      {t("chat.a2ui.approvalType", {
-                        type: approvalTypeLabel,
-                      })}
-                    </strong>
-                    <small>{t("chat.a2ui.approvalTypeHint")}</small>
+                    <strong>{action.label}</strong>
+                    <small>{action.hint}</small>
                   </span>
                   <ArrowRight
                     className="a2ui-approval-always-arrow"
@@ -465,7 +636,7 @@ export default function ClarifyWizard({
                     aria-hidden
                   />
                 </button>
-              ) : null}
+              ))}
             </div>
           ) : null}
         </div>
