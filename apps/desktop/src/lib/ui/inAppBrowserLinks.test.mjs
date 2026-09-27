@@ -9,6 +9,9 @@ const hook = await read("../../hooks/ui/useInAppBrowserLinks.ts");
 const link = await read("../browser/inAppBrowserLink.ts");
 const markdown = await read("../../components/chat/ChatMarkdown.tsx");
 const dockStyles = await read("../../styles/features/chat/browser-dock.css");
+const previewStyles = await read(
+  "../../styles/features/chat/browser-preview.css",
+);
 
 test("web links are routed to the built-in browser dock", () => {
   assert.match(app, /useInAppBrowserLinks\(\{/);
@@ -40,6 +43,19 @@ test("the overlay host only captures the dock itself", () => {
   assert.match(
     dockStyles,
     /\.browser-dock-shell > \.browser-dock\.is-open\s*\{/,
+  );
+});
+
+test("opening a link preview never touches the conversation or its sessions", () => {
+  // 浏览器接管右侧坞时只让其他面板让位：不再销毁侧边会话
+  assert.doesNotMatch(
+    app,
+    /if \(sideSessionId\) void closeSideChat\(\);\s*\n\s*setBrowserDockOpen\(true\);/,
+  );
+  // 坞已经显示同一页时，不再往会话上叠一张悬浮预览卡
+  assert.match(
+    previewStyles,
+    /\.chat-layout-with-right\.has-browser > \.chat-main \.browser-preview-float\s*\{[\s\S]*?display:\s*none;/,
   );
 });
 

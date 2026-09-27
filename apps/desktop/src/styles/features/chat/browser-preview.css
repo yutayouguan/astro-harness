@@ -23,6 +23,12 @@
   will-change: transform;
 }
 
+/* 浏览器坞已经把同一页开在右侧时，不再往会话上叠一张悬浮预览卡；
+   坞收起后浮层仍会回来，继续充当「浏览器还在跑」的提示。 */
+.chat-layout-with-right.has-browser > .chat-main .browser-preview-float {
+  display: none;
+}
+
 .browser-preview-head {
   height: 48px;
   display: flex;

@@ -741,14 +741,11 @@ export default function App() {
     projectFiles.setPanelOpen(false);
     setChatRightOpen(false);
     setReviewState(null);
-    if (sideSessionId) void closeSideChat();
     setBrowserDockOpen(true);
   }, [
     browserDockOpen,
-    closeSideChat,
     projectFiles.setPanelOpen,
     setChatRightOpen,
-    sideSessionId,
   ]);
 
   const openActivityUrlInBrowser = useCallback(
@@ -758,7 +755,6 @@ export default function App() {
       projectFiles.setPanelOpen(false);
       setChatRightOpen(false);
       setReviewState(null);
-      if (sideSessionId) await closeSideChat();
       setBrowserDockOpen(true);
       try {
         await chat.controlBrowser("open", { url, new_tab: false });
@@ -768,11 +764,9 @@ export default function App() {
     },
     [
       chat.controlBrowser,
-      closeSideChat,
       projectFiles.setPanelOpen,
       setChatRightOpen,
       showTransientToast,
-      sideSessionId,
     ],
   );
 
@@ -795,7 +789,6 @@ export default function App() {
         projectFiles.setPanelOpen(false);
         setChatRightOpen(false);
         setReviewState(null);
-        if (sideSessionId) void closeSideChat();
         setBrowserDockOpen(true);
       } catch (error) {
         showTransientToast(String(error), { tone: "error" });
@@ -805,11 +798,9 @@ export default function App() {
       activeProjectId,
       chat.applyBrowserResult,
       chat.sessionId,
-      closeSideChat,
       projectFiles.setPanelOpen,
       setChatRightOpen,
       showTransientToast,
-      sideSessionId,
     ],
   );
 
@@ -836,18 +827,17 @@ export default function App() {
   });
 
   useEffect(() => {
+    // 浏览器接管右侧坞：只让其他面板让位，不动会话本身
+    // （侧边会话既不被销毁，也不影响当前聊天）。
     if (!chat.browserPreview || chat.browserPreview.status === "closed") return;
     projectFiles.setPanelOpen(false);
     setChatRightOpen(false);
     setReviewState(null);
-    if (sideSessionId) void closeSideChat();
     setBrowserDockOpen(true);
   }, [
     chat.browserPreview?.updatedAt,
-    closeSideChat,
     projectFiles.setPanelOpen,
     setChatRightOpen,
-    sideSessionId,
   ]);
 
   const switchActiveProject = useCallback(
