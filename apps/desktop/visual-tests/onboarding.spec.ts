@@ -754,7 +754,8 @@ test("hung provider times out without bypassing validation", async ({ page }) =>
   const request = page.waitForRequest("**/__onboarding_mock/responses");
   await page.getByRole("button", { name: "测试", exact: true }).click();
   await request;
-  await expect(page.getByRole("alert")).toContainText("连接测试超时", { timeout: 25000 });
+  // 应用侧探测超时本身约 20-25s；并行跑时页面计时器会被拖慢，给足预算。
+  await expect(page.getByRole("alert")).toContainText("连接测试超时", { timeout: 45000 });
   release();
   await expect(page.getByRole("button", { name: "继续", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /稍后连接|先进入 App/ })).toHaveCount(0);
