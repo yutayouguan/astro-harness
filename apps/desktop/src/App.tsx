@@ -658,10 +658,6 @@ export default function App() {
     void cleanupStaleBrowserLiveWebviews();
   }, []);
 
-  useEffect(() => {
-    if (nav !== "chat") setBrowserDockOpen(false);
-  }, [nav]);
-
   const openChatRightDock = useCallback(
     (tab?: ChatRightTab) => {
       setBrowserDockOpen(false);
@@ -832,9 +828,10 @@ export default function App() {
     [chat.controlBrowser, showTransientToast],
   );
 
-  // 内置浏览器坞是聊天页的右侧坞；其他页面没有坞可用，链接保持系统浏览器行为。
+  // 网页链接一律交给内置浏览器：聊天页嵌在右侧坞，其他页面用浮层宿主，
+  // 这样点链接既不会切走当前页面，也不需要用户手动再打开浏览器。
   useInAppBrowserLinks({
-    enabled: nav === "chat" && isTauriRuntime(),
+    enabled: isTauriRuntime(),
     onOpen: openLinkInAppBrowser,
   });
 
@@ -2968,6 +2965,29 @@ export default function App() {
           )}
         </section>
       </div>
+
+      {/*
+        非聊天页没有右侧坞布局：浏览器坞用浮层宿主挂在窗口右侧，
+        打开链接时保持当前页面（及其筛选、抽屉等状态）不变。
+      */}
+      {browserDockPresence.mounted && nav !== "chat" ? (
+        <div className="browser-dock-shell">
+          <Suspense fallback={null}>
+            <BrowserDock
+              open={browserDockPresence.visible}
+              preview={chat.browserPreview}
+              expanded={browserExpanded}
+              onControl={chat.controlBrowser}
+              onExpandedChange={setBrowserExpanded}
+              onClose={() => {
+                setBrowserExpanded(false);
+                setBrowserComposerOverlayOpen(false);
+                setBrowserDockOpen(false);
+              }}
+            />
+          </Suspense>
+        </div>
+      ) : null}
 
       {projectMenu && (
         <ProjectContextMenu

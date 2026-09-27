@@ -49,6 +49,25 @@
   transition-delay: 0s;
 }
 
+/* 非聊天页的浏览器坞：浮层宿主贴在窗口右侧，
+   打开链接时不改变当前页面布局与状态。 */
+.browser-dock-shell {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-window-drag);
+  display: flex;
+  justify-content: flex-end;
+  width: 100vw;
+  /* 空白区域放行点击，页面仍然可操作 */
+  pointer-events: none;
+}
+
+.browser-dock-shell > .browser-dock.is-open {
+  pointer-events: auto;
+}
+
 .chat-layout-with-right.is-browser-expanded > .browser-dock {
   position: absolute;
   top: 0;
