@@ -3,7 +3,6 @@ import {
   ChevronDown as ChevronDownData,
   ChevronUp as ChevronUpData,
 } from "lucide";
-import { Layers3 } from "lucide-react";
 import { useI18n } from "../../i18n/LocaleContext";
 import {
   activityGroupProgress,
@@ -122,9 +121,6 @@ function MsgActivityGroupImpl({
         }
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="msg-activity-group-icon" aria-hidden>
-          <Layers3 size={14} strokeWidth={2} />
-        </span>
         <span className="msg-activity-group-title">{actionLabel}</span>
         <span className="msg-activity-group-count">{metadata.join(" · ")}</span>
         <MorphToggleIcon

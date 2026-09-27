@@ -1,18 +1,4 @@
 /* Native response activity batches: one foldable group, then independently foldable IO rows. */
-.bubble.assistant .msg-activity-kind-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  color: color-mix(
-    in srgb,
-    var(--tl-tone, var(--tone, var(--accent))) 68%,
-    var(--ink-mute)
-  );
-}
-
 .bubble.assistant .msg-activity-group {
   padding: 1px 2px 8px;
   border-bottom: 1px solid
@@ -36,20 +22,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-}
-
-.bubble.assistant .msg-activity-group-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  color: color-mix(
-    in srgb,
-    var(--tl-tone, var(--tone, var(--accent))) 72%,
-    var(--ink-mute)
-  );
 }
 
 .bubble.assistant .msg-activity-group-title {
@@ -99,8 +71,9 @@
   opacity: 1;
 }
 
+/* 组内行与组标题左对齐：图标位已交给轨道，不再需要 24px 缩进。 */
 .bubble.assistant .msg-activity-group-items .msg-activity {
-  padding-left: 24px;
+  padding-left: 0;
 }
 
 /* 收起详情时不让零高度折叠区继续占用 gap，工具项上下留白保持一致。 */
@@ -113,26 +86,16 @@
   border-bottom: 0;
 }
 
-.bubble.assistant
-  .msg-activity-group:is(.is-running, .is-retrying)
-  .msg-activity-group-icon {
-  animation: msg-live-glow 1.8s ease-in-out infinite;
-}
-
-.bubble.assistant .msg-activity-group.is-error .msg-activity-group-icon,
 .bubble.assistant .msg-activity-group.is-error .msg-activity-group-count {
   color: var(--danger, #ef4444);
 }
 
 .bubble.assistant
   .msg-activity-group:is(.is-waiting, .is-partial, .is-declined):not(.is-error)
-  :is(.msg-activity-group-icon, .msg-activity-group-count) {
+  .msg-activity-group-count {
   color: var(--tone-amber, #d97706);
 }
 
-.bubble.assistant
-  .msg-activity-group.is-interrupted:not(.is-running):not(.is-error)
-  .msg-activity-group-icon,
 .bubble.assistant
   .msg-activity-group.is-interrupted:not(.is-running):not(.is-error)
   .msg-activity-group-count {
@@ -144,20 +107,11 @@
     padding: 1px 0 7px;
   }
 
-  .bubble.assistant .msg-activity-group-items .msg-activity {
-    padding-left: 16px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bubble.assistant .msg-activity-group-collapse,
   .bubble.assistant .msg-activity-group-items {
     transition: none;
-  }
-
-  .bubble.assistant
-    .msg-activity-group:is(.is-running, .is-retrying)
-    .msg-activity-group-icon {
-    animation: none;
   }
 }

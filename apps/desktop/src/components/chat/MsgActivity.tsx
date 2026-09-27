@@ -162,9 +162,6 @@ function MsgActivityImpl({
 
   const summary: ReactNode = (
     <>
-      <span className="msg-activity-kind-icon">
-        <ActivityIcon activity={activity} />
-      </span>
       <span className="msg-activity-title" title={activity.title}>
         {displayTitle}
       </span>
@@ -190,9 +187,6 @@ function MsgActivityImpl({
         })}
         onClick={() => void onOpenUrl?.(link.url)}
       >
-        <span className="msg-activity-kind-icon">
-          <ActivityIcon activity={activity} />
-        </span>
         <span className="msg-activity-title" title={displayTitle}>
           {displayTitle}
         </span>
