@@ -815,6 +815,7 @@ export const zh = {
     "写在这里的目录长期可写，Agent 越过工作区边界时不再逐个询问；只读组合会因此至少按工作区写入运行。",
   "approvals.writeRoots.empty": "还没有永久可写目录。",
   "approvals.writeRoots.placeholder": "如：/Users/me/shared-out（绝对路径）",
+  "approvals.writeRoots.needAbsolute": "请输入绝对路径（以 / 开头）。",
   "approvals.writeRoots.promote": "把本会话额外权限写入永久",
   "approvals.writeRoots.promoteReady": "本会话还有 {n} 项额外权限可以固化。",
   "approvals.writeRoots.promoteEmpty": "本会话暂无额外权限。",

@@ -493,6 +493,9 @@ mod tests {
 ///
 /// 由 `request_permissions` 的 preflight（会话级授权）与权限设置页（永久可写目录）
 /// 共用，避免两处规则漂移。
+///
+/// 两侧都做规范化再比较：macOS 上 `/var` 与 `/private/var` 是同一目录的两种写法，
+/// 只规范化一边会让「目录已存在」的路径绕过 Astro 自身目录 / 敏感目录的判定。
 pub fn sanitize_write_root(
     raw: &str,
     memory_dir: &std::path::Path,
@@ -506,15 +509,52 @@ pub fn sanitize_write_root(
         return Err(format!("{trimmed}：必须是绝对路径"));
     }
     let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
-    if normalized.starts_with(memory_dir) {
+    let memory_root = memory_dir
+        .canonicalize()
+        .unwrap_or_else(|_| memory_dir.to_path_buf());
+    if normalized.starts_with(&memory_root) || path.starts_with(memory_dir) {
         return Err(format!("{trimmed}：Astro 自身目录不可授予"));
     }
-    if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+    if let Some(raw_home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        let home = raw_home.canonicalize().unwrap_or_else(|_| raw_home.clone());
         for sensitive in [".ssh", ".aws", ".gnupg", "Library/Keychains"] {
-            if normalized.starts_with(home.join(sensitive)) {
-                return Err(format!("{trimmed}：敏感目录不可授予"));
+            for base in [&home, &raw_home] {
+                let sensitive_dir = base.join(sensitive);
+                let sensitive_dir = sensitive_dir.canonicalize().unwrap_or(sensitive_dir);
+                if normalized.starts_with(&sensitive_dir) || path.starts_with(&sensitive_dir) {
+                    return Err(format!("{trimmed}：敏感目录不可授予"));
+                }
             }
         }
     }
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod write_root_tests {
+    use super::*;
+
+    #[test]
+    fn existing_paths_inside_astro_home_are_still_rejected() {
+        let memory = tempfile::tempdir().unwrap();
+        let inside = memory.path().join("workspace-out");
+        std::fs::create_dir_all(&inside).unwrap();
+        // 已存在的目录会被 canonicalize（macOS 上 /var → /private/var）：只规范化
+        // 请求侧就会漏判，这里锁定「两侧都规范化」的行为。
+        assert!(sanitize_write_root(&inside.display().to_string(), memory.path()).is_err());
+        assert!(sanitize_write_root("", memory.path()).is_err());
+        assert!(sanitize_write_root("relative/out", memory.path()).is_err());
+
+        let outside = tempfile::tempdir().unwrap();
+        assert!(sanitize_write_root(
+            &outside.path().join("shared-out").display().to_string(),
+            memory.path()
+        )
+        .is_ok());
+
+        if let Some(home) = std::env::var_os("HOME") {
+            let ssh = std::path::PathBuf::from(home).join(".ssh/id_rsa");
+            assert!(sanitize_write_root(&ssh.display().to_string(), memory.path()).is_err());
+        }
+    }
 }

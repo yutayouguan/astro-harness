@@ -295,7 +295,7 @@ impl AgentLoop {
             &dynamic_ctx,
             crate::prompt::contract::RuntimePromptLayers {
                 base_guidance: crate::prompt::prompt_builder::TOOL_GUIDANCE,
-                developer_guidance,
+                developer_guidance: &developer_guidance,
                 timestamp: &timestamp,
                 mcp_instructions: &mcp_instructions,
                 thread_checkpoint: &thread_checkpoint,
@@ -400,13 +400,29 @@ impl AgentLoop {
     }
 
     /// 随 Turn 变化的开发者策略与上下文时间戳。
-    async fn system_prompt_runtime_context(&self) -> (&'static str, String) {
-        let interaction_mode = self
-            .current_turn_context()
-            .await
+    async fn system_prompt_runtime_context(&self) -> (String, String) {
+        let turn_context = self.current_turn_context().await;
+        let interaction_mode = turn_context
+            .as_ref()
             .map(|context| context.mode())
             .unwrap_or_else(|| self.lock_state().interaction_mode);
-        let developer_guidance = interaction_mode.system_guidance();
+        let mut developer_guidance = interaction_mode.system_guidance().to_string();
+        // 用户永久授权的可写目录直接写进开发者策略：模型不必为这些路径再走一次
+        // request_permissions（preflight 会去重，但少一次往返更好）。
+        let settings = memory::load_permission_settings(self.memory_dir());
+        let profile_id = turn_context
+            .as_ref()
+            .and_then(|context| context.permission_profile().map(str::to_string))
+            .unwrap_or_else(|| settings.selection.profile_id.clone());
+        let writable_roots = settings.permissions.extra_writable_roots_for(&profile_id);
+        if !writable_roots.is_empty() {
+            developer_guidance.push_str(
+                "\n\n# 已授权的可写目录\n以下目录已被用户永久授权为可写，不需要再请求权限：",
+            );
+            for root in writable_roots {
+                developer_guidance.push_str(&format!("\n- {}", root.display()));
+            }
+        }
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
         let timestamp = format!("# 当前时间\n{now}");
         (developer_guidance, timestamp)
@@ -416,6 +432,40 @@ impl AgentLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn permanent_write_roots_are_announced_to_the_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let outside = tempfile::tempdir().unwrap();
+        let shared = outside.path().join("shared-out");
+        std::fs::create_dir_all(&shared).unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":workspace", "extra_writable_roots" = ["{}"] }}
+"#,
+                shared.display()
+            ),
+        )
+        .unwrap();
+        let config = super::super::Config::with_defaults(dir.path().to_path_buf());
+        let session = AgentLoop::with_session_id(config, "writable-roots".into())
+            .await
+            .unwrap();
+
+        let prompt = session.build_prompt_contract().await;
+        let context_text = prompt
+            .context
+            .iter()
+            .map(|item| item.text_content())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(context_text.contains("已授权的可写目录"), "{context_text}");
+        assert!(context_text.contains("shared-out"), "{context_text}");
+        // 它属于 developer 策略层，不混进稳定的 base 指令。
+        assert!(!prompt.base_instructions.contains("已授权的可写目录"));
+    }
 
     #[tokio::test]
     async fn workspace_identity_is_loaded_without_overriding_explicit_context() {

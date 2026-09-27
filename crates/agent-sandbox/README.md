@@ -25,7 +25,7 @@ Agent 派生进程的 OS 级平台沙箱入口：基于三级权限模型生成�
 ## 核心类型与 API
 
 - `SandboxPolicy` — 沙箱策略封装
-  - `new(mode, workspace_root, extra_writable_roots, network_access)` — 构造策略，自动规范化与去重可写根
+  - `new(mode, workspace_root, extra_writable_roots, network_access)` — 构造策略，自动规范化与去重可写根；每个根必须真实存在，调用方需先过滤（`tools::context::build_command_sandbox_policy_with_roots` 会跳过缺失的根，避免一次过期授权让整轮工具调用失败）
   - `unrestricted_file_system(execution_root, network_access)` — 全文件系统写入但保留网络策略独立性
   - `with_managed_network(context)` — 附加托管网络上下文（精确端口放行）
   - `profile_hash_material()` — 策略哈希材料（不含敏感路径），供审计使用

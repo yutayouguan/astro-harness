@@ -125,6 +125,13 @@ function ApprovalsSection({
   const promotableRoots = (sessionGrants?.writableRoots ?? []).filter(
     (root) => !(writeRoots?.roots ?? []).includes(root),
   );
+  // 客户端的即时提示只覆盖最确定的一条：必须是绝对路径。Astro 自身目录与敏感目录
+  // 仍由后端（同一套 sanitize_write_root）判定，避免两边规则漂移。
+  const newRootValue = newRoot.trim();
+  const newRootError =
+    newRootValue && !newRootValue.startsWith("/")
+      ? t("approvals.writeRoots.needAbsolute")
+      : "";
 
   const saveRoots = async (roots: string[]): Promise<boolean> => {
     setBusy(true);
@@ -473,12 +480,15 @@ function ApprovalsSection({
                 type="button"
                 className="mcp-btn-primary"
                 onClick={() => void addRoot()}
-                disabled={!newRoot.trim() || busy}
+                disabled={!newRootValue || Boolean(newRootError) || busy}
               >
                 <Plus size={14} strokeWidth={2.3} aria-hidden />
                 {t("approvals.allowlist.add")}
               </button>
             </div>
+            {newRootError ? (
+              <p className="tools-detail-body is-error">{newRootError}</p>
+            ) : null}
             <div className="approvals-write-roots-promote">
               <button
                 type="button"

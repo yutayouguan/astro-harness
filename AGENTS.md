@@ -284,7 +284,7 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 7. **交互模式**：`interaction_mode` 经 Agent turn 下传；行为说明只进 Responses `instructions`，用户 item 不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。
 
-10. **模型发起的权限升级**：`request_permissions` 只能经 confirm preflight 的 HITL 批准生效，且必须同时满足：路径净化（绝对路径，拒绝 Astro 自身目录与 `.ssh`/`.aws`/`.gnupg`/`Library/Keychains`）、去重（先与当前有效范围——工作区根 + 会话授权 + 永久可写目录——比对：已覆盖的根不弹卡也不落审计，完全访问模式直接返回无需请求，只请求真正越界的根）、**会话级**（`Session::permission_grants`，仅内存、随会话结束失效、可在权限菜单撤销）、审计齐全（permission.requested/granted/denied/revoked）。升为**永久**只走用户确认的设置流（权限菜单「写入永久」/权限设置页，写 `permissions.extra_writable_roots`，对所有 profile 生效且可逐条移除）；模型没有写配置的通道。答复走 confirm 的 HITL resume——不要接入 `Op::RequestPermissionsResponse`（它没有客户端卡片，`EventMsg::RequestPermissions` 只用于 rollout/观察者留痕）。
+10. **模型发起的权限升级**：`request_permissions` 只能经 confirm preflight 的 HITL 批准生效，且必须同时满足：路径净化（绝对路径，两侧规范化后拒绝 Astro 自身目录与 `.ssh`/`.aws`/`.gnupg`/`Library/Keychains`；配置文件声明的可写根在加载时同样过滤并记 `dropped_write_root` 诊断）、去重（先与当前有效范围——工作区根 + 会话授权 + 永久可写目录——比对：已覆盖的根不弹卡也不落审计，完全访问模式直接返回无需请求，只请求真正越界的根）、**会话级**（`Session::permission_grants`，仅内存、随会话结束失效、可在权限菜单撤销）、审计齐全（permission.requested/granted/denied/revoked）。升为**永久**只走用户确认的设置流（权限菜单「写入永久」/权限设置页，写 `permissions.extra_writable_roots`，对所有 profile 生效且可逐条移除）；模型没有写配置的通道。沙箱构造跳过已不存在的可写根（丢根只会更窄，不让整轮调用失败）。答复走 confirm 的 HITL resume——不要接入 `Op::RequestPermissionsResponse`（它没有客户端卡片，`EventMsg::RequestPermissions` 只用于 rollout/观察者留痕）。
 
 9. **工具可用性回调**：`ToolEntry::check_fn` 在每次 Step 构建模型可见 schema 时被**同步**求值，必须是 O(1) 探测（列一层目录、读环境变量、查内存状态）；禁止递归遍历、全盘扫描、子进程或网络调用。历史事故：浏览器探测递归扫 `~/Library/Caches/ms-playwright`，16 个工具每轮约 1.8s 同步阻塞异步 worker，任务取消/替换因此无法在预算内生效。
 

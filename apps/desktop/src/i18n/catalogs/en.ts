@@ -879,6 +879,7 @@ export const en: Record<MessageKey, string> = {
     "Folders listed here stay writable, so the agent stops asking every time it steps past the workspace boundary. A read-only mode therefore runs at least as workspace-write.",
   "approvals.writeRoots.empty": "No permanent writable folders yet.",
   "approvals.writeRoots.placeholder": "e.g. /Users/me/shared-out (absolute path)",
+  "approvals.writeRoots.needAbsolute": "Use an absolute path (starting with /).",
   "approvals.writeRoots.promote": "Make this session's permissions permanent",
   "approvals.writeRoots.promoteReady":
     "{n} extra permission(s) from this session can be made permanent.",

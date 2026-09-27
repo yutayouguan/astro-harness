@@ -224,6 +224,15 @@ pub fn build_command_sandbox_policy_with_roots(
             extra_roots.push(root);
         }
     }
+    // 沙箱策略要求每个可写根都能 canonicalize：被删掉的永久目录（或拔掉的 U 盘）
+    // 不该让整次工具调用失败。丢根只会让沙箱更窄，因此这里跳过不存在的根。
+    extra_roots.retain(|root| {
+        if root.is_dir() {
+            return true;
+        }
+        tracing::warn!(root = %root.display(), "skipping missing writable root");
+        false
+    });
     // 网络默认放开：只有显式配置 managed proxy 的 profile 才会把子进程流量收回代理。
     sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, true).map_err(Into::into)
 }
@@ -236,7 +245,9 @@ mod tests {
     fn profile_extra_writable_roots_join_the_sandbox_policy() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
-        let shared = dir.path().join("shared-out");
+        // 可写根必须在 Astro 目录之外：出现在 memory_dir 里的条目加载时就会被丢掉。
+        let outside = tempfile::tempdir().unwrap();
+        let shared = outside.path().join("shared-out");
         std::fs::create_dir_all(&workspace).unwrap();
         std::fs::create_dir_all(&shared).unwrap();
         std::fs::write(
@@ -270,7 +281,8 @@ mod tests {
     fn user_level_write_roots_upgrade_read_only_commands() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = dir.path().join("workspace");
-        let shared = dir.path().join("shared-out");
+        let outside = tempfile::tempdir().unwrap();
+        let shared = outside.path().join("shared-out");
         std::fs::create_dir_all(&workspace).unwrap();
         std::fs::create_dir_all(&shared).unwrap();
         // 权限设置页维护的用户级可写根：不依赖自定义 profile，内置组合也能用。
@@ -299,6 +311,42 @@ mod tests {
             "{:?}",
             policy.writable_roots
         );
+    }
+
+    #[test]
+    fn missing_write_roots_are_skipped_instead_of_failing_the_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        // 永久目录被删掉（或 U 盘拔了）：策略仍然能建，只是丢了这个根。
+        let outside = tempfile::tempdir().unwrap();
+        let gone = outside.path().join("gone-out");
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":workspace", "extra_writable_roots" = ["{}"] }}
+"#,
+                gone.display()
+            ),
+        )
+        .unwrap();
+
+        let policy = build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &workspace,
+            std::slice::from_ref(&workspace),
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert!(
+            !policy.writable_roots.contains(&gone),
+            "{:?}",
+            policy.writable_roots
+        );
+        assert!(policy.writable_roots.contains(&workspace.canonicalize().unwrap()));
     }
 
     #[test]

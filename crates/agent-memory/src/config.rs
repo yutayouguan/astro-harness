@@ -160,6 +160,7 @@ pub enum PermissionConfigSource {
 pub enum PermissionDiagnosticCode {
     InvalidProfileConfig,
     DomainRulesWithoutProxy,
+    DroppedWriteRoot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -829,7 +830,7 @@ pub fn load_command_approval_config(base: &Path) -> CommandApprovalConfig {
 pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
     let file = read_file_config(base);
     if let Some(permissions) = file.permissions.clone() {
-        return load_explicit_permissions(file, permissions);
+        return load_explicit_permissions(file, permissions, base);
     }
     let rules = file.command_approvals.unwrap_or_default();
     let mut loaded = LoadedPermissionSettings::default();
@@ -838,6 +839,38 @@ pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
     loaded.command_allowlist = rules.command_allowlist;
     loaded.command_type_allowlist = rules.command_type_allowlist;
     loaded
+}
+
+/// 净化配置文件带来的可写根（用户级 + 各 profile 自带）：只保留通过
+/// `permission_audit::sanitize_write_root` 的条目，并把它们规范化成沙箱真正使用的路径。
+///
+/// 返回被丢弃的原始条目（用于诊断）。这是"模型不能给自己授权"的最后一道防线：
+/// 即使有人手写 config.toml，`~/.ssh`、Astro 自身目录这类路径也不会生效。
+fn sanitize_loaded_write_roots(permissions: &mut PermissionsConfig, base: &Path) -> Vec<String> {
+    let mut dropped = Vec::new();
+    let sanitize = |roots: &mut Vec<String>, dropped: &mut Vec<String>| {
+        let mut kept: Vec<String> = Vec::new();
+        for root in roots.drain(..) {
+            match crate::permission_audit::sanitize_write_root(&root, base) {
+                Ok(path) => {
+                    let rendered = path.display().to_string();
+                    if !kept.contains(&rendered) {
+                        kept.push(rendered);
+                    }
+                }
+                Err(reason) => {
+                    tracing::warn!(root = %root, %reason, "ignoring unauthorized writable root");
+                    dropped.push(reason);
+                }
+            }
+        }
+        *roots = kept;
+    };
+    sanitize(&mut permissions.extra_writable_roots, &mut dropped);
+    for profile in permissions.profiles.values_mut() {
+        sanitize(&mut profile.extra_writable_roots, &mut dropped);
+    }
+    dropped
 }
 
 /// 覆写用户级永久可写目录（权限设置页维护，`permissions.extra_writable_roots`）。
@@ -920,7 +953,8 @@ pub fn set_permission_preset(
 
 fn load_explicit_permissions(
     file: FileConfig,
-    permissions: PermissionsConfig,
+    mut permissions: PermissionsConfig,
+    base: &Path,
 ) -> LoadedPermissionSettings {
     let mut diagnostics = Vec::new();
     if let Err(error) = permissions.validate() {
@@ -932,6 +966,18 @@ fn load_explicit_permissions(
             diagnostics,
             ..LoadedPermissionSettings::default()
         };
+    }
+    // 配置文件里的可写根同样要过净化：手写（或在极端配置下由模型写入）的
+    // `extra_writable_roots` 不能绕过 Astro 自身目录与敏感目录的护栏。
+    let dropped_write_roots = sanitize_loaded_write_roots(&mut permissions, base);
+    if !dropped_write_roots.is_empty() {
+        diagnostics.push(PermissionConfigDiagnostic {
+            code: PermissionDiagnosticCode::DroppedWriteRoot,
+            message: format!(
+                "已忽略不可授权的可写目录：{}",
+                dropped_write_roots.join("；")
+            ),
+        });
     }
 
     let network_proxy_enabled = file.network_proxy.unwrap_or_default().enabled;
@@ -2052,6 +2098,44 @@ mod tests {
 
         let loaded = set_permission_preset(dir.path(), PermissionPreset::FullAccess).unwrap();
         assert_eq!(loaded.selection, SessionPermissions::full_access());
+    }
+
+    #[test]
+    fn loaded_write_roots_drop_paths_the_settings_page_would_reject() {
+        let dir = tempfile::tempdir().unwrap();
+        let inside_astro = dir.path().join("workspace-out");
+        std::fs::create_dir_all(&inside_astro).unwrap();
+        let mut rejected = format!("\"{}\"", inside_astro.display());
+        if let Some(home) = std::env::var_os("HOME") {
+            rejected.push_str(&format!(
+                ", \"{}\"",
+                std::path::Path::new(&home).join(".ssh").display()
+            ));
+        }
+        fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":workspace", "extra_writable_roots" = [{rejected}], "profiles" = {{ "writer" = {{ "extends" = ":workspace", "extra_writable_roots" = ["/tmp/astro-kept-out"] }} }} }}
+"#
+            ),
+        )
+        .unwrap();
+
+        let loaded = load_permission_settings(dir.path());
+        // 手写配置不能绕过护栏：Astro 自身目录 / 敏感目录在加载时就被丢掉。
+        assert!(loaded.permissions.extra_writable_roots.is_empty());
+        assert!(loaded
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == PermissionDiagnosticCode::DroppedWriteRoot));
+        // 合法条目（用户级 + profile 自带）继续生效。
+        assert_eq!(
+            loaded.permissions.extra_writable_roots_for("writer"),
+            vec![std::path::PathBuf::from("/tmp/astro-kept-out")]
+        );
+        // 只影响运行时有效范围，不改写用户的配置文件。
+        let raw = fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        assert!(raw.contains("workspace-out"), "{raw}");
     }
 
     #[test]

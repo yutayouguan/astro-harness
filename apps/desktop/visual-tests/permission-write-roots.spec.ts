@@ -16,6 +16,12 @@ test("permanent writable folders can be edited and promoted from the approvals p
   await expect(roots).toHaveText(["/tmp/qa-shared-out"]);
 
   // 新增：绝对路径写入成功并进入列表。
+  // 相对路径在提交前就被挡下（按钮禁用 + 即时提示）。
+  const input = card.getByPlaceholder("如：/Users/me/shared-out（绝对路径）");
+  await input.fill("relative/out");
+  await expect(card).toContainText("请输入绝对路径");
+  await expect(card.getByRole("button", { name: "添加" })).toBeDisabled();
+
   await card
     .getByPlaceholder("如：/Users/me/shared-out（绝对路径）")
     .fill("/tmp/qa-added-out");
