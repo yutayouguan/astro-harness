@@ -1294,6 +1294,45 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   white-space: nowrap;
 }
 
+/* 永久可写目录：跨会话生效（绿色），行内直接移除。 */
+.composer-policy-grants.is-permanent {
+  border-color: color-mix(
+    in srgb,
+    var(--success, #2f9e67) 26%,
+    transparent
+  );
+  background: color-mix(in srgb, var(--success, #2f9e67) 8%, transparent);
+}
+
+.composer-policy-grants.is-permanent .composer-policy-grants-title {
+  color: color-mix(in srgb, var(--success, #2f9e67) 78%, var(--ink));
+}
+
+.composer-policy-grants-list li.is-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.composer-policy-grants-remove {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 7px;
+  color: var(--ink-soft, var(--ink));
+  background: transparent;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer-policy-grants-remove:hover {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 34%, transparent);
+  color: color-mix(in srgb, var(--danger, #ef4444) 82%, var(--ink));
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
 .composer-policy-grants-revoke {
   justify-self: start;
   padding: 4px 8px;

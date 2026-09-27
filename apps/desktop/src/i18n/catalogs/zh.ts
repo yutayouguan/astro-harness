@@ -1183,6 +1183,10 @@ export const zh = {
   "chat.approval.promoteGrantsConfirmMessage":
     "会把本会话批准过的可写目录写进设置，之后的对话也不再询问；可随时在权限设置里移除。",
   "chat.approval.sessionGrantsPromoted": "已写入永久可写目录",
+  "chat.approval.permanentRoots": "永久可写目录",
+  "chat.approval.permanentRootsHint": "跨会话生效，在权限设置或这里移除即恢复边界",
+  "chat.approval.removePermanentRoot": "移除",
+  "chat.approval.permanentRootRemoved": "已从永久可写目录移除",
   "chat.approval.askForApproval": "请求批准",
   "chat.approval.approveForMe": "帮我批准",
   "chat.approval.fullAccess": "完全访问",

@@ -375,6 +375,11 @@ type SessionPermissionGrantsDto = {
   workspaceWrite: boolean;
   writableRoots: string[];
 };
+/** 用户级永久可写目录（权限设置页维护，跨会话生效）。 */
+type PermissionWriteRootsDto = {
+  profileId: string;
+  roots: string[];
+};
 type PermissionSettings = {
   preset: string | null;
   sandboxHealth: {
@@ -618,6 +623,7 @@ export default function ChatView({
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [sessionGrants, setSessionGrants] =
     useState<SessionPermissionGrantsDto | null>(null);
+  const [permanentRoots, setPermanentRoots] = useState<string[] | null>(null);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
@@ -1186,6 +1192,22 @@ export default function ChatView({
     };
   }, [modeMenuOpen, sessionId]);
 
+  // 永久可写目录：打开菜单时读一次，菜单里可直接移除。
+  useEffect(() => {
+    if (!modeMenuOpen) return;
+    let cancelled = false;
+    void invoke<PermissionWriteRootsDto>("get_permission_write_roots")
+      .then((state) => {
+        if (!cancelled) setPermanentRoots(state.roots);
+      })
+      .catch(() => {
+        if (!cancelled) setPermanentRoots(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modeMenuOpen]);
+
   const revokeSessionGrants = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -1215,7 +1237,11 @@ export default function ChatView({
     });
     if (!approved) return;
     try {
-      await invoke("promote_session_write_roots", { sessionId });
+      const state = await invoke<PermissionWriteRootsDto>(
+        "promote_session_write_roots",
+        { sessionId },
+      );
+      setPermanentRoots(state.roots);
       showToast?.(t("chat.approval.sessionGrantsPromoted"), {
         tone: "success",
       });
@@ -1226,6 +1252,28 @@ export default function ChatView({
       );
     }
   }, [confirm, sessionId, showToast, t]);
+
+  const removePermanentRoot = useCallback(
+    async (root: string) => {
+      const next = (permanentRoots ?? []).filter((entry) => entry !== root);
+      try {
+        const state = await invoke<PermissionWriteRootsDto>(
+          "set_permission_write_roots",
+          { roots: next },
+        );
+        setPermanentRoots(state.roots);
+        showToast?.(t("chat.approval.permanentRootRemoved"), {
+          tone: "success",
+        });
+      } catch (error) {
+        showToast?.(
+          error instanceof Error ? error.message : String(error),
+          { tone: "error" },
+        );
+      }
+    },
+    [permanentRoots, showToast, t],
+  );
 
   const approvalMeta = useMemo(
     () => ({
@@ -3480,6 +3528,33 @@ export default function ChatView({
                                   {t("chat.approval.revokeSessionGrants")}
                                 </button>
                               </div>
+                            </div>
+                          ) : null}
+                          {permanentRoots && permanentRoots.length > 0 ? (
+                            <div className="composer-policy-grants is-permanent">
+                              <span
+                                className="composer-policy-grants-title"
+                                title={t("chat.approval.permanentRootsHint")}
+                              >
+                                {t("chat.approval.permanentRoots")}
+                              </span>
+                              <ul className="composer-policy-grants-list">
+                                {permanentRoots.map((root) => (
+                                  <li key={root} className="is-row" title={root}>
+                                    <span>{root}</span>
+                                    <button
+                                      type="button"
+                                      className="composer-policy-grants-remove"
+                                      onClick={() => void removePermanentRoot(root)}
+                                      aria-label={t(
+                                        "chat.approval.removePermanentRoot",
+                                      )}
+                                    >
+                                      {t("chat.approval.removePermanentRoot")}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           ) : null}
                           <div

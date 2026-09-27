@@ -90,7 +90,7 @@ async function boot(page: Page) {
           },
           unregisterCallback: (id: number) => callbacks.delete(id),
           convertFileSrc: (path: string) => path,
-          invoke: async (cmd: string) => {
+          invoke: async (cmd: string, args?: unknown) => {
             switch (cmd) {
               case "plugin:event|listen":
                 return ++serial;
@@ -169,6 +169,16 @@ async function boot(page: Page) {
                   command: "promote_session_write_roots",
                 });
                 return { profileId: ":workspace", roots: ["/tmp/shared-out"] };
+              case "get_permission_write_roots":
+                return { profileId: ":workspace", roots: ["/tmp/perm-out"] };
+              case "set_permission_write_roots": {
+                const roots = (args as { roots?: string[] })?.roots ?? [];
+                (window as unknown as { __permissionCalls: unknown[] }).__permissionCalls.push({
+                  command: "set_permission_write_roots",
+                  roots,
+                });
+                return { profileId: ":workspace", roots };
+              }
               case "get_chat_history":
                 return {
                   sessionId,
@@ -229,13 +239,15 @@ test("session permission grants are visible and revocable from the policy menu",
 
   // 打开菜单看细节，并撤销。
   await page.locator(".composer-policy-pill").click();
-  const grants = page.locator(".composer-policy-grants");
+  const grants = page.locator(".composer-policy-grants:not(.is-permanent)");
   await expect(grants).toBeVisible();
   await expect(grants).toContainText("本会话额外权限");
   await expect(grants.locator("li")).toHaveText(["/tmp/shared-out"]);
 
   await grants.getByRole("button", { name: "撤销本会话额外权限" }).click();
-  await expect(page.locator(".composer-policy-grants")).toHaveCount(0);
+  await expect(
+    page.locator(".composer-policy-grants:not(.is-permanent)"),
+  ).toHaveCount(0);
   await expect(page.locator(".composer-policy-grants-badge")).toHaveCount(0);
   const calls = await page.evaluate(
     () => (window as unknown as { __permissionCalls: unknown[] }).__permissionCalls,
@@ -255,7 +267,7 @@ test("session permissions can be promoted to permanent after an explicit confirm
   await boot(page);
 
   await page.locator(".composer-policy-pill").click();
-  const grants = page.locator(".composer-policy-grants");
+  const grants = page.locator(".composer-policy-grants:not(.is-permanent)");
   await expect(grants).toBeVisible();
 
   // 写入永久必须经过一次显式确认，取消则不写。
@@ -291,4 +303,34 @@ test("session permissions can be promoted to permanent after an explicit confirm
       ),
     )
     .toBe(1);
+});
+
+test("permanent writable folders stay visible in the policy menu and can be removed there", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await boot(page);
+
+  await page.locator(".composer-policy-pill").click();
+  const permanent = page.locator(".composer-policy-grants.is-permanent");
+  await expect(permanent).toBeVisible();
+  await expect(permanent).toContainText("永久可写目录");
+  await expect(permanent.locator("li span")).toHaveText(["/tmp/perm-out"]);
+
+  // 菜单里就能移除，不必跳设置页。
+  await permanent.getByRole("button", { name: "移除" }).click();
+  await expect(page.locator(".composer-policy-grants.is-permanent")).toHaveCount(
+    0,
+  );
+  const call = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __permissionCalls: { command?: string; roots?: string[] }[];
+        }
+      ).__permissionCalls.find(
+        (entry) => entry.command === "set_permission_write_roots",
+      ) ?? null,
+  );
+  expect(call?.roots).toEqual([]);
 });

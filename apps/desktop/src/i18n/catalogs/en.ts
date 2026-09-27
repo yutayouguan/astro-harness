@@ -1273,6 +1273,12 @@ export const en: Record<MessageKey, string> = {
   "chat.approval.promoteGrantsConfirmMessage":
     "The writable folders approved in this session are written to your settings, so later chats stop asking. You can remove them in permission settings at any time.",
   "chat.approval.sessionGrantsPromoted": "Added to the permanent writable folders",
+  "chat.approval.permanentRoots": "Permanent writable folders",
+  "chat.approval.permanentRootsHint":
+    "Applies to every session; remove it here or in permission settings to restore the boundary",
+  "chat.approval.removePermanentRoot": "Remove",
+  "chat.approval.permanentRootRemoved":
+    "Removed from the permanent writable folders",
   "chat.approval.askForApproval": "Ask for approval",
   "chat.approval.approveForMe": "Approve for me",
   "chat.approval.fullAccess": "Full access",
