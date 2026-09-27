@@ -43,6 +43,7 @@ const job: CronJobDto = {
   last_run_at: run.fired_at,
   next_run_at: "2026-08-29T08:00:00+08:00",
   show_in_chat: true,
+  archived_at: null,
 };
 
 const messages: ConversationEntry[] = [
@@ -112,6 +113,7 @@ function CronRunChatPreview() {
           onClose={() => setTaskOpen(false)}
           onEdit={() => {}}
           onToggleEnabled={() => {}}
+          onToggleArchived={() => {}}
           onRunNow={() => {}}
           onOpenRun={() => setRunOpen(true)}
         />

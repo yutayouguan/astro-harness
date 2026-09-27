@@ -746,6 +746,22 @@ export default function ChatView({
     }
   }, [cronBusy, cronJob, loadCronTask, showToast]);
 
+  const toggleCronJobArchived = useCallback(async () => {
+    if (!cronJob || cronBusy) return;
+    setCronBusy(true);
+    try {
+      const updated = await invoke<CronJobDto>("archive_cron_job", {
+        id: cronJob.id,
+        archived: !cronJob.archived_at,
+      });
+      setCronJob(updated);
+    } catch (error) {
+      showToast(String(error));
+    } finally {
+      setCronBusy(false);
+    }
+  }, [cronBusy, cronJob, showToast]);
+
   const cancelContextPopoverClose = useCallback(() => {
     if (contextCloseTimerRef.current == null) return;
     window.clearTimeout(contextCloseTimerRef.current);
@@ -3540,6 +3556,7 @@ export default function ChatView({
           onClose={() => setCronTaskOpen(false)}
           onEdit={() => setCronEditOpen(true)}
           onToggleEnabled={() => void toggleCronJob()}
+          onToggleArchived={() => void toggleCronJobArchived()}
           onRunNow={() => void runCronJobNow()}
           onOpenRun={setSelectedCronRun}
         />

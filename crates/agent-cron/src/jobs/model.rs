@@ -41,6 +41,12 @@ pub struct CronJob {
     /// 是否在聊天时间线展示本次执行
     #[serde(default)]
     pub show_in_chat: bool,
+    /// 归档时间；非空表示任务已归档，不再参与调度扫描
+    ///
+    /// 归档只收起任务定义，运行记录与执行会话保持原样，可通过
+    /// [`super::CronStore::set_archived`] 恢复。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<String>,
 }
 
 /// 创建或更新定时任务的输入（供 Tauri / 上层调用）

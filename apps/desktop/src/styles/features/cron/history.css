@@ -361,6 +361,68 @@ html[data-theme="dark"] .cron-timeline-card {
   flex-shrink: 0;
 }
 
+/* 任务已删除的孤儿运行记录 */
+.cron-timeline-orphan {
+  width: fit-content;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px dashed var(--chip-border);
+  color: var(--ink-mute);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.cron-history-purge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--chip-border);
+  background: transparent;
+  color: var(--ink-mute);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.cron-history-purge:hover:not(:disabled) {
+  color: var(--dialog-danger, var(--danger, var(--tone)));
+  border-color: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger, var(--tone))) 34%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--dialog-danger, var(--danger, var(--tone))) 8%,
+    transparent
+  );
+}
+
+.cron-history-purge:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cron-history-purge-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .cron-timeline-summary {
   margin: 0 0 10px;
   font-size: 13px;

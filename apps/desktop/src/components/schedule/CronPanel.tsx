@@ -11,6 +11,8 @@ import { createPortal } from "react-dom";
 import { toneStyleFromElement } from "../../lib/ui/toneFromElement";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  Archive,
+  ArchiveRestore,
   BookOpen,
   BrainCircuit,
   CalendarClock,
@@ -40,7 +42,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAnchoredMenu } from "../../hooks/ui/useAnchoredMenu";
-import { useConfirm } from "../../hooks/ui/DialogContext";
+import { useConfirm, useConfirmDetailed } from "../../hooks/ui/DialogContext";
 import { useI18n } from "../../i18n/LocaleContext";
 import type { MessageKey } from "../../i18n/messages";
 import { formatScheduleLabel } from "../../lib/cron/cronSchedule";
@@ -530,6 +532,7 @@ export default function CronPanel({
 }: Props) {
   const { t, locale } = useI18n();
   const confirm = useConfirm();
+  const confirmDetailed = useConfirmDetailed();
   const [jobs, setJobs] = useState<CronJobDto[]>([]);
   const agentId = "default";
   const [search, setSearch] = useState("");
@@ -541,6 +544,8 @@ export default function CronPanel({
   const [prefill, setPrefill] = useState<CronPrefill | null>(null);
   const [menuJobId, setMenuJobId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [purgingRuns, setPurgingRuns] = useState(false);
 
   const [activeTab, setActiveTab] = useState<TabId>("jobs");
   const [jobsView, setJobsView] = useState<JobsView>("gallery");
@@ -736,10 +741,25 @@ export default function CronPanel({
     };
   }, [menuJobId, closeMenu]);
 
+  const archivedCount = useMemo(
+    () => jobs.filter((j) => Boolean(j.archived_at)).length,
+    [jobs],
+  );
+
+  const jobIds = useMemo(() => new Set(jobs.map((j) => j.id)), [jobs]);
+
+  /** 运行记录里找不到对应任务的条数（任务已删除）。 */
+  const orphanRunCount = useMemo(
+    () => historyRuns.filter((run) => !jobIds.has(run.job_id)).length,
+    [historyRuns, jobIds],
+  );
+
   const filteredJobs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return jobs.filter((j) => {
       if (j.agent_id !== agentId && j.agent_id !== "workspace") return false;
+      // 归档任务只在归档视图里出现，默认列表不混入
+      if (Boolean(j.archived_at) !== showArchived) return false;
       if (!q) return true;
       return (
         j.title.toLowerCase().includes(q) ||
@@ -748,7 +768,7 @@ export default function CronPanel({
         (j.model?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [jobs, agentId, search]);
+  }, [jobs, agentId, search, showArchived]);
 
   const selectedDetailJob = useMemo(
     () => filteredJobs.find((j) => j.id === selectedDetailId) ?? null,
@@ -870,20 +890,64 @@ export default function CronPanel({
     }
   };
 
-  const removeJob = async (job: CronJobDto) => {
+  const setJobArchived = async (job: CronJobDto, archived: boolean) => {
     if (!isTauri()) return;
-    const ok = await confirm({
-      title: t("dialog.deleteTitle"),
-      message: t("cron.removeConfirm"),
-      confirmLabel: t("cron.remove"),
-      variant: "danger",
-    });
-    if (!ok) return;
     setBusyId(job.id);
     closeMenu();
     setError(null);
     try {
-      await invoke("remove_cron_job", { id: job.id });
+      const updated = await invoke<CronJobDto>("archive_cron_job", {
+        id: job.id,
+        archived,
+      });
+      setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+      if (archived) {
+        if (selectedDetailId === job.id) setSelectedDetailId(null);
+        if (drawerJobId === job.id) {
+          setDrawerJobId(null);
+          setDrawerJobRuns([]);
+        }
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeJob = async (job: CronJobDto) => {
+    if (!isTauri()) return;
+    const outcome = await confirmDetailed({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.removeConfirm"),
+      emphasis: job.title,
+      confirmLabel: t("cron.remove"),
+      variant: "danger",
+      options: [
+        {
+          id: "archiveSession",
+          label: t("cron.remove.archiveSession"),
+          description: t("cron.remove.archiveSessionHint"),
+          defaultChecked: true,
+        },
+        {
+          id: "deleteRuns",
+          label: t("cron.remove.deleteRuns"),
+          description: t("cron.remove.deleteRunsHint"),
+          danger: true,
+        },
+      ],
+    });
+    if (!outcome.confirmed) return;
+    const archiveSession = outcome.selected.includes("archiveSession");
+    const deleteRuns = outcome.selected.includes("deleteRuns");
+    setBusyId(job.id);
+    closeMenu();
+    setError(null);
+    try {
+      await invoke("remove_cron_job", {
+        args: { id: job.id, archiveSession, deleteRuns },
+      });
       if (drawerRun?.job_id === job.id) {
         setDrawerRun(null);
         setDrawerMessages([]);
@@ -895,8 +959,15 @@ export default function CronPanel({
         setDrawerJobId(null);
         setDrawerJobRuns([]);
       }
+      if (deleteRuns) {
+        const dropJobRuns = (list: CronRunDto[]) =>
+          list.filter((run) => run.job_id !== job.id);
+        setHistoryRuns(dropJobRuns);
+        setDetailRuns(dropJobRuns);
+        setDrawerJobRuns(dropJobRuns);
+      }
       await loadJobs();
-      if (activeTab === "history") {
+      if (activeTab === "history" || deleteRuns) {
         void loadHistoryRuns();
       }
     } catch (err) {
@@ -947,6 +1018,35 @@ export default function CronPanel({
     closeMenu();
     setFilterJobId(job.id);
     setActiveTab("history");
+  };
+
+  /** 清理「任务已删除」的孤儿运行记录。 */
+  const purgeOrphanRuns = async () => {
+    if (!isTauri() || purgingRuns) return;
+    const ok = await confirm({
+      title: t("dialog.deleteTitle"),
+      message: t("cron.orphanPurgeConfirm", { count: String(orphanRunCount) }),
+      confirmLabel: t("cron.orphanPurge"),
+      variant: "danger",
+    });
+    if (!ok) return;
+    setPurgingRuns(true);
+    setError(null);
+    try {
+      await invoke<number>("purge_orphaned_cron_runs");
+      const keepKnownJob = (list: CronRunDto[]) =>
+        list.filter((run) => jobIds.has(run.job_id));
+      setHistoryRuns(keepKnownJob);
+      setDetailRuns(keepKnownJob);
+      setDrawerJobRuns(keepKnownJob);
+      if (activeTab === "history") {
+        void loadHistoryRuns();
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPurgingRuns(false);
+    }
   };
 
   const openRunDrawer = useCallback((run: CronRunDto) => {
@@ -1025,18 +1125,37 @@ export default function CronPanel({
     return status;
   };
 
+  const jobStateClass = (job: CronJobDto) =>
+    job.archived_at
+      ? "is-archived"
+      : job.enabled
+        ? "is-enabled"
+        : "is-disabled";
+
+  const jobStatusClass = (job: CronJobDto) =>
+    job.archived_at ? "is-archived" : job.enabled ? "is-on" : "is-off";
+
+  const jobStatusLabel = (job: CronJobDto) =>
+    job.archived_at
+      ? t("cron.statusArchived")
+      : job.enabled
+        ? t("cron.statusOn")
+        : t("cron.statusOff");
+
   const renderJobActions = (job: CronJobDto) => (
     <div className="cron-card-top-actions">
-      <button
-        type="button"
-        role="switch"
-        className="tool-toggle"
-        aria-checked={job.enabled}
-        aria-label={job.title}
-        onClick={() => void toggleEnabled(job)}
-      >
-        <span className="tool-toggle-thumb" />
-      </button>
+      {job.archived_at ? null : (
+        <button
+          type="button"
+          role="switch"
+          className="tool-toggle"
+          aria-checked={job.enabled}
+          aria-label={job.title}
+          onClick={() => void toggleEnabled(job)}
+        >
+          <span className="tool-toggle-thumb" />
+        </button>
+      )}
       <div className={`cron-more ${menuJobId === job.id ? "is-open" : ""}`}>
         <button
           type="button"
@@ -1059,7 +1178,7 @@ export default function CronPanel({
         <article
           key={job.id}
           role="listitem"
-          className={`cron-card ${job.enabled ? "is-enabled" : "is-disabled"} ${
+          className={`cron-card ${jobStateClass(job)} ${
             drawerJobId === job.id ? "is-detail-open" : ""
           }`}
           style={{ animationDelay: `${0.04 + index * 0.05}s` }}
@@ -1073,10 +1192,8 @@ export default function CronPanel({
             </span>
             <div className="cron-card-heading">
               <h3 className="cron-card-title">{job.title}</h3>
-              <span
-                className={`cron-card-status ${job.enabled ? "is-on" : "is-off"}`}
-              >
-                {job.enabled ? t("cron.statusOn") : t("cron.statusOff")}
+              <span className={`cron-card-status ${jobStatusClass(job)}`}>
+                {jobStatusLabel(job)}
               </span>
             </div>
             <div className="cron-card-actions-cluster">
@@ -1133,7 +1250,7 @@ export default function CronPanel({
         <article
           key={job.id}
           role="listitem"
-          className={`cron-job-list-row ${job.enabled ? "is-enabled" : "is-disabled"}`}
+          className={`cron-job-list-row ${jobStateClass(job)}`}
         >
           <span className="cron-job-list-icon" aria-hidden>
             <IconCronGlyph width={18} height={18} />
@@ -1146,10 +1263,8 @@ export default function CronPanel({
               {t("cron.lastRun")}: {formatLastRun(job.last_run_at, locale)}
             </span>
           </div>
-          <span
-            className={`cron-card-status ${job.enabled ? "is-on" : "is-off"}`}
-          >
-            {job.enabled ? t("cron.statusOn") : t("cron.statusOff")}
+          <span className={`cron-card-status ${jobStatusClass(job)}`}>
+            {jobStatusLabel(job)}
           </span>
           {renderJobActions(job)}
         </article>
@@ -1165,7 +1280,7 @@ export default function CronPanel({
             key={job.id}
             type="button"
             role="listitem"
-            className={`cron-job-detail-item ${selectedDetailId === job.id ? "is-selected" : ""} ${job.enabled ? "" : "is-disabled"}`}
+            className={`cron-job-detail-item ${selectedDetailId === job.id ? "is-selected" : ""} ${jobStateClass(job)}`}
             onClick={() => setSelectedDetailId(job.id)}
           >
             <span className="cron-job-detail-item-title">{job.title}</span>
@@ -1184,11 +1299,9 @@ export default function CronPanel({
                   {selectedDetailJob.title}
                 </h3>
                 <span
-                  className={`cron-card-status ${selectedDetailJob.enabled ? "is-on" : "is-off"}`}
+                  className={`cron-card-status ${jobStatusClass(selectedDetailJob)}`}
                 >
-                  {selectedDetailJob.enabled
-                    ? t("cron.statusOn")
-                    : t("cron.statusOff")}
+                  {jobStatusLabel(selectedDetailJob)}
                 </span>
               </div>
               {renderJobActions(selectedDetailJob)}
@@ -1258,15 +1371,17 @@ export default function CronPanel({
                   <History size={13} strokeWidth={2.2} aria-hidden />
                   {t("cron.detail.recentRuns")}
                 </h4>
-                <button
-                  type="button"
-                  className="cron-btn-primary cron-job-detail-run"
-                  disabled={busyId === selectedDetailJob.id}
-                  onClick={() => void runNow(selectedDetailJob)}
-                >
-                  <IconPlay width={14} height={14} />
-                  {t("cron.runNow")}
-                </button>
+                {selectedDetailJob.archived_at ? null : (
+                  <button
+                    type="button"
+                    className="cron-btn-primary cron-job-detail-run"
+                    disabled={busyId === selectedDetailJob.id}
+                    onClick={() => void runNow(selectedDetailJob)}
+                  >
+                    <IconPlay width={14} height={14} />
+                    {t("cron.runNow")}
+                  </button>
+                )}
               </div>
               {detailRunsLoading && (
                 <p className="cron-loading">{t("workspace.loading")}</p>
@@ -1359,6 +1474,11 @@ export default function CronPanel({
                         {formatTime(run.fired_at, locale)}
                       </span>
                       <span className="cron-timeline-title">{run.title}</span>
+                      {jobIds.has(run.job_id) ? null : (
+                        <span className="cron-timeline-orphan">
+                          {t("cron.orphanRun")}
+                        </span>
+                      )}
                     </div>
                     <span
                       className={`cron-status-pill is-${runStatusKind(run.status)}`}
@@ -1512,6 +1632,27 @@ export default function CronPanel({
                   {t("cron.tab.history")}
                 </button>
               </nav>
+              {archivedCount > 0 || showArchived ? (
+                <button
+                  type="button"
+                  className={`cron-archive-filter ${
+                    showArchived ? "is-active" : ""
+                  }`}
+                  aria-pressed={showArchived}
+                  title={t("cron.archiveFilterHint")}
+                  onClick={() => {
+                    setShowArchived((prev) => !prev);
+                    setSelectedDetailId(null);
+                    setDrawerJobId(null);
+                  }}
+                >
+                  <Archive size={14} strokeWidth={2.2} aria-hidden />
+                  <span>{t("cron.archiveFilter")}</span>
+                  <span className="cron-archive-filter-count">
+                    {archivedCount}
+                  </span>
+                </button>
+              ) : null}
               <ExpandableSearch
                 value={search}
                 onChange={setSearch}
@@ -1605,6 +1746,21 @@ export default function CronPanel({
                   placeholder={t("cron.history.filterDateTo")}
                 />
               </div>
+              {orphanRunCount > 0 ? (
+                <button
+                  type="button"
+                  className="cron-history-purge"
+                  disabled={purgingRuns}
+                  title={t("cron.orphanPurgeHint")}
+                  onClick={() => void purgeOrphanRuns()}
+                >
+                  <IconTrash width={13} height={13} />
+                  {t("cron.orphanPurge")}
+                  <span className="cron-history-purge-count">
+                    {orphanRunCount}
+                  </span>
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -1707,6 +1863,39 @@ export default function CronPanel({
             {(() => {
               const job = jobs.find((j) => j.id === menuJobId);
               if (!job) return null;
+              if (job.archived_at) {
+                return (
+                  <>
+                    <button
+                      type="button"
+                      className="cron-more-item"
+                      role="menuitem"
+                      onClick={() => void setJobArchived(job, false)}
+                    >
+                      <ArchiveRestore size={15} strokeWidth={2.2} aria-hidden />
+                      <span>{t("cron.restore")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="cron-more-item"
+                      role="menuitem"
+                      onClick={() => openHistory(job)}
+                    >
+                      <IconHistory />
+                      <span>{t("cron.viewHistory")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="cron-more-item is-danger"
+                      role="menuitem"
+                      onClick={() => void removeJob(job)}
+                    >
+                      <IconTrash />
+                      <span>{t("cron.remove")}</span>
+                    </button>
+                  </>
+                );
+              }
               return (
                 <>
                   <button
@@ -1742,6 +1931,15 @@ export default function CronPanel({
                   </button>
                   <button
                     type="button"
+                    className="cron-more-item"
+                    role="menuitem"
+                    onClick={() => void setJobArchived(job, true)}
+                  >
+                    <Archive size={15} strokeWidth={2.2} aria-hidden />
+                    <span>{t("cron.archive")}</span>
+                  </button>
+                  <button
+                    type="button"
                     className="cron-more-item is-danger"
                     role="menuitem"
                     onClick={() => void removeJob(job)}
@@ -1768,6 +1966,9 @@ export default function CronPanel({
             setShowCreate(true);
           }}
           onToggleEnabled={() => void toggleEnabled(drawerJob)}
+          onToggleArchived={() =>
+            void setJobArchived(drawerJob, !drawerJob.archived_at)
+          }
           onRunNow={() => void runNow(drawerJob)}
           onOpenRun={openRunDrawer}
         />

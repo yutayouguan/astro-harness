@@ -1,5 +1,7 @@
 import { useCallback, useId, useState } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
@@ -55,6 +57,8 @@ export type CronJobDto = {
   last_run_at: string | null;
   next_run_at: string | null;
   show_in_chat: boolean;
+  /** 归档时间；非空表示任务已归档（不参与调度，可恢复） */
+  archived_at: string | null;
 };
 
 export function cronRunStatusKind(
@@ -193,6 +197,7 @@ type TaskDrawerProps = {
   onClose: () => void;
   onEdit: () => void;
   onToggleEnabled: () => void;
+  onToggleArchived: () => void;
   onRunNow: () => void;
   onOpenRun: (run: CronRunDto) => void;
 };
@@ -206,12 +211,14 @@ export function CronTaskDetailDrawer({
   onClose,
   onEdit,
   onToggleEnabled,
+  onToggleArchived,
   onRunNow,
   onOpenRun,
 }: TaskDrawerProps) {
   const { t, locale } = useI18n();
   const titleId = useId();
   const statusLabel = useCronRunStatusLabel();
+  const archived = Boolean(job.archived_at);
 
   return (
     <Drawer
@@ -242,9 +249,15 @@ export function CronTaskDetailDrawer({
               {job.title}
             </h2>
             <span
-              className={`cron-card-status ${job.enabled ? "is-on" : "is-off"}`}
+              className={`cron-card-status ${
+                archived ? "is-archived" : job.enabled ? "is-on" : "is-off"
+              }`}
             >
-              {job.enabled ? t("cron.statusOn") : t("cron.statusOff")}
+              {archived
+                ? t("cron.statusArchived")
+                : job.enabled
+                  ? t("cron.statusOn")
+                  : t("cron.statusOff")}
             </span>
           </div>
         </div>
@@ -290,28 +303,56 @@ export function CronTaskDetailDrawer({
             <Pencil size={15} strokeWidth={2.2} aria-hidden />
             <span>{t("cron.edit")}</span>
           </button>
-          <button
-            type="button"
-            className="cron-job-drawer-action"
-            disabled={busy}
-            onClick={onToggleEnabled}
-          >
-            {job.enabled ? (
-              <Pause size={15} strokeWidth={2.2} aria-hidden />
-            ) : (
-              <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden />
-            )}
-            <span>{job.enabled ? t("cron.pause") : t("cron.resume")}</span>
-          </button>
-          <button
-            type="button"
-            className="cron-job-drawer-action is-primary"
-            disabled={busy}
-            onClick={onRunNow}
-          >
-            <Play size={15} strokeWidth={2.2} fill="currentColor" aria-hidden />
-            <span>{t("cron.runNow")}</span>
-          </button>
+          {archived ? (
+            <button
+              type="button"
+              className="cron-job-drawer-action"
+              disabled={busy}
+              onClick={onToggleArchived}
+            >
+              <ArchiveRestore size={15} strokeWidth={2.2} aria-hidden />
+              <span>{t("cron.restore")}</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="cron-job-drawer-action"
+                disabled={busy}
+                onClick={onToggleEnabled}
+              >
+                {job.enabled ? (
+                  <Pause size={15} strokeWidth={2.2} aria-hidden />
+                ) : (
+                  <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden />
+                )}
+                <span>{job.enabled ? t("cron.pause") : t("cron.resume")}</span>
+              </button>
+              <button
+                type="button"
+                className="cron-job-drawer-action"
+                disabled={busy}
+                onClick={onToggleArchived}
+              >
+                <Archive size={15} strokeWidth={2.2} aria-hidden />
+                <span>{t("cron.archive")}</span>
+              </button>
+              <button
+                type="button"
+                className="cron-job-drawer-action is-primary"
+                disabled={busy}
+                onClick={onRunNow}
+              >
+                <Play
+                  size={15}
+                  strokeWidth={2.2}
+                  fill="currentColor"
+                  aria-hidden
+                />
+                <span>{t("cron.runNow")}</span>
+              </button>
+            </>
+          )}
         </div>
 
         <section className="cron-job-drawer-history">

@@ -205,6 +205,66 @@ html[data-theme="dark"] .app-dialog-input {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+/* 确认弹窗里的附加勾选项（如删除时的附属数据处理） */
+.app-dialog-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.app-dialog-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--chip-border) 88%, transparent);
+  background: color-mix(in srgb, var(--composer-bg, #fff) 72%, transparent);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.app-dialog-option:hover {
+  border-color: color-mix(in srgb, var(--dialog-accent) 30%, var(--chip-border));
+}
+
+.app-dialog-option input[type="checkbox"] {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--dialog-accent);
+}
+
+.app-dialog-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-dialog-option-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.app-dialog-option-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-mute);
+}
+
+.app-dialog-option.is-danger .app-dialog-option-label {
+  color: var(--dialog-danger, var(--danger, var(--ink)));
+}
+
+html[data-theme="dark"] .app-dialog-option {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.06) 70%, transparent);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 .app-dialog-actions {
   display: flex;
   justify-content: flex-end;

@@ -420,6 +420,8 @@ pub fn run() {
             commands::cron::add_cron_job,
             commands::cron::update_cron_job,
             commands::cron::remove_cron_job,
+            commands::cron::archive_cron_job,
+            commands::cron::purge_orphaned_cron_runs,
             commands::cron::set_cron_job_enabled,
             commands::cron::run_cron_job_now,
             commands::cron::get_cron_run,

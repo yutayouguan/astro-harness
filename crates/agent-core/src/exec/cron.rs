@@ -758,7 +758,7 @@ fn now_rfc3339() -> String {
 }
 
 /// 一个定时任务始终对应同一个聊天会话；任务 ID 在 CronStore 中唯一。
-fn cron_session_id(job_id: &str) -> String {
+pub fn cron_session_id(job_id: &str) -> String {
     format!("cron-{}", job_id.trim())
 }
 
@@ -767,6 +767,9 @@ async fn prepare_cron_session(store: &SessionStore, job: &CronJob, session_id: &
     let summary = format!("定时任务 · {}", job.title);
     let _ = store.ensure_session(session_id, "cron").await;
     let _ = store.set_session_title(session_id, &summary).await;
+    // 执行即产出：会话不能停在归档态，否则新结果会写进归档会话而默认列表看不到。
+    // 要彻底收起这条任务，归档/停用任务本身，而不是单独归档它的会话。
+    let _ = store.unarchive_session(session_id).await;
 
     if cron::normalize_cron_agent_id(&job.agent_id) == home::DEFAULT_AGENT_ID {
         let memory_dir = default_memory_dir();
@@ -860,6 +863,7 @@ mod tests {
             last_run_at: None,
             next_run_at: None,
             show_in_chat: true,
+            archived_at: None,
         }
     }
 
@@ -883,6 +887,34 @@ mod tests {
                 .as_deref(),
             Some(session::DEFAULT_PROJECT_ID)
         );
+    }
+
+    #[tokio::test]
+    async fn prepare_cron_session_reactivates_archived_session() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::open_sessions_dir(dir.path()).await.unwrap();
+        let job = cron_job("job-archived");
+        let session_id = cron_session_id(&job.id);
+
+        prepare_cron_session(&store, &job, &session_id).await;
+        store.archive_session(&session_id).await.unwrap();
+        assert!(store
+            .get_session(&session_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .archived_at
+            .is_some());
+
+        // 归档会话不能吞掉后续执行结果：再次准备时状态回到活跃
+        prepare_cron_session(&store, &job, &session_id).await;
+        assert!(store
+            .get_session(&session_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .archived_at
+            .is_none());
     }
 
     #[test]

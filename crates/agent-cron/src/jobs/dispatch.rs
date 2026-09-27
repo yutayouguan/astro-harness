@@ -42,9 +42,16 @@ pub fn dispatch_cron_tool(args: &serde_json::Value) -> anyhow::Result<String> {
             let body = jobs
                 .iter()
                 .map(|j| {
+                    let state = if j.archived_at.is_some() {
+                        "archived"
+                    } else if j.enabled {
+                        "on"
+                    } else {
+                        "off"
+                    };
                     format!(
                         "- [{}] {} | {} | next={} | {}",
-                        if j.enabled { "on" } else { "off" },
+                        state,
                         &j.id[..8],
                         j.schedule,
                         j.next_run_at.as_deref().unwrap_or("-"),

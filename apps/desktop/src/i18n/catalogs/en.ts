@@ -1306,6 +1306,12 @@ export const en: Record<MessageKey, string> = {
   "chat.a2ui.approvalAlwaysHint": "Skip prompts when this rule matches",
   "chat.a2ui.approvalType": "Always allow similar {type} commands",
   "chat.a2ui.approvalTypeHint": "Only the same program and low-risk reason",
+  "chat.a2ui.approvalRiskDangerous": "High risk",
+  "chat.a2ui.approvalRiskSensitive": "Sensitive",
+  "chat.a2ui.approvalRiskConfirmTitle": "Confirm again",
+  "chat.a2ui.approvalRiskConfirmBody": "This is a high-risk action and runs immediately once approved. Approve it anyway?",
+  "chat.a2ui.approvalRiskConfirm": "Confirm approval",
+  "chat.a2ui.approvalRiskBack": "Back",
   "chat.a2ui.approvalAuthorization": "Authorization needed",
   "chat.a2ui.approvalCopy": "Copy command",
   "chat.a2ui.approvalSessionApproved": "Allowed until this session ends",
@@ -3043,7 +3049,24 @@ export const en: Record<MessageKey, string> = {
   "cron.delete": "Delete",
   "cron.remove": "Delete task",
   "cron.removeConfirm":
-    "Delete this scheduled task? The task definition will be removed; existing run records are kept.",
+    "Delete this scheduled task? The definition is removed; you can also choose what happens to its session and run records.",
+  "cron.remove.archiveSession": "Also archive its session",
+  "cron.remove.archiveSessionHint":
+    "The session holds this task's output; you can still find it under archived sessions",
+  "cron.remove.deleteRuns": "Also delete all run records",
+  "cron.remove.deleteRunsHint":
+    "Irreversible: run history and results are erased",
+  "cron.archive": "Archive task",
+  "cron.restore": "Restore task",
+  "cron.statusArchived": "Archived",
+  "cron.archiveFilter": "Archived",
+  "cron.archiveFilterHint": "Show archived scheduled tasks only",
+  "cron.orphanRun": "Task deleted",
+  "cron.orphanPurge": "Clean orphaned records",
+  "cron.orphanPurgeHint":
+    "Remove run records whose scheduled task no longer exists",
+  "cron.orphanPurgeConfirm":
+    "Delete {count} orphaned run record(s)? Their task is already gone and this cannot be undone.",
   "cron.more": "More actions",
   "cron.runNow": "Run now",
   "cron.edit": "Edit",

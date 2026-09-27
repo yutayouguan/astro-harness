@@ -83,7 +83,7 @@ export default function AppDialog({
     const prev = document.activeElement as HTMLElement | null;
     const t = window.setTimeout(() => {
       const input = panelRef.current?.querySelector<HTMLInputElement>(
-        "input:not([type='hidden']):not([disabled])",
+        "input:not([type='hidden']):not([disabled]):not([data-dialog-skip-autofocus])",
       );
       if (input) {
         input.focus();

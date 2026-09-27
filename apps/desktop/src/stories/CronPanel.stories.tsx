@@ -19,6 +19,7 @@ const jobs: CronJobDto[] = [
     last_run_at: "2026-08-28T09:30:00+08:00",
     next_run_at: "2026-08-29T09:30:00+08:00",
     show_in_chat: true,
+    archived_at: null,
   },
   {
     id: "weekly-report",
@@ -33,6 +34,7 @@ const jobs: CronJobDto[] = [
     last_run_at: "2026-08-22T17:00:00+08:00",
     next_run_at: null,
     show_in_chat: false,
+    archived_at: null,
   },
 ];
 

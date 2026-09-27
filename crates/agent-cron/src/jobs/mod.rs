@@ -98,6 +98,59 @@ mod tests {
     }
 
     #[test]
+    fn archived_job_is_skipped_by_claim_due_until_restored() {
+        let dir = TempDir::new().unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let job = store.add("every:1m", "x").unwrap();
+
+        let archived = store.set_archived(&job.id, true).unwrap().unwrap();
+        assert!(archived.archived_at.is_some());
+
+        // 归档后即便计划时间早已过期也不触发，且不会被补算 next_run_at
+        let mut file = store.load().unwrap();
+        file.jobs[0].next_run_at = Some("2000-01-01T00:00:00+00:00".into());
+        store.save(&file).unwrap();
+        assert!(store.claim_due().unwrap().is_empty());
+        let after = store.list().unwrap();
+        assert_eq!(
+            after[0].next_run_at.as_deref(),
+            Some("2000-01-01T00:00:00+00:00")
+        );
+
+        // 恢复时按当前时间重算，不能把归档期间积压的计划一次性补跑
+        let restored = store.set_archived(&job.id, false).unwrap().unwrap();
+        assert!(restored.archived_at.is_none());
+        assert!(restored.next_run_at.as_deref().unwrap() > "2026");
+    }
+
+    #[test]
+    fn legacy_jobs_without_archived_at_stay_active_and_unwritten() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("jobs.json");
+        std::fs::write(
+            &path,
+            r#"{
+          "jobs": [{
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "schedule": "every:5m",
+            "task": "提醒喝水",
+            "enabled": true,
+            "created_at": "2026-01-01T00:00:00Z"
+          }]
+        }"#,
+        )
+        .unwrap();
+        let store = CronStore::open(dir.path()).unwrap();
+        let jobs = store.list().unwrap();
+        assert!(jobs[0].archived_at.is_none());
+
+        // 旧文件写回时不回填 archived_at，避免无谓的格式漂移
+        store.set_enabled(&jobs[0].id, false).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(!raw.contains("archived_at"), "{raw}");
+    }
+
+    #[test]
     fn five_field_cron_parses() {
         use chrono::TimeZone;
         let after = Local.with_ymd_and_hms(2026, 7, 11, 10, 0, 0).unwrap();

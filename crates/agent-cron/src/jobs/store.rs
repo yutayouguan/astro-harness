@@ -81,6 +81,12 @@ impl CronStore {
             .collect())
     }
 
+    /// 列出未过滤的全部任务（含非默认 Agent），用于删除 / 孤儿判定等内部场景。
+    pub fn list_all(&self) -> anyhow::Result<Vec<CronJob>> {
+        let _guard = lock_store(&self.root)?;
+        Ok(self.load_unlocked()?.jobs)
+    }
+
     /// 快捷添加：仅 schedule + task，其余用默认值
     pub fn add(&self, schedule: &str, task: &str) -> anyhow::Result<CronJob> {
         self.add_job(NewCronJob {
@@ -131,6 +137,7 @@ impl CronStore {
             last_run_at: None,
             next_run_at: Some(next),
             show_in_chat: input.show_in_chat,
+            archived_at: None,
         };
         file.jobs.push(job.clone());
         self.save_unlocked(&file)?;
@@ -231,7 +238,7 @@ impl CronStore {
         let mut found = false;
         for job in &mut file.jobs {
             if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
-                if enabled && job.next_run_at.is_none() {
+                if enabled && job.archived_at.is_none() && job.next_run_at.is_none() {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, Local::now())?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -249,6 +256,40 @@ impl CronStore {
         Ok(true)
     }
 
+    /// 归档或恢复任务；未找到返回 `Ok(None)`。
+    ///
+    /// 归档只停止自动调度，任务定义、运行记录与执行会话都保留。恢复时按当前
+    /// 时间重算 `next_run_at`，避免把归档期间积压的过期计划一次性补跑。
+    pub fn set_archived(
+        &self,
+        id_or_prefix: &str,
+        archived: bool,
+    ) -> anyhow::Result<Option<CronJob>> {
+        let _guard = lock_store(&self.root)?;
+        let mut file = self.load_unlocked()?;
+        let mut updated = None;
+        for job in &mut file.jobs {
+            if job.id == id_or_prefix || job.id.starts_with(id_or_prefix) {
+                if archived {
+                    job.archived_at =
+                        Some(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+                } else {
+                    job.archived_at = None;
+                    job.next_run_at = Some(
+                        compute_next_run(&job.schedule, Local::now())?
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    );
+                }
+                updated = Some(job.clone());
+                break;
+            }
+        }
+        if updated.is_some() {
+            self.save_unlocked(&file)?;
+        }
+        Ok(updated)
+    }
+
     /// 扫描到期任务：更新 next_run，返回已触发的任务（不写 output JSON）
     pub fn claim_due(&self) -> anyhow::Result<Vec<CronJob>> {
         let now = Local::now();
@@ -257,7 +298,7 @@ impl CronStore {
         let mut fired = Vec::new();
 
         for job in &mut file.jobs {
-            if !job.enabled || job.agent_id != default_agent_id() {
+            if !job.enabled || job.archived_at.is_some() || job.agent_id != default_agent_id() {
                 continue;
             }
             let due = match &job.next_run_at {
@@ -286,7 +327,11 @@ impl CronStore {
             // 只在有 next_run 需要初始化时才写文件
             let mut needs_save = false;
             for job in &mut file.jobs {
-                if job.enabled && job.agent_id == default_agent_id() && job.next_run_at.is_none() {
+                if job.enabled
+                    && job.archived_at.is_none()
+                    && job.agent_id == default_agent_id()
+                    && job.next_run_at.is_none()
+                {
                     job.next_run_at = Some(
                         compute_next_run(&job.schedule, now)?
                             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),

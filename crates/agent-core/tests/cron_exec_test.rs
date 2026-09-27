@@ -16,6 +16,7 @@ async fn execute_job_fails_without_api_key() {
         last_run_at: None,
         next_run_at: None,
         show_in_chat: false,
+        archived_at: None,
     };
     let creds = agent::exec::cron::CronExecCredentials {
         provider: "openai".into(),

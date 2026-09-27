@@ -4,7 +4,7 @@
 
 ## 核心职责
 
-1. **任务定义与持久化** -- 在 `~/.astro/automation/cron/jobs.json` 以 JSON 格式管理定时任务列表，支持 CRUD 操作（add / update / remove / enable / disable），原子写入（临时文件 + rename）防半写损坏。
+1. **任务定义与持久化** -- 在 `~/.astro/automation/cron/jobs.json` 以 JSON 格式管理定时任务列表，支持 CRUD 操作（add / update / remove / enable / disable / archive），原子写入（临时文件 + rename）防半写损坏。归档是软删除：只停止自动调度，定义与运行记录都保留，恢复时按当前时间重算 `next_run_at`。
 2. **调度表达式解析** -- 支持三种调度语法：`every:Nunit`（间隔调度，可选 `;wd=` 工作日过滤）、`custom:` 日历重复（每小时 / 天 / 周 / 月 / 年及自适应字段）、五段 cron（分 时 日 月 周，支持 `*` / 数字 / 逗号列表 / 区间）。
 
 新建或更新 `custom:` 任务时会自动持久化本地墙钟相位
@@ -19,19 +19,19 @@
 | 文件 | 职责 |
 |---|---|
 | `src/lib.rs` | crate 入口；re-export `jobs::*` 与 `run_db` 公共类型 |
-| `src/run_db.rs` | `CronRunDb` -- SQLite 执行记录层；`insert_running` / `finish_success` / `finish_failure` / `get` / `delete` / `has_running_for_job` / `list_running` / `list_filtered` |
+| `src/run_db.rs` | `CronRunDb` -- SQLite 执行记录层；`insert_running` / `finish_success` / `finish_failure` / `get` / `delete` / `delete_for_job` / `distinct_job_ids` / `has_running_for_job` / `list_running` / `list_filtered` |
 | `src/jobs/mod.rs` | jobs 子模块入口；re-export 并包含模块级集成测试 |
 | `src/jobs/model.rs` | 数据模型 -- `CronJob`（持久化定义）、`NewCronJob`（创建输入）、`CronJobExtract`（自然语言抽取目标）、`normalize_cron_extract`（校验与规范化）、`normalize_cron_agent_id`（legacy `"default"` 映射） |
-| `src/jobs/store.rs` | `CronStore` -- 文件级持久化；`open` / `add` / `add_job` / `update_job` / `remove` / `set_enabled` / `claim_due` / `tick` / `touch_last_run`；内含 `JobsFile` 结构和心跳文件写入 |
+| `src/jobs/store.rs` | `CronStore` -- 文件级持久化；`open` / `add` / `add_job` / `update_job` / `remove` / `set_enabled` / `set_archived` / `list` / `list_all` / `claim_due` / `tick` / `touch_last_run`；内含 `JobsFile` 结构和心跳文件写入 |
 | `src/jobs/schedule.rs` | `compute_next_run` -- 调度表达式解析引擎；`every:` 间隔、`custom:` 日历重复、五段 cron（`CronField` 枚举 + 分钟级扫描） |
-| `src/jobs/dispatch.rs` | `dispatch_cron_tool` -- Agent 工具入口；按 `action` 参数分发 add / list / remove / enable / disable |
+| `src/jobs/dispatch.rs` | `dispatch_cron_tool` -- Agent 工具入口；按 `action` 参数分发 add / list / remove / enable / disable（`list` 会把归档任务标为 `archived`） |
 | `src/jobs/tick.rs` | `tick_default` -- 对默认 cron 目录执行一次 tick 的便捷入口 |
 
 ## 核心类型与 API
 
 ### 结构体
 
-- `CronJob` -- 持久化任务定义（id / schedule / task / title / agent_id / provider_id / model / enabled / created_at / last_run_at / next_run_at / show_in_chat）
+- `CronJob` -- 持久化任务定义（id / schedule / task / title / agent_id / provider_id / model / enabled / created_at / last_run_at / next_run_at / show_in_chat / archived_at）
 - `NewCronJob` -- 创建或更新任务的输入
 - `CronJobExtract` -- 自然语言抽取的结构化目标（实现 `JsonSchema`）
 - `CronStore` -- 文件级持久化存储；管理 `jobs.json` 与 `output/` 目录

@@ -221,6 +221,23 @@ impl CronRunDb {
         Ok(result.rows_affected() > 0)
     }
 
+    /// 删除某个任务的全部运行记录，返回删除条数。
+    pub async fn delete_for_job(&self, job_id: &str) -> anyhow::Result<u64> {
+        let result = sqlx::query("DELETE FROM cron_runs WHERE job_id = ?1")
+            .bind(job_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// 列出运行记录出现过的全部 job_id（用于识别任务已删除的孤儿记录）。
+    pub async fn distinct_job_ids(&self) -> anyhow::Result<Vec<String>> {
+        let rows: Vec<(String,)> = sqlx::query_as("SELECT DISTINCT job_id FROM cron_runs")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().map(|(id,)| id).collect())
+    }
+
     pub async fn has_running_for_job(&self, job_id: &str) -> anyhow::Result<bool> {
         let (count,): (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM cron_runs WHERE job_id = ?1 AND status = 'running'",
@@ -345,6 +362,38 @@ mod tests {
         assert!(db.delete(&id).await.unwrap());
         assert!(db.get(&id).await.unwrap().is_none());
         assert!(!db.delete(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn delete_for_job_scopes_to_one_job() {
+        let dir = TempDir::new().unwrap();
+        let db = CronRunDb::new(dir.path().join(DB_SPEC.filename))
+            .await
+            .unwrap();
+        for (job_id, fired_at) in [
+            ("job-a", "2026-07-11T11:00:00+08:00"),
+            ("job-a", "2026-07-11T12:00:00+08:00"),
+            ("job-b", "2026-07-11T13:00:00+08:00"),
+        ] {
+            db.insert_running(NewCronRun {
+                job_id: job_id.into(),
+                title: "t".into(),
+                agent_id: "workspace".into(),
+                schedule: "every:1d".into(),
+                task: "task".into(),
+                fired_at: fired_at.into(),
+                trigger: "due".into(),
+                session_id: None,
+            })
+            .await
+            .unwrap();
+        }
+
+        assert_eq!(db.delete_for_job("job-a").await.unwrap(), 2);
+        assert_eq!(db.delete_for_job("job-a").await.unwrap(), 0);
+        let mut remaining = db.distinct_job_ids().await.unwrap();
+        remaining.sort();
+        assert_eq!(remaining, vec!["job-b".to_string()]);
     }
 
     #[tokio::test]

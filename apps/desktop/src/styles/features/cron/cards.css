@@ -104,6 +104,28 @@ html[data-theme="dark"] .cron-card {
   opacity: 0.35;
 }
 
+/* 已归档：任务定义仍在但已停止调度，视觉上明显退到背景里 */
+.cron-card.is-archived {
+  opacity: 1;
+}
+
+.cron-card.is-archived::before {
+  opacity: 0.22;
+}
+
+.cron-card.is-archived .cron-card-icon,
+.cron-card.is-archived .cron-card-meta {
+  opacity: 0.72;
+}
+
+.cron-job-list-row.is-archived {
+  opacity: 0.72;
+}
+
+.cron-job-detail-item.is-archived {
+  opacity: 0.72;
+}
+
 .cron-card > * {
   position: relative;
   z-index: 1;
@@ -404,6 +426,12 @@ html[data-theme="dark"] .cron-more-menu {
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   border: 1px solid var(--chip-border);
+}
+
+.cron-card-status.is-archived {
+  color: var(--ink-mute);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 1px dashed var(--chip-border);
 }
 
 .cron-card-task {

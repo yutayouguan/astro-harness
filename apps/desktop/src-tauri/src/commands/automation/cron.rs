@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::commands::common::bootstrap_workspace;
+use crate::commands::common::{bootstrap_workspace, open_sessions};
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -22,6 +22,8 @@ pub struct CronJobDto {
     pub last_run_at: Option<String>,
     pub next_run_at: Option<String>,
     pub show_in_chat: bool,
+    /// 归档时间；非空表示任务已归档（不参与调度，可恢复）
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,9 +97,29 @@ pub struct ListCronRunsArgs {
     pub limit: u32,
 }
 
+/// 删除定时任务时的附属数据选项。
+///
+/// 默认只删任务定义并把它的执行会话归档，运行记录保留——会话里是 Agent 的真实产出，
+/// 误删代价远高于留一条历史；要清记录必须显式勾选。
+#[derive(Debug, Deserialize)]
+pub struct RemoveCronJobArgs {
+    pub id: String,
+    /// 是否同时归档该任务的执行会话（默认 true）。
+    #[serde(default = "default_true")]
+    pub archive_session: bool,
+    /// 是否同时删除该任务的全部执行记录（默认 false）。
+    #[serde(default)]
+    pub delete_runs: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// 布尔选项默认值：用于「默认勾选但不强制」的删除选项。
+fn default_true() -> bool {
+    true
+}
 
 /// 定时任务运行列表默认条数上限。
 fn default_run_limit() -> u32 {
@@ -124,6 +146,7 @@ fn job_to_dto(j: cron::CronJob) -> CronJobDto {
         last_run_at: j.last_run_at,
         next_run_at: j.next_run_at,
         show_in_chat: j.show_in_chat,
+        archived_at: j.archived_at,
     }
 }
 
@@ -324,12 +347,119 @@ pub async fn update_cron_job(args: UpdateCronJobArgs) -> Result<CronJobDto, Stri
     Ok(job_to_dto(j))
 }
 
-/// 删除定时任务。
+/// 归档 / 恢复定时任务。
+///
+/// 归档 = 停止自动调度并顺手收起它的执行会话；任务定义与运行记录都保留，可随时恢复。
+/// 恢复只解归档任务，会话会在下一次执行时自动回到活跃。
 #[tauri::command]
-pub async fn remove_cron_job(id: String) -> Result<bool, String> {
+pub async fn archive_cron_job(id: String, archived: bool) -> Result<CronJobDto, String> {
     bootstrap_workspace()?;
     let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
-    store.remove(&id).map_err(|e| e.to_string())
+    if archived {
+        // 归档会连同会话一起收起；运行中归档会把这一轮的产出写进归档会话，先等它跑完。
+        let target = store
+            .list_all()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|j| j.id == id || j.id.starts_with(&id))
+            .ok_or_else(|| "未找到定时任务".to_string())?;
+        let db = cron::CronRunDb::open_default()
+            .await
+            .map_err(|e| e.to_string())?;
+        if db
+            .has_running_for_job(&target.id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            return Err("任务正在执行，请等待本次运行结束后再归档".to_string());
+        }
+    }
+    let job = store
+        .set_archived(&id, archived)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "未找到定时任务".to_string())?;
+    if archived {
+        let session_id = agent::exec::cron::cron_session_id(&job.id);
+        if let Ok(sessions) = open_sessions().await {
+            // 会话可能还没被创建过；不存在时归档失败可忽略
+            let _ = sessions.archive_session(&session_id).await;
+        }
+    }
+    Ok(job_to_dto(job))
+}
+
+/// 删除定时任务。
+///
+/// 默认行为：删任务定义 + 归档其执行会话 + 保留运行记录。`delete_runs` 为 true 时连
+/// 运行记录一起删除；任务正在执行时拒绝删除，避免打断进行中的一轮。
+#[tauri::command]
+pub async fn remove_cron_job(args: RemoveCronJobArgs) -> Result<bool, String> {
+    bootstrap_workspace()?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
+    let job = store
+        .list_all()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|j| j.id == args.id || j.id.starts_with(&args.id));
+    let Some(job) = job else {
+        return Ok(false);
+    };
+
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    if db
+        .has_running_for_job(&job.id)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        return Err("任务正在执行，请等待本次运行结束后再删除".to_string());
+    }
+
+    if args.delete_runs {
+        db.delete_for_job(&job.id)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    if args.archive_session {
+        let session_id = agent::exec::cron::cron_session_id(&job.id);
+        if let Ok(sessions) = open_sessions().await {
+            let _ = sessions.archive_session(&session_id).await;
+        }
+    }
+    store.remove(&job.id).map_err(|e| e.to_string())
+}
+
+/// 清理「任务已删除」的孤儿运行记录，返回删除条数。
+#[tauri::command]
+pub async fn purge_orphaned_cron_runs() -> Result<u32, String> {
+    bootstrap_workspace()?;
+    let store = cron::CronStore::open_default().map_err(|e| e.to_string())?;
+    let known: std::collections::HashSet<String> = store
+        .list_all()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|j| j.id)
+        .collect();
+    let db = cron::CronRunDb::open_default()
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut removed = 0u32;
+    for job_id in db.distinct_job_ids().await.map_err(|e| e.to_string())? {
+        if known.contains(&job_id)
+            || db
+                .has_running_for_job(&job_id)
+                .await
+                .map_err(|e| e.to_string())?
+        {
+            continue;
+        }
+        removed += db
+            .delete_for_job(&job_id)
+            .await
+            .map_err(|e| e.to_string())? as u32;
+    }
+    Ok(removed)
 }
 
 /// Tauri 命令：set_cron_job_enabled。

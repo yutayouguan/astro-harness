@@ -43,6 +43,49 @@
   box-shadow: var(--plugins-active-shadow);
 }
 
+/* 已归档筛选：与视图切换同一条工具栏视觉语言 */
+.cron-archive-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: var(--plugins-control-h);
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--plugins-shell-border);
+  background: var(--plugins-shell-bg);
+  color: var(--ink-mute);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.cron-archive-filter:hover {
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--plugins-shell-border));
+}
+
+.cron-archive-filter.is-active {
+  color: var(--tone);
+  background: var(--plugins-active-bg);
+  border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+}
+
+.cron-archive-filter-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Compact list view */
 .cron-job-list {
   display: flex;

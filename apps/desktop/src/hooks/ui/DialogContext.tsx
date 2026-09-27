@@ -21,6 +21,25 @@ export type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "default" | "danger";
+  /** 附加勾选项；用 confirmDetailed 读取勾选结果，confirm 仍只返回是否确认。 */
+  options?: ConfirmOptionItem[];
+};
+
+/** 确认弹窗里的附加勾选项。 */
+export type ConfirmOptionItem = {
+  id: string;
+  label: string;
+  description?: string;
+  /** 默认勾选状态（缺省为未勾选）。 */
+  defaultChecked?: boolean;
+  /** 危险选项：渲染为警示样式，通常配合 defaultChecked 为 false。 */
+  danger?: boolean;
+};
+
+/** 确认结果；未声明 options 时 `selected` 为空数组。 */
+export type ConfirmOutcome = {
+  confirmed: boolean;
+  selected: string[];
 };
 
 export type PromptOptions = {
@@ -37,7 +56,7 @@ export type PromptOptions = {
 type ConfirmRequest = {
   kind: "confirm";
   options: ConfirmOptions;
-  resolve: (ok: boolean) => void;
+  resolve: (outcome: ConfirmOutcome) => void;
 };
 
 type PromptRequest = {
@@ -50,6 +69,8 @@ type DialogRequest = ConfirmRequest | PromptRequest;
 
 type DialogApi = {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
+  /** 带勾选项的确认：返回确认结果与勾选项 id 列表。 */
+  confirmDetailed: (options: ConfirmOptions) => Promise<ConfirmOutcome>;
   prompt: (options: PromptOptions) => Promise<string | null>;
 };
 
@@ -59,6 +80,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [request, setRequest] = useState<DialogRequest | null>(null);
   const [draft, setDraft] = useState("");
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const queueRef = useRef<DialogRequest[]>([]);
   const activeRef = useRef<DialogRequest | null>(null);
 
@@ -69,12 +91,19 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     if (!next) {
       setRequest(null);
       setDraft("");
+      setChecked({});
       return;
     }
     if (next.kind === "prompt") {
       setDraft(next.options.defaultValue ?? "");
+      setChecked({});
     } else {
       setDraft("");
+      const initial: Record<string, boolean> = {};
+      for (const option of next.options.options ?? []) {
+        initial[option.id] = option.defaultChecked ?? false;
+      }
+      setChecked(initial);
     }
     setRequest(next);
   }, []);
@@ -93,18 +122,25 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       activeRef.current = null;
       setRequest(null);
       setDraft("");
+      setChecked({});
       // 下一帧再弹出队列，避免同一次点击连环触发
       window.setTimeout(() => pump(), 0);
     },
     [pump],
   );
 
-  const confirm = useCallback(
+  const confirmDetailed = useCallback(
     (options: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => {
+      new Promise<ConfirmOutcome>((resolve) => {
         enqueue({ kind: "confirm", options, resolve });
       }),
     [enqueue],
+  );
+
+  const confirm = useCallback(
+    (options: ConfirmOptions) =>
+      confirmDetailed(options).then((outcome) => outcome.confirmed),
+    [confirmDetailed],
   );
 
   const prompt = useCallback(
@@ -115,7 +151,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     [enqueue],
   );
 
-  const api = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
+  const api = useMemo(
+    () => ({ confirm, confirmDetailed, prompt }),
+    [confirm, confirmDetailed, prompt],
+  );
 
   const cancelLabel = request?.options.cancelLabel ?? t("dialog.cancel");
   const confirmLabel =
@@ -156,14 +195,19 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           confirmDisabled={promptEmpty}
           onCancel={() => {
             if (request.kind === "confirm") {
-              closeActive(() => request.resolve(false));
+              closeActive(() =>
+                request.resolve({ confirmed: false, selected: [] }),
+              );
             } else {
               closeActive(() => request.resolve(null));
             }
           }}
           onConfirm={() => {
             if (request.kind === "confirm") {
-              closeActive(() => request.resolve(true));
+              const selected = (request.options.options ?? [])
+                .filter((option) => checked[option.id])
+                .map((option) => option.id);
+              closeActive(() => request.resolve({ confirmed: true, selected }));
               return;
             }
             const value = draft.trim();
@@ -178,6 +222,37 @@ export function DialogProvider({ children }: { children: ReactNode }) {
               placeholder={request.options.placeholder}
               onChange={(e) => setDraft(e.target.value)}
             />
+          ) : request.options.options?.length ? (
+            <div className="app-dialog-options">
+              {request.options.options.map((option) => (
+                <label
+                  key={option.id}
+                  className={`app-dialog-option ${option.danger ? "is-danger" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    data-dialog-skip-autofocus
+                    checked={checked[option.id] ?? false}
+                    onChange={(e) =>
+                      setChecked((prev) => ({
+                        ...prev,
+                        [option.id]: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="app-dialog-option-text">
+                    <span className="app-dialog-option-label">
+                      {option.label}
+                    </span>
+                    {option.description ? (
+                      <span className="app-dialog-option-desc">
+                        {option.description}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </div>
           ) : null}
         </AppDialog>
       ) : null}
@@ -191,6 +266,15 @@ export function useConfirm(): DialogApi["confirm"] {
     throw new Error("useConfirm must be used within DialogProvider");
   }
   return ctx.confirm;
+}
+
+/** 带勾选项的确认；返回确认结果与勾选项 id 列表。 */
+export function useConfirmDetailed(): DialogApi["confirmDetailed"] {
+  const ctx = useContext(DialogContext);
+  if (!ctx) {
+    throw new Error("useConfirmDetailed must be used within DialogProvider");
+  }
+  return ctx.confirmDetailed;
 }
 
 export function usePrompt(): DialogApi["prompt"] {
