@@ -479,8 +479,8 @@ test("session activity preserves title space and progressively reveals tools", (
   assert.match(sessionList, /new ResizeObserver\(measureTitle\)/);
   assert.match(
     sessionStyles,
-    /\.sidebar-session-item:is\(:hover, :focus-within\) \.sidebar-session-time,[\s\S]*?\.session-status-icon\s*\{[\s\S]*?display:\s*none;/,
-    "secondary metadata must release layout width while title actions are visible",
+    /\.sidebar-session-item:is\(:hover, :focus-within\) \.sidebar-session-time,[\s\S]*?\.sidebar-session-pin-mark,[\s\S]*?\.session-status-icon\s*\{[\s\S]*?display:\s*none;/,
+    "secondary metadata, including the inline pin mark, must release layout width while title actions are visible",
   );
   assert.ok(sessionTime, "session time should keep a compact trailing slot");
   assert.match(sessionTime, /flex:\s*0 0 auto;/);

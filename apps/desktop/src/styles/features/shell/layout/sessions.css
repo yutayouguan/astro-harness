@@ -267,8 +267,11 @@
   margin-right: 0;
 }
 
-/* hover/focus 时次要信息真正让出布局空间，避免只把文字变透明却继续挤压标题 */
+/* hover/focus 时次要信息真正让出布局空间，避免只把文字变透明却继续挤压标题。
+   行内置顶标记同时收起：置顶行的悬停按钮本身就是「取消置顶」，
+   两者并存会出现「置顶」图标与「取消置顶」按钮同时可见的重复提示。 */
 .sidebar-session-item:is(:hover, :focus-within) .sidebar-session-time,
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-pin-mark,
 .sidebar-session-item:is(:hover, :focus-within) .session-status-icon {
   display: none;
 }
