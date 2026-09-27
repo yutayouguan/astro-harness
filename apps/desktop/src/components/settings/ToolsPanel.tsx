@@ -6,6 +6,7 @@ import {
   Columns2,
   FileJson2,
   FileText,
+  FolderPlus,
   FunctionSquare,
   Hash,
   LayoutGrid,
@@ -47,6 +48,15 @@ type ApprovalSettings = {
   browserApprovalRules: BrowserApprovalRule[];
 };
 
+/** 用户级永久可写目录（Tauri camelCase） */
+type PermissionWriteRoots = { profileId: string; roots: string[] };
+
+/** 本会话已生效的额外权限（Tauri camelCase） */
+type SessionPermissionGrants = {
+  workspaceWrite: boolean;
+  writableRoots: string[];
+};
+
 const APPROVAL_MODES: PermissionPreset[] = [
   "ask_for_approval",
   "approve_for_me",
@@ -54,24 +64,117 @@ const APPROVAL_MODES: PermissionPreset[] = [
 ];
 
 /** 危险命令审批设置区（全局，非按 Agent） */
-function ApprovalsSection({ active }: { active: boolean }) {
+function ApprovalsSection({
+  active,
+  sessionId = null,
+}: {
+  active: boolean;
+  sessionId?: string | null;
+}) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const [settings, setSettings] = useState<ApprovalSettings | null>(null);
+  const [writeRoots, setWriteRoots] = useState<PermissionWriteRoots | null>(
+    null,
+  );
+  const [sessionGrants, setSessionGrants] =
+    useState<SessionPermissionGrants | null>(null);
+  const [newRoot, setNewRoot] = useState("");
   const [newEntry, setNewEntry] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (!active || !isTauri()) return;
     void (async () => {
       try {
-        setSettings(await invoke<ApprovalSettings>("get_approval_settings"));
+        const [nextSettings, nextRoots] = await Promise.all([
+          invoke<ApprovalSettings>("get_approval_settings"),
+          invoke<PermissionWriteRoots>("get_permission_write_roots"),
+        ]);
+        setSettings(nextSettings);
+        setWriteRoots(nextRoots);
       } catch (cause) {
         setError(String(cause));
       }
     })();
   }, [active]);
+
+  // 本会话额外权限：用于「写入永久」按钮的可用状态。
+  useEffect(() => {
+    if (!active || !isTauri() || !sessionId) {
+      setSessionGrants(null);
+      return;
+    }
+    let cancelled = false;
+    void invoke<SessionPermissionGrants>("get_session_permission_grants", {
+      sessionId,
+    })
+      .then((grants) => {
+        if (!cancelled) setSessionGrants(grants);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionGrants(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, sessionId]);
+
+  const promotableRoots = (sessionGrants?.writableRoots ?? []).filter(
+    (root) => !(writeRoots?.roots ?? []).includes(root),
+  );
+
+  const saveRoots = async (roots: string[]): Promise<boolean> => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      setWriteRoots(
+        await invoke<PermissionWriteRoots>("set_permission_write_roots", {
+          roots,
+        }),
+      );
+      return true;
+    } catch (cause) {
+      setError(String(cause));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addRoot = async () => {
+    const root = newRoot.trim();
+    if (!root || busy || !writeRoots) return;
+    // 只在校验通过（列表真的变了）后清空输入，错误路径保留原文方便修改。
+    if (await saveRoots([...writeRoots.roots, root])) setNewRoot("");
+  };
+
+  const removeRoot = async (root: string) => {
+    if (busy || !writeRoots) return;
+    await saveRoots(writeRoots.roots.filter((entry) => entry !== root));
+  };
+
+  const promoteSessionRoots = async () => {
+    if (!sessionId || busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      setWriteRoots(
+        await invoke<PermissionWriteRoots>("promote_session_write_roots", {
+          sessionId,
+        }),
+      );
+      setNotice(t("approvals.writeRoots.promoted"));
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const setMode = async (preset: string) => {
     if (!APPROVAL_MODES.includes(preset as PermissionPreset) || busy) return;
@@ -322,6 +425,85 @@ function ApprovalsSection({ active }: { active: boolean }) {
         )}
       </section>
 
+      <section className="tools-detail-section approvals-write-roots-card">
+        <h4 className="tools-detail-label">
+          <FolderPlus size={15} strokeWidth={2.25} aria-hidden />
+          {t("approvals.writeRoots.label")}
+        </h4>
+        <p className="tools-detail-body">{t("approvals.writeRoots.hint")}</p>
+        {writeRoots === null ? (
+          <p className="tools-detail-empty-params">{t("approvals.loading")}</p>
+        ) : (
+          <>
+            {writeRoots.roots.length === 0 ? (
+              <p className="tools-detail-empty-params">
+                {t("approvals.writeRoots.empty")}
+              </p>
+            ) : (
+              <ul className="approvals-allow-list">
+                {writeRoots.roots.map((root) => (
+                  <li key={root} className="mcp-tool-row">
+                    <code className="mcp-tool-name">{root}</code>
+                    <button
+                      type="button"
+                      className="mcp-btn-ghost"
+                      onClick={() => void removeRoot(root)}
+                      disabled={busy}
+                      aria-label={t("approvals.allowlist.remove")}
+                    >
+                      <Trash2 size={13} strokeWidth={2.25} aria-hidden />
+                      {t("approvals.allowlist.remove")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="approvals-add-row">
+              <input
+                type="text"
+                value={newRoot}
+                onChange={(e) => setNewRoot(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void addRoot();
+                }}
+                placeholder={t("approvals.writeRoots.placeholder")}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="mcp-btn-primary"
+                onClick={() => void addRoot()}
+                disabled={!newRoot.trim() || busy}
+              >
+                <Plus size={14} strokeWidth={2.3} aria-hidden />
+                {t("approvals.allowlist.add")}
+              </button>
+            </div>
+            <div className="approvals-write-roots-promote">
+              <button
+                type="button"
+                className="mcp-btn-primary"
+                onClick={() => void promoteSessionRoots()}
+                disabled={!sessionId || busy || promotableRoots.length === 0}
+              >
+                <ShieldCheck size={14} strokeWidth={2.3} aria-hidden />
+                {t("approvals.writeRoots.promote")}
+              </button>
+              <span className="tools-detail-body">
+                {!sessionId
+                  ? t("approvals.writeRoots.promoteNoSession")
+                  : promotableRoots.length === 0
+                    ? t("approvals.writeRoots.promoteEmpty")
+                    : t("approvals.writeRoots.promoteReady", {
+                        n: String(promotableRoots.length),
+                      })}
+              </span>
+            </div>
+          </>
+        )}
+        {notice ? <p className="tools-detail-body is-ok">{notice}</p> : null}
+      </section>
+
       <section className="tools-detail-section approvals-hardline">
         <h4 className="tools-detail-label">
           <ShieldAlert size={15} strokeWidth={2.25} aria-hidden />
@@ -417,6 +599,8 @@ type Props = {
   /** 打开时落到该 tab；消费后通知父级清空 */
   initialTab?: ToolTab | null;
   onInitialTabConsumed?: () => void;
+  /** 当前会话；用于「把本会话额外权限写入永久」 */
+  sessionId?: string | null;
 };
 
 /** 是否运行在 Tauri 壳内 */
@@ -429,6 +613,7 @@ export default function ToolsPanel({
   active = true,
   initialTab = null,
   onInitialTabConsumed,
+  sessionId = null,
 }: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<ToolTab>("builtin");
@@ -1032,7 +1217,9 @@ export default function ToolsPanel({
             </>
           )}
 
-          {tab === "approvals" && <ApprovalsSection active={active} />}
+          {tab === "approvals" && (
+            <ApprovalsSection active={active} sessionId={sessionId} />
+          )}
         </MotionSwitch>
       </div>
     </div>

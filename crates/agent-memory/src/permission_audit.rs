@@ -488,3 +488,33 @@ mod tests {
         assert_eq!(clear_permission_audits(dir.path()).unwrap(), (0, 0));
     }
 }
+
+/// 可授权的写入根净化：绝对路径、非 Astro 自身目录、非常见敏感目录。
+///
+/// 由 `request_permissions` 的 preflight（会话级授权）与权限设置页（永久可写目录）
+/// 共用，避免两处规则漂移。
+pub fn sanitize_write_root(
+    raw: &str,
+    memory_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("空路径".to_string());
+    }
+    let path = std::path::PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err(format!("{trimmed}：必须是绝对路径"));
+    }
+    let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
+    if normalized.starts_with(memory_dir) {
+        return Err(format!("{trimmed}：Astro 自身目录不可授予"));
+    }
+    if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        for sensitive in [".ssh", ".aws", ".gnupg", "Library/Keychains"] {
+            if normalized.starts_with(home.join(sensitive)) {
+                return Err(format!("{trimmed}：敏感目录不可授予"));
+            }
+        }
+    }
+    Ok(normalized)
+}

@@ -898,30 +898,10 @@ async fn preflight_read_only_write(
     .await
 }
 
-/// 可授权的写入根：必须是绝对路径、不在 Astro 自身目录、不是常见敏感目录。
-///
-/// 用户批准是唯一的放行来源，但敏感位置（私钥/凭据/钥匙串）连批准也不提供。
+/// 可授权的写入根：净化规则见 `memory::permission_audit::sanitize_write_root`
+/// （会话级授权与设置页的永久可写目录共用同一套规则）。
 fn sanitize_grant_path(raw: &str, memory_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("空路径".to_string());
-    }
-    let path = std::path::PathBuf::from(trimmed);
-    if !path.is_absolute() {
-        return Err(format!("{trimmed}：必须是绝对路径"));
-    }
-    let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
-    if normalized.starts_with(memory_dir) {
-        return Err(format!("{trimmed}：Astro 自身目录不可授予"));
-    }
-    if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
-        for sensitive in [".ssh", ".aws", ".gnupg", "Library/Keychains"] {
-            if normalized.starts_with(home.join(sensitive)) {
-                return Err(format!("{trimmed}：敏感目录不可授予"));
-            }
-        }
-    }
-    Ok(normalized)
+    memory::permission_audit::sanitize_write_root(raw, memory_dir)
 }
 
 /// `request_permissions` 的 preflight：park 用户批准，批准后落**会话级**授权。

@@ -1129,7 +1129,7 @@ pub struct SessionPermissionGrantsDto {
     pub writable_roots: Vec<String>,
 }
 
-async fn session_permission_grants(
+pub(crate) async fn session_permission_grants(
     session_id: &str,
     revoke: bool,
 ) -> Result<SessionPermissionGrantsDto, String> {

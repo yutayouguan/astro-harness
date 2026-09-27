@@ -164,6 +164,11 @@ async function boot(page: Page) {
                   command: "revoke_session_permission_grants",
                 });
                 return { workspaceWrite: false, writableRoots: [] };
+              case "promote_session_write_roots":
+                (window as unknown as { __permissionCalls: unknown[] }).__permissionCalls.push({
+                  command: "promote_session_write_roots",
+                });
+                return { profileId: ":workspace", roots: ["/tmp/shared-out"] };
               case "get_chat_history":
                 return {
                   sessionId,
@@ -241,4 +246,49 @@ test("session permission grants are visible and revocable from the policy menu",
         call.command === "revoke_session_permission_grants",
     ),
   ).toHaveLength(1);
+});
+
+test("session permissions can be promoted to permanent after an explicit confirmation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await boot(page);
+
+  await page.locator(".composer-policy-pill").click();
+  const grants = page.locator(".composer-policy-grants");
+  await expect(grants).toBeVisible();
+
+  // 写入永久必须经过一次显式确认，取消则不写。
+  await grants.getByRole("button", { name: "写入永久" }).click();
+  const dialog = page.locator(".app-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("把本会话权限写入永久？");
+  await dialog.locator(".app-dialog-btn.is-cancel").click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as unknown as { __permissionCalls: { command?: string }[] }
+        ).__permissionCalls.filter(
+          (call) => call.command === "promote_session_write_roots",
+        ).length,
+    ),
+  ).toBe(0);
+
+  // 确认后才调用后端，把本会话授权写进用户级永久可写目录。
+  await grants.getByRole("button", { name: "写入永久" }).click();
+  await page.locator(".app-dialog-btn.is-confirm").click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as { __permissionCalls: { command?: string }[] }
+          ).__permissionCalls.filter(
+            (call) => call.command === "promote_session_write_roots",
+          ).length,
+      ),
+    )
+    .toBe(1);
 });

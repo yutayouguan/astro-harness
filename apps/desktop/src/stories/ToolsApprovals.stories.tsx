@@ -13,13 +13,30 @@ const approvalSettings = {
   commandAllowlist: [],
 };
 
+let writeRoots = ["/tmp/qa-shared-out"];
+
 const meta = {
   id: "tools-approvals",
   title: "Settings/Tools Approvals",
   component: ToolsPanel,
   beforeEach: () => {
-    mockIPC((command) => {
+    writeRoots = ["/tmp/qa-shared-out"];
+    mockIPC((command, payload) => {
       if (command === "get_approval_settings") return approvalSettings;
+      if (command === "get_permission_write_roots") {
+        return { profileId: ":workspace", roots: writeRoots };
+      }
+      if (command === "set_permission_write_roots") {
+        writeRoots = (payload as { roots: string[] }).roots;
+        return { profileId: ":workspace", roots: writeRoots };
+      }
+      if (command === "get_session_permission_grants") {
+        return { workspaceWrite: true, writableRoots: ["/tmp/qa-session-out"] };
+      }
+      if (command === "promote_session_write_roots") {
+        writeRoots = [...writeRoots, "/tmp/qa-session-out"];
+        return { profileId: ":workspace", roots: writeRoots };
+      }
       if (command === "get_config") {
         return { active_agent_id: "default", agents: [], workspace_dir: "" };
       }
@@ -79,6 +96,7 @@ const meta = {
   args: {
     active: true,
     initialTab: "approvals",
+    sessionId: "sess-qa-approvals",
   },
   parameters: {
     controls: { disable: true },

@@ -810,6 +810,16 @@ export const zh = {
   "approvals.hardline.label": "永久拦截（hardline）",
   "approvals.hardline.desc":
     "mkfs、dd 写块设备、fork 炸弹、rm -rf / 等不可恢复操作——任何模式、任何白名单都无法放行。",
+  "approvals.writeRoots.label": "永久可写目录",
+  "approvals.writeRoots.hint":
+    "写在这里的目录长期可写，Agent 越过工作区边界时不再逐个询问；只读组合会因此至少按工作区写入运行。",
+  "approvals.writeRoots.empty": "还没有永久可写目录。",
+  "approvals.writeRoots.placeholder": "如：/Users/me/shared-out（绝对路径）",
+  "approvals.writeRoots.promote": "把本会话额外权限写入永久",
+  "approvals.writeRoots.promoteReady": "本会话还有 {n} 项额外权限可以固化。",
+  "approvals.writeRoots.promoteEmpty": "本会话暂无额外权限。",
+  "approvals.writeRoots.promoteNoSession": "当前没有进行中的会话。",
+  "approvals.writeRoots.promoted": "已写入永久可写目录。",
   "approvals.audit.title": "安全审计",
   "approvals.audit.sub":
     "最近的权限决策和沙箱启动记录；不显示命令正文、参数或具体路径。",
@@ -1168,6 +1178,11 @@ export const zh = {
   "chat.approval.sessionGrantsHint": "批准后仅在本会话有效，新开对话即失效",
   "chat.approval.revokeSessionGrants": "撤销本会话额外权限",
   "chat.approval.sessionGrantsRevoked": "已撤销本会话的额外权限",
+  "chat.approval.promoteSessionGrants": "写入永久",
+  "chat.approval.promoteGrantsConfirmTitle": "把本会话权限写入永久？",
+  "chat.approval.promoteGrantsConfirmMessage":
+    "会把本会话批准过的可写目录写进设置，之后的对话也不再询问；可随时在权限设置里移除。",
+  "chat.approval.sessionGrantsPromoted": "已写入永久可写目录",
   "chat.approval.askForApproval": "请求批准",
   "chat.approval.approveForMe": "帮我批准",
   "chat.approval.fullAccess": "完全访问",

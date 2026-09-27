@@ -1205,6 +1205,28 @@ export default function ChatView({
     }
   }, [sessionId, showToast, t]);
 
+  // 会话授权 → 永久：由用户确认后写进用户级永久可写目录，模型无权直接改配置。
+  const promoteSessionGrants = useCallback(async () => {
+    if (!sessionId) return;
+    const approved = await confirm({
+      title: t("chat.approval.promoteGrantsConfirmTitle"),
+      message: t("chat.approval.promoteGrantsConfirmMessage"),
+      confirmLabel: t("chat.approval.promoteSessionGrants"),
+    });
+    if (!approved) return;
+    try {
+      await invoke("promote_session_write_roots", { sessionId });
+      showToast?.(t("chat.approval.sessionGrantsPromoted"), {
+        tone: "success",
+      });
+    } catch (error) {
+      showToast?.(
+        error instanceof Error ? error.message : String(error),
+        { tone: "error" },
+      );
+    }
+  }, [confirm, sessionId, showToast, t]);
+
   const approvalMeta = useMemo(
     () => ({
       ask_for_approval: {
@@ -3442,13 +3464,22 @@ export default function ChatView({
                                   </li>
                                 ))}
                               </ul>
-                              <button
-                                type="button"
-                                className="composer-policy-grants-revoke"
-                                onClick={() => void revokeSessionGrants()}
-                              >
-                                {t("chat.approval.revokeSessionGrants")}
-                              </button>
+                              <div className="composer-policy-grants-actions">
+                                <button
+                                  type="button"
+                                  className="composer-policy-grants-promote"
+                                  onClick={() => void promoteSessionGrants()}
+                                >
+                                  {t("chat.approval.promoteSessionGrants")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="composer-policy-grants-revoke"
+                                  onClick={() => void revokeSessionGrants()}
+                                >
+                                  {t("chat.approval.revokeSessionGrants")}
+                                </button>
+                              </div>
                             </div>
                           ) : null}
                           <div

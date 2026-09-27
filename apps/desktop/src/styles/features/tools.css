@@ -1458,8 +1458,13 @@ html[data-theme="dark"] .mcp-btn-primary:hover:not(:disabled) {
   transition: background 0.15s ease;
 }
 
-.mcp-btn-ghost:hover {
+.mcp-btn-ghost:hover:not(:disabled) {
   background: var(--chip-bg);
+}
+
+.mcp-btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .agent-tools-grid {
@@ -2361,6 +2366,7 @@ html[data-theme="dark"] .tool-lucide-inline {
 
 .approvals-mode-card,
 .approvals-allowlist-card,
+.approvals-write-roots-card,
 .approvals-hardline,
 .approvals-section > .security-audit-section {
   grid-column: 1 / -1;
@@ -2480,6 +2486,27 @@ html[data-theme="dark"] .approvals-add-row input {
 
 .approvals-section .tools-detail-body.is-error {
   color: var(--danger);
+}
+
+.approvals-write-roots-promote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed
+    color-mix(in srgb, var(--tone, var(--accent)) 18%, transparent);
+}
+
+.approvals-write-roots-promote .tools-detail-body {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 12px;
+}
+
+.approvals-section .tools-detail-body.is-ok {
+  color: var(--success, #2f9e67);
 }
 
 /* hardline：危险色描边，强调不可越过 */

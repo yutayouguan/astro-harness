@@ -714,6 +714,61 @@ pub async fn get_permission_settings() -> Result<PermissionSettingsDto, String> 
     Ok(permission_settings_dto())
 }
 
+/// 权限设置页：用户级永久可写目录（`permissions.extra_writable_roots`）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionWriteRootsDto {
+    /// 当前生效的权限组合，仅用于展示（内置组合也支持永久可写目录）。
+    pub profile_id: String,
+    pub roots: Vec<String>,
+}
+
+fn permission_write_roots_dto() -> PermissionWriteRootsDto {
+    let root = home::default_memory_dir();
+    let settings = memory::load_permission_settings(&root);
+    PermissionWriteRootsDto {
+        profile_id: settings.selection.profile_id.clone(),
+        roots: settings.permissions.extra_writable_roots.clone(),
+    }
+}
+
+#[tauri::command]
+pub async fn get_permission_write_roots() -> Result<PermissionWriteRootsDto, String> {
+    Ok(permission_write_roots_dto())
+}
+
+#[tauri::command]
+pub async fn set_permission_write_roots(
+    roots: Vec<String>,
+) -> Result<PermissionWriteRootsDto, String> {
+    let root = home::default_memory_dir();
+    memory::set_extra_write_roots(&root, &roots).map_err(|error| error.to_string())?;
+    Ok(permission_write_roots_dto())
+}
+
+/// 把当前会话的额外权限（`request_permissions` 批准过）写进用户级列表，变成永久可写目录。
+#[tauri::command]
+pub async fn promote_session_write_roots(
+    session_id: String,
+) -> Result<PermissionWriteRootsDto, String> {
+    let grants = super::super::chat::session_permission_grants(&session_id, false).await?;
+    let root = home::default_memory_dir();
+    let settings = memory::load_permission_settings(&root);
+    let mut roots: Vec<String> = settings.permissions.extra_writable_roots.clone();
+    for candidate in grants.writable_roots {
+        // 会话授权本身就经过净化；这里再兜一次，避免个别过期/异常路径让整次固化失败。
+        let Ok(path) = memory::permission_audit::sanitize_write_root(&candidate, &root) else {
+            continue;
+        };
+        let rendered = path.display().to_string();
+        if !roots.contains(&rendered) {
+            roots.push(rendered);
+        }
+    }
+    memory::set_extra_write_roots(&root, &roots).map_err(|error| error.to_string())?;
+    Ok(permission_write_roots_dto())
+}
+
 #[tauri::command]
 pub async fn set_permission_preset(
     preset: String,

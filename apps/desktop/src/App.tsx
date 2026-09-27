@@ -2308,6 +2308,7 @@ export default function App() {
                         modelInfo={loadingModelInfo?.providerId === activeProvider?.id && loadingModelInfo?.info.id === activeProvider?.model ? loadingModelInfo?.info : null}
                         initialTab={toolsInitialTab}
                         onInitialTabConsumed={() => setToolsInitialTab(null)}
+                        sessionId={chat.sessionId}
                       />
                     )}
                     {settingsTab === "browser" && (

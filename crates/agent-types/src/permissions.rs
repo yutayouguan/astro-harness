@@ -168,6 +168,10 @@ pub struct PermissionProfile {
     pub workspace_roots: BTreeMap<String, bool>,
     #[serde(default)]
     pub filesystem: FilesystemPolicy,
+    /// 该 profile 自带的永久可写目录（绝对路径，通常写在 `permissions.profiles.<id>` 里）。
+    /// 声明后该 profile 至少按 workspace-write 处理，这些根额外可写。
+    #[serde(default)]
+    pub extra_writable_roots: Vec<String>,
     #[serde(default)]
     pub network: NetworkPolicy,
 }
@@ -179,6 +183,10 @@ pub struct PermissionsConfig {
     pub default_profile: String,
     #[serde(default)]
     pub profiles: BTreeMap<String, PermissionProfile>,
+    /// 用户级永久可写目录（绝对路径，权限设置页维护，含"把本会话授权写入永久"）。
+    /// 与选中哪个 profile 无关：所有 profile 都会额外获得这些可写根。
+    #[serde(default)]
+    pub extra_writable_roots: Vec<String>,
 }
 
 impl Default for PermissionsConfig {
@@ -186,6 +194,7 @@ impl Default for PermissionsConfig {
         Self {
             default_profile: default_profile(),
             profiles: BTreeMap::new(),
+            extra_writable_roots: Vec::new(),
         }
     }
 }
@@ -197,6 +206,13 @@ fn default_profile() -> String {
 impl PermissionsConfig {
     pub fn validate(&self) -> Result<(), PermissionProfileError> {
         self.validate_profile_ref(&self.default_profile)?;
+        if self
+            .extra_writable_roots
+            .iter()
+            .any(|root| root.trim().is_empty() || !std::path::Path::new(root.trim()).is_absolute())
+        {
+            return Err(PermissionProfileError::InvalidGlobalWriteRoot);
+        }
         for (id, profile) in &self.profiles {
             if id.is_empty() || id.starts_with(':') {
                 return Err(PermissionProfileError::InvalidName(id.clone()));
@@ -206,6 +222,11 @@ impl PermissionsConfig {
             }
             if matches!(profile.network.domains.get("*"), Some(NetworkAccess::Deny)) {
                 return Err(PermissionProfileError::GlobalDenyWildcard(id.clone()));
+            }
+            for root in &profile.extra_writable_roots {
+                if root.trim().is_empty() || !std::path::Path::new(root.trim()).is_absolute() {
+                    return Err(PermissionProfileError::InvalidWriteRoot(id.clone()));
+                }
             }
             self.resolve_chain(id)?;
         }
@@ -228,6 +249,32 @@ impl PermissionsConfig {
         })
     }
 
+    /// 该 profile 能用到的永久可写目录：extends 链上的 profile 声明 + 用户级列表（保序去重）。
+    pub fn extra_writable_roots_for(&self, profile_id: &str) -> Vec<std::path::PathBuf> {
+        let mut roots: Vec<std::path::PathBuf> = Vec::new();
+        let Ok(chain) = self.resolve_chain(profile_id) else {
+            return roots;
+        };
+        for id in chain {
+            let Some(profile) = self.profiles.get(&id) else {
+                continue;
+            };
+            for root in &profile.extra_writable_roots {
+                let path = std::path::PathBuf::from(root.trim());
+                if !roots.contains(&path) {
+                    roots.push(path);
+                }
+            }
+        }
+        for root in &self.extra_writable_roots {
+            let path = std::path::PathBuf::from(root.trim());
+            if !roots.contains(&path) {
+                roots.push(path);
+            }
+        }
+        roots
+    }
+
     pub fn command_sandbox_mode_for(
         &self,
         profile_id: &str,
@@ -244,7 +291,12 @@ impl PermissionsConfig {
                 return Err(PermissionProfileError::UnresolvedFilesystemRules(id));
             }
         }
-        self.sandbox_mode_for(profile_id)
+        let mode = self.sandbox_mode_for(profile_id)?;
+        // 声明了永久可写目录的 profile 不能再按只读跑：这些根就是要写。
+        if mode == SandboxMode::ReadOnly && !self.extra_writable_roots_for(profile_id).is_empty() {
+            return Ok(SandboxMode::WorkspaceWrite);
+        }
+        Ok(mode)
     }
 
     fn validate_profile_ref(&self, id: &str) -> Result<(), PermissionProfileError> {
@@ -310,6 +362,10 @@ pub enum PermissionProfileError {
     GlobalDenyWildcard(String),
     #[error("permission profile {0} has filesystem rules that are not yet executable")]
     UnresolvedFilesystemRules(String),
+    #[error("permission profile {0} extra writable root must be a non-empty absolute path")]
+    InvalidWriteRoot(String),
+    #[error("permissions.extra_writable_roots entries must be non-empty absolute paths")]
+    InvalidGlobalWriteRoot,
 }
 
 /// 会话真正激活的三个正交权限维度。
@@ -412,6 +468,7 @@ mod tests {
                     ..Default::default()
                 },
             )]),
+            extra_writable_roots: Vec::new(),
         };
 
         assert_eq!(
@@ -435,6 +492,7 @@ mod tests {
                     ..Default::default()
                 },
             )]),
+            extra_writable_roots: Vec::new(),
         };
 
         assert!(matches!(
@@ -511,5 +569,47 @@ mod tests {
             PermissionPreset::from_selection(&auto),
             Some(PermissionPreset::ApproveForMe)
         );
+    }
+
+    #[test]
+    fn user_level_write_roots_apply_to_builtin_and_custom_profiles() {
+        let shared = "/tmp/astro-shared-out".to_string();
+        let mut config = PermissionsConfig {
+            extra_writable_roots: vec![shared.clone()],
+            ..Default::default()
+        };
+        // 内置组合也能拿到用户级可写根；只读组合随之升级为 workspace-write。
+        assert_eq!(
+            config.extra_writable_roots_for(WORKSPACE_PROFILE),
+            vec![std::path::PathBuf::from(&shared)]
+        );
+        assert_eq!(
+            config.command_sandbox_mode_for(READ_ONLY_PROFILE).unwrap(),
+            SandboxMode::WorkspaceWrite
+        );
+
+        // 自定义 profile 的自有根排在前，用户级根去重追加。
+        config.profiles.insert(
+            "writer".into(),
+            PermissionProfile {
+                extends: Some(WORKSPACE_PROFILE.into()),
+                extra_writable_roots: vec![shared.clone(), "/tmp/astro-profile-only".into()],
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            config.extra_writable_roots_for("writer"),
+            vec![
+                std::path::PathBuf::from(&shared),
+                std::path::PathBuf::from("/tmp/astro-profile-only")
+            ]
+        );
+
+        // 相对路径一律视为无效配置。
+        config.extra_writable_roots = vec!["relative/out".into()];
+        assert!(matches!(
+            config.validate(),
+            Err(PermissionProfileError::InvalidGlobalWriteRoot)
+        ));
     }
 }

@@ -213,11 +213,17 @@ pub fn build_command_sandbox_policy_with_roots(
     if workspace_write_grant && mode == types::SandboxMode::ReadOnly {
         mode = types::SandboxMode::WorkspaceWrite;
     }
-    let extra_roots: Vec<PathBuf> = workspace_roots
+    let mut extra_roots: Vec<PathBuf> = workspace_roots
         .iter()
         .filter(|root| root.as_path() != execution_root)
         .cloned()
         .collect();
+    // profile 里的永久可写目录（权限设置页维护）同样并入额外可写根。
+    for root in loaded.permissions.extra_writable_roots_for(profile_id) {
+        if root.as_path() != execution_root && !extra_roots.contains(&root) {
+            extra_roots.push(root);
+        }
+    }
     // 网络默认放开：只有显式配置 managed proxy 的 profile 才会把子进程流量收回代理。
     sandbox::SandboxPolicy::new(mode, execution_root, extra_roots, true).map_err(Into::into)
 }
@@ -225,6 +231,75 @@ pub fn build_command_sandbox_policy_with_roots(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_extra_writable_roots_join_the_sandbox_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        let shared = dir.path().join("shared-out");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&shared).unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = "writer", "profiles" = {{ "writer" = {{ "extends" = ":read-only", "extra_writable_roots" = ["{}"] }} }} }}
+"#,
+                shared.display()
+            ),
+        )
+        .unwrap();
+
+        let policy = build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &workspace,
+            std::slice::from_ref(&workspace),
+            Some("writer"),
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert!(
+            policy.writable_roots.contains(&shared.canonicalize().unwrap()),
+            "{:?}",
+            policy.writable_roots
+        );
+    }
+
+    #[test]
+    fn user_level_write_roots_upgrade_read_only_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        let shared = dir.path().join("shared-out");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&shared).unwrap();
+        // 权限设置页维护的用户级可写根：不依赖自定义 profile，内置组合也能用。
+        std::fs::write(
+            dir.path().join("config.toml"),
+            format!(
+                r#""permissions" = {{ "default_profile" = ":read-only", "extra_writable_roots" = ["{}"] }}
+"#,
+                shared.display()
+            ),
+        )
+        .unwrap();
+
+        let policy = build_command_sandbox_policy_with_roots(
+            dir.path(),
+            &workspace,
+            std::slice::from_ref(&workspace),
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(policy.mode, types::SandboxMode::WorkspaceWrite);
+        assert!(
+            policy.writable_roots.contains(&shared.canonicalize().unwrap()),
+            "{:?}",
+            policy.writable_roots
+        );
+    }
 
     #[test]
     fn network_only_custom_profile_uses_inherited_command_sandbox_mode() {

@@ -874,6 +874,18 @@ export const en: Record<MessageKey, string> = {
   "approvals.hardline.label": "Hardline blocklist",
   "approvals.hardline.desc":
     "mkfs, dd to block devices, fork bombs, rm -rf / and other unrecoverable ops — never allowed by any mode or allowlist.",
+  "approvals.writeRoots.label": "Permanent writable folders",
+  "approvals.writeRoots.hint":
+    "Folders listed here stay writable, so the agent stops asking every time it steps past the workspace boundary. A read-only mode therefore runs at least as workspace-write.",
+  "approvals.writeRoots.empty": "No permanent writable folders yet.",
+  "approvals.writeRoots.placeholder": "e.g. /Users/me/shared-out (absolute path)",
+  "approvals.writeRoots.promote": "Make this session's permissions permanent",
+  "approvals.writeRoots.promoteReady":
+    "{n} extra permission(s) from this session can be made permanent.",
+  "approvals.writeRoots.promoteEmpty":
+    "This session has no extra permissions yet.",
+  "approvals.writeRoots.promoteNoSession": "No active session right now.",
+  "approvals.writeRoots.promoted": "Added to the permanent writable folders.",
   "approvals.audit.title": "Security audit",
   "approvals.audit.sub":
     "Recent permission decisions and sandbox launches. Command text, arguments, and concrete paths are not shown.",
@@ -1255,6 +1267,12 @@ export const en: Record<MessageKey, string> = {
   "chat.approval.sessionGrantsHint": "Granted for this session only; a new chat starts without them",
   "chat.approval.revokeSessionGrants": "Revoke session permissions",
   "chat.approval.sessionGrantsRevoked": "Revoked this session's extra permissions",
+  "chat.approval.promoteSessionGrants": "Make permanent",
+  "chat.approval.promoteGrantsConfirmTitle":
+    "Make this session's permissions permanent?",
+  "chat.approval.promoteGrantsConfirmMessage":
+    "The writable folders approved in this session are written to your settings, so later chats stop asking. You can remove them in permission settings at any time.",
+  "chat.approval.sessionGrantsPromoted": "Added to the permanent writable folders",
   "chat.approval.askForApproval": "Ask for approval",
   "chat.approval.approveForMe": "Approve for me",
   "chat.approval.fullAccess": "Full access",

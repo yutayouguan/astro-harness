@@ -500,6 +500,10 @@ macOS Seatbelt · 已启用
 > **现状补充（实现对齐，2026-09-27）**：上面的菜单之外，权限菜单现在还会显示
 > 「本会话额外权限」卡片（列出 `request_permissions` 批准的可写根 + 撤销按钮），
 > 胶囊上有 `+N` 角标；撤销走 `RevokeSessionPermissionGrants`。
+> 卡片上的「写入永久」与权限设置页的「永久可写目录」（`get/set_permission_write_roots`、
+> `promote_session_write_roots`）把已批准的会话授权写进用户级
+> `permissions.extra_writable_roots`，两者都要用户先确认；该列表对所有 profile 生效，
+> 设置页可逐条移除，模型无权直接改配置。
 > 沙箱重试卡的「命令摘要」现在直接给可复制/可编辑的命令，并提供
 > 「在终端打开（预填不执行）」与「编辑后重试」（= 拒绝原请求 + 用修改后的命令重试）。
 > 高风险（dangerous）审批要求显式点击或 ⌘/Ctrl+Enter，`Esc` 只回退二阶确认。

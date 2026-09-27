@@ -840,6 +840,45 @@ pub fn load_permission_settings(base: &Path) -> LoadedPermissionSettings {
     loaded
 }
 
+/// 覆写用户级永久可写目录（权限设置页维护，`permissions.extra_writable_roots`）。
+///
+/// 与选中哪个 profile 无关，因此内置组合也能用；每个路径都按
+/// `permission_audit::sanitize_write_root` 净化，空列表删除该键。
+pub fn set_extra_write_roots(
+    base: &Path,
+    roots: &[String],
+) -> anyhow::Result<LoadedPermissionSettings> {
+    let mut normalized = Vec::with_capacity(roots.len());
+    for root in roots {
+        let path = crate::permission_audit::sanitize_write_root(root, base)
+            .map_err(|reason| anyhow::anyhow!("{reason}"))?;
+        let rendered = path.display().to_string();
+        if !normalized.contains(&rendered) {
+            normalized.push(rendered);
+        }
+    }
+
+    let _guard = home::config_file::lock_config_file(&home::config_path(base))?;
+    let mut root = load_config_root(base)?;
+    let permissions = ensure_mapping_path(&mut root, &["permissions"])?;
+    let key = serde_yaml::Value::String("extra_writable_roots".into());
+    if normalized.is_empty() {
+        permissions.remove(&key);
+    } else {
+        permissions.insert(
+            key,
+            serde_yaml::Value::Sequence(
+                normalized
+                    .into_iter()
+                    .map(serde_yaml::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    save_config_root(base, &root)?;
+    Ok(load_permission_settings(base))
+}
+
 /// 激活桌面端内置权限组合，同时保留自定义 profiles 和其它配置段。
 pub fn set_permission_preset(
     base: &Path,
@@ -2013,6 +2052,48 @@ mod tests {
 
         let loaded = set_permission_preset(dir.path(), PermissionPreset::FullAccess).unwrap();
         assert_eq!(loaded.selection, SessionPermissions::full_access());
+    }
+
+    #[test]
+    fn extra_write_roots_roundtrip_and_sanitize() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.toml"),
+            r#""permissions" = { "default_profile" = ":workspace" }
+"#,
+        )
+        .unwrap();
+
+        let loaded =
+            set_extra_write_roots(dir.path(), &["/tmp/astro-writer-out".to_string()]).unwrap();
+        assert_eq!(
+            loaded.permissions.extra_writable_roots_for(":workspace"),
+            vec![std::path::PathBuf::from("/tmp/astro-writer-out")]
+        );
+        // 内置组合（default_profile 未变）也被写入用户级列表。
+        assert_eq!(
+            loaded.permissions.default_profile, ":workspace",
+            "不应改动 default_profile"
+        );
+
+        // 相对路径 / Astro 自身目录一律拒绝。
+        assert!(set_extra_write_roots(dir.path(), &["relative/out".into()]).is_err());
+        let inside_home = dir.path().join("cache").display().to_string();
+        assert!(set_extra_write_roots(dir.path(), &[inside_home]).is_err());
+
+        // 清空后字段被移除，回到 profile 自身边界。
+        let cleared = set_extra_write_roots(dir.path(), &[]).unwrap();
+        assert!(cleared.permissions.extra_writable_roots.is_empty());
+        assert!(
+            cleared
+                .permissions
+                .extra_writable_roots_for(":workspace")
+                .is_empty()
+        );
+        // 失败写入不能把之前的值留在文件里。
+        assert!(!fs::read_to_string(dir.path().join("config.toml"))
+            .unwrap()
+            .contains("extra_writable_roots"));
     }
 
     #[test]
