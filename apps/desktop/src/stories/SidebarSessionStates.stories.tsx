@@ -389,6 +389,42 @@ function CronSessionTitles() {
   );
 }
 
+/** 定时任务会话的归属标注：任务在调度中、已归档、已被删除。 */
+const cronOwnerSessions = [
+  {
+    sessionId: "cron-job-active",
+    source: "tauri",
+    summary: "定时任务 · 每日 8 点舆情早报",
+    createdAt: new Date().toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+  {
+    sessionId: "cron-job-archived",
+    source: "tauri",
+    summary: "定时任务 · 归档的周报",
+    createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+  {
+    sessionId: "cron-job-gone",
+    source: "tauri",
+    summary: "定时任务 · 已删除的备份任务",
+    createdAt: new Date(Date.now() - 7_200_000).toISOString(),
+    endReason: null,
+    archivedAt: null,
+    pinnedAt: null,
+  },
+] satisfies RecentSessionDto[];
+
+const cronOwnerJobs = [
+  { id: "job-active", archived_at: null },
+  { id: "job-archived", archived_at: "2026-09-20T10:00:00+08:00" },
+];
+
 const meta = {
   id: "sidebar-session-states",
   title: "Shell/Sidebar Session States",
@@ -440,6 +476,19 @@ export const CronSessionTitlesStory: Story = {
     mockIPC((command) =>
       command === "list_sessions" ? cronAwareSessions : null,
     );
+    return () => clearMocks();
+  },
+};
+
+export const CronOwnerStatesStory: Story = {
+  name: "Cron Owner States",
+  render: () => <CronSessionTitles />,
+  beforeEach: () => {
+    mockIPC((command) => {
+      if (command === "list_sessions") return cronOwnerSessions;
+      if (command === "list_cron_jobs") return cronOwnerJobs;
+      return null;
+    });
     return () => clearMocks();
   },
 };

@@ -5,7 +5,7 @@ import { MorphiconProvider } from "../hooks/app/useMorphicons";
 import { DialogProvider } from "../hooks/ui/DialogContext";
 import { LocaleProvider } from "../i18n/LocaleContext";
 
-const jobs: CronJobDto[] = [
+const activeJobs: CronJobDto[] = [
   {
     id: "daily-ai-news",
     schedule: "0 9 * * *",
@@ -37,6 +37,35 @@ const jobs: CronJobDto[] = [
     archived_at: null,
   },
 ];
+
+const archivedJob: CronJobDto = {
+  id: "archived-report",
+  schedule: "0 8 * * 1",
+  task: "汇总上周归档报告并生成摘要。",
+  title: "归档的周报",
+  agent_id: "default",
+  provider_id: "openai",
+  model: "gpt-5.2",
+  enabled: true,
+  created_at: "2026-08-10T08:00:00+08:00",
+  last_run_at: "2026-09-15T08:00:00+08:00",
+  next_run_at: null,
+  show_in_chat: true,
+  archived_at: "2026-09-20T10:00:00+08:00",
+};
+
+const jobs: CronJobDto[] = [...activeJobs, archivedJob];
+
+/** 归档 / 删除会改写这份内存列表，让故事里的操作有可见结果。 */
+let mockJobs: CronJobDto[] = jobs;
+
+type CronCall = { command: string; payload: unknown };
+
+function recordCronCall(command: string, payload: unknown) {
+  const scope = window as unknown as { __cronCalls?: CronCall[] };
+  scope.__cronCalls = scope.__cronCalls ?? [];
+  scope.__cronCalls.push({ command, payload });
+}
 
 const runs = [
   {
@@ -101,14 +130,34 @@ const meta = {
     tone: "teal",
   },
   beforeEach: () => {
+    mockJobs = jobs.map((job) => ({ ...job }));
+    (window as unknown as { __cronCalls?: CronCall[] }).__cronCalls = [];
     mockIPC((command, payload) => {
-      if (command === "list_cron_jobs") return jobs;
+      recordCronCall(command, payload);
+      if (command === "list_cron_jobs") return mockJobs;
       if (command === "list_cron_runs") return runs;
       if (command === "list_cron_job_runs") {
         const id = String((payload as { id?: string } | undefined)?.id ?? "");
         return runs.filter((run) => run.job_id === id);
       }
       if (command === "set_cron_job_enabled") return true;
+      if (command === "archive_cron_job") {
+        const { id, archived } = payload as { id: string; archived: boolean };
+        mockJobs = mockJobs.map((job) =>
+          job.id === id
+            ? {
+                ...job,
+                archived_at: archived ? "2026-09-27T10:00:00+08:00" : null,
+              }
+            : job,
+        );
+        return mockJobs.find((job) => job.id === id) ?? null;
+      }
+      if (command === "remove_cron_job") {
+        const id = (payload as { args?: { id?: string } }).args?.id;
+        mockJobs = mockJobs.filter((job) => job.id !== id);
+        return true;
+      }
       if (command === "run_cron_job_now") return runs[0];
       if (command === "get_cron_run") return runs[0];
       if (command === "get_chat_history") return { items: [] };
