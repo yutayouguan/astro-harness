@@ -1905,6 +1905,8 @@ export const zh = {
   "sessions.regenerateTitleSoon": "正在重新生成标题…",
   "sessions.archive": "归档",
   "sessions.unarchive": "取消归档",
+  "sessions.cronOwnerArchived": "任务已归档",
+  "sessions.cronOwnerMissing": "任务已删除",
   "sessions.pin": "置顶",
   "sessions.unpin": "取消置顶",
   "sessions.status.idle": "已完成",

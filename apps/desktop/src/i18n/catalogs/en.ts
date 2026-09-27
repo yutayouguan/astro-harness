@@ -2022,6 +2022,8 @@ export const en: Record<MessageKey, string> = {
   "sessions.regenerateTitleSoon": "Regenerating title…",
   "sessions.archive": "Archive",
   "sessions.unarchive": "Unarchive",
+  "sessions.cronOwnerArchived": "Task archived",
+  "sessions.cronOwnerMissing": "Task deleted",
   "sessions.pin": "Pin",
   "sessions.unpin": "Unpin",
   "sessions.status.idle": "Done",

@@ -132,6 +132,42 @@
   align-self: center;
 }
 
+/* 定时任务会话的归属提示：任务已归档 / 已删除（未归档任务不额外标注） */
+.sidebar-session-cron-owner {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 74px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--ink-mute) 38%, transparent);
+  color: var(--ink-mute);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-session-cron-owner.is-missing {
+  color: color-mix(in srgb, var(--danger, #ef4444) 72%, var(--ink-mute));
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 34%, transparent);
+}
+
+/* 悬浮操作条出现时让出宽度，与时间/状态图标同一套规则 */
+.sidebar-session-item:is(:hover, :focus-within) .sidebar-session-cron-owner {
+  display: none;
+}
+
+.sidebar-session-item.is-cron-owner-missing
+  .sidebar-session-main
+  .sidebar-session-cron-mark,
+.sidebar-session-item.is-cron-owner-archived
+  .sidebar-session-main
+  .sidebar-session-cron-mark {
+  opacity: 0.55;
+}
+
 .sidebar-session-item.is-active .sidebar-session-main svg {
   opacity: 0.8;
   color: var(--tone, var(--tone-blue));

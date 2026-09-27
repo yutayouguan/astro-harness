@@ -41,6 +41,12 @@ import {
   sessionTitleDisplay,
   visibleSessionTitle,
 } from "../../lib/chat/sessionTitle";
+import {
+  cronJobIdFromSessionId,
+  cronOwnerNeedsAttention,
+  resolveCronOwnerStates,
+  type CronOwnerState,
+} from "../../lib/chat/cronSessionOwner";
 import { compactSessionTime } from "../../lib/chat/compactSessionTime";
 import {
   matchesSidebarSessionPlacement,
@@ -104,6 +110,10 @@ export default function SidebarSessionList({
   const [items, setItems] = useState<RecentSessionDto[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [unreadTick, setUnreadTick] = useState(0);
+  /** 定时任务会话 → 归属任务状态；仅用于解释已归档 / 已删除的任务会话 */
+  const [cronOwners, setCronOwners] = useState<Map<string, CronOwnerState>>(
+    () => new Map(),
+  );
   const loadRevisionRef = useRef(0);
   const visibleCount = readVisibleCount();
 
@@ -165,6 +175,45 @@ export default function SidebarSessionList({
     () => subscribeSessionUnread(() => setUnreadTick((n) => n + 1)),
     [],
   );
+
+  // 当前列表里的定时任务会话集合；只在集合本身变化时重新解析归属，
+  // 标题刷新等 items 变动不会重复请求任务列表。
+  const cronSessionKey = useMemo(
+    () =>
+      items
+        .map((item) => item.sessionId)
+        .filter((id) => cronJobIdFromSessionId(id) !== null)
+        .sort()
+        .join("|"),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!cronSessionKey) {
+      setCronOwners((prev) => (prev.size === 0 ? prev : new Map()));
+      return;
+    }
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    let disposed = false;
+    void (async () => {
+      try {
+        const jobs =
+          await invoke<{ id: string; archived_at?: string | null }[]>(
+            "list_cron_jobs",
+          );
+        if (disposed) return;
+        setCronOwners(resolveCronOwnerStates(cronSessionKey.split("|"), jobs));
+      } catch (error) {
+        // 归属标注只是增强信息：拿不到任务列表时保持会话列表原样。
+        console.warn("load cron owners failed", error);
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [cronSessionKey]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window))
@@ -273,6 +322,7 @@ export default function SidebarSessionList({
             status={resolveSessionStatus(sessionStatuses[s.sessionId])}
             unread={isSessionUnread(s.sessionId)}
             unreadTick={unreadTick}
+            cronOwner={cronOwners.get(s.sessionId)}
             onOpen={() => {
               clearSessionUnread(s.sessionId);
               onOpenSession(s.sessionId);
@@ -349,6 +399,7 @@ function SessionItem({
   status,
   unread,
   unreadTick,
+  cronOwner,
   onOpen,
   onContextMenu,
   onMoreClick,
@@ -361,6 +412,8 @@ function SessionItem({
   unread: boolean;
   /** 未读集合变更计数；仅用于触发重渲染 */
   unreadTick: number;
+  /** 定时任务会话的归属状态；普通会话为 undefined */
+  cronOwner?: CronOwnerState;
   onOpen: () => void;
   onContextMenu: (x: number, y: number) => void;
   onMoreClick: (x: number, y: number) => void;
@@ -384,6 +437,11 @@ function SessionItem({
   // 读屏与悬浮提示仍保留文字语义。
   const isCron = display.isCron && Boolean(display.title);
   const accessibleTitle = isCron ? `${t("nav.cron")} · ${title}` : title;
+  const ownerHint = cronOwnerNeedsAttention(cronOwner)
+    ? cronOwner === "missing"
+      ? t("sessions.cronOwnerMissing")
+      : t("sessions.cronOwnerArchived")
+    : null;
 
   const measureTitle = useCallback(() => {
     const el = titleRef.current;
@@ -421,7 +479,9 @@ function SessionItem({
     <div
       className={`sidebar-session-item ${isActive ? "is-active" : ""} ${
         status === "awaiting" ? "is-awaiting" : ""
-      } ${status === "error" ? "is-errored" : ""} ${showUnread ? "is-unread" : ""}`}
+      } ${status === "error" ? "is-errored" : ""} ${showUnread ? "is-unread" : ""} ${
+        ownerHint ? `is-cron-owner-${cronOwner}` : ""
+      }`}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -470,6 +530,14 @@ function SessionItem({
             {title}
           </span>
         </span>
+        {ownerHint && (
+          <span
+            className={`sidebar-session-cron-owner is-${cronOwner}`}
+            title={ownerHint}
+          >
+            {ownerHint}
+          </span>
+        )}
         {s.pinnedAt && (
           <Pin
             className="sidebar-session-pin-mark"

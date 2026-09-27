@@ -20,6 +20,10 @@ const agentCron = await read(
 const cronStore = await read(
   "../../../../../crates/agent-cron/src/jobs/store.rs",
 );
+const sidebar = await read("../../components/chat/SidebarSessionList.tsx");
+const sessionStyles = await read(
+  "../../styles/features/shell/layout/sessions.css",
+);
 const zh = await read("../../i18n/catalogs/zh.ts");
 const en = await read("../../i18n/catalogs/en.ts");
 
@@ -86,6 +90,16 @@ test("orphaned run records are marked and purgeable", () => {
   assert.match(historyStyles, /\.cron-history-purge\s*\{/);
 });
 
+test("sidebar explains cron sessions whose task is archived or deleted", () => {
+  assert.match(sidebar, /resolveCronOwnerStates\(/);
+  assert.match(sidebar, /"list_cron_jobs"/);
+  assert.match(sidebar, /sidebar-session-cron-owner/);
+  assert.match(sidebar, /t\("sessions\.cronOwnerMissing"\)/);
+  assert.match(sidebar, /t\("sessions\.cronOwnerArchived"\)/);
+  assert.match(sessionStyles, /\.sidebar-session-cron-owner\s*\{/);
+  assert.match(sessionStyles, /\.sidebar-session-cron-owner\.is-missing\s*\{/);
+});
+
 test("archive and delete copy exists in both locales", () => {
   const keys = [
     "cron.archive",
@@ -101,6 +115,8 @@ test("archive and delete copy exists in both locales", () => {
     "cron.orphanPurge",
     "cron.orphanPurgeHint",
     "cron.orphanPurgeConfirm",
+    "sessions.cronOwnerArchived",
+    "sessions.cronOwnerMissing",
   ];
   for (const key of keys) {
     assert.ok(zh.includes(`"${key}":`), `zh missing ${key}`);
