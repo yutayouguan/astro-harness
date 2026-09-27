@@ -1,4 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  Clock3,
+  Copy,
+  Globe2,
+  ShieldAlert,
+  ShieldCheck,
+  TerminalSquare,
+  X,
+} from "lucide-react";
+import { parseApprovalContent } from "../../a2ui/clarifySteps";
 import ClarifyWizard from "../../a2ui/ClarifyWizard";
 import {
   approvalDetails,
@@ -47,6 +59,38 @@ export default function InteractionCard({
   const disabled = busy || !connected || !alive;
   const steps = wizardSteps(request),
     schema = simpleSchema(request);
+  const approval = request.kind === "approval";
+  // 网络类授权（allow_*）与工具批准共用一张卡，只是 eyebrow 与动作作用域不同。
+  const networkScoped = request.actions.some((action) =>
+    action.id.startsWith("allow_"),
+  );
+  const details = approval ? parseApprovalContent(approvalDetails(request)) : null;
+  const primaryAction = request.actions.find(
+    (action) => !action.persistent && action.id !== "deny",
+  );
+  const denyAction = request.actions.find((action) => action.id === "deny");
+  const scopedActions = request.actions.filter((action) => action.persistent);
+  const scopedIcon = (id: string) =>
+    id === "allow_session" ? (
+      <Clock3 size={16} strokeWidth={2} aria-hidden />
+    ) : id === "approve_type" ? (
+      <TerminalSquare size={16} strokeWidth={2} aria-hidden />
+    ) : id === "allow_always" ? (
+      <ShieldCheck size={16} strokeWidth={2} aria-hidden />
+    ) : (
+      <ShieldCheck size={16} strokeWidth={2} aria-hidden />
+    );
+  const [detailsCopied, setDetailsCopied] = useState(false);
+  const copyDetails = () => {
+    const text = details?.command ?? approvalDetails(request);
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setDetailsCopied(true);
+        window.setTimeout(() => setDetailsCopied(false), 1600);
+      })
+      .catch(() => undefined);
+  };
   const task = snapshot.tasks.find((t) => t.sessionId === request.sessionId);
   const saveDraft = useCallback(
     (wizard: WizardDraft) => {
@@ -88,28 +132,64 @@ export default function InteractionCard({
       data-pending-interaction-key={request.key}
       aria-busy={busy}
     >
-      <header>
-        <small className="pet-interaction-eyebrow">
-          {request.kind === "approval" ? "需要审批" : "需要你的回答"} ·{" "}
-          {task?.title ?? "任务"}
-        </small>
-        {task?.project && (
-          <small className="pet-task-project">{task.project}</small>
-        )}
-        <h3>
-          {request.kind === "approval"
-            ? "确认待执行操作"
-            : redactInteractionDisplay(request.message)}
-        </h3>
+      <header className="pet-interaction-header">
+        <span className="pet-interaction-mark" aria-hidden>
+          {request.kind !== "approval" ? (
+            <Check size={18} strokeWidth={2.2} />
+          ) : networkScoped ? (
+            <Globe2 size={18} strokeWidth={2} />
+          ) : (
+            <ShieldAlert size={18} strokeWidth={2} />
+          )}
+        </span>
+        <div className="pet-interaction-heading">
+          <small className="pet-interaction-eyebrow">
+            {approval
+              ? networkScoped
+                ? "需要授权"
+                : "需要批准"
+              : "需要你的回答"}
+          </small>
+          <h3>
+            {approval
+              ? "确认待执行操作"
+              : redactInteractionDisplay(request.message)}
+          </h3>
+          <small className="pet-task-project">
+            {[task?.title ?? "任务", task?.project]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </div>
       </header>
-      {request.kind === "approval" && (
-        <details open>
-          <summary>操作说明与权限范围</summary>
-          <pre className="pet-interaction-details">
-            {approvalDetails(request)}
-          </pre>
+      {approval && details ? (
+        <details open className="pet-interaction-details-block">
+          <summary>
+            <span>操作说明与权限范围</span>
+            <button
+              type="button"
+              className="pet-interaction-copy"
+              onClick={copyDetails}
+              aria-label="复制命令"
+              title="复制命令"
+            >
+              {detailsCopied ? (
+                <Check size={13} strokeWidth={2.4} aria-hidden />
+              ) : (
+                <Copy size={13} strokeWidth={2} aria-hidden />
+              )}
+            </button>
+          </summary>
+          {details.description ? (
+            <p className="pet-interaction-description">{details.description}</p>
+          ) : null}
+          {details.command ? (
+            <pre className="pet-interaction-details">
+              <code>{details.command}</code>
+            </pre>
+          ) : null}
         </details>
-      )}
+      ) : null}
       {!alive && <p role="status">此请求已处理、取消或过期。</p>}
       {!connected && (
         <p role="status">连接中断，恢复后才能提交。输入已保留。</p>
@@ -136,14 +216,16 @@ export default function InteractionCard({
               请核对上方操作及权限范围。
             </p>
             <button
-              className="pet-task-primary"
+              className={`pet-interaction-action is-scoped is-${confirm.id}`}
               type="button"
               disabled={disabled}
               onClick={() => void submit(confirm.id, {}, true)}
             >
-              确认{confirm.label}
+              {scopedIcon(confirm.id)}
+              <span>确认{confirm.label}</span>
             </button>
             <button
+              className="pet-task-quiet"
               type="button"
               disabled={busy}
               onClick={() => setConfirm(null)}
@@ -153,25 +235,51 @@ export default function InteractionCard({
           </div>
         ) : (
           <div className="pet-interaction-actions">
-            {request.actions.map((action) => (
+            {denyAction ? (
               <button
-                key={action.id}
-                className={
-                  action.id === "approve" || action.id === "allow_once"
-                    ? "pet-task-primary"
-                    : ""
-                }
+                key={denyAction.id}
+                className="pet-interaction-action is-deny"
                 type="button"
                 disabled={disabled}
-                onClick={() =>
-                  action.persistent
-                    ? setConfirm(action)
-                    : void submit(action.id, {})
-                }
+                onClick={() => void submit(denyAction.id, {})}
               >
-                {action.label}
+                <X size={16} strokeWidth={2.2} aria-hidden />
+                <span>{denyAction.label}</span>
               </button>
-            ))}
+            ) : null}
+            {primaryAction ? (
+              <button
+                key={primaryAction.id}
+                className="pet-interaction-action is-primary"
+                type="button"
+                disabled={disabled}
+                onClick={() => void submit(primaryAction.id, {})}
+              >
+                <Check size={16} strokeWidth={2.3} aria-hidden />
+                <span>{primaryAction.label}</span>
+              </button>
+            ) : null}
+            {scopedActions.length > 0 ? (
+              <div className="pet-interaction-scoped">
+                {scopedActions.map((action) => (
+                  <button
+                    key={action.id}
+                    className={`pet-interaction-action is-scoped is-${action.id}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setConfirm(action)}
+                  >
+                    {scopedIcon(action.id)}
+                    <span>{action.label}</span>
+                    <ArrowRight
+                      className="pet-interaction-arrow"
+                      size={15}
+                      aria-hidden
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         )
       ) : steps.length ? (

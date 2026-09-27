@@ -221,6 +221,205 @@ html[data-window-surface="pet-task"] #root {
   border-radius: 6px;
   flex-shrink: 0;
 }
+/* 桌宠窗口里的批准/授权卡片：与聊天内的 approval 卡同一套视觉语言
+   （图标 + eyebrow 档位、终端面板、两层动作区），只是按弹窗尺寸收紧。 */
+.pet-interaction-card {
+  --approval-accent: var(--tone-amber, #f59e0b);
+  --approval-accent-strong: #d97706;
+  --approval-scoped: var(--tone-blue, #2563eb);
+  --approval-grid: minmax(0, 0.82fr) minmax(0, 1fr);
+}
+
+.pet-interaction-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.pet-interaction-mark {
+  display: inline-grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--approval-accent-strong) 30%, transparent);
+  border-radius: 11px;
+  color: color-mix(in srgb, var(--approval-accent-strong) 88%, var(--pet-ink));
+  background: color-mix(in srgb, var(--approval-accent) 14%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
+}
+
+.pet-interaction-heading {
+  min-width: 0;
+}
+
+.pet-interaction-eyebrow {
+  display: block;
+  color: color-mix(in srgb, var(--approval-accent-strong) 78%, var(--pet-ink)) !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+}
+
+.pet-interaction-details-block summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+}
+
+.pet-interaction-copy {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  min-height: 22px !important;
+  margin-left: auto;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px;
+  color: var(--pet-muted, var(--color-text-secondary));
+  background: transparent !important;
+}
+
+.pet-interaction-copy:hover {
+  border-color: color-mix(in srgb, var(--pet-ink) 14%, transparent) !important;
+  background: color-mix(in srgb, var(--pet-ink) 6%, transparent) !important;
+}
+
+.pet-interaction-description {
+  margin: 8px 0 0;
+  color: color-mix(in srgb, var(--pet-ink) 78%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.pet-interaction-details {
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-height: 200px;
+  margin: 8px 0 0;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--pet-ink) 11%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pet-ink) 4%, var(--pet-field));
+  color: color-mix(in srgb, var(--pet-ink) 90%, transparent);
+  font:
+    12px / 1.6 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  scrollbar-width: thin;
+  white-space: pre;
+}
+
+.pet-interaction-actions {
+  display: grid;
+  grid-template-columns: var(--approval-grid);
+  gap: 8px;
+  width: 100%;
+}
+
+/* 弹窗宽度有限：长期授权逐行铺满，避免标签被迫断词。 */
+.pet-interaction-scoped {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--pet-ink) 12%, transparent);
+}
+
+.pet-interaction-card .pet-interaction-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--pet-ink) 14%, transparent);
+  border-radius: 12px;
+  color: var(--pet-ink, var(--color-text));
+  background: color-mix(in srgb, var(--pet-ink) 4%, transparent);
+  font-weight: 550;
+  text-align: left;
+}
+
+.pet-interaction-card .pet-interaction-action > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.pet-interaction-card .pet-interaction-action.is-deny:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 32%, transparent);
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
+.pet-interaction-card .pet-interaction-action.is-primary {
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 50%, transparent);
+  color: #fff;
+  background: linear-gradient(145deg, #e28a0a, #c66a03);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 5px 14px color-mix(in srgb, var(--approval-accent-strong) 20%, transparent);
+  font-weight: 640;
+}
+
+.pet-interaction-card .pet-interaction-action.is-primary:hover:not(:disabled) {
+  background: linear-gradient(145deg, #ec9411, #cf7107);
+}
+
+.pet-interaction-card .pet-interaction-action.is-scoped {
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 22%, transparent);
+  color: color-mix(in srgb, var(--approval-accent-strong) 74%, var(--pet-ink));
+  background: color-mix(in srgb, var(--approval-accent) 7%, transparent);
+}
+
+.pet-interaction-card .pet-interaction-action.is-scoped:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--approval-accent-strong) 36%, transparent);
+  background: color-mix(in srgb, var(--approval-accent) 12%, transparent);
+}
+
+.pet-interaction-card
+  .pet-interaction-action.is-scoped:is(.is-allow_session, .is-approve_type) {
+  border-color: color-mix(in srgb, var(--approval-scoped) 22%, transparent);
+  color: color-mix(in srgb, var(--approval-scoped) 78%, var(--pet-ink));
+  background: color-mix(in srgb, var(--approval-scoped) 7%, transparent);
+}
+
+.pet-interaction-card
+  .pet-interaction-action.is-scoped:is(.is-allow_session, .is-approve_type):hover:not(
+    :disabled
+  ) {
+  border-color: color-mix(in srgb, var(--approval-scoped) 36%, transparent);
+  background: color-mix(in srgb, var(--approval-scoped) 13%, transparent);
+}
+
+.pet-interaction-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.pet-interaction-card .pet-interaction-action:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+html[data-theme="dark"] .pet-interaction-details {
+  background: color-mix(in srgb, #000 32%, var(--pet-field));
+  border-color: color-mix(in srgb, #fff 12%, transparent);
+}
+
+html[data-theme="dark"] .pet-interaction-card .pet-interaction-action.is-primary {
+  background: linear-gradient(145deg, #d08410, #a75d05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 6px 16px rgba(0, 0, 0, 0.32);
+}
+
 .pet-interaction-card {
   display: grid;
   gap: 16px;

@@ -300,7 +300,7 @@ export default function PetTaskSurface({
                 key={r.key}
                 onClick={() => selectRequest(r.key)}
               >
-                <span>{r.kind === "approval" ? "待审批" : "待回答"}</span>
+                <span>{r.kind === "approval" ? "待批准" : "待回答"}</span>
                 <strong>
                   {snapshot.tasks.find((t) => t.sessionId === r.sessionId)
                     ?.title ?? "任务"}

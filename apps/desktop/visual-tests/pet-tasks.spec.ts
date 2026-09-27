@@ -231,3 +231,30 @@ test("pet approvals require explicit persistent confirmation and keep sibling qu
     0,
   );
 });
+
+test("pet approval card mirrors the in-chat approval visual language", async ({
+  page,
+}) => {
+  await page.goto(
+    "/iframe.html?id=desktop-pettasks--approval-and-question&viewMode=story",
+  );
+  const card = page.locator(".pet-interaction-card").first();
+  await expect(card.locator(".pet-interaction-mark")).toBeVisible();
+  await expect(card.locator(".pet-interaction-eyebrow")).toHaveText("需要批准");
+  await expect(card.locator(".pet-interaction-details-block")).toBeVisible();
+  await expect(card.locator(".pet-interaction-copy")).toBeVisible();
+  // 命令块只放命令本身：markdown 围栏不应再漏进弹窗文本。
+  await expect(card.locator(".pet-interaction-details code")).toHaveText(
+    "cat README.md",
+  );
+  await expect(card.locator(".pet-interaction-details")).not.toContainText(
+    "```",
+  );
+  // 两层动作区：拒绝 + 仅本次允许（主色）／永久允许此操作（作用域行）。
+  await expect(card.locator(".pet-interaction-action.is-primary")).toContainText(
+    "仅本次允许",
+  );
+  const scoped = card.locator(".pet-interaction-scoped .pet-interaction-action");
+  await expect(scoped).toHaveCount(1);
+  await expect(scoped.first()).toContainText("永久允许此操作");
+});
