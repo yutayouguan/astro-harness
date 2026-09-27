@@ -78,7 +78,7 @@ type Deps = {
   setAttachments: Dispatch<SetStateAction<ChatAttachment[]>>;
   showTransientToast: ShowToastFn;
   t: TFn;
-  /** 独立任务成功完成；失败、取消或等待审批均不触发。 */
+  /** 独立任务成功完成；失败、取消或等待批准均不触发。 */
   onTaskSucceeded?: () => void;
 };
 

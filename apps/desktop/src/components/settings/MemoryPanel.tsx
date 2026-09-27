@@ -87,7 +87,7 @@ type DreamRunReport = {
 /** 记忆面板子视图 */
 type MemoryView = "diary" | "dream" | "longterm" | "pending";
 
-/** `write_approval` 待审批写入（Tauri camelCase） */
+/** `write_approval` 待批准写入（Tauri camelCase） */
 type PendingMemoryWrite = {
   id: string;
   agentId: string;

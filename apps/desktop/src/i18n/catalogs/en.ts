@@ -2027,7 +2027,7 @@ export const en: Record<MessageKey, string> = {
   "sessions.status.idle": "Done",
   "sessions.status.unread": "Completed, unread",
   "sessions.status.running": "Generating",
-  "sessions.status.awaiting": "Awaiting approval",
+  "sessions.status.awaiting": "Waiting for your confirmation",
   "sessions.status.error": "Error",
   "sessions.export": "Export",
   "sessions.exportDone": "Exported to {path}",
@@ -2208,7 +2208,7 @@ export const en: Record<MessageKey, string> = {
   "memory.pending.refresh": "Refresh",
   "memory.pending.hint":
     "With write approval on, tool/dreaming/review writes land here first; approve to update MEMORY/USER.",
-  "memory.pending.emptyTitle": "No pending writes",
+  "memory.pending.emptyTitle": "No writes awaiting approval",
   "memory.pending.emptyHint":
     "Enable “Write approval” above to queue memory updates.",
   "memory.pending.emptyHintOn":
@@ -2229,7 +2229,7 @@ export const en: Record<MessageKey, string> = {
   "memory.settings.backgroundReviewOn": "Post-turn review enabled",
   "memory.settings.backgroundReviewOff": "Post-turn review disabled",
   "memory.toast.updated": "Memory updated",
-  "memory.toast.pending": "Pending memory write awaiting approval",
+  "memory.toast.pending": "A memory write is waiting for your approval",
   "memory.settings.autoRefresh": "Auto-refresh chat memory",
   "memory.settings.autoRefreshDesc": "Refresh the current session snapshot when memory changes.",
   "memory.settings.autoRefreshOn": "Auto-refresh chat memory enabled",

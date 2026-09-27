@@ -820,14 +820,24 @@ fn find_browser_executable() -> Option<PathBuf> {
         .or_else(find_playwright_browser)
 }
 
+/// Playwright 缓存探测结果按进程缓存一次。
+///
+/// 该函数由工具 `check_fn` 在每次 Step 构建 schema 时同步调用；虽然已经改成定向查找
+/// （0.1ms 级），但列目录的结果在一次进程生命周期内不会变，缓存掉更稳。显式
+/// `ASTRO_BROWSER_EXECUTABLE` 与系统浏览器候选仍在 `find_browser_executable` 里实时读取。
 fn find_playwright_browser() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from)?;
-    #[cfg(target_os = "macos")]
-    let roots = [home.join("Library/Caches/ms-playwright")];
-    #[cfg(not(target_os = "macos"))]
-    let roots = [home.join(".cache/ms-playwright")];
+    static CACHE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let home = std::env::var_os("HOME").map(PathBuf::from)?;
+            #[cfg(target_os = "macos")]
+            let roots = [home.join("Library/Caches/ms-playwright")];
+            #[cfg(not(target_os = "macos"))]
+            let roots = [home.join(".cache/ms-playwright")];
 
-    roots.iter().find_map(|root| playwright_browser_in(root))
+            roots.iter().find_map(|root| playwright_browser_in(root))
+        })
+        .clone()
 }
 
 /// Playwright 缓存中 Chromium 家族可执行文件相对 `<rev>/` 的候选路径（按优先级）。
