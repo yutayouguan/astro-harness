@@ -85,6 +85,7 @@ const EVENT_LABELS: Record<string, MessageKey> = {
   "permission.granted": "approvals.audit.event.permission.granted",
   "permission.denied": "approvals.audit.event.permission.denied",
   "permission.applied": "approvals.audit.event.permission.applied",
+  "permission.revoked": "approvals.audit.event.permission.revoked",
   "sandbox.spawned": "approvals.audit.event.sandbox.spawned",
   "sandbox.denied": "approvals.audit.event.sandbox.denied",
   "sandbox.backend_unavailable":

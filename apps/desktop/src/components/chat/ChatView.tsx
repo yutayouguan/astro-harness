@@ -1151,7 +1151,24 @@ export default function ChatView({
     return map;
   }, [t]);
 
-  // 打开权限菜单时读一次本会话额外权限；撤销走同一条 RPC。
+  // 本会话额外权限：轮次结束/切换会话时刷新（角标用），打开菜单时再确认一次。
+  useEffect(() => {
+    if (!sessionId || streaming) return;
+    let cancelled = false;
+    void invoke<SessionPermissionGrantsDto>("get_session_permission_grants", {
+      sessionId,
+    })
+      .then((grants) => {
+        if (!cancelled) setSessionGrants(grants);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionGrants(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, streaming]);
+
   useEffect(() => {
     if (!modeMenuOpen || !sessionId) return;
     let cancelled = false;
@@ -3295,6 +3312,16 @@ export default function ChatView({
                           <span className="composer-mode-pill-label">
                             {Meta.label}
                           </span>
+                          {sessionGrants &&
+                          (sessionGrants.workspaceWrite ||
+                            sessionGrants.writableRoots.length > 0) ? (
+                            <span
+                              className="composer-policy-grants-badge"
+                              title={t("chat.approval.sessionGrantsHint")}
+                            >
+                              +{sessionGrants.writableRoots.length}
+                            </span>
+                          ) : null}
                           <span
                             className="composer-policy-separator"
                             aria-hidden

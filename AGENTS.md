@@ -284,6 +284,8 @@ Plugin bus 事件（可拦截/变更）：`PreLlmCall`、`PreToolUse`、`Stop`�
 
 7. **交互模式**：`interaction_mode` 经 Agent turn 下传；行为说明只进 Responses `instructions`，用户 item 不得拼接 `[Mode: …]`。`start_chat` 仅接受 `StartChatRequest` 包装，无扁平字段兼容。
 
+10. **模型发起的权限升级**：`request_permissions` 只能经 confirm preflight 的 HITL 批准生效，且必须同时满足：路径净化（绝对路径，拒绝 Astro 自身目录与 `.ssh`/`.aws`/`.gnupg`/`Library/Keychains`）、**会话级**（`Session::permission_grants`，仅内存、随会话结束失效、可在权限菜单撤销）、审计齐全（`permission.requested/granted/denied/revoked`）。答复走 confirm 的 HITL resume——不要接入 `Op::RequestPermissionsResponse`（它没有客户端卡片，`EventMsg::RequestPermissions` 只用于 rollout/观察者留痕）。
+
 9. **工具可用性回调**：`ToolEntry::check_fn` 在每次 Step 构建模型可见 schema 时被**同步**求值，必须是 O(1) 探测（列一层目录、读环境变量、查内存状态）；禁止递归遍历、全盘扫描、子进程或网络调用。历史事故：浏览器探测递归扫 `~/Library/Caches/ms-playwright`，16 个工具每轮约 1.8s 同步阻塞异步 worker，任务取消/替换因此无法在预算内生效。
 
 8. **网络默认放开**：沙箱策略一律 `network_access = true`，进程内 HTTP 工具只保留 SSRF 防护。开启 managed proxy 后，proxy listener 只归属单个 tool attempt，沙箱只放行其精确端口；terminal 后台模式在 spawn 前拒绝，code_exec 先 scrub secrets 再注入 proxy env，结构化网络拒绝不得触发文件系统提权。

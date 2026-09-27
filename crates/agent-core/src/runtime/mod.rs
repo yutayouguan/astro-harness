@@ -1957,12 +1957,50 @@ impl Session {
     }
 
     /// 撤销本会话全部额外权限（回到 permission profile 本身允许的范围）。
+    ///
+    /// 撤销同样写安全审计（`permission.revoked`），避免"授权凭空消失"。
     pub fn clear_permission_grants(&self) -> PermissionGrants {
-        let mut current = self
-            .permission_grants
-            .lock()
-            .expect("permission grants mutex poisoned");
-        std::mem::take(&mut *current)
+        let revoked = {
+            let mut current = self
+                .permission_grants
+                .lock()
+                .expect("permission grants mutex poisoned");
+            std::mem::take(&mut *current)
+        };
+        if !revoked.is_empty() && self.config.thread_memory_mode != types::ThreadMemoryMode::Disabled
+        {
+            let settings = memory::load_permission_settings(self.memory_dir());
+            let profile_id = settings.selection.profile_id.clone();
+            let paths: Vec<String> = revoked
+                .writable_roots
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect();
+            let event = memory::PermissionAuditEvent::new(
+                memory::PermissionAuditKind::Revoked,
+                &types::PermissionRequest {
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    session_id: self.session_id.clone(),
+                    turn_id: None,
+                    tool_call_id: String::new(),
+                    tool_name: "request_permissions".to_string(),
+                    summary: format!("Revoked session grants for {} path(s)", paths.len()),
+                    capabilities: vec![types::PermissionCapability::FileWrite {
+                        paths: paths.clone(),
+                    }],
+                    reason: types::PermissionReason::OutsideWritableRoots,
+                    requested_scope: types::GrantScope::Session,
+                    command_preview: None,
+                    affected_paths: paths,
+                    network_hosts: Vec::new(),
+                },
+                profile_id.clone(),
+                memory::permission_snapshot_hash(&settings, &profile_id),
+            )
+            .with_result("user_revoked_session");
+            memory::try_append_permission_audit(self.memory_dir(), event);
+        }
+        revoked
     }
 
     pub fn session_id(&self) -> &str {

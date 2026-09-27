@@ -241,6 +241,25 @@ fn build_network_approval_decider(
                     };
 
                     let (_, hitl_gate, _) = session.ensure_thread_controls();
+                    // 审计：网络授权与命令类审批一致留痕（请求 + 批准/拒绝）。
+                    let audit_settings = memory::load_permission_settings(session.memory_dir());
+                    let audit = make_network_audit_receipt(
+                        &session,
+                        &audit_settings,
+                        &profile_id,
+                        &turn_context,
+                        &tool_call_id,
+                        &protocol_name,
+                        &request.host,
+                        request.port,
+                        command_preview.as_deref(),
+                    );
+                    audit.record(
+                        memory::PermissionAuditKind::Requested,
+                        None,
+                        Some("backup_network_approval"),
+                        None,
+                    );
                     let outcome = super::hitl_bridge::park_network_approval(
                         &hitl_gate,
                         &session,
@@ -264,6 +283,24 @@ fn build_network_approval_decider(
                                 "network approval resolved"
                             );
                             let decision = o.decision.clone();
+                            match &decision {
+                                crate::control::network_approval::PendingApprovalDecision::Allow(
+                                    _,
+                                ) => audit.record(
+                                    memory::PermissionAuditKind::Granted,
+                                    None,
+                                    Some(o.status.as_str()),
+                                    None,
+                                ),
+                                crate::control::network_approval::PendingApprovalDecision::Deny => {
+                                    audit.record(
+                                        memory::PermissionAuditKind::Denied,
+                                        None,
+                                        Some(o.status.as_str()),
+                                        None,
+                                    )
+                                }
+                            }
                             owner.resolve(decision);
                             match o.decision {
                                 crate::control::network_approval::PendingApprovalDecision::Allow(
@@ -1069,6 +1106,44 @@ async fn preflight_request_permissions(
     Some(PermissionPreflight::Handled(format!(
         "Permission granted for this session: write {listed}（会话级，结束即失效）。此后本会话的命令可在这些目录写入；网络默认放开，未做额外授权。"
     )))
+}
+
+/// 网络审批的审计收据：把 host/port/协议与命中 profile 记成一次权限请求。
+#[allow(clippy::too_many_arguments)]
+fn make_network_audit_receipt(
+    session: &Arc<AgentLoop>,
+    settings: &memory::LoadedPermissionSettings,
+    profile_id: &str,
+    turn_context: &TurnContext,
+    tool_call_id: &str,
+    protocol: &str,
+    host: &str,
+    port: u16,
+    command_preview: Option<&str>,
+) -> PermissionAuditReceipt {
+    let target = format!("{protocol}://{host}:{port}");
+    PermissionAuditReceipt::new(
+        session.memory_dir().to_path_buf(),
+        settings,
+        profile_id.to_string(),
+        types::PermissionRequest {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            session_id: session.session_id().to_string(),
+            turn_id: Some(turn_context.sub_id().to_string()),
+            tool_call_id: tool_call_id.to_string(),
+            tool_name: "network_proxy".to_string(),
+            summary: format!("Network approval for {target}"),
+            capabilities: vec![types::PermissionCapability::Network {
+                hosts: vec![target.clone()],
+            }],
+            reason: types::PermissionReason::NetworkDisabled,
+            requested_scope: types::GrantScope::Once,
+            command_preview: command_preview.map(str::to_string),
+            affected_paths: Vec::new(),
+            network_hosts: vec![target],
+        },
+        session.config.thread_memory_mode,
+    )
 }
 
 async fn preflight_workflow_tool(
@@ -3088,6 +3163,58 @@ mod tests {
         let revoked = session.clear_permission_grants();
         assert!(revoked.workspace_write);
         assert!(session.permission_grants().is_empty());
+        let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
+            .expect("permission audit written");
+        assert!(audit.contains("permission.revoked"), "{audit}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn network_approval_audit_records_host_and_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let _env = home::test_env::AstroMemoryDirGuard::set(dir.path());
+        let session = Arc::new(
+            AgentLoop::new(crate::runtime::Config::with_defaults(
+                dir.path().to_path_buf(),
+            ))
+            .await
+            .unwrap(),
+        );
+        let turn = Arc::new(TurnContext::new(
+            "network-audit".into(),
+            1,
+            types::InteractionMode::Agent,
+            Some(types::READ_ONLY_PROFILE.into()),
+            Some(dir.path().to_path_buf()),
+        ));
+        session.bind_turn_context(Arc::clone(&turn)).await;
+        let settings = memory::load_permission_settings(session.memory_dir());
+
+        let receipt = make_network_audit_receipt(
+            &session,
+            &settings,
+            types::READ_ONLY_PROFILE,
+            &turn,
+            "call-network",
+            "https",
+            "api.example.com",
+            8443,
+            Some("curl https://api.example.com"),
+        );
+        assert_eq!(receipt.request.tool_name, "network_proxy");
+        assert_eq!(
+            receipt.request.network_hosts,
+            vec!["https://api.example.com:8443".to_string()]
+        );
+        assert_eq!(
+            receipt.request.reason,
+            types::PermissionReason::NetworkDisabled
+        );
+        receipt.record(memory::PermissionAuditKind::Granted, None, Some("resolved"), None);
+
+        let audit = std::fs::read_to_string(memory::permission_audit_path(dir.path()))
+            .expect("network audit written");
+        assert!(audit.contains("permission.granted"), "{audit}");
+        assert!(audit.contains("api.example.com"), "{audit}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

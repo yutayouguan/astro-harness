@@ -912,6 +912,7 @@ export const en: Record<MessageKey, string> = {
   "approvals.audit.event.permission.granted": "Permission granted",
   "approvals.audit.event.permission.denied": "Permission denied",
   "approvals.audit.event.permission.applied": "Permission applied",
+  "approvals.audit.event.permission.revoked": "Session permission revoked",
   "approvals.audit.event.sandbox.spawned": "Sandbox process started",
   "approvals.audit.event.sandbox.denied": "Sandbox start denied",
   "approvals.audit.event.sandbox.backendUnavailable":

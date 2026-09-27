@@ -847,6 +847,7 @@ export const zh = {
   "approvals.audit.event.permission.granted": "已授予权限",
   "approvals.audit.event.permission.denied": "已拒绝权限",
   "approvals.audit.event.permission.applied": "权限已应用",
+  "approvals.audit.event.permission.revoked": "已撤销会话权限",
   "approvals.audit.event.sandbox.spawned": "沙箱进程已启动",
   "approvals.audit.event.sandbox.denied": "沙箱启动已拒绝",
   "approvals.audit.event.sandbox.backendUnavailable": "沙箱后端不可用",

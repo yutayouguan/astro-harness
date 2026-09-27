@@ -219,7 +219,10 @@ test("session permission grants are visible and revocable from the policy menu",
   await page.setViewportSize({ width: 1100, height: 900 });
   await boot(page);
 
-  // 菜单打开时才拉取：点开权限胶囊。
+  // 角标：不用打开菜单就能看到本会话有额外权限。
+  await expect(page.locator(".composer-policy-grants-badge")).toHaveText("+1");
+
+  // 打开菜单看细节，并撤销。
   await page.locator(".composer-policy-pill").click();
   const grants = page.locator(".composer-policy-grants");
   await expect(grants).toBeVisible();
@@ -228,6 +231,7 @@ test("session permission grants are visible and revocable from the policy menu",
 
   await grants.getByRole("button", { name: "撤销本会话额外权限" }).click();
   await expect(page.locator(".composer-policy-grants")).toHaveCount(0);
+  await expect(page.locator(".composer-policy-grants-badge")).toHaveCount(0);
   const calls = await page.evaluate(
     () => (window as unknown as { __permissionCalls: unknown[] }).__permissionCalls,
   );

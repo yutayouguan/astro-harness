@@ -38,6 +38,8 @@ pub enum PermissionAuditKind {
     Denied,
     #[serde(rename = "permission.applied")]
     Applied,
+    #[serde(rename = "permission.revoked")]
+    Revoked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
