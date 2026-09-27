@@ -1283,10 +1283,22 @@ export function useChatSession({
     });
   }, [initialStored, persistClientState, reconcileHistoryFromBackend]);
 
+  /**
+   * 丢弃临时（侧边）会话前先确认：它是一条真实会话，discard 后无法恢复。
+   * 返回 false 表示用户选择保留，调用方应中止本次切换 / 新建。
+   */
   const discardCurrentSide = useCallback(
-    async (nextSessionId?: string | null) => {
+    async (nextSessionId?: string | null): Promise<boolean> => {
       if (!sessionEphemeral || !sessionId || nextSessionId === sessionId)
-        return;
+        return true;
+      const confirmed = await confirm({
+        title: t("chat.side.closeConfirmTitle"),
+        message: t("chat.side.closeConfirm"),
+        confirmLabel: t("chat.side.closeConfirmAction"),
+        cancelLabel: t("chat.side.closeKeep"),
+        variant: "danger",
+      });
+      if (!confirmed) return false;
       try {
         await invoke("discard_side_session", { sessionId });
       } catch (error) {
@@ -1295,8 +1307,9 @@ export function useChatSession({
       setSessionEphemeral(false);
       setSideParentSessionId(null);
       setSideExcludedTurnCount(0);
+      return true;
     },
-    [sessionEphemeral, sessionId],
+    [confirm, sessionEphemeral, sessionId, t],
   );
 
   const clearLocalChatSurface = useCallback(() => {
@@ -2080,10 +2093,11 @@ export function useChatSession({
   );
 
   // ── Reset / New session ───────────────────────────────────────────────────
-  const resetChatSurface = useCallback(() => {
+  /** 回到空白新会话；临时（侧边）会话需要用户确认丢弃，取消时返回 false。 */
+  const resetChatSurface = useCallback(async () => {
     const sid = sessionId;
     if (sessionEphemeral && sid) {
-      void discardCurrentSide(null);
+      if (!(await discardCurrentSide(null))) return false;
     } else if (
       sid &&
       typeof window !== "undefined" &&
@@ -2094,6 +2108,7 @@ export function useChatSession({
       );
     }
     clearLocalChatSurface();
+    return true;
   }, [sessionId, sessionEphemeral, discardCurrentSide, clearLocalChatSurface]);
 
   const confirmIfStreaming = useCallback(async () => {
@@ -2106,7 +2121,7 @@ export function useChatSession({
 
   const startNewChat = useCallback(async () => {
     if (!(await confirmIfStreaming())) return;
-    resetChatSurface();
+    if (!(await resetChatSurface())) return;
     setInput("");
     setEmptyMode("chat");
     const draft = petNavigationDrafts.current.get("new");
@@ -2289,7 +2304,7 @@ export function useChatSession({
           return;
         }
         if (!preserveCurrent) {
-          await discardCurrentSide(targetSessionId);
+          if (!(await discardCurrentSide(targetSessionId))) return;
           resetSchedulingSurface();
         }
         const hist = await invoke<ResponseItemHistoryDto>("get_chat_history", {
@@ -2505,7 +2520,7 @@ export function useChatSession({
 
       if (mode === "new") {
         if (!(await confirmIfStreaming())) return;
-        resetChatSurface();
+        if (!(await resetChatSurface())) return;
         setInput("");
         setEmptyMode("chat");
         const capped = converted.slice(0, MAX_ATTACHMENTS);

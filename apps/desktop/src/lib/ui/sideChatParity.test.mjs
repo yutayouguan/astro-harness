@@ -67,11 +67,7 @@ test("discarding the side chat always asks the user first", async () => {
   );
 
   const discards = app.match(/closeSideChat\(\)/g) ?? [];
-  assert.equal(
-    discards.length,
-    1,
-    "侧边会话只允许在确认后的 helper 里被丢弃",
-  );
+  assert.equal(discards.length, 1, "侧边会话只允许在确认后的 helper 里被丢弃");
 
   // 所有入口（右侧坞切换与显式关闭）都走确认
   assert.match(app, /void discardSideChat\(\);/);
@@ -90,4 +86,30 @@ test("discarding the side chat always asks the user first", async () => {
     assert.ok(zh.includes(`"${key}":`), `zh missing ${key}`);
     assert.ok(en.includes(`"${key}":`), `en missing ${key}`);
   }
+});
+
+test("ephemeral side sessions are only discarded after confirmation", async () => {
+  const sessionHook = await source("hooks/chat/useChatSession.ts");
+
+  // hook 内的另一条丢弃路径（切换会话 / 新建会话）同样先确认
+  assert.match(
+    sessionHook,
+    /const discardCurrentSide = useCallback\(\s*async \(nextSessionId\?: string \| null\): Promise<boolean> => \{/,
+  );
+  assert.match(
+    sessionHook,
+    /"chat\.side\.closeConfirmTitle"[\s\S]*?if \(!confirmed\) return false;/,
+  );
+
+  // 用户选择保留时，本次切换 / 新建整体中止
+  assert.match(
+    sessionHook,
+    /if \(!\(await discardCurrentSide\(targetSessionId\)\)\) return;/,
+  );
+  assert.match(sessionHook, /if \(!\(await resetChatSurface\(\)\)\) return;/);
+  assert.equal(
+    (sessionHook.match(/resetChatSurface\(\);/g) ?? []).length,
+    0,
+    "resetChatSurface 必须被等待并检查结果",
+  );
 });
