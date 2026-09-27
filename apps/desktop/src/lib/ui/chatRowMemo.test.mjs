@@ -54,8 +54,9 @@ test("the whole message row is a memo component driven by primitive props", asyn
   assert.doesNotMatch(row, /parallelRunningIds\.has/);
 
   assert.match(view, /<ChatMessageRow/);
+  // 允许 prettier 把调用折成多行：契约是"由 ChatView 算好再传入"。
   assert.match(
     view,
-    /pendingAsyncQuestions=\{pendingAsyncQuestionsAt\(messages, index\)\}/,
+    /pendingAsyncQuestions=\{pendingAsyncQuestionsAt\(\s*messages,\s*index,?\s*\)\}/,
   );
 });
