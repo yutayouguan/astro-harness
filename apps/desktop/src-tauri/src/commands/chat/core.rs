@@ -1121,6 +1121,53 @@ pub async fn interrupt_resume(session_id: String, resume_json: String) -> Result
     Ok(())
 }
 
+/// 本会话已生效的额外权限（`request_permissions` 批准后写入）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPermissionGrantsDto {
+    pub workspace_write: bool,
+    pub writable_roots: Vec<String>,
+}
+
+async fn session_permission_grants(
+    session_id: &str,
+    revoke: bool,
+) -> Result<SessionPermissionGrantsDto, String> {
+    let grpc_address = default_grpc_address();
+    let endpoint = endpoint_url(&grpc_address);
+    let mut client = AstroServiceClient::connect(endpoint)
+        .await
+        .map_err(|e| e.to_string())?;
+    let request = proto::SessionPermissionGrantsRequest {
+        session_id: session_id.to_string(),
+    };
+    let response = if revoke {
+        client.revoke_session_permission_grants(request).await
+    } else {
+        client.get_session_permission_grants(request).await
+    }
+    .map_err(|e| e.to_string())?
+    .into_inner();
+    Ok(SessionPermissionGrantsDto {
+        workspace_write: response.workspace_write,
+        writable_roots: response.writable_roots,
+    })
+}
+
+#[tauri::command]
+pub async fn get_session_permission_grants(
+    session_id: String,
+) -> Result<SessionPermissionGrantsDto, String> {
+    session_permission_grants(&session_id, false).await
+}
+
+#[tauri::command]
+pub async fn revoke_session_permission_grants(
+    session_id: String,
+) -> Result<SessionPermissionGrantsDto, String> {
+    session_permission_grants(&session_id, true).await
+}
+
 #[tauri::command]
 pub async fn resolve_elicitation(
     session_id: String,

@@ -24,7 +24,8 @@ use proto::{
     RealtimeConversationTextRequest, RealtimeOperationResponse, RealtimeVoicesResponse,
     ResolveElicitationRequest, RunUserShellCommandRequest, RunUserShellCommandResponse,
     SessionSnippet as ProtoSessionSnippet, SkillEvent, SkillInfo, SkillList, SkillRequest,
-    SteerChatRequest, SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
+    SessionPermissionGrantsRequest, SessionPermissionGrantsResponse, SteerChatRequest,
+    SteerChatResponse, TerminalIdRequest, TerminalOpenRequest,
     TerminalReadRequest, TerminalReadResponse, TerminalResizeRequest, TerminalSessionResponse,
     TerminalWriteRequest, UpdateTurnSettingsRequest, UpdateTurnSettingsResponse,
 };
@@ -118,6 +119,19 @@ fn terminal_prefill_bytes(initial_input: &str) -> Option<Vec<u8>> {
         return None;
     }
     Some(trimmed.as_bytes().to_vec())
+}
+
+fn permission_grants_response(
+    grants: agent::runtime::PermissionGrants,
+) -> SessionPermissionGrantsResponse {
+    SessionPermissionGrantsResponse {
+        workspace_write: grants.workspace_write,
+        writable_roots: grants
+            .writable_roots
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
+    }
 }
 
 fn terminal_session_response(info: tools::TerminalSessionInfo) -> TerminalSessionResponse {
@@ -2293,6 +2307,33 @@ impl AstroService for AstroServiceImpl {
     ///
     /// 与 `SubmitTurn(start_or_steer)` 不同，这个 RPC 只接受已有活动 turn：
     /// 不创建 Session，也不启动新的 Thread 事件流。
+    async fn get_session_permission_grants(
+        &self,
+        request: Request<SessionPermissionGrantsRequest>,
+    ) -> Result<Response<SessionPermissionGrantsResponse>, Status> {
+        let req = request.into_inner();
+        let session = self.get_session(req.session_id.trim()).await?;
+        Ok(Response::new(permission_grants_response(
+            session.permission_grants(),
+        )))
+    }
+
+    async fn revoke_session_permission_grants(
+        &self,
+        request: Request<SessionPermissionGrantsRequest>,
+    ) -> Result<Response<SessionPermissionGrantsResponse>, Status> {
+        let req = request.into_inner();
+        let session = self.get_session(req.session_id.trim()).await?;
+        let revoked = permission_grants_response(session.clear_permission_grants());
+        tracing::info!(
+            session = %req.session_id.trim(),
+            roots = ?revoked.writable_roots,
+            workspace_write = revoked.workspace_write,
+            "session permission grants revoked"
+        );
+        Ok(Response::new(revoked))
+    }
+
     async fn steer_chat(
         &self,
         request: Request<SteerChatRequest>,

@@ -32,6 +32,11 @@ service AstroService {
   rpc UnsubscribeThread(UnsubscribeThreadRequest) returns (Empty);
   // 校验并登记 interrupt 的 resume 项（随后 Chat 携带 resume_json 续跑）。
   rpc InterruptResume(InterruptResumeRequest) returns (Empty);
+  // 本会话额外权限（`request_permissions` 批准后写入；仅内存、随会话结束失效）。
+  rpc GetSessionPermissionGrants(SessionPermissionGrantsRequest)
+      returns (SessionPermissionGrantsResponse);
+  rpc RevokeSessionPermissionGrants(SessionPermissionGrantsRequest)
+      returns (SessionPermissionGrantsResponse);
   rpc ResolveElicitation(ResolveElicitationRequest) returns (Empty);
   rpc GetPendingInteractions(Empty) returns (PendingInteractionsJson);
   rpc WatchPendingInteractions(Empty) returns (stream PendingInteractionsJson);
@@ -192,6 +197,13 @@ message ChatControlRequest {
 }
 
 // Codex-style steering：只接受已有活动 turn，不会隐式创建新任务。
+message SessionPermissionGrantsRequest { string session_id = 1; }
+
+message SessionPermissionGrantsResponse {
+  bool workspace_write = 1;
+  repeated string writable_roots = 2;
+}
+
 message SteerChatRequest {
   string session_id = 1;
   string content = 2;

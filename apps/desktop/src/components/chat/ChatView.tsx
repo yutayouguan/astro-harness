@@ -1,42 +1,149 @@
 /** 聊天主视图：消息列表、输入框与流式状态。 */
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
 import { useClampPopover } from "../../hooks/ui/useClampPopover";
-import { Bot, Check, ChevronDown, CircleStop, CornerDownRight, ArrowDown, ArrowUp, ExternalLink, File, Hand, Infinity as InfinityIcon, ListEnd, ListX, ListTree, Mic, Navigation, Pencil, Plus, ShieldAlert, ShieldCheck, Sparkles, Square, PhoneOff, Trash2, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
-import { ChevronDown as ChevronDownData, ChevronUp as ChevronUpData, Pause as PauseData, Play as PlayData } from "lucide";
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  CircleStop,
+  CornerDownRight,
+  ArrowDown,
+  ArrowUp,
+  ExternalLink,
+  File,
+  Hand,
+  Infinity as InfinityIcon,
+  ListEnd,
+  ListX,
+  ListTree,
+  Mic,
+  Navigation,
+  Pencil,
+  Plus,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Square,
+  PhoneOff,
+  Trash2,
+  MoreHorizontal,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
+import {
+  ChevronDown as ChevronDownData,
+  ChevronUp as ChevronUpData,
+  Pause as PauseData,
+  Play as PlayData,
+} from "lucide";
 import { MorphToggleIcon } from "../icons/MorphIcon";
-import { type ChatAnswerLayout, type ChatDisplayPrefs } from "../../hooks/chat/useChatDisplayPrefs";
+import {
+  type ChatAnswerLayout,
+  type ChatDisplayPrefs,
+} from "../../hooks/chat/useChatDisplayPrefs";
 import { useI18n } from "../../i18n/LocaleContext";
-import { findSlotAt, listTemplateSegments, nextEmptySlot, prepareAgentCreateSend, prevEmptySlot } from "../../lib/agent/agentCreateTemplate";
-import { CHAT_MODES, CHAT_SEND_MODES, type ChatSendMode, type ChatWorkMode, type ModeSwitchRequest, loadChatSendMode, saveChatSendMode } from "../../lib/chat/chatMode";
-import { findPromptTemplateSlotAt, listPromptTemplateSegments, nextEmptyPromptTemplateSlot, preparePromptTemplateSend, prevEmptyPromptTemplateSlot } from "../../lib/chat/promptTemplate";
+import {
+  findSlotAt,
+  listTemplateSegments,
+  nextEmptySlot,
+  prepareAgentCreateSend,
+  prevEmptySlot,
+} from "../../lib/agent/agentCreateTemplate";
+import {
+  CHAT_MODES,
+  CHAT_SEND_MODES,
+  type ChatSendMode,
+  type ChatWorkMode,
+  type ModeSwitchRequest,
+  loadChatSendMode,
+  saveChatSendMode,
+} from "../../lib/chat/chatMode";
+import {
+  findPromptTemplateSlotAt,
+  listPromptTemplateSegments,
+  nextEmptyPromptTemplateSlot,
+  preparePromptTemplateSend,
+  prevEmptyPromptTemplateSlot,
+} from "../../lib/chat/promptTemplate";
 import type { QueuedFollowUp } from "../../lib/chat/followUpQueue";
 import type { ParallelChatTask } from "../../lib/chat/parallelTasks";
-import { countRunningParallel, countSettledByStatus, isParallelTaskActive } from "../../lib/chat/parallelTasks";
+import {
+  countRunningParallel,
+  countSettledByStatus,
+  isParallelTaskActive,
+} from "../../lib/chat/parallelTasks";
 import { pendingAsyncQuestionsAt } from "../../lib/chat/asyncAgentUpdate";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
 import { ChatMediaAttachProvider } from "../../contexts/ChatMediaAttachContext";
 import TaskCompletionCelebration from "./TaskCompletionCelebration";
-import { attachmentsFromOsClipboard, filesFromClipboardRead, pathToAttachment, pathsFromClipboardText, pathsFromDataTransfer, pathsToAttachments } from "../../lib/chat/chatPaste";
+import {
+  attachmentsFromOsClipboard,
+  filesFromClipboardRead,
+  pathToAttachment,
+  pathsFromClipboardText,
+  pathsFromDataTransfer,
+  pathsToAttachments,
+} from "../../lib/chat/chatPaste";
 import type { MediaActionKind } from "../../lib/media/mediaActions";
-import type { ChatThinkingPrefs, ThinkingLevel } from "../../lib/chat/thinkingPrefs";
-import { assistantAnswerPlainText, assistantProcessMarkdown } from "../../lib/chat/assistantTurnClipboard";
-import type { ChatAttachment, ChatAttachmentKind, ChatEmptyMode, ResponseItemHistoryDto, ConversationEntry, InstalledSkill, ModelCapabilities, ModelPricingMeta, ModelReasoningMeta, PendingInterrupt } from "../../types";
-import { attachmentAcceptForCaps, attachmentKindAllowed, estimateTurnCostUsd, formatEstimateCostUsd } from "../../lib/model/modelCaps";
+import type {
+  ChatThinkingPrefs,
+  ThinkingLevel,
+} from "../../lib/chat/thinkingPrefs";
+import {
+  assistantAnswerPlainText,
+  assistantProcessMarkdown,
+} from "../../lib/chat/assistantTurnClipboard";
+import type {
+  ChatAttachment,
+  ChatAttachmentKind,
+  ChatEmptyMode,
+  ResponseItemHistoryDto,
+  ConversationEntry,
+  InstalledSkill,
+  ModelCapabilities,
+  ModelPricingMeta,
+  ModelReasoningMeta,
+  PendingInterrupt,
+} from "../../types";
+import {
+  attachmentAcceptForCaps,
+  attachmentKindAllowed,
+  estimateTurnCostUsd,
+  formatEstimateCostUsd,
+} from "../../lib/model/modelCaps";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
 import { useConfirm } from "../../hooks/ui/DialogContext";
 import TurnNavigator from "./TurnNavigator";
 import { ChatWelcome } from "./ChatWelcome";
-import { ComposerPalette, type PaletteItem, type PaletteKind } from "./ComposerPalette";
+import {
+  ComposerPalette,
+  type PaletteItem,
+  type PaletteKind,
+} from "./ComposerPalette";
 import ComposerPlusMenu from "./ComposerPlusMenu";
-import ComposerContextPreview, { type ComposerPreviewTarget } from "./ComposerContextPreview";
+import ComposerContextPreview, {
+  type ComposerPreviewTarget,
+} from "./ComposerContextPreview";
 import ContextUsagePopover from "./ContextUsagePopover";
 import McpIcon from "../icons/McpIcon";
 import ChatMessageRow from "./ChatMessageRow";
 import { AttachmentGlyph, formatSize } from "./attachmentDisplay";
-import AssistantTurnContextMenu, { type AssistantTurnMenuAction } from "./AssistantTurnContextMenu";
+import AssistantTurnContextMenu, {
+  type AssistantTurnMenuAction,
+} from "./AssistantTurnContextMenu";
 import { useMcpTools } from "../../hooks/providers/useMcpTools";
 import { useTypingPlaceholder } from "../../hooks/chat/useTypingPlaceholder";
 import { useRealtimeConversation } from "../../hooks/chat/useRealtimeConversation";
@@ -48,14 +155,35 @@ import TodoProgress from "./TodoProgress";
 import { type FileChangeItem } from "../../lib/chat/taskProgress";
 import BrowserPreviewFloat from "./BrowserPreviewFloat";
 import type { BrowserPreview } from "../../hooks/chat/useBrowserPreview";
-import { CronRunFloatingCard, CronTaskDetailDrawer, CronRunDetailDrawer, cronRunStatusKind, type CronJobDto, type CronRunDto } from "../schedule/CronRunDetailDrawer";
-import { CreateCronDialog, type ProviderOpt } from "../schedule/CreateCronDialog";
+import {
+  CronRunFloatingCard,
+  CronTaskDetailDrawer,
+  CronRunDetailDrawer,
+  cronRunStatusKind,
+  type CronJobDto,
+  type CronRunDto,
+} from "../schedule/CronRunDetailDrawer";
+import {
+  CreateCronDialog,
+  type ProviderOpt,
+} from "../schedule/CreateCronDialog";
 import { projectResponseItemsToEntries } from "../../lib/chat/projectResponseItemsToEntries";
 import { findLastUserEntryId } from "../../lib/chat/turnEditing";
 import { findComposerClarifySurface } from "../../lib/chat/composerClarify";
 import { isAgentIconSrc, type AgentIconInfo } from "../../lib/agent/agentIcons";
-import { buildMentionCandidates, buildSlashPaletteEntries, parseSlashInput, type SlashAction } from "../../lib/chat/composerCommands";
-import { addComposerContextToken, createFileComposerContextToken, removeTriggerText, serializeComposerContext, type ComposerContextToken } from "../../lib/chat/composerContext";
+import {
+  buildMentionCandidates,
+  buildSlashPaletteEntries,
+  parseSlashInput,
+  type SlashAction,
+} from "../../lib/chat/composerCommands";
+import {
+  addComposerContextToken,
+  createFileComposerContextToken,
+  removeTriggerText,
+  serializeComposerContext,
+  type ComposerContextToken,
+} from "../../lib/chat/composerContext";
 
 const PAUSE_ICON = PauseData;
 const PLAY_ICON = PlayData;
@@ -241,6 +369,12 @@ const COMPOSER_LAYOUT_TRANSITION = {
 const COMPOSER_REDUCED_MOTION_TRANSITION = { duration: 0 } as const;
 
 type PermissionPreset = "ask_for_approval" | "approve_for_me" | "full_access";
+
+/** 本会话额外权限（`request_permissions` 批准后由运行时写入）。 */
+type SessionPermissionGrantsDto = {
+  workspaceWrite: boolean;
+  writableRoots: string[];
+};
 type PermissionSettings = {
   preset: string | null;
   sandboxHealth: {
@@ -278,7 +412,6 @@ function kindFromMime(mime: string, name: string): ChatAttachmentKind {
   if (["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext)) return "audio";
   return "file";
 }
-
 
 /** 读取文件为纯 base64（去掉 data URL 前缀） */
 function fileToBase64(file: File): Promise<string> {
@@ -332,7 +465,6 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   };
 }
 
-
 function ComposerContextGlyph({
   kind,
 }: {
@@ -348,7 +480,6 @@ function ComposerContextGlyph({
 /** 消息内附件缩略图条 */
 
 /** 消息悬停操作：AI 为复制/分支，最后一条用户消息为复制/编辑。 */
-
 
 export default function ChatView({
   projectId = null,
@@ -485,6 +616,8 @@ export default function ChatView({
     PermissionSettings["sandboxHealth"] | null
   >(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
+  const [sessionGrants, setSessionGrants] =
+    useState<SessionPermissionGrantsDto | null>(null);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
@@ -865,7 +998,7 @@ export default function ChatView({
 
   const assistantHasCustomAvatar = Boolean(
     activeAgent &&
-    (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
+      (isAgentIconSrc(activeAgent.avatar) || isAgentIconSrc(activeAgent.emoji)),
   );
 
   useEffect(() => {
@@ -1017,6 +1150,43 @@ export default function ChatView({
     };
     return map;
   }, [t]);
+
+  // 打开权限菜单时读一次本会话额外权限；撤销走同一条 RPC。
+  useEffect(() => {
+    if (!modeMenuOpen || !sessionId) return;
+    let cancelled = false;
+    void invoke<SessionPermissionGrantsDto>("get_session_permission_grants", {
+      sessionId,
+    })
+      .then((grants) => {
+        if (!cancelled) setSessionGrants(grants);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionGrants(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modeMenuOpen, sessionId]);
+
+  const revokeSessionGrants = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const grants = await invoke<SessionPermissionGrantsDto>(
+        "revoke_session_permission_grants",
+        { sessionId },
+      );
+      setSessionGrants(grants);
+      showToast?.(t("chat.approval.sessionGrantsRevoked"), {
+        tone: "success",
+      });
+    } catch (error) {
+      showToast?.(
+        error instanceof Error ? error.message : String(error),
+        { tone: "error" },
+      );
+    }
+  }, [sessionId, showToast, t]);
 
   const approvalMeta = useMemo(
     () => ({
@@ -2339,7 +2509,7 @@ export default function ChatView({
             hasAnswer={Boolean(contextMenuMessage.content.trim())}
             hasProcess={Boolean(
               contextMenuMessage.reasoning?.trim() ||
-              contextMenuMessage.activities?.length,
+                contextMenuMessage.activities?.length,
             )}
             canSetDefault={Boolean(onDefaultAnswerLayoutChange)}
             canBranch={!streaming && !turnInFlight && Boolean(onBranchMessage)}
@@ -2393,7 +2563,10 @@ export default function ChatView({
                   isEditingUserMessage={editingUserMessageId === m.id}
                   editingUserDraft={editingUserDraft}
                   submittingUserEdit={submittingUserEdit}
-                  pendingAsyncQuestions={pendingAsyncQuestionsAt(messages, index)}
+                  pendingAsyncQuestions={pendingAsyncQuestionsAt(
+                    messages,
+                    index,
+                  )}
                   activeAgent={activeAgent}
                   assistantHasCustomAvatar={assistantHasCustomAvatar}
                   modelId={modelId}
@@ -3228,6 +3401,29 @@ export default function ChatView({
                               </button>
                             );
                           })}
+                          {sessionGrants &&
+                          (sessionGrants.workspaceWrite ||
+                            sessionGrants.writableRoots.length > 0) ? (
+                            <div className="composer-policy-grants">
+                              <span className="composer-policy-grants-title">
+                                {t("chat.approval.sessionGrants")}
+                              </span>
+                              <ul className="composer-policy-grants-list">
+                                {sessionGrants.writableRoots.map((root) => (
+                                  <li key={root} title={root}>
+                                    {root}
+                                  </li>
+                                ))}
+                              </ul>
+                              <button
+                                type="button"
+                                className="composer-policy-grants-revoke"
+                                onClick={() => void revokeSessionGrants()}
+                              >
+                                {t("chat.approval.revokeSessionGrants")}
+                              </button>
+                            </div>
+                          ) : null}
                           <div
                             className="composer-approval-health"
                             data-status={sandboxHealth?.status ?? "unknown"}

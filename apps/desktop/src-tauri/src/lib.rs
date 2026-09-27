@@ -248,6 +248,8 @@ pub fn run() {
             commands::chat::chat_control,
             commands::chat::steer_chat,
             commands::chat::interrupt_resume,
+            commands::chat::get_session_permission_grants,
+            commands::chat::revoke_session_permission_grants,
             commands::chat::resolve_elicitation,
             commands::chat::update_turn_settings,
             commands::chat::reconcile_extensions,

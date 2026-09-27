@@ -3083,6 +3083,11 @@ mod tests {
             grants.writable_roots,
             vec![grant_root.canonicalize().unwrap()]
         );
+
+        // 撤销（设置页「撤销本会话额外权限」）把会话恢复到 profile 自己的范围。
+        let revoked = session.clear_permission_grants();
+        assert!(revoked.workspace_write);
+        assert!(session.permission_grants().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

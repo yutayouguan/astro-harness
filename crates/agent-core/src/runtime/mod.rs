@@ -1935,7 +1935,7 @@ impl Session {
 
     /// 当前会话唯一标识符。
     /// 合并一次用户批准的会话级权限（幂等）。
-    pub(crate) fn grant_permissions(&self, grants: PermissionGrants) {
+    pub fn grant_permissions(&self, grants: PermissionGrants) {
         let mut current = self
             .permission_grants
             .lock()
@@ -1949,11 +1949,20 @@ impl Session {
     }
 
     /// 当前会话已获批的额外权限快照。
-    pub(crate) fn permission_grants(&self) -> PermissionGrants {
+    pub fn permission_grants(&self) -> PermissionGrants {
         self.permission_grants
             .lock()
             .expect("permission grants mutex poisoned")
             .clone()
+    }
+
+    /// 撤销本会话全部额外权限（回到 permission profile 本身允许的范围）。
+    pub fn clear_permission_grants(&self) -> PermissionGrants {
+        let mut current = self
+            .permission_grants
+            .lock()
+            .expect("permission grants mutex poisoned");
+        std::mem::take(&mut *current)
     }
 
     pub fn session_id(&self) -> &str {

@@ -1254,6 +1254,64 @@ html[data-theme="dark"] .composer-agent-validate-hint {
   overflow: auto;
 }
 
+/* 本会话额外权限（request_permissions 批准后）：菜单里可见、可撤销。 */
+.composer-policy-grants {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone-amber, #f59e0b) 26%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone-amber, #f59e0b) 8%, transparent);
+}
+
+.composer-policy-grants-title {
+  color: color-mix(in srgb, var(--tone-amber, #f59e0b) 78%, var(--ink));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.composer-policy-grants-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.composer-policy-grants-list li {
+  overflow: hidden;
+  color: var(--ink-mute);
+  font:
+    11px / 1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-policy-grants-revoke {
+  justify-self: start;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 8px;
+  color: var(--ink-soft, var(--ink));
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer-policy-grants-revoke:hover {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 34%, transparent);
+  color: color-mix(in srgb, var(--danger, #ef4444) 82%, var(--ink));
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
 .composer-policy-menu {
   width: min(330px, calc(100vw - 24px));
 }
