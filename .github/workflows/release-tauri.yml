@@ -50,7 +50,9 @@ concurrency:
 jobs:
   preflight:
     name: 发布前置检查
-    runs-on: ubuntu-22.04
+    # 自托管模式下，轻量作业也走本机 runner：托管 runner 的免费额度耗尽时
+    # 连 version/secrets 校验都起不来，会把整个发布卡死。
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.macos_runner == 'self-hosted') && 'astro-mac' || 'ubuntu-22.04' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       apple_signed: ${{ steps.signing.outputs.apple_signed }}
@@ -149,7 +151,7 @@ jobs:
 
   plan:
     name: 计算构建矩阵
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.macos_runner == 'self-hosted') && 'astro-mac' || 'ubuntu-22.04' }}
     outputs:
       include: ${{ steps.set.outputs.include }}
       expected: ${{ steps.set.outputs.expected }}
@@ -362,9 +364,14 @@ jobs:
   verify-release:
     name: 校验更新清单
     needs: [preflight, plan, publish-tauri]
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.macos_runner == 'self-hosted') && 'astro-mac' || 'ubuntu-22.04' }}
 
     steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
       - name: 校验 latest.json 覆盖全部平台
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
