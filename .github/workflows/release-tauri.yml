@@ -1,11 +1,27 @@
-# 在 macOS / Windows / Linux 上构建 Astro Agent 桌面安装包。
-# 触发：手动运行或推送 v* 标签。
-# 产物写入独立的公开 Release 仓库；私有源码不会被推送过去。
+# 在 macOS / Windows / Linux 上构建 Astro Agent 桌面安装包并发布到公开资产仓库。
+#
+# 触发：手动运行（workflow_dispatch）或推送 v* 标签。
+# 安装包、更新签名和 latest.json 只写入 yutayouguan/astro-agent-releases，
+# 私有源码不会被推送过去。
+#
+# 所需 Secrets（配置方式见 docs/03-系统设计阶段/06-桌面端/11-桌面端更新发布.md）：
+#   必需：ASTRO_RELEASE_TOKEN / TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+#   macOS 分发：APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD
+#             APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
+#             （可选 APPLE_SIGNING_IDENTITY，缺省时 Tauri 从 APPLE_CERTIFICATE 推断）
+#   Windows 分发：WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
+#
+# 缺少任何一项系统代码签名密钥时默认拒绝发布；只做内测包时手动运行并勾选 allow_unsigned。
 
 name: release-tauri
 
 on:
   workflow_dispatch:
+    inputs:
+      allow_unsigned:
+        description: "缺少系统代码签名密钥时仍然发布（仅内测，产物不可正式分发）"
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -15,26 +31,111 @@ permissions:
 
 concurrency:
   group: release-tauri-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: 发布前置检查
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signing_ready: ${{ steps.signing.outputs.signing_ready }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: 校验三处版本号一致
+        id: version
+        run: |
+          node tools/bump-version.mjs --check
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "本次发布版本：$VERSION"
+
+      - name: 校验 tag 与版本号一致
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME 与 tauri.conf.json 里的版本 $VERSION 不一致；先执行 node tools/bump-version.mjs $TAG 并提交，再打 tag"
+            exit 1
+          fi
+
+      - name: 校验发布密钥
+        id: signing
+        env:
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
+          ASTRO_RELEASE_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          required=(ASTRO_RELEASE_TOKEN TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
+          signing=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+                   WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD)
+          missing_required=()
+          for key in "${required[@]}"; do
+            if [[ -z "${!key}" ]]; then missing_required+=("$key"); fi
+          done
+          missing_signing=()
+          for key in "${signing[@]}"; do
+            if [[ -z "${!key}" ]]; then missing_signing+=("$key"); fi
+          done
+          if (( ${#missing_required[@]} > 0 )); then
+            echo "::error::缺少必需的发布密钥：${missing_required[*]}"
+            exit 1
+          fi
+          if (( ${#missing_signing[@]} > 0 )); then
+            if [[ "$ALLOW_UNSIGNED" != "true" ]]; then
+              echo "::error::缺少系统代码签名密钥：${missing_signing[*]}；确需发布未签名安装包时，手动运行本工作流并勾选 allow_unsigned"
+              exit 1
+            fi
+            echo "::warning::本次发布未启用系统代码签名：${missing_signing[*]}"
+            echo "signing_ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing_ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
   publish-tauri:
+    name: 构建 ${{ matrix.artifact }}
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
-            args: --target aarch64-apple-darwin
+            artifact: macos-aarch64
+            target: aarch64-apple-darwin
             rust_targets: aarch64-apple-darwin
+            signing: apple
           - platform: macos-latest
-            args: --target x86_64-apple-darwin
+            artifact: macos-x86_64
+            target: x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
+            signing: apple
           - platform: ubuntu-22.04
-            args: ""
+            artifact: linux-x64
+            target: ""
             rust_targets: ""
+            signing: ""
           - platform: windows-latest
-            args: ""
+            artifact: windows-x64
+            target: ""
             rust_targets: ""
+            signing: windows
 
     runs-on: ${{ matrix.platform }}
 
@@ -71,23 +172,88 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate public release configuration
-        env:
-          ASTRO_RELEASE_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: >-
-          node -e "for (const key of ['ASTRO_RELEASE_TOKEN','TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD']) if (!process.env[key]) { console.error('Missing release configuration: ' + key); process.exitCode = 1 }"
-
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-          shared-key: tauri-${{ matrix.platform }}-${{ matrix.rust_targets || 'host' }}
+          shared-key: release-${{ matrix.artifact }}
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
+
+      - name: 准备发布说明
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<ASTRO_RELEASE_NOTES_EOF"
+            if [[ -f RELEASE_NOTES.md ]]; then
+              cat RELEASE_NOTES.md
+            else
+              echo "本次发布的安装包见下方 Assets。"
+            fi
+            echo ""
+            echo "## 安装包"
+            echo ""
+            echo "- **macOS Apple Silicon (ARM64)**：\`aarch64-apple-darwin\` 的 \`.dmg\`"
+            echo "- **macOS Intel (x86_64)**：\`x86_64-apple-darwin\` 的 \`.dmg\`"
+            echo "- **Windows x64**：\`.msi\` / \`setup.exe\`（NSIS）"
+            echo "- **Linux x64**：\`.AppImage\` / \`.deb\` / \`.rpm\`"
+            echo ""
+            echo "应用内「关于」页可检查并安装签名更新。"
+            echo "ASTRO_RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 配置 macOS 签名与公证
+        if: matrix.signing == 'apple' && needs.preflight.outputs.signing_ready == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_ID=$APPLE_ID"
+            echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+          } >> "$GITHUB_ENV"
+          if [[ -n "$APPLE_SIGNING_IDENTITY" ]]; then
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          fi
+
+      - name: 配置 Windows 签名证书
+        if: matrix.signing == 'windows' && needs.preflight.outputs.signing_ready == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'astro-signing.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, $certBytes)
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          try {
+            $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          } finally {
+            Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+          # 摘要算法与时间戳服务器写在 tauri.release.conf.json；这里只覆盖每次构建才知道的证书指纹。
+          $overrides = @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $cert.Thumbprint
+              }
+            }
+          } | ConvertTo-Json -Compress -Depth 5
+          $overridePath = (Join-Path $env:RUNNER_TEMP 'windows-signing.json').Replace('\', '/')
+          [IO.File]::WriteAllText($overridePath, $overrides)
+          "EXTRA_ARGS=--config $overridePath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build and upload Tauri bundles
         uses: tauri-apps/tauri-action@v1
@@ -102,20 +268,66 @@ jobs:
           repo: astro-agent-releases
           tagName: v__VERSION__
           releaseName: Astro Agent v__VERSION__
-          releaseBody: |
-            ## 安装包
-
-            - **macOS Apple Silicon (ARM64)**：`aarch64-apple-darwin` 的 `.dmg` / `.app`
-            - **macOS Intel (x86_64)**：`x86_64-apple-darwin` 的 `.dmg` / `.app`
-            - **Windows x64**：`.msi` / `.exe`（NSIS）
-            - **Linux x64**：`.AppImage` / `.deb`
-
-            详见本 Release 的 Assets。
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-nightly') }}
           releaseCommitish: main
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
           # 基础配置默认关闭 updater 产物，让普通 `npm run tauri build` 与打包校验
           # 不需要私钥；发布通道在这里显式打开，配合 TAURI_SIGNING_PRIVATE_KEY 签名。
-          args: ${{ matrix.args }} --config src-tauri/tauri.release.conf.json
+          args: >-
+            ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
+            --config src-tauri/tauri.release.conf.json
+            ${{ env.EXTRA_ARGS }}
+
+      - name: 校验 macOS 签名与公证票据
+        if: matrix.signing == 'apple' && needs.preflight.outputs.signing_ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(ls -d target/*/release/bundle/macos/*.app target/release/bundle/macos/*.app 2>/dev/null | head -n 1 || true)
+          if [[ -z "$APP_PATH" ]]; then
+            echo "::error::没有找到打包出来的 .app"
+            exit 1
+          fi
+          echo "校验 $APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          grep -q "Authority=Developer ID Application" "$RUNNER_TEMP/codesign.txt"
+          xcrun stapler validate "$APP_PATH"
+
+  verify-release:
+    name: 校验更新清单
+    needs: [preflight, publish-tauri]
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: 校验 latest.json 覆盖全部平台
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/yutayouguan/astro-agent-releases/releases/download/v${VERSION}/latest.json"
+          for attempt in $(seq 1 12); do
+            if curl -fsSL "$URL" -o latest.json; then break; fi
+            echo "等待 latest.json 可下载（第 $attempt 次）：$URL"
+            sleep 10
+          done
+          node -e '
+            const fs = require("node:fs");
+            const expectedVersion = process.env.VERSION;
+            const manifest = JSON.parse(fs.readFileSync("latest.json", "utf8"));
+            const expected = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64"];
+            const platforms = manifest.platforms ?? {};
+            const missing = expected.filter((key) => !platforms[key]);
+            if (manifest.version !== expectedVersion) {
+              console.error(`latest.json 版本 ${manifest.version} 与本次发布 ${expectedVersion} 不一致`);
+              process.exit(1);
+            }
+            if (missing.length > 0) {
+              console.error(`latest.json 缺少平台条目：${missing.join(", ")}；当前只有 ${Object.keys(platforms).join(", ")}`);
+              process.exit(1);
+            }
+            console.log(`latest.json 已覆盖 ${expected.join(", ")}，版本 ${manifest.version}`);
+          '

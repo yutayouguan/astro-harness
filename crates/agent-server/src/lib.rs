@@ -184,7 +184,7 @@ pub async fn serve(
         })
         .context("spawn astro-webhook thread")?;
 
-    tracing::info!("Astro Backend v0.1.0");
+    tracing::info!("Astro Backend v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("gRPC Server: {}", addr_str);
     tracing::info!("Memory dir: {}", memory_dir.display());
     tracing::info!("Logs dir: {}", logs_dir().display());

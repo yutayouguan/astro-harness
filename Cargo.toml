@@ -38,6 +38,10 @@ debug = 1
 [profile.test]
 debug = 1
 
+# 闭源分发：正式包去掉符号表，缩小安装包体积并减少符号信息泄露面。
+[profile.release]
+strip = "symbols"
+
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7" }

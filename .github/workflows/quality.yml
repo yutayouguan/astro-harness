@@ -68,6 +68,9 @@ jobs:
         working-directory: apps/desktop
         run: npm ci --legacy-peer-deps
 
+      - name: Check version consistency
+        run: node tools/bump-version.mjs --check
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 

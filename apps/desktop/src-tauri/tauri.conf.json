@@ -54,6 +54,12 @@
     "active": true,
     "createUpdaterArtifacts": false,
     "targets": "all",
+    "publisher": "Astro Agent",
+    "copyright": "Copyright © 2026 Astro Agent. All rights reserved.",
+    "category": "DeveloperTool",
+    "license": "Proprietary",
+    "shortDescription": "本地优先的多模态 AI Agent 桌面工作站",
+    "longDescription": "本地优先的多模态 AI Agent 桌面工作站：多模型对话、工具与 Skill、内置浏览器、工作流与自动化。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -62,6 +68,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    },
     "resources": {
       "resources/**/*": "./",
       "../../../evolution-dspy/pyproject.toml": "evolution-dspy/pyproject.toml",
