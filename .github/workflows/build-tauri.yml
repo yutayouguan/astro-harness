@@ -2,6 +2,9 @@
 #
 # 注意：该文件必须位于默认分支（develop）上，GitHub 才会注册这个 workflow；
 # 只存在于非默认分支时，Actions 页面不会出现 build-tauri。
+#
+# 计费：私有仓库的 macOS runner 按 10 倍、Windows 按 2 倍消耗每月额度。
+# 因此 PR 只构建 Linux（1 倍、最快），手动触发才跑满三平台矩阵。
 
 name: build-tauri
 
@@ -23,32 +26,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 生成构建矩阵：PR 只跑 Linux，手动触发跑全平台。
+  plan:
+    name: 计算构建矩阵
+    runs-on: ubuntu-22.04
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - name: 选择矩阵
+        id: set
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'include=[{"platform":"ubuntu-22.04","args":"","rust_targets":"","artifact":"linux-x64","bundles":""}]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'include=[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","rust_targets":"aarch64-apple-darwin","artifact":"macos-aarch64","bundles":""},{"platform":"macos-latest","args":"--target x86_64-apple-darwin","rust_targets":"x86_64-apple-darwin","artifact":"macos-x86_64","bundles":""},{"platform":"ubuntu-22.04","args":"","rust_targets":"","artifact":"linux-x64","bundles":""},{"platform":"windows-latest","args":"","rust_targets":"","artifact":"windows-x64","bundles":"--bundles nsis"}]' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
-            rust_targets: aarch64-apple-darwin
-            artifact: macos-aarch64
-            bundles: ""
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-            rust_targets: x86_64-apple-darwin
-            artifact: macos-x86_64
-            bundles: ""
-          - platform: ubuntu-22.04
-            args: ""
-            rust_targets: ""
-            artifact: linux-x64
-            bundles: ""
-          - platform: windows-latest
-            args: ""
-            rust_targets: ""
-            artifact: windows-x64
-            # WiX(MSI) 在本工程上 light.exe 打包失败，且应用内更新走 NSIS，只出 setup.exe
-            bundles: "--bundles nsis"
+        include: ${{ fromJSON(needs.plan.outputs.include) }}
 
     runs-on: ${{ matrix.platform }}
 
