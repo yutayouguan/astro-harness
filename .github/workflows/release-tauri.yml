@@ -327,6 +327,10 @@ jobs:
           ASTRO_UPDATE_ENDPOINT: https://github.com/yutayouguan/astro-agent-releases/releases/latest/download/latest.json
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Tauri 只在 CI=true 且该变量不为 true 时才给 bundle_dmg.sh 传 --skip-jenkins。
+          # tauri-action 默认把它设成 true，会让 DMG 脚本去跑依赖 Finder 的 AppleScript
+          # 布局；自托管/无 GUI 会话下这一步会挂到超时，导致整个 job 失败。
+          TAURI_BUNDLER_DMG_IGNORE_CI: "false"
         with:
           projectPath: apps/desktop
           owner: yutayouguan
