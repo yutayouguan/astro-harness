@@ -395,11 +395,6 @@ jobs:
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.macos_runner == 'self-hosted') && 'astro-mac' || 'ubuntu-22.04' }}
 
     steps:
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
       - name: 校验 latest.json 覆盖全部平台
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
