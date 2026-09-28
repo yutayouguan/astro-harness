@@ -1,5 +1,7 @@
 # macOS
 .DS_Store
+# Finder 自定义文件夹图标残留：文件名形如 Icon<CR>，Windows 无法 checkout
+Icon?
 
 # Cargo / Rust
 /target/
