@@ -214,15 +214,18 @@ pub fn terminal_open_external(app: AppHandle, cwd: String) -> Result<(), String>
     #[cfg(target_os = "windows")]
     let command = {
         let path = cwd.to_string_lossy().replace('\'', "''");
-        app.shell().command("cmd.exe").args([
-            "/C".into(),
-            "start".into(),
-            "".into(),
-            "powershell.exe".into(),
-            "-NoExit".into(),
-            "-Command".into(),
-            format!("Set-Location -LiteralPath '{path}'").into(),
-        ])
+        // 显式用 String 构成参数列表：全 `.into()` 时 AsRef<OsStr> 有多个候选类型，
+        // Windows 目标会因类型推断失败（E0283）而编译不过。
+        let args: Vec<String> = vec![
+            "/C".to_string(),
+            "start".to_string(),
+            String::new(),
+            "powershell.exe".to_string(),
+            "-NoExit".to_string(),
+            "-Command".to_string(),
+            format!("Set-Location -LiteralPath '{path}'"),
+        ];
+        app.shell().command("cmd.exe").args(args)
     };
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
