@@ -382,7 +382,7 @@ npm run tauri:build:dmg:universal
 target/aarch64-apple-darwin/release/bundle/macos|dmg/...
 target/x86_64-apple-darwin/release/bundle/macos|dmg/...
 target/universal-apple-darwin/release/bundle/...
-target/release/bundle/nsis|msi|appimage|deb/...     # Windows / Linux
+target/release/bundle/nsis|appimage|deb|rpm/...     # Windows / Linux
 ```
 
 图标与 DMG 资源在 `apps/desktop/src-tauri/icons/`；DMG 窗口尺寸与图标位置在 `tauri.conf.json` → `bundle.macOS.dmg`。默认不设自定义背景（曾引用不存在的 `dmg-background.png` 会让打包直接失败），需要品牌背景时放入 660×372 的 PNG 并补上 `"background"` 字段。
@@ -393,12 +393,13 @@ target/release/bundle/nsis|msi|appimage|deb/...     # Windows / Linux
 
 | Workflow | 触发 | 作用 |
 | --- | --- | --- |
-| `build-tauri` | PR（相关路径变更）/ 手动 | macOS arm64 + x86_64、Linux x64、Windows x64，上传 Artifacts |
-| `release-tauri` | 手动 / `release` 分支 / `v*` 标签 | 同上，写入**草稿** GitHub Release |
+| `build-tauri` | PR（相关路径变更）/ 手动 | PR 只构建 Linux；手动触发构建 macOS arm64 + x86_64、Linux x64、Windows x64 并上传 Artifacts |
+| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-agent-releases` |
 
 - Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
-- 首次使用 Release 前，在仓库 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**。
-- 推送到 GitHub 后，在 Actions 页点 **Run workflow** 即可试跑。
+- 私有仓库的 macOS runner 按 10 倍、Windows 按 2 倍消耗 Actions 分钟额度，所以 PR 只跑 Linux，全平台矩阵留给手动触发与发布。
+- 发布需要 `ASTRO_RELEASE_TOKEN`（公开资产仓库写权限）、`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 三个 Secret；发布后 `verify-release` 会校验 `latest.json` 是否覆盖四个平台条目。
+- Windows 目前只出 NSIS `setup.exe`；macOS 与 Windows 未做系统代码签名，首次打开按 Release 说明放行（macOS 右键「打开」或 `xattr -dr com.apple.quarantine`）。
 
 ## 运行形态
 
