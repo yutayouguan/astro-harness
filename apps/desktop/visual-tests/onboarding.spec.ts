@@ -644,6 +644,16 @@ test("workspace is rechecked at completion and quota errors offer the official c
   await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
 });
 
+test("provider step offers the official key console before any failure", async ({ page }) => {
+  await installTransport(page);
+  await startProvider(page);
+  // 新用户还没拿到密钥时也要能找到官方控制台，而不是只在报错后才有入口。
+  const keyLink = page.getByRole("button", { name: "获取密钥", exact: true });
+  await expect(keyLink).toBeVisible();
+  await keyLink.click();
+  await expect.poll(() => page.evaluate(() => (window as any).__onboardingCalls.find((x: any) => x.cmd === "plugin:opener|open_url")?.args.url)).toBe("https://platform.openai.com/");
+});
+
 test("revisiting provider keeps the model menu closed until explicitly reloaded", async ({ page }) => {
   await installTransport(page);
   await startProvider(page);

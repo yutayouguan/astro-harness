@@ -1438,6 +1438,44 @@
   gap: 7px;
 }
 
+.onboarding-key-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.onboarding-key-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tone, inherit);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.onboarding-key-link:hover {
+  opacity: 0.85;
+}
+
+.onboarding-key-link > svg {
+  flex: 0 0 auto;
+}
+
+.onboarding-key-link-error {
+  margin: 4px 0 0;
+  color: var(--danger, #dc2626);
+  font-size: 12px;
+}
+
 .onboarding-field-label > svg,
 .onboarding-inline-label > svg,
 .onboarding-folder-action > svg,

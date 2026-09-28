@@ -164,6 +164,36 @@ export function classifyConnectionIssue(error: unknown): ConnectionIssueKind {
   return "unknown";
 }
 
+/**
+ * 服务商官方密钥链接：只接受 https 且不带凭据的地址。
+ * 元数据被污染时宁可不给入口，也不打开非 https 或带用户名密码的地址。
+ */
+export function officialKeyUrl(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** 原生外壳走系统浏览器；浏览器 / Storybook 预览退化为新标签页。失败返回 false。 */
+export async function openExternalUrl(url: string): Promise<boolean> {
+  try {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function withDeadline<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("timeout")), ms);

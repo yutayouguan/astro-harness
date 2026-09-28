@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -20,6 +21,7 @@ import {
   CircleX,
   Clock3,
   Cpu,
+  ExternalLink,
   FolderOpen,
   Info,
   KeyRound,
@@ -55,6 +57,8 @@ import {
   classifyConnectionIssue,
   withDeadline,
   createOnboardingWriteQueue,
+  officialKeyUrl,
+  openExternalUrl,
   persistableOnboardingEndpoint,
   type ConnectionIssueKind,
   type OnboardingDraft,
@@ -278,6 +282,15 @@ export function FirstRunOnboarding({
   );
   const selectedProvider =
     providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  // 服务商官方获取密钥入口：新用户第一次接入模型时不必自己去搜索引擎找控制台。
+  const apiKeyFieldId = useId();
+  const officialKeyHref = officialKeyUrl(selectedProvider?.official_key_url);
+  const [keyLinkError, setKeyLinkError] = useState(false);
+  const openOfficialKey = async () => {
+    if (!officialKeyHref) return;
+    setKeyLinkError(false);
+    if (!(await openExternalUrl(officialKeyHref))) setKeyLinkError(true);
+  };
   const providerOptions = useMemo(
     () =>
       providers.map((provider) => ({
@@ -1255,12 +1268,28 @@ export function FirstRunOnboarding({
 
                           {selectedProvider &&
                           providerRequiresApiKey(selectedProvider) ? (
-                            <label>
-                              <span className="onboarding-field-label">
-                                <KeyRound size={14} aria-hidden />
-                                {copy.apiKey}
-                              </span>
+                            <div className="onboarding-key-field">
+                              <div className="onboarding-key-head">
+                                <label
+                                  className="onboarding-field-label"
+                                  htmlFor={apiKeyFieldId}
+                                >
+                                  <KeyRound size={14} aria-hidden />
+                                  {copy.apiKey}
+                                </label>
+                                {officialKeyHref ? (
+                                  <button
+                                    type="button"
+                                    className="onboarding-key-link"
+                                    onClick={() => void openOfficialKey()}
+                                  >
+                                    <ExternalLink size={13} aria-hidden />
+                                    {copy.getOfficialKey}
+                                  </button>
+                                ) : null}
+                              </div>
                               <input
+                                id={apiKeyFieldId}
                                 ref={apiKeyRef}
                                 data-immediate-focus
                                 type="password"
@@ -1281,7 +1310,15 @@ export function FirstRunOnboarding({
                                   setApiKey(event.target.value);
                                 }}
                               />
-                            </label>
+                              {keyLinkError ? (
+                                <p
+                                  className="onboarding-key-link-error"
+                                  role="alert"
+                                >
+                                  {copy.openKeyFailed}
+                                </p>
+                              ) : null}
+                            </div>
                           ) : null}
 
                           <Button

@@ -11,6 +11,7 @@ import {
   takeOnboardingStarterPrompt,
   classifyConnectionIssue,
   createOnboardingWriteQueue,
+  officialKeyUrl,
   persistableOnboardingEndpoint,
   withDeadline,
   resumeOnboardingStep,
@@ -199,4 +200,19 @@ test("first draft survives unavailable session storage", () => {
     if (descriptor) Object.defineProperty(globalThis, "window", descriptor);
     else Reflect.deleteProperty(globalThis, "window");
   }
+});
+
+test("official key links only accept plain https addresses", () => {
+  assert.equal(
+    officialKeyUrl("https://platform.openai.com/api-keys"),
+    "https://platform.openai.com/api-keys",
+  );
+  // 非 https、带凭据、根本不是 URL 的元数据都不给外链入口。
+  assert.equal(officialKeyUrl("http://platform.openai.com/api-keys"), null);
+  assert.equal(officialKeyUrl("https://user:secret@example.com/key"), null);
+  assert.equal(officialKeyUrl("javascript:alert(1)"), null);
+  assert.equal(officialKeyUrl("not a url"), null);
+  assert.equal(officialKeyUrl(""), null);
+  assert.equal(officialKeyUrl(null), null);
+  assert.equal(officialKeyUrl(undefined), null);
 });

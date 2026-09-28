@@ -38,6 +38,8 @@ export const COPY = {
     apiKey: "API Key",
     apiKeyStored: "密钥已保存，可获取模型列表",
     apiKeyPlaceholder: "输入 API Key",
+    getOfficialKey: "获取密钥",
+    openKeyFailed: "无法打开官方控制台，请手动访问服务商官网创建密钥。",
     model: "默认模型",
     loadModels: "保存密钥并获取模型",
     loadingModels: "正在获取模型…",
@@ -136,6 +138,9 @@ export const COPY = {
     apiKey: "API Key",
     apiKeyStored: "Key saved. Load models to continue.",
     apiKeyPlaceholder: "Enter API Key",
+    getOfficialKey: "Get API key",
+    openKeyFailed:
+      "Could not open the provider console. Create the key on the provider's site.",
     model: "Default model",
     loadModels: "Save key and load models",
     loadingModels: "Loading models…",
