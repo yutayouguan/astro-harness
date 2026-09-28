@@ -39,11 +39,12 @@ pub fn create_restricted_token(
 ) -> io::Result<windows_sys::Win32::Foundation::HANDLE> {
     use windows_sys::Win32::Foundation::*;
     use windows_sys::Win32::Security::*;
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     unsafe {
-        let mut base_token: HANDLE = 0;
+        let mut base_token: HANDLE = std::ptr::null_mut();
         let result = OpenProcessToken(
-            windows_sys::Win32::System::Threading::GetCurrentProcess(),
+            GetCurrentProcess(),
             TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_PRIVILEGES,
             &mut base_token,
         );
@@ -59,7 +60,7 @@ pub fn create_restricted_token(
             })
             .collect();
 
-        let mut restricted_token: HANDLE = 0;
+        let mut restricted_token: HANDLE = std::ptr::null_mut();
         // DISABLE_MAX_PRIVILEGE(1) | LUA_TOKEN(4) | WRITE_RESTRICTED(8)
         let flags: u32 = 1 | 4 | 8;
 

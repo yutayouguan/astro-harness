@@ -717,25 +717,32 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| match event {
-            // 菜单「退出」等会走 ExitRequested：允许后续关窗真正销毁。
-            RunEvent::ExitRequested { .. } => {
-                ALLOW_EXIT.store(true, Ordering::SeqCst);
-            }
-            // 进程真正退出前：清理仍在运行的后台任务（独立进程组，否则会变孤儿）。
-            RunEvent::Exit => {
-                let n = tools::shutdown_background_jobs();
-                if n > 0 {
-                    tracing::info!(killed = n, "terminated background jobs on exit");
+        .run(|app, event| {
+            // 只有 macOS/iOS 有 Dock 重开事件，其余平台没有地方用 app，显式消费避免未使用告警。
+            #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+            let _ = app;
+
+            match event {
+                // 菜单「退出」等会走 ExitRequested：允许后续关窗真正销毁。
+                RunEvent::ExitRequested { .. } => {
+                    ALLOW_EXIT.store(true, Ordering::SeqCst);
                 }
+                // 进程真正退出前：清理仍在运行的后台任务（独立进程组，否则会变孤儿）。
+                RunEvent::Exit => {
+                    let n = tools::shutdown_background_jobs();
+                    if n > 0 {
+                        tracing::info!(killed = n, "terminated background jobs on exit");
+                    }
+                }
+                // macOS：点 Dock 图标时若窗口已关进托盘，重新显示。
+                #[cfg(any(target_os = "macos", target_os = "ios"))]
+                RunEvent::Reopen {
+                    has_visible_windows: false,
+                    ..
+                } => {
+                    ui::tray::show_main_window(app);
+                }
+                _ => {}
             }
-            // macOS：点 Dock 图标时若窗口已关进托盘，重新显示。
-            RunEvent::Reopen {
-                has_visible_windows: false,
-                ..
-            } => {
-                ui::tray::show_main_window(app);
-            }
-            _ => {}
         });
 }

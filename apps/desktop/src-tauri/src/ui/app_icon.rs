@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::image::Image;
+#[cfg(not(target_os = "macos"))]
+use tauri::Manager;
 use tauri::{AppHandle, Runtime};
 
 /// 与 [`tray::install_tray`](crate::ui::tray) 使用的 tray id 保持一致。
