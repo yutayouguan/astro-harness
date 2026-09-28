@@ -204,6 +204,24 @@ test("wallpaper-only keeps pet; linked wallpaper switches pet explicitly", async
   await expect(dialog.locator(".ambience-current")).toContainText("布丁");
 });
 
+test("picking a wallpaper turns wallpaper colors back on by default", async ({ page }) => {
+  const { dialog } = await open(page);
+  const toggle = dialog.getByRole("checkbox", { name: "从壁纸自动取色" });
+
+  // 第一次选壁纸：默认从壁纸取色。
+  await dialog.getByRole("button", { name: "森林小屋", exact: true }).click();
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).toBeChecked();
+
+  // 用户手选配色 → 关掉。
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+
+  // 换一张壁纸 → 回到默认的从壁纸取色。
+  await dialog.getByRole("button", { name: "晴日草地", exact: true }).click();
+  await expect(toggle).toBeChecked();
+});
+
 test("material strength and mode have local undo without changing wallpaper or pet", async ({ page }) => {
   const { dialog } = await open(page);
   const previous = await dialog.locator(".ambience-current").getAttribute("title");

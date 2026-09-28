@@ -12,6 +12,7 @@ import {
   resolveExtractedWallpaperPalette,
   resolveWallpaperPalette,
   wallpaperBackgroundSize,
+  withWallpaperModeDefaults,
   type WallpaperAsset,
 } from "./wallpaper.ts";
 
@@ -218,4 +219,53 @@ test("recent wallpaper cycle advances and wraps without changing a single item",
     cycleRecentWallpaper({ ...prefs, recent: [first] }).current?.id,
     "first",
   );
+});
+
+test("wallpaper mode defaults to picking colors from the wallpaper", () => {
+  // 历史数据：壁纸模式 + 勾选关闭，但没有留下任何自定义配色 → 归一成「从壁纸取色」。
+  const repaired = normalizeWallpaperPrefs({
+    mode: "wallpaper",
+    current: asset("wallpaper"),
+    adaptiveColor: false,
+  });
+  assert.equal(repaired.adaptiveColor, true);
+
+  // 用户手选过配色时保持关闭，不被覆盖。
+  const custom = normalizeWallpaperPrefs({
+    mode: "wallpaper",
+    current: asset("wallpaper"),
+    adaptiveColor: false,
+    customThemeColor: "#F97316",
+    customHighlightColor: "#EC4899",
+  });
+  assert.equal(custom.adaptiveColor, false);
+
+  // 纯色模式不参与这条默认（带上 recent 才不会命中「旧版默认」映射）。
+  assert.equal(
+    normalizeWallpaperPrefs({
+      mode: "color",
+      recent: [asset("kept")],
+      adaptiveColor: false,
+    }).adaptiveColor,
+    false,
+  );
+});
+
+test("applying a wallpaper resets the color source to the wallpaper", () => {
+  const manual = normalizeWallpaperPrefs({
+    mode: "color",
+    current: null,
+    adaptiveColor: false,
+    customThemeColor: "#F97316",
+    customHighlightColor: "#EC4899",
+  });
+  const applied = withWallpaperModeDefaults(
+    addRecentWallpaper(manual, asset("next")),
+  );
+  assert.equal(applied.mode, "wallpaper");
+  assert.equal(applied.adaptiveColor, true);
+  assert.equal(applied.current?.id, "next");
+  // 自定义配色留着：用户再取消勾选时能回到刚才那套。
+  assert.equal(applied.customThemeColor, "#f97316");
+  assert.equal(applied.customHighlightColor, "#ec4899");
 });

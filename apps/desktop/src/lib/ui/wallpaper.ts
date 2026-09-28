@@ -230,6 +230,12 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
     recent.length === 0;
   const mode: WallpaperMode =
     value.mode === "wallpaper" || legacySystemDefault ? "wallpaper" : "color";
+  const customThemeColor = normalizeHexColor(value.customThemeColor);
+  const customHighlightColor = normalizeHexColor(value.customHighlightColor);
+  const adaptiveColor =
+    typeof value.adaptiveColor === "boolean"
+      ? value.adaptiveColor
+      : DEFAULT_WALLPAPER_PREFS.adaptiveColor;
   return {
     mode,
     current,
@@ -237,17 +243,31 @@ export function normalizeWallpaperPrefs(raw: unknown): WallpaperPrefs {
     fit,
     shade: clamp(value.shade, 0, 55, DEFAULT_WALLPAPER_PREFS.shade),
     blur: clamp(value.blur, 0, 12, DEFAULT_WALLPAPER_PREFS.blur),
+    // 壁纸模式默认「从壁纸取色」：历史数据里可能残留 false，但又没有任何自定义
+    // 配色（取消勾选时会把当时的配色写进 custom*），这种状态没有含义，归一成 true。
     adaptiveColor:
-      typeof value.adaptiveColor === "boolean"
-        ? value.adaptiveColor
-        : DEFAULT_WALLPAPER_PREFS.adaptiveColor,
-    customThemeColor: normalizeHexColor(value.customThemeColor),
-    customHighlightColor: normalizeHexColor(value.customHighlightColor),
+      mode === "wallpaper" && !customThemeColor && !customHighlightColor
+        ? true
+        : adaptiveColor,
+    customThemeColor,
+    customHighlightColor,
     followSystemWallpaper:
       typeof value.followSystemWallpaper === "boolean"
         ? value.followSystemWallpaper
         : current?.source === "system" || legacySystemDefault,
   };
+}
+
+/**
+ * 用户主动使用/切换壁纸时的默认：进入壁纸模式，配色回到「从壁纸取色」。
+ *
+ * 只用于用户动作（选择、导入、生成确认、切换最近一张、切到壁纸模式）；系统壁纸自动
+ * 同步与氛围切换不走这里，避免覆盖用户手选的配色。
+ */
+export function withWallpaperModeDefaults(
+  prefs: WallpaperPrefs,
+): WallpaperPrefs {
+  return { ...prefs, mode: "wallpaper", adaptiveColor: true };
 }
 
 export function resolveWallpaperPalette(

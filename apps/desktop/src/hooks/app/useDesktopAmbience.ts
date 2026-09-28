@@ -35,6 +35,7 @@ import type { ActiveUiStyle } from "../../lib/ui/activeUiStyle";
 import {
   addRecentWallpaper,
   resolveExtractedWallpaperPalette,
+  withWallpaperModeDefaults,
   type WallpaperAsset,
   type WallpaperPrefs,
 } from "../../lib/ui/wallpaper";
@@ -229,14 +230,20 @@ export function useDesktopAmbience(props: AmbienceProps, open: boolean) {
       else
         await change(
           { kind: "wallpaper", path: asset.path },
-          (prefs, colors) => [addRecentWallpaper(prefs, asset), colors],
+          (prefs, colors) => [
+            withWallpaperModeDefaults(addRecentWallpaper(prefs, asset)),
+            colors,
+          ],
         );
     });
   const followSystem = () =>
     guard(async () => {
       const asset = await invoke<WallpaperAsset>("get_system_wallpaper");
       await change({ kind: "wallpaper", path: asset.path }, (prefs, colors) => [
-        { ...addRecentWallpaper(prefs, asset), followSystemWallpaper: true },
+        withWallpaperModeDefaults({
+          ...addRecentWallpaper(prefs, asset),
+          followSystemWallpaper: true,
+        }),
         colors,
       ]);
     });

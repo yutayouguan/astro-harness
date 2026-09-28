@@ -9,6 +9,7 @@ import {
   applySystemWallpaper,
   cycleRecentWallpaper,
   normalizeWallpaperPrefs,
+  withWallpaperModeDefaults,
   WALLPAPER_STORAGE_KEY,
   type WallpaperAsset,
   type WallpaperFit,
@@ -149,7 +150,10 @@ export function useWallpaper(): WallpaperController {
       if (remember && outgoing && outgoing.id !== asset.id) {
         setPrevious(outgoing);
       }
-      update((current) => addRecentWallpaper(current, asset));
+      // 应用一张壁纸（选择/导入/生成确认/撤销上一张）同样回到默认的从壁纸取色。
+      update((current) =>
+        withWallpaperModeDefaults(addRecentWallpaper(current, asset)),
+      );
     },
     [discardCandidate, update],
   );
@@ -241,7 +245,12 @@ export function useWallpaper(): WallpaperController {
   const setMode = useCallback(
     (mode: WallpaperMode) => {
       deactivateGeneratedStyle();
-      update((current) => ({ ...current, mode }));
+      // 切到壁纸模式就是「开始用壁纸」：默认从壁纸取色（用户仍可手动关掉）。
+      update((current) =>
+        mode === "wallpaper"
+          ? withWallpaperModeDefaults(current)
+          : { ...current, mode },
+      );
     },
     [update],
   );
@@ -319,11 +328,13 @@ export function useWallpaper(): WallpaperController {
     setPending(null);
     const outgoing = prefsRef.current.current;
     const next = cycleRecentWallpaper(prefsRef.current);
+    // 没有可切换的壁纸时保持原样（包括纯色模式，不要被顺手切到壁纸模式）。
+    if (next === prefsRef.current) return;
     if (outgoing && next.current && next.current.id !== outgoing.id) {
       setPrevious(outgoing);
     }
     deactivateGeneratedStyle();
-    update(() => next);
+    update(() => withWallpaperModeDefaults(next));
   }, [update]);
 
   const importImage = useCallback(
