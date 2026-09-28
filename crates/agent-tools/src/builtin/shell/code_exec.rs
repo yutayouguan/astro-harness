@@ -102,8 +102,15 @@ pub(crate) fn scrubbed_env(
 
 #[cfg(unix)]
 fn apply_unix_rlimits() {
+    // Linux（glibc/musl）的 setrlimit / RLIMIT_* 用 __rlimit_resource_t，
+    // macOS 用 c_int，按目标平台取别名，避免硬编码整数类型。
+    #[cfg(target_os = "linux")]
+    type RlimitResource = libc::__rlimit_resource_t;
+    #[cfg(not(target_os = "linux"))]
+    type RlimitResource = libc::c_int;
+
     unsafe {
-        let set = |resource: libc::c_int, value: u64| {
+        let set = |resource: RlimitResource, value: u64| {
             let lim = libc::rlimit {
                 rlim_cur: value as libc::rlim_t,
                 rlim_max: value as libc::rlim_t,
