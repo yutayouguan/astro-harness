@@ -394,7 +394,7 @@ target/release/bundle/nsis|appimage|deb|rpm/...     # Windows / Linux
 | Workflow | 触发 | 作用 |
 | --- | --- | --- |
 | `build-tauri` | PR（相关路径变更）/ 手动 | PR 只构建 Linux；手动触发构建 macOS arm64 + x86_64、Linux x64、Windows x64 并上传 Artifacts |
-| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-agent-releases` |
+| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-agent-releases`；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
 
 - Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
 - 私有仓库的 macOS runner 按 10 倍、Windows 按 2 倍消耗 Actions 分钟额度，所以 PR 只跑 Linux，全平台矩阵留给手动触发与发布。

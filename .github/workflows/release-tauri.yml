@@ -29,6 +29,13 @@ on:
           - hosted
           - self-hosted
         default: hosted
+      platforms:
+        description: "发布范围：all 出三平台，macos 只出 macOS（先发 Mac 版时用）"
+        type: choice
+        options:
+          - all
+          - macos
+        default: all
   push:
     tags:
       - "v*"
@@ -145,6 +152,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       include: ${{ steps.set.outputs.include }}
+      expected: ${{ steps.set.outputs.expected }}
     steps:
       - name: 选择 runner
         id: set
@@ -156,7 +164,17 @@ jobs:
           else
             MACOS_RUNNER='["macos-latest"]'
           fi
-          echo "include=[{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-aarch64\",\"target\":\"aarch64-apple-darwin\",\"rust_targets\":\"aarch64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"},{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-x86_64\",\"target\":\"x86_64-apple-darwin\",\"rust_targets\":\"x86_64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"},{\"runs_on\":[\"ubuntu-22.04\"],\"os\":\"linux\",\"artifact\":\"linux-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"\",\"bundles\":\"\"},{\"runs_on\":[\"windows-latest\"],\"os\":\"windows\",\"artifact\":\"windows-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"windows\",\"bundles\":\"--bundles nsis\"}]" >> "$GITHUB_OUTPUT"
+          MACOS_ENTRIES="{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-aarch64\",\"target\":\"aarch64-apple-darwin\",\"rust_targets\":\"aarch64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"},{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-x86_64\",\"target\":\"x86_64-apple-darwin\",\"rust_targets\":\"x86_64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"}"
+          OTHER_ENTRIES="{\"runs_on\":[\"ubuntu-22.04\"],\"os\":\"linux\",\"artifact\":\"linux-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"\",\"bundles\":\"\"},{\"runs_on\":[\"windows-latest\"],\"os\":\"windows\",\"artifact\":\"windows-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"windows\",\"bundles\":\"--bundles nsis\"}"
+
+          # platforms=macos 时只构建 macOS：先发 Mac 版可以把 Actions 用量压到最低。
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.platforms }}" = "macos" ]; then
+            echo "include=[$MACOS_ENTRIES]" >> "$GITHUB_OUTPUT"
+            echo 'expected=["darwin-aarch64","darwin-x86_64"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "include=[$MACOS_ENTRIES,$OTHER_ENTRIES]" >> "$GITHUB_OUTPUT"
+            echo 'expected=["darwin-aarch64","darwin-x86_64","windows-x86_64","linux-x86_64"]' >> "$GITHUB_OUTPUT"
+          fi
 
   publish-tauri:
     name: 构建 ${{ matrix.artifact }}
@@ -343,13 +361,14 @@ jobs:
 
   verify-release:
     name: 校验更新清单
-    needs: [preflight, publish-tauri]
+    needs: [preflight, plan, publish-tauri]
     runs-on: ubuntu-22.04
 
     steps:
       - name: 校验 latest.json 覆盖全部平台
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
+          EXPECTED: ${{ needs.plan.outputs.expected }}
         run: |
           set -euo pipefail
           URL="https://github.com/yutayouguan/astro-agent-releases/releases/download/v${VERSION}/latest.json"
@@ -362,7 +381,7 @@ jobs:
             const fs = require("node:fs");
             const expectedVersion = process.env.VERSION;
             const manifest = JSON.parse(fs.readFileSync("latest.json", "utf8"));
-            const expected = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64"];
+            const expected = JSON.parse(process.env.EXPECTED);
             const platforms = manifest.platforms ?? {};
             const missing = expected.filter((key) => !platforms[key]);
             if (manifest.version !== expectedVersion) {
