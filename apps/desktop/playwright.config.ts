@@ -7,6 +7,7 @@ const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 // Chromium 看不出来的差异，只有换引擎才会暴露。截图基线仍只跑 Chromium。
 const WEBKIT_SMOKE = [
   "**/project-file-editor.spec.ts",
+  "**/project-dialog-focus.spec.ts",
   "**/chat-activity-memo.spec.ts",
   "**/terminal-dock-material.spec.ts",
   "**/dock-edge-layout.spec.ts",

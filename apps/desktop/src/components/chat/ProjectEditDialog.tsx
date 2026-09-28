@@ -175,7 +175,7 @@ export default function ProjectEditDialog({
 
       {/* 项目名称（图标内嵌在名称行左侧，点击即可换） */}
       <label className="project-edit-label">项目名称</label>
-      <div className="project-edit-name-row">
+      <div className="project-edit-name-row" data-input-surface>
         <button
           type="button"
           className="project-edit-name-icon-btn"

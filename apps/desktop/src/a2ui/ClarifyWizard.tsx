@@ -877,6 +877,7 @@ export default function ClarifyWizard({
   const customInput = (
     <div
       className={`a2ui-clarify-custom ${hasPresets ? "is-inline-option" : "is-standalone"}`}
+      data-input-surface
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) return;
         customInputRef.current?.focus();

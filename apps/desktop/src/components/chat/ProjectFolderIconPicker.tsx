@@ -61,7 +61,7 @@ export default function ProjectFolderIconPicker({
           </button>
         </header>
 
-        <label className="project-icon-picker-search">
+        <label className="project-icon-picker-search" data-input-surface>
           <Search size={15} aria-hidden />
           <input
             ref={inputRef}

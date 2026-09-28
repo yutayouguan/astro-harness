@@ -379,7 +379,7 @@ function LoopNodePicker({
         visibility: pos ? "visible" : "hidden",
       }}
     >
-      <div className="loop-node-picker-search">
+      <div className="loop-node-picker-search" data-input-surface>
         <LOOP_ICON_MAP.Search
           size={14}
           className="loop-node-picker-search-icon"
@@ -1813,7 +1813,7 @@ function LoopEditorInner({ workflowId, providers: _providers, onBack }: Props) {
             </div>
           )}
           {showCanvasSearch && (
-            <div className="loop-canvas-search">
+            <div className="loop-canvas-search" data-input-surface>
               <LOOP_ICON_MAP.Search size={14} />
               <input
                 autoFocus
