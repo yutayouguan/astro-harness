@@ -22,6 +22,13 @@ on:
         description: "强制要求 macOS / Windows 代码签名齐全（证书到位后开启）"
         type: boolean
         default: false
+      macos_runner:
+        description: "macOS 构建走哪种 runner：hosted 消耗 Actions 分钟，self-hosted 用本机免费 runner"
+        type: choice
+        options:
+          - hosted
+          - self-hosted
+        default: hosted
   push:
     tags:
       - "v*"
@@ -133,47 +140,40 @@ jobs:
             exit 1
           fi
 
+  plan:
+    name: 计算构建矩阵
+    runs-on: ubuntu-22.04
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - name: 选择 runner
+        id: set
+        run: |
+          # 默认走 GitHub 托管 runner；手动触发时可选本机自托管 macOS runner。
+          # 自托管不扣 Actions 分钟，但要求这台 Mac 在线且已注册 astro-mac runner。
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.macos_runner }}" = "self-hosted" ]; then
+            MACOS_RUNNER='["self-hosted","macOS","astro-mac"]'
+          else
+            MACOS_RUNNER='["macos-latest"]'
+          fi
+          echo "include=[{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-aarch64\",\"target\":\"aarch64-apple-darwin\",\"rust_targets\":\"aarch64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"},{\"runs_on\":$MACOS_RUNNER,\"os\":\"macos\",\"artifact\":\"macos-x86_64\",\"target\":\"x86_64-apple-darwin\",\"rust_targets\":\"x86_64-apple-darwin\",\"signing\":\"apple\",\"bundles\":\"\"},{\"runs_on\":[\"ubuntu-22.04\"],\"os\":\"linux\",\"artifact\":\"linux-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"\",\"bundles\":\"\"},{\"runs_on\":[\"windows-latest\"],\"os\":\"windows\",\"artifact\":\"windows-x64\",\"target\":\"\",\"rust_targets\":\"\",\"signing\":\"windows\",\"bundles\":\"--bundles nsis\"}]" >> "$GITHUB_OUTPUT"
+
   publish-tauri:
     name: 构建 ${{ matrix.artifact }}
-    needs: preflight
+    needs: [preflight, plan]
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-latest
-            artifact: macos-aarch64
-            target: aarch64-apple-darwin
-            rust_targets: aarch64-apple-darwin
-            signing: apple
-            bundles: ""
-          - platform: macos-latest
-            artifact: macos-x86_64
-            target: x86_64-apple-darwin
-            rust_targets: x86_64-apple-darwin
-            signing: apple
-            bundles: ""
-          - platform: ubuntu-22.04
-            artifact: linux-x64
-            target: ""
-            rust_targets: ""
-            signing: ""
-            bundles: ""
-          - platform: windows-latest
-            artifact: windows-x64
-            target: ""
-            rust_targets: ""
-            signing: windows
-            # WiX(MSI) 打包失败，且应用内更新走 NSIS，Windows 只出 setup.exe
-            bundles: "--bundles nsis"
+        include: ${{ fromJSON(needs.plan.outputs.include) }}
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ fromJSON(matrix.runs_on) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
