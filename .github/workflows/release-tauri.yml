@@ -155,16 +155,21 @@ jobs:
         run: |
           # 发布 token 权限不够时，之前的失败发生在构建完成之后，白等十几分钟；
           # 这里先按真实 API 权限判一次，缺写入权限立刻失败。
-          perms=$(GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api \
-            repos/yutayouguan/astro-agent-releases --jq '.permissions' 2>&1) || {
-            echo "::error::发布 token 无法读取公开仓库：$perms"
+          # 注意：仓库响应的 permissions 字段对细粒度 token 会回显用户角色，
+          # 读权限不能证明能建 Release，因此这里做一次可回收的真实写入探测。
+          tag="release-token-probe-$(date +%s)"
+          id=$(GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X POST \
+            repos/yutayouguan/astro-agent-releases/releases \
+            -f tag_name="$tag" -f name="release token probe" -F draft=true \
+            --jq .id 2>&1) || {
+            echo "::error::发布 token 无法在公开仓库创建 Release：$id"
             exit 1
           }
-          echo "发布 token 权限：$perms"
-          if ! echo "$perms" | grep -q '"push": *true'; then
-            echo "::error::发布 token 缺少 astro-agent-releases 的写入权限；需要 Contents: Read and write（且仓库必须被选中）"
-            exit 1
-          fi
+          GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X DELETE \
+            "repos/yutayouguan/astro-agent-releases/releases/$id" >/dev/null 2>&1 || true
+          GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X DELETE \
+            "repos/yutayouguan/astro-agent-releases/git/refs/tags/$tag" >/dev/null 2>&1 || true
+          echo "发布 token 写入探测通过（草稿 Release 与探测 tag 已清理）"
 
   plan:
     name: 计算构建矩阵
