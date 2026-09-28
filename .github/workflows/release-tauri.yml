@@ -186,7 +186,9 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.include) }}
 
-    runs-on: ${{ fromJSON(matrix.runs_on) }}
+    # matrix.runs_on 已经是数组（plan 作业产出的 JSON），不能再套 fromJSON，
+    # 否则构建作业根本不会被创建，整轮发布会以 failure 结束。
+    runs-on: ${{ matrix.runs_on }}
 
     steps:
       - name: Checkout
