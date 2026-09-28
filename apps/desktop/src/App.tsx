@@ -3013,15 +3013,26 @@ export default function App() {
           onAction={(action) => {
             if (action === "remove") {
               if (projectMenu.id === "default") return;
-              void invoke("delete_project", {
-                projectId: projectMenu.id,
-              }).catch(() => {});
-              setProjects((prev) =>
-                prev.filter((p) => p.id !== projectMenu.id),
-              );
-              if (activeProjectId === projectMenu.id) {
-                setActiveProjectId(projects[0]?.id ?? "default");
-              }
+              const { id: removingId, name: removingName } = projectMenu;
+              void (async () => {
+                const confirmed = await confirm({
+                  title: t("project.removeTitle"),
+                  message: t("project.removeConfirm", { name: removingName }),
+                  confirmLabel: t("project.removeAction"),
+                  cancelLabel: t("project.removeKeep"),
+                  variant: "danger",
+                });
+                if (!confirmed) return;
+                await invoke("delete_project", {
+                  projectId: removingId,
+                }).catch(() => {});
+                setProjects((prev) =>
+                  prev.filter((p) => p.id !== removingId),
+                );
+                if (activeProjectId === removingId) {
+                  setActiveProjectId(projects[0]?.id ?? "default");
+                }
+              })();
             } else if (action === "reveal") {
               const root = projects.find((p) => p.id === projectMenu.id)
                 ?.roots[0];

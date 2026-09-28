@@ -35,6 +35,11 @@ export const en: Record<MessageKey, string> = {
     "“{name}” has not been saved. Closing it will discard your changes.",
   "project.filesUnsavedCloseAll":
     "Some files have not been saved. Closing all files will discard those changes.",
+  "project.removeTitle": "Remove project?",
+  "project.removeConfirm":
+    '"{name}" and its project folders will be removed; sessions in it return to ungrouped (the sessions themselves are kept).',
+  "project.removeAction": "Remove project",
+  "project.removeKeep": "Keep project",
 
   "about.tagline": "Local AI desktop workstation",
   "about.version": "Version {v}",
@@ -2854,6 +2859,9 @@ export const en: Record<MessageKey, string> = {
   "providers.apiKeyMissing": "Not configured",
   "providers.saveKey": "Save key",
   "providers.clearKey": "Clear key",
+  "providers.clearKeyTitle": "Clear this provider's key?",
+  "providers.clearKeyConfirm":
+    "The key is no longer stored locally afterwards; re-enter it to keep using this provider.",
   "providers.requiresKey": "This provider requires an API key",
   "providers.noKeyRequired": "Local provider — no API key needed",
   "providers.test": "Test connection",

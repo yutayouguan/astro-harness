@@ -1037,6 +1037,13 @@ export default function ProvidersPanel({ active, onStateChange, tone }: Props) {
 
   const clearApiKey = async () => {
     if (!selected || !isTauri()) return;
+    const confirmed = await confirm({
+      title: t("providers.clearKeyTitle"),
+      message: t("providers.clearKeyConfirm"),
+      confirmLabel: t("providers.clearKey"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setError(null);
     try {
       const next = await invoke<ProvidersStateDto>("clear_provider_api_key", {

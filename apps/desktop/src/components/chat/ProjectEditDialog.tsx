@@ -3,6 +3,8 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { useTransientToast } from "../../hooks/ui/useTransientToast";
+import { useConfirm } from "../../hooks/ui/DialogContext";
+import { useI18n } from "../../i18n/LocaleContext";
 import type { ProjectDto } from "../../types";
 import { ModalShell } from "../ui";
 import ProjectFolderIcon from "./ProjectFolderIcon";
@@ -35,6 +37,8 @@ export default function ProjectEditDialog({
   const [roots, setRoots] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const { showToast, toastHost } = useTransientToast();
+  const confirm = useConfirm();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -128,6 +132,14 @@ export default function ProjectEditDialog({
 
   const handleRemoveProject = useCallback(async () => {
     if (!project) return;
+    const confirmed = await confirm({
+      title: t("project.removeTitle"),
+      message: t("project.removeConfirm", { name: project.name }),
+      confirmLabel: t("project.removeAction"),
+      cancelLabel: t("project.removeKeep"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     try {
       await invoke("delete_project", { projectId: project.id });
       onRemoved(project.id);
@@ -135,7 +147,7 @@ export default function ProjectEditDialog({
     } catch {
       /* 移除失败静默 */
     }
-  }, [project, onRemoved, onClose]);
+  }, [project, confirm, t, onRemoved, onClose]);
 
   const isDefaultProject = project?.id === "default";
   const isCreating = project === null;

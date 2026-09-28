@@ -29,6 +29,11 @@ export const zh = {
   "dialog.deleteTitle": "确认删除",
   "dialog.discard": "放弃更改",
   "project.unsavedSwitch": "当前项目还有未保存文件，切换项目会丢弃这些修改。",
+  "project.removeTitle": "移除项目？",
+  "project.removeConfirm":
+    "「{name}」的分组和项目文件夹会被移除，项目里的会话会回到未分组（会话本身不会删除）。",
+  "project.removeAction": "移除项目",
+  "project.removeKeep": "保留",
   "project.fileUnsavedClose": "“{name}”尚未保存，关闭后将丢弃修改。",
   "project.filesUnsavedCloseAll": "仍有未保存文件，关闭全部文件会丢弃修改。",
 
@@ -2693,6 +2698,9 @@ export const zh = {
   "providers.apiKeyMissing": "未配置",
   "providers.saveKey": "保存密钥",
   "providers.clearKey": "清除密钥",
+  "providers.clearKeyTitle": "清除这个提供商的密钥？",
+  "providers.clearKeyConfirm":
+    "清除后本地不再保存密钥，需要重新填写才能继续用这个提供商。",
   "providers.requiresKey": "此提供商需要 API Key",
   "providers.noKeyRequired": "本地提供商无需 API Key",
   "providers.test": "测试连通性",
