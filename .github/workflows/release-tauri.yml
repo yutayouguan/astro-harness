@@ -6,20 +6,20 @@
 #
 # 所需 Secrets（配置方式见 docs/03-系统设计阶段/06-桌面端/11-桌面端更新发布.md）：
 #   必需：ASTRO_RELEASE_TOKEN / TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-#   macOS 分发：APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD
-#             APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
-#             （可选 APPLE_SIGNING_IDENTITY，缺省时 Tauri 从 APPLE_CERTIFICATE 推断）
-#   Windows 分发：WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
+#   可选（当前未采购，缺失时按未签名包发布并在日志/Release 里显式标注）：
+#     macOS：APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD / APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
+#     Windows：WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD
 #
-# 缺少任何一项系统代码签名密钥时默认拒绝发布；只做内测包时手动运行并勾选 allow_unsigned。
+# 系统代码签名是可选的：缺失时照样出包，只是系统会提示"未验证的开发者"。
+# 拿到证书后手动运行并勾选 require_signing，即可让缺证书直接失败。
 
 name: release-tauri
 
 on:
   workflow_dispatch:
     inputs:
-      allow_unsigned:
-        description: "缺少系统代码签名密钥时仍然发布（仅内测，产物不可正式分发）"
+      require_signing:
+        description: "强制要求 macOS / Windows 代码签名齐全（证书到位后开启）"
         type: boolean
         default: false
   push:
@@ -39,7 +39,8 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
-      signing_ready: ${{ steps.signing.outputs.signing_ready }}
+      apple_signed: ${{ steps.signing.outputs.apple_signed }}
+      windows_signed: ${{ steps.signing.outputs.windows_signed }}
 
     steps:
       - name: Checkout
@@ -71,7 +72,7 @@ jobs:
       - name: 校验发布密钥
         id: signing
         env:
-          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
+          REQUIRE_SIGNING: ${{ inputs.require_signing }}
           ASTRO_RELEASE_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -84,29 +85,52 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           required=(ASTRO_RELEASE_TOKEN TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
-          signing=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-                   WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD)
+          apple=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID)
+          windows=(WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD)
           missing_required=()
           for key in "${required[@]}"; do
             if [[ -z "${!key}" ]]; then missing_required+=("$key"); fi
-          done
-          missing_signing=()
-          for key in "${signing[@]}"; do
-            if [[ -z "${!key}" ]]; then missing_signing+=("$key"); fi
           done
           if (( ${#missing_required[@]} > 0 )); then
             echo "::error::缺少必需的发布密钥：${missing_required[*]}"
             exit 1
           fi
-          if (( ${#missing_signing[@]} > 0 )); then
-            if [[ "$ALLOW_UNSIGNED" != "true" ]]; then
-              echo "::error::缺少系统代码签名密钥：${missing_signing[*]}；确需发布未签名安装包时，手动运行本工作流并勾选 allow_unsigned"
-              exit 1
-            fi
-            echo "::warning::本次发布未启用系统代码签名：${missing_signing[*]}"
-            echo "signing_ready=false" >> "$GITHUB_OUTPUT"
+          missing_apple=()
+          for key in "${apple[@]}"; do
+            if [[ -z "${!key}" ]]; then missing_apple+=("$key"); fi
+          done
+          missing_windows=()
+          for key in "${windows[@]}"; do
+            if [[ -z "${!key}" ]]; then missing_windows+=("$key"); fi
+          done
+          if (( ${#missing_apple[@]} > 0 )); then
+            echo "apple_signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::macOS 代码签名缺失（${missing_apple[*]}）：本次 macOS 安装包未签名、未公证，用户首次打开需要右键「打开」或在安装后执行 xattr -dr com.apple.quarantine"
           else
-            echo "signing_ready=true" >> "$GITHUB_OUTPUT"
+            echo "apple_signed=true" >> "$GITHUB_OUTPUT"
+          fi
+          if (( ${#missing_windows[@]} > 0 )); then
+            echo "windows_signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Windows 代码签名缺失（${missing_windows[*]}）：本次 Windows 安装包未签名，SmartScreen 会提示未知发布者"
+          else
+            echo "windows_signed=true" >> "$GITHUB_OUTPUT"
+          fi
+          apple_state="已签名 + 公证"
+          if (( ${#missing_apple[@]} > 0 )); then apple_state="未签名（缺 ${#missing_apple[@]} 项密钥）"; fi
+          windows_state="已签名"
+          if (( ${#missing_windows[@]} > 0 )); then windows_state="未签名（缺 ${#missing_windows[@]} 项密钥）"; fi
+          {
+            echo "### 发布签名状态"
+            echo ""
+            echo "| 平台 | 状态 |"
+            echo "| --- | --- |"
+            echo "| macOS | $apple_state |"
+            echo "| Windows | $windows_state |"
+            echo "| Linux | 不适用（AppImage / deb / rpm 不做系统代码签名） |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$REQUIRE_SIGNING" == "true" ]] && (( ${#missing_apple[@]} > 0 || ${#missing_windows[@]} > 0 )); then
+            echo "::error::已勾选 require_signing，但系统代码签名密钥不全（macOS: ${missing_apple[*]:-无缺失}；Windows: ${missing_windows[*]:-无缺失}）"
+            exit 1
           fi
 
   publish-tauri:
@@ -193,6 +217,17 @@ jobs:
             else
               echo "本次发布的安装包见下方 Assets。"
             fi
+            if [[ "${{ needs.preflight.outputs.apple_signed }}" != "true" ]] || [[ "${{ needs.preflight.outputs.windows_signed }}" != "true" ]]; then
+              echo ""
+              echo "### 安装提示（未签名构建）"
+              echo ""
+              if [[ "${{ needs.preflight.outputs.apple_signed }}" != "true" ]]; then
+                echo "- **macOS**：本次安装包未做 Developer ID 签名与公证。首次打开请右键点击 App 选择「打开」，或安装后执行 \`xattr -dr com.apple.quarantine \"/Applications/Astro Agent.app\"\`。"
+              fi
+              if [[ "${{ needs.preflight.outputs.windows_signed }}" != "true" ]]; then
+                echo "- **Windows**：本次安装包未做 Authenticode 签名，SmartScreen 会提示「未知发布者」，选择「更多信息 → 仍要运行」即可。"
+              fi
+            fi
             echo ""
             echo "## 安装包"
             echo ""
@@ -206,7 +241,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: 配置 macOS 签名与公证
-        if: matrix.signing == 'apple' && needs.preflight.outputs.signing_ready == 'true'
+        if: matrix.signing == 'apple' && needs.preflight.outputs.apple_signed == 'true'
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -228,7 +263,7 @@ jobs:
           fi
 
       - name: 配置 Windows 签名证书
-        if: matrix.signing == 'windows' && needs.preflight.outputs.signing_ready == 'true'
+        if: matrix.signing == 'windows' && needs.preflight.outputs.windows_signed == 'true'
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -282,7 +317,7 @@ jobs:
             ${{ env.EXTRA_ARGS }}
 
       - name: 校验 macOS 签名与公证票据
-        if: matrix.signing == 'apple' && needs.preflight.outputs.signing_ready == 'true'
+        if: matrix.signing == 'apple' && needs.preflight.outputs.apple_signed == 'true'
         shell: bash
         run: |
           set -euo pipefail
