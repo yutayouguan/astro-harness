@@ -581,6 +581,8 @@ export const zh = {
   "evo.kindMerge": "合并技能",
   "evo.judgeScore": "评分",
   "evo.reject": "拒绝",
+  "evo.removeTitle": "删除这条评估样例？",
+  "evo.removeConfirm": "删除后需要重新添加才能恢复这条样例。",
   "evo.approve": "批准写入",
   "evo.approveDisable": "批准禁用",
   "evo.approveMerge": "批准合并",

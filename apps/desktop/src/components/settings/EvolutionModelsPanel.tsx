@@ -171,6 +171,20 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
     importFromSession,
     error: evalError,
   } = useEvalExamples(active);
+  /** 删除评估样例前先确认：删掉后只能重新添加。 */
+  const confirmRemoveEval = useCallback(
+    async (id: string) => {
+      const confirmed = await confirm({
+        title: t("evo.removeTitle"),
+        message: t("evo.removeConfirm"),
+        confirmLabel: t("evo.reject"),
+        variant: "danger",
+      });
+      if (!confirmed) return;
+      await removeEval(id);
+    },
+    [confirm, removeEval, t],
+  );
   const [evalTask, setEvalTask] = useState("");
   const [evalSkill, setEvalSkill] = useState("");
   const [evalExpect, setEvalExpect] = useState("");
@@ -2107,7 +2121,7 @@ export default function EvolutionModelsPanel({ active, tone }: Props) {
                       <button
                         type="button"
                         className="aux-action aux-action-ghost"
-                        onClick={() => void removeEval(ex.id)}
+                        onClick={() => void confirmRemoveEval(ex.id)}
                       >
                         <Trash2 size={15} />
                         {t("evo.reject")}

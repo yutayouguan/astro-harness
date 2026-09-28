@@ -7,6 +7,9 @@ const read = (relative) => readFile(new URL(relative, import.meta.url), "utf8");
 const app = await read("../../App.tsx");
 const projectDialog = await read("../../components/chat/ProjectEditDialog.tsx");
 const providers = await read("../../components/settings/ProvidersPanel.tsx");
+const evolution = await read(
+  "../../components/settings/EvolutionModelsPanel.tsx",
+);
 const zh = await read("../../i18n/catalogs/zh.ts");
 const en = await read("../../i18n/catalogs/en.ts");
 
@@ -37,6 +40,18 @@ test("clearing a provider key asks first", () => {
   });
 });
 
+test("deleting an eval example asks first", () => {
+  confirmBefore(evolution, {
+    titleKey: "evo.removeTitle",
+    command: "removeEval\\(id\\)",
+  });
+  // 列表按钮改走带确认的入口
+  assert.match(
+    evolution,
+    /onClick=\{\(\) => void confirmRemoveEval\(ex\.id\)\}/,
+  );
+});
+
 test("the new confirm copy exists in both locales", () => {
   for (const key of [
     "project.removeTitle",
@@ -45,6 +60,8 @@ test("the new confirm copy exists in both locales", () => {
     "project.removeKeep",
     "providers.clearKeyTitle",
     "providers.clearKeyConfirm",
+    "evo.removeTitle",
+    "evo.removeConfirm",
   ]) {
     assert.ok(zh.includes(`"${key}":`), `zh missing ${key}`);
     assert.ok(en.includes(`"${key}":`), `en missing ${key}`);

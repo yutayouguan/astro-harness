@@ -631,6 +631,9 @@ export const en: Record<MessageKey, string> = {
   "evo.kindMerge": "Merge skills",
   "evo.judgeScore": "Score",
   "evo.reject": "Reject",
+  "evo.removeTitle": "Delete this eval example?",
+  "evo.removeConfirm":
+    "You will need to add it again to restore this example.",
   "evo.approve": "Approve",
   "evo.approveDisable": "Approve disable",
   "evo.approveMerge": "Approve merge",
