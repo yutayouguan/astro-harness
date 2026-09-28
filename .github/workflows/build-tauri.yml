@@ -1,4 +1,7 @@
 # 不创建 Release，仅构建并上传产物（用于验证 Windows / Linux / macOS 打包）。
+#
+# 注意：该文件必须位于默认分支（develop）上，GitHub 才会注册这个 workflow；
+# 只存在于非默认分支时，Actions 页面不会出现 build-tauri。
 
 name: build-tauri
 
