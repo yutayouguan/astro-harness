@@ -48,7 +48,6 @@ fn path_to_file_uri(path: &std::path::Path) -> String {
     let s = path.to_string_lossy();
     #[cfg(target_os = "windows")]
     {
-        s.replace('\\', "/");
         format!("file:///{}", s.replace('\\', "/"))
     }
     #[cfg(not(target_os = "windows"))]

@@ -32,18 +32,23 @@ jobs:
             args: --target aarch64-apple-darwin
             rust_targets: aarch64-apple-darwin
             artifact: macos-aarch64
+            bundles: ""
           - platform: macos-latest
             args: --target x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
             artifact: macos-x86_64
+            bundles: ""
           - platform: ubuntu-22.04
             args: ""
             rust_targets: ""
             artifact: linux-x64
+            bundles: ""
           - platform: windows-latest
             args: ""
             rust_targets: ""
             artifact: windows-x64
+            # WiX(MSI) 在本工程上 light.exe 打包失败，且应用内更新走 NSIS，只出 setup.exe
+            bundles: "--bundles nsis"
 
     runs-on: ${{ matrix.platform }}
 
@@ -85,6 +90,8 @@ jobs:
         with:
           workspaces: ". -> target"
           shared-key: build-${{ matrix.artifact }}
+          # 构建失败（例如打包阶段）也保留依赖缓存，避免每次重编整棵依赖树
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -94,7 +101,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: apps/desktop
-        run: npm run tauri build -- ${{ matrix.args }}
+        run: npm run tauri build -- ${{ matrix.args }} ${{ matrix.bundles }}
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4

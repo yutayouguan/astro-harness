@@ -145,21 +145,26 @@ jobs:
             target: aarch64-apple-darwin
             rust_targets: aarch64-apple-darwin
             signing: apple
+            bundles: ""
           - platform: macos-latest
             artifact: macos-x86_64
             target: x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
             signing: apple
+            bundles: ""
           - platform: ubuntu-22.04
             artifact: linux-x64
             target: ""
             rust_targets: ""
             signing: ""
+            bundles: ""
           - platform: windows-latest
             artifact: windows-x64
             target: ""
             rust_targets: ""
             signing: windows
+            # WiX(MSI) 打包失败，且应用内更新走 NSIS，Windows 只出 setup.exe
+            bundles: "--bundles nsis"
 
     runs-on: ${{ matrix.platform }}
 
@@ -201,6 +206,7 @@ jobs:
         with:
           workspaces: ". -> target"
           shared-key: release-${{ matrix.artifact }}
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -235,7 +241,7 @@ jobs:
             echo ""
             echo "- **macOS Apple Silicon (ARM64)**：\`aarch64-apple-darwin\` 的 \`.dmg\`"
             echo "- **macOS Intel (x86_64)**：\`x86_64-apple-darwin\` 的 \`.dmg\`"
-            echo "- **Windows x64**：\`.msi\` / \`setup.exe\`（NSIS）"
+            echo "- **Windows x64**：\`setup.exe\`（NSIS 安装包）"
             echo "- **Linux x64**：\`.AppImage\` / \`.deb\` / \`.rpm\`"
             echo ""
             echo "应用内「关于」页可检查并安装签名更新。"
@@ -316,6 +322,7 @@ jobs:
           args: >-
             ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
             --config src-tauri/tauri.release.conf.json
+            ${{ matrix.bundles }}
             ${{ env.EXTRA_ARGS }}
 
       - name: 校验 macOS 签名与公证票据
