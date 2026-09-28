@@ -236,9 +236,25 @@ jobs:
           cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install Rust stable
+        if: matrix.runs_on[0] != 'self-hosted'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_targets }}
+
+      # 自托管机器上绝不跑 rustup 安装脚本：它会重写用户自己的 ~/.cargo/bin，
+      # 网络中断时曾把 rustup 本体删掉、只留下断链的 cargo，直接搞坏本机开发环境。
+      - name: Use existing Rust toolchain (self-hosted)
+        if: matrix.runs_on[0] == 'self-hosted'
+        shell: bash
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          if [ -z "${{ matrix.rust_targets }}" ]; then exit 0; fi
+          if [ -x "$HOME/.cargo/bin/rustup" ]; then
+            "$HOME/.cargo/bin/rustup" target add ${{ matrix.rust_targets }}
+          else
+            # toolchain 里已经带好目标时无需 rustup；缺了 rustup 只告警，构建会自己报缺 std。
+            echo "::warning::本机缺少 rustup，跳过 target add（目标 ${{ matrix.rust_targets }} 需已安装）"
+          fi
 
       - name: Install protobuf compiler
         uses: arduino/setup-protoc@v3
