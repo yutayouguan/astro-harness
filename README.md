@@ -394,11 +394,12 @@ target/release/bundle/nsis|appimage|deb|rpm/...     # Windows / Linux
 | Workflow | 触发 | 作用 |
 | --- | --- | --- |
 | `build-tauri` | PR（相关路径变更）/ 手动 | PR 只构建 Linux；手动触发构建 macOS arm64 + x86_64、Linux x64、Windows x64 并上传 Artifacts |
-| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-harness-releases`；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
+| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 直接发布到**本仓库的 Releases**；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
 
 - Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
-- 私有仓库的 macOS runner 按 10 倍、Windows 按 2 倍消耗 Actions 分钟额度，所以 PR 只跑 Linux，全平台矩阵留给手动触发与发布。
-- 发布需要 `ASTRO_RELEASE_TOKEN`（公开资产仓库写权限）、`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 三个 Secret；发布后 `verify-release` 会校验 `latest.json` 是否覆盖四个平台条目。
+- 公开仓库的 Actions 不消耗分钟额度；自托管 runner 也不消耗。PR 只跑 Linux 是为了减少等待，全平台矩阵留给手动触发与发布。
+- 发布只需要 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 两个 Secret，其余走仓库自带的 `GITHUB_TOKEN`；发布后 `verify-release` 会校验 `latest.json` 是否覆盖本次平台条目。
+- 开源协议：**MIT OR Apache-2.0** 双许可，见 `LICENSE` / `LICENSE-MIT` / `LICENSE-APACHE`。
 - Windows 目前只出 NSIS `setup.exe`；macOS 与 Windows 未做系统代码签名，首次打开按 Release 说明放行（macOS 右键「打开」或 `xattr -dr com.apple.quarantine`）。
 
 ## 运行形态
@@ -534,4 +535,4 @@ npm run lint:css                     # Stylelint
 
 ## 许可证
 
-私有项目，未声明开源许可。
+开源项目，采用 MIT OR Apache-2.0 双许可（见 `LICENSE`）。

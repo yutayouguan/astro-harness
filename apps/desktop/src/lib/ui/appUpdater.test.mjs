@@ -38,7 +38,10 @@ test("desktop updater pins a public key and only accepts HTTPS manifests", () =>
   assert.deepEqual(updaterConfig, { pubkey: publicKey.trim() });
   assert.match(command, /endpoint\.scheme\(\) != "https"/);
   assert.match(command, /option_env!\("ASTRO_UPDATE_ENDPOINT"\)/);
-  assert.match(command, /yutayouguan\/astro-harness-releases/);
+  assert.match(
+    command,
+    /yutayouguan\/astro-harness\/releases\/latest\/download\/latest\.json/,
+  );
   assert.match(publicKey, /^dW50cnVzdGVkIGNvbW1lbnQ6/);
 });
 
@@ -65,9 +68,11 @@ test("release workflow publishes signed updater assets without source", () => {
     workflow,
     /--config src-tauri\/tauri\.release\.conf\.json/,
   );
-  assert.match(workflow, /owner:\s*yutayouguan/);
-  assert.match(workflow, /repo:\s*astro-harness-releases/);
-  assert.match(workflow, /secrets\.ASTRO_RELEASE_TOKEN/);
+  // 发布到当前仓库：不带 owner/repo 覆盖（避免指向另一个仓库），
+  // 使用仓库自带的 GITHUB_TOKEN，因此需要 contents: write。
+  assert.doesNotMatch(workflow, /repo:\s*astro-harness/);
+  assert.match(workflow, /contents:\s*write/);
+  assert.match(workflow, /secrets\.GITHUB_TOKEN/);
   assert.match(workflow, /secrets\.TAURI_SIGNING_PRIVATE_KEY/);
   assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
   assert.match(workflow, /releases\/latest\/download\/latest\.json/);

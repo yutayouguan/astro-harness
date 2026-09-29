@@ -37,7 +37,7 @@ QA 包标识为 `ai.astro.onboarding.bundleqa`，正式应用配置为
   条目是否存在；没有读取私钥/密码，也没有验证密钥对匹配或实际签名产物。
 - 本机未设置本次检查的 Apple/Tauri 签名环境变量。这不等于 CI secrets 或其他钥匙串
   公证 profile 不存在；本次未读取或修改远端 secrets。
-- 当前代码和工作流指向 `yutayouguan/astro-harness-releases`。
+- 当前代码和工作流指向 `yutayouguan/astro-harness`。
   公开 GitHub API 的 latest-release 查询以及默认 `latest.json` URL 均返回 HTTP 404。
   另核对过历史使用的 `yutayouguan/astro-harness` latest-release，亦为 404。
   因此本次未取得公开更新候选；404 不足以区分无发布、私有资源或地址配置问题。

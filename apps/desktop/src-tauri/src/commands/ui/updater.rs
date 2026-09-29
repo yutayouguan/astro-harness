@@ -7,7 +7,7 @@ use url::Url;
 
 const UPDATE_ENDPOINT_ENV: &str = "ASTRO_UPDATE_ENDPOINT";
 const DEFAULT_UPDATE_ENDPOINT: &str =
-    "https://github.com/yutayouguan/astro-harness-releases/releases/latest/download/latest.json";
+    "https://github.com/yutayouguan/astro-harness/releases/latest/download/latest.json";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
