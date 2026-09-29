@@ -75,7 +75,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 | `crates/agent-memory` | `memory` | `MemoryManager` — MEMORY.md/USER.md 快照、dreaming 管道、待审批记忆队列、decision log、workspace bootstrap、权限审计。 |
 | `crates/agent-network-proxy` | `network-proxy` | 受管网络代理：HTTP CONNECT 策略、per-attempt 租约、网络审批流。 |
 | `crates/agent-sandbox` | `sandbox` | 沙箱权限控制：`PermissionProfile`（read-only/workspace-write/danger-full-access）、权限审计、网络策略。 |
-| `crates/agent-subagents` | `subagents` | Codex V2 Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
+| `crates/agent-subagents` | `subagents` | Agent Thread：`AgentControl`（根级共享控制器）、`AgentGraphStore`（subagents.db 图/邮箱/状态事件）、`AgentRegistry`（RAII 预留/配额）、`ActivityBus`（事件等待）、`.astro` 自定义 agent 配置。 |
 | `crates/agent-evolution` | `evolution` | 自进化/学习循环：改进提议、评判、信号分析、评估集、DSPy 集成。配套 Python 包 `evolution-dspy/`。 |
 | `crates/agent-cron` | `cron` | Cron job JSON 持久化、运行记录 DB（`cron_v1.db`）、ticker（每 30s，`current_thread` runtime）。 |
 | `crates/agent-workflow` | `workflow` | 可视化工作流引擎：29 种节点跨 6 类（Trigger/AI/Media/FlowControl/DataProcessing/Action），DAG 执行引擎、变量解析、运行 DB。 |
@@ -212,6 +212,7 @@ Tauri 2 桌面应用壳层，默认内嵌 gRPC backend（随机端口），通�
 19 种 Plugin bus 生命周期事件（Codex 对齐命名 + Astro 扩展）覆盖 Agent 执行全链路：`PreLlmCall`、`PostLlmCall`、`PreToolUse`、`PostToolUse`、`PermissionRequest`、`Stop`、`Interrupt`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`UserPromptSubmit`、`SubagentStart`、`SubagentStop`、`PreApiRequest`、`PostApiRequest`、`TransformTerminalOutput`、`TransformToolResult`、`TransformFinalLlmOutput`。事件名只接受 canonical 精确匹配。新增横切关注点（日志、审计、限流、隐私过滤）通过实现 Hook 而非修改主循环。
 
 **扩展新 Hook 的步骤**：
+
 1. 在 `agent-hooks/src/` 新增文件
 2. 实现 `Hook` trait，指定监听的 `HookEvent`
 3. 在 `register_builtin_hooks()` 中注册 — 主循环代码不变

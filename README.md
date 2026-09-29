@@ -394,10 +394,11 @@ target/release/bundle/nsis|appimage|deb|rpm/...     # Windows / Linux
 | Workflow | 触发 | 作用 |
 | --- | --- | --- |
 | `build-tauri` | PR（相关路径变更）/ 手动 | PR 只构建 Linux；手动触发构建 macOS arm64 + x86_64、Linux x64、Windows x64 并上传 Artifacts |
-| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 直接发布到**本仓库的 Releases**；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
+| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 直接发布到**本仓库的 Releases**；手动触发可用 `platforms=macos` 只发 Mac 版 |
 
 - Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
-- 公开仓库的 Actions 不消耗分钟额度；自托管 runner 也不消耗。PR 只跑 Linux 是为了减少等待，全平台矩阵留给手动触发与发布。
+- 公开仓库的 Actions 不消耗分钟额度，三个平台都跑 GitHub 托管 runner。PR 只跑 Linux 是为了减少等待，全平台矩阵留给手动触发与发布。
+- macOS 也可以用 Homebrew 安装：`brew install --cask yutayouguan/astro-harness/astro-harness`（tap 仓库 [homebrew-astro-harness](https://github.com/yutayouguan/homebrew-astro-harness)）。
 - 发布只需要 `TAURI_SIGNING_PRIVATE_KEY` 与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 两个 Secret，其余走仓库自带的 `GITHUB_TOKEN`；发布后 `verify-release` 会校验 `latest.json` 是否覆盖本次平台条目。
 - 开源协议：**MIT OR Apache-2.0** 双许可，见 `LICENSE` / `LICENSE-MIT` / `LICENSE-APACHE`。
 - Windows 目前只出 NSIS `setup.exe`；macOS 与 Windows 未做系统代码签名，首次打开按 Release 说明放行（macOS 右键「打开」或 `xattr -dr com.apple.quarantine`）。
