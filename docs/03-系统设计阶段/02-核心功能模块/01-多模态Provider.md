@@ -127,6 +127,21 @@ default_effort = "high"
 
 ## Provider Profile 表
 
+### 接入门槛：只接入支持 Responses API 的提供商
+
+Agent 对话与全部 Agent 能力只走 Responses 路径，因此**新装目录与“添加提供商”列表只提供
+支持 Responses API 的提供商**：OpenAI、DeepSeek、Azure OpenAI、OpenRouter、百炼、
+MiniMax，以及自定义 Provider（按 OpenAI 兼容处理）。
+
+不支持的提供商（Claude、Google、智谱、Ollama、NVIDIA、月之暗面、火山引擎、混元、
+MiniMax Anthropic 通道、Gemini 原生）不再进入目录，桌面端 `add_provider` 也会拒绝这些
+kind；历史配置里的条目保持原样，不删除、不重写，仍可用于图片、语音、嵌入等媒体能力。
+协议层实现（Chat Completions / Anthropic Messages / Gemini）因此保留，供历史配置使用；
+若某厂商后续支持 Responses，只需把它的 `supports_agent_responses` 置为 true 即可重新接入。
+
+判断依据是 [`ProviderProfile::supports_agent_responses`](../../../crates/agent-providers/src/profile.rs)，
+桌面端的 `supports_responses_toggle(kind)` 与 DTO 的 `supports_responses_api` 都取自它。
+
 `ProviderProfile` 静态表（`profile.rs::PROFILES`），每厂商一个条目：
 
 | 字段 | 说明 |

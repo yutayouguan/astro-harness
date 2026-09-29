@@ -149,21 +149,18 @@ type Props = {
   tone?: string;
 };
 
+/**
+ * 添加提供商只列支持 Responses API 的内置项：
+ * 不支持的（anthropic / google / zhipu / ollama / nvidia / moonshot / volcengine / hunyuan）
+ * 既不能用于 Agent 对话，也不再提供入口；自定义提供商按 OpenAI 兼容处理，保留。
+ */
 const ADD_KINDS: ProviderKindId[] = [
-  "anthropic",
   "openai",
-  "google",
   "deepseek",
   "azure",
-  "zhipu",
   "openrouter",
   "bailian",
-  "nvidia",
-  "moonshot",
-  "volcengine",
   "minimax",
-  "hunyuan",
-  "ollama",
   "custom",
 ];
 

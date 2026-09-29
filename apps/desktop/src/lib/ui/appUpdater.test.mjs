@@ -33,7 +33,9 @@ test("desktop updater pins a public key and only accepts HTTPS manifests", () =>
   assert.match(cargo, /tauri-plugin-updater\s*=\s*"2\.11\.0"/);
   assert.match(tauriLib, /tauri_plugin_updater::Builder::new\(\)/);
   assert.match(tauriLib, /include_str!\("\.\.\/updater\.pub"\)\.trim\(\)/);
-  assert.deepEqual(updaterConfig, { pubkey: "" });
+  // 配置里的公钥必须与 updater.pub 一致：创建更新产物时 CLI 会校验它，
+  // 空字符串会直接报 "Missing comment in public key"。
+  assert.deepEqual(updaterConfig, { pubkey: publicKey.trim() });
   assert.match(command, /endpoint\.scheme\(\) != "https"/);
   assert.match(command, /option_env!\("ASTRO_UPDATE_ENDPOINT"\)/);
   assert.match(command, /yutayouguan\/astro-agent-releases/);

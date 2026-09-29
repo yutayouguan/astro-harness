@@ -310,7 +310,14 @@ pub struct ProvidersState {
 }
 
 impl ProvidersState {
-    fn add_provider(&mut self, kind: ProviderKind) {
+    fn add_provider(&mut self, kind: ProviderKind) -> Result<(), String> {
+        // 不支持 Responses API 的提供商不再接入：UI 不给入口，命令层也拒绝。
+        if !supports_responses_toggle(kind) {
+            return Err(format!(
+                "{} 不支持 Responses API，未接入",
+                kind.display_name()
+            ));
+        }
         let mut provider = if let Some(index) = self
             .providers
             .iter()
@@ -334,6 +341,7 @@ impl ProvidersState {
         };
         provider.added = Some(true);
         self.providers.push(provider);
+        Ok(())
     }
 
     fn reorder_added(&mut self, ids: Vec<String>) -> Result<(), String> {
@@ -417,33 +425,21 @@ impl ProvidersState {
 
     pub fn ensure_builtin_kinds(&mut self) -> bool {
         let mut changed = false;
+        // 只接入支持 Responses API 的提供商：不支持的内置项不再进入目录。
+        // 既有配置里的历史条目保持原样，不会被删除。
         for kind in [
-            ProviderKind::Anthropic,
             ProviderKind::Openai,
-            ProviderKind::Google,
             ProviderKind::Deepseek,
             ProviderKind::Azure,
-            ProviderKind::Zhipu,
-            ProviderKind::Ollama,
             ProviderKind::Openrouter,
             ProviderKind::Bailian,
-            ProviderKind::Nvidia,
-            ProviderKind::Moonshot,
-            ProviderKind::Volcengine,
             ProviderKind::Minimax,
-            ProviderKind::Hunyuan,
         ] {
             if !self.providers.iter().any(|provider| provider.kind == kind) {
                 let mut provider = ProviderConfig::new(kind);
                 provider.enabled = matches!(
                     kind,
-                    ProviderKind::Anthropic
-                        | ProviderKind::Openai
-                        | ProviderKind::Google
-                        | ProviderKind::Deepseek
-                        | ProviderKind::Azure
-                        | ProviderKind::Zhipu
-                        | ProviderKind::Ollama
+                    ProviderKind::Openai | ProviderKind::Deepseek | ProviderKind::Azure
                 );
                 provider.added = Some(false);
                 self.providers.push(provider);
@@ -1045,6 +1041,8 @@ fn to_state_dto(state: &ProvidersState) -> ProvidersStateDto {
             .iter()
             .filter(|provider| !provider.is_added())
             .map(to_dto)
+            // 目录里不再暴露不支持 Responses API 的提供商（历史配置仍保留在 providers 里）。
+            .filter(|dto| dto.supports_responses_api)
             .collect(),
         active_provider_id: state.active_provider_id.clone().filter(|id| {
             state
@@ -1121,7 +1119,7 @@ pub fn list_providers() -> Result<Vec<ProviderConfigDto>, String> {
 pub fn add_provider(kind: String) -> Result<ProvidersStateDto, String> {
     let kind = ProviderKind::from_str(&kind).ok_or_else(|| format!("未知提供商类型: {kind}"))?;
     with_state_mut(|s| {
-        s.add_provider(kind);
+        s.add_provider(kind)?;
         Ok(to_state_dto(s))
     })
 }
@@ -2407,15 +2405,42 @@ mod tests {
     #[test]
     fn fresh_catalog_is_not_user_configuration() {
         let state = ProvidersState::with_defaults();
-        assert_eq!(state.providers.len(), 14);
+        // 目录只保留支持 Responses API 的提供商。
+        assert_eq!(state.providers.len(), 6);
         let dto = to_state_dto(&state);
         assert!(dto.providers.is_empty());
-        assert_eq!(dto.provider_templates.len(), 14);
+        assert_eq!(dto.provider_templates.len(), 6);
+        assert!(dto
+            .provider_templates
+            .iter()
+            .all(|p| p.supports_responses_api));
         assert!(dto.active_provider_id.is_none());
         assert!(dto
             .provider_templates
             .iter()
             .all(|p| p.config_source == "builtin"));
+    }
+
+    #[test]
+    fn providers_without_responses_api_are_not_available() {
+        let mut state = ProvidersState::with_defaults();
+        for kind in [
+            ProviderKind::Anthropic,
+            ProviderKind::Google,
+            ProviderKind::Zhipu,
+            ProviderKind::Ollama,
+            ProviderKind::Nvidia,
+            ProviderKind::Moonshot,
+            ProviderKind::Volcengine,
+            ProviderKind::Hunyuan,
+        ] {
+            let error = state.add_provider(kind).unwrap_err();
+            assert!(error.contains("不支持 Responses API"), "{error}");
+        }
+        assert!(state.providers.iter().all(|p| !p.is_added()));
+        // 自定义提供商按 OpenAI 兼容处理，仍然可以接入。
+        state.add_provider(ProviderKind::Custom).unwrap();
+        assert_eq!(to_state_dto(&state).providers.len(), 1);
     }
 
     #[test]
@@ -2428,8 +2453,8 @@ mod tests {
             .unwrap()
             .id
             .clone();
-        state.add_provider(ProviderKind::Openai);
-        assert_eq!(state.providers.len(), 14);
+        state.add_provider(ProviderKind::Openai).unwrap();
+        assert_eq!(state.providers.len(), 6);
         assert_eq!(state.providers.last().unwrap().id, id);
         let mut restored: ProvidersState =
             serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
@@ -2438,7 +2463,7 @@ mod tests {
         assert_eq!(dto.providers.len(), 1);
         assert_eq!(dto.providers[0].id, id);
         assert_eq!(dto.providers[0].config_source, "user");
-        restored.add_provider(ProviderKind::Openai);
+        restored.add_provider(ProviderKind::Openai).unwrap();
         assert_eq!(to_state_dto(&restored).providers.len(), 2);
         assert_ne!(restored.providers.last().unwrap().id, id);
     }
@@ -2455,7 +2480,8 @@ mod tests {
         duplicate.added = None;
         state.providers.push(duplicate);
         assert!(state.migrate_added_flags(|p| p.id == keyed));
-        assert_eq!(state.providers.len(), 15);
+        // 目录 6 条 + 手工加入的重复 OpenAI 行。
+        assert_eq!(state.providers.len(), 7);
         assert_eq!(state.providers.iter().filter(|p| p.is_added()).count(), 3);
         // A later environment key must not silently add every template again.
         assert!(!state.migrate_added_flags(|_| true));
@@ -2486,7 +2512,7 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
         restored.ensure_builtin_kinds();
         restored.migrate_added_flags(|_| true);
-        assert_eq!(restored.providers.len(), 14);
+        assert_eq!(restored.providers.len(), 6);
         assert!(to_state_dto(&restored).providers.is_empty());
         assert!(restored.active_provider_id.is_none());
     }
@@ -2494,13 +2520,11 @@ mod tests {
     #[test]
     fn legacy_selected_local_provider_is_retained_without_credentials() {
         let mut state = ProvidersState::with_defaults();
-        let local = state
-            .providers
-            .iter_mut()
-            .find(|p| p.kind == ProviderKind::Ollama)
-            .unwrap();
+        // 旧版本配置里的本地提供商（不再接入新目录）必须原样保留。
+        let mut local = ProviderConfig::new(ProviderKind::Ollama);
         local.added = None;
         let id = local.id.clone();
+        state.providers.push(local);
         state.active_provider_id = Some(id.clone());
         state.migrate_added_flags(|_| false);
         assert_eq!(to_state_dto(&state).providers[0].id, id);
@@ -2524,15 +2548,25 @@ mod tests {
     }
 
     #[test]
-    fn ensure_builtin_adds_six_disabled() {
+    fn ensure_builtin_seeds_responses_capable_catalog() {
         let mut s = ProvidersState::default();
         assert!(s.ensure_builtin_kinds());
+        assert_eq!(s.providers.len(), 6);
+        for kind in [
+            ProviderKind::Openai,
+            ProviderKind::Deepseek,
+            ProviderKind::Azure,
+        ] {
+            let p = s
+                .providers
+                .iter()
+                .find(|p| p.kind == kind)
+                .expect("missing kind");
+            assert!(p.enabled, "{kind:?} should default enabled");
+        }
         for kind in [
             ProviderKind::Openrouter,
             ProviderKind::Bailian,
-            ProviderKind::Nvidia,
-            ProviderKind::Moonshot,
-            ProviderKind::Volcengine,
             ProviderKind::Minimax,
         ] {
             let p = s
@@ -2540,20 +2574,17 @@ mod tests {
                 .iter()
                 .find(|p| p.kind == kind)
                 .expect("missing kind");
-            assert!(!p.enabled, "{:?} should be disabled", kind);
+            assert!(!p.enabled, "{kind:?} should be disabled");
         }
         assert!(!s.ensure_builtin_kinds()); // idempotent
     }
 
     #[test]
-    fn with_defaults_six_new_are_disabled() {
+    fn with_defaults_only_optional_catalog_kinds_are_disabled() {
         let s = ProvidersState::with_defaults();
         for kind in [
             ProviderKind::Openrouter,
             ProviderKind::Bailian,
-            ProviderKind::Nvidia,
-            ProviderKind::Moonshot,
-            ProviderKind::Volcengine,
             ProviderKind::Minimax,
         ] {
             let p = s
