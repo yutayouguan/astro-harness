@@ -12,7 +12,7 @@ Provider 注册信息、工具/Skill 开关和 Agent 默认设置统一在全局
 
 ## Project Overview
 
-Astro Agent（阿童木）— 本地 AI 桌面工作站。技术栈：**Rust workspace + Tauri 2 + React/Vite**。
+Astro Harness — 本地 AI 桌面工作站。技术栈：**Rust workspace + Tauri 2 + React/Vite**。
 
 ## Build & Development Commands
 
@@ -121,7 +121,7 @@ cd apps/desktop && npm run tauri:build:universal    # universal-apple-darwin
 
 | 路径 | package name | 职责 |
 |---|---|---|
-| `apps/desktop/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。32 个 Tauri command 模块。 |
+| `apps/desktop/src-tauri` | `astro-harness` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。32 个 Tauri command 模块。 |
 
 前端 React 应用在 `apps/desktop/`，使用 CodeMirror（多语言）、`@xyflow/react`（流程图编辑器，用于 workflow）、`react-markdown`、`lucide-react`。
 

@@ -421,7 +421,7 @@ async fn create_webrtc_call(config: &RealtimeConnectionConfig, sdp: &str) -> Res
     let response = reqwest::Client::new()
         .post(endpoint.clone())
         .bearer_auth(&config.api_key)
-        .header(USER_AGENT, "astro-agent/realtime")
+        .header(USER_AGENT, "astro-harness/realtime")
         .multipart(form)
         .send()
         .await
@@ -472,7 +472,7 @@ fn azure_client_secret_request(
     client
         .post(endpoint)
         .header("api-key", config.api_key.trim())
-        .header(USER_AGENT, "astro-agent/realtime")
+        .header(USER_AGENT, "astro-harness/realtime")
         .json(&serde_json::json!({
             "session": session_config(&config.model, &config.params)
         }))
@@ -487,7 +487,7 @@ fn azure_sdp_request(
     client
         .post(endpoint)
         .bearer_auth(ephemeral_key)
-        .header(USER_AGENT, "astro-agent/realtime")
+        .header(USER_AGENT, "astro-harness/realtime")
         .header(CONTENT_TYPE, "application/sdp")
         .body(sdp.to_string())
 }
@@ -780,9 +780,10 @@ fn websocket_request(
             );
         }
     }
-    request
-        .headers_mut()
-        .insert(USER_AGENT, HeaderValue::from_static("astro-agent/realtime"));
+    request.headers_mut().insert(
+        USER_AGENT,
+        HeaderValue::from_static("astro-harness/realtime"),
+    );
     Ok(request)
 }
 

@@ -49,7 +49,7 @@
 
 ## 2. 客户端侧实现的方法列表
 
-Astro Agent 作为 MCP 客户端时，主动发起以下请求：
+Astro Harness 作为 MCP 客户端时，主动发起以下请求：
 
 | 方法 | 说明 | 关键参数 |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ Astro Agent 作为 MCP 客户端时，主动发起以下请求：
 
 ## 3. 服务端侧目标工具列表（未实现）
 
-Astro Agent 作为 MCP Server 时，向宿主（如 Claude Desktop）注册以下工具：
+Astro Harness 作为 MCP Server 时，向宿主（如 Claude Desktop）注册以下工具：
 
 ### 3.1 记忆管理工具
 

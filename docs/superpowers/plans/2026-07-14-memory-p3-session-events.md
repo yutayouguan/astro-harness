@@ -677,7 +677,7 @@ useEffect(() => {
 
 记忆 nav 按钮旁：`memoryPendingCount > 0` 时显示数字 badge（CSS：`nav-badge`）。
 
-- [x] **Step 4: 手测 / `cargo check -p astro-agent`**
+- [x] **Step 4: 手测 / `cargo check -p astro-harness`**
 
 - [x] **Step 5: Commit**
 
@@ -854,7 +854,7 @@ EOF
 ```bash
 cargo test -p memory --lib 2>&1 | tail -15
 cargo test -p backend session_events:: 2>&1 | tail -15
-cargo check -p astro-agent 2>&1 | tail -15
+cargo check -p astro-harness 2>&1 | tail -15
 rg -i hermes frontend memory agent backend proto --glob '!docs/**' || true
 ```
 

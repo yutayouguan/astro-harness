@@ -125,5 +125,5 @@ Desktop 注册 session_event listener
 - OpenAI Codex Subagents：<https://learn.chatgpt.com/docs/agent-configuration/subagents>
 - Codex 对照基线：`e24190caa9..a0dcfe2ada`
 - Codex 根服务层级提交：`dc2ccc6843`（Make subagents follow the root service tier）
-- Astro Agent Tree 实现：`crates/agent-subagents/src/control.rs`、
+- Astro Harness Tree 实现：`crates/agent-subagents/src/control.rs`、
   `apps/desktop/src/hooks/chat/subagentTree.ts`

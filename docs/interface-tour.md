@@ -27,7 +27,7 @@ outcome = "completed" # 或 skipped
 ## 验证
 
 ```sh
-cargo test -p astro-agent --lib commands::ui::interface_tour::tests
+cargo test -p astro-harness --lib commands::ui::interface_tour::tests
 cd apps/desktop
 node --test src/lib/ui/interfaceTour.test.ts
 npx tsc --noEmit

@@ -14,13 +14,13 @@
 #   - 独立 git 历史（不含源码提交），main 分支，force-push 覆盖
 set -euo pipefail
 
-PUBLIC_REPO="${PUBLIC_REPO:-yutayouguan/astro-agent-docs}"
+PUBLIC_REPO="${PUBLIC_REPO:-yutayouguan/astro-harness-docs}"
 PUBLISH_INTERNAL_DOCS="${PUBLISH_INTERNAL_DOCS:-0}"
 INTERNAL_DOC_DIRS=(docs/superpowers/ docs/codex/ docs/plans/)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOME_DIR="${HOME:-/Users/$(whoami)}"
-BANNER='> **说明**：本仓库只发布 Astro Agent 的**文档与界面截图**，源代码不在此仓库公开。'
-SOURCE_NOTE='> 下面的构建与运行命令需要 Astro Agent 的完整源码，本仓库只包含文档。'
+BANNER='> **说明**：本仓库只发布 Astro Harness 的**文档与界面截图**，源代码不在此仓库公开。'
+SOURCE_NOTE='> 下面的构建与运行命令需要 Astro Harness 的完整源码，本仓库只包含文档。'
 
 WORK="$(mktemp -d)"
 STAGE="$WORK/site"
@@ -109,11 +109,11 @@ git init -q -b main
 git add -A
 git -c user.name="$(git -C "$REPO_ROOT" config user.name)" \
     -c user.email="$(git -C "$REPO_ROOT" config user.email)" \
-    commit -q -m "docs: 发布 Astro Agent 文档快照（$(date +%Y-%m-%d)）"
+    commit -q -m "docs: 发布 Astro Harness 文档快照（$(date +%Y-%m-%d)）"
 
 if ! gh repo view "$PUBLIC_REPO" >/dev/null 2>&1; then
   echo "==> 创建公开仓库 $PUBLIC_REPO"
-  gh repo create "$PUBLIC_REPO" --public --description "Astro Agent 文档与界面说明（源码不公开）"
+  gh repo create "$PUBLIC_REPO" --public --description "Astro Harness 文档与界面说明（源码不公开）"
 fi
 
 git remote add origin "https://github.com/$PUBLIC_REPO.git"

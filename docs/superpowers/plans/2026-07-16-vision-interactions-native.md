@@ -780,7 +780,7 @@ git commit -m "docs(i18n): update vision tool description for Interactions API"
 ```bash
 cargo test -p providers vision_tests openai_vision_body default_vision -- --nocapture
 cargo test -p tools --test tools_test -- --nocapture
-cargo check -p tools -p providers -p astro-agent
+cargo check -p tools -p providers -p astro-harness
 ```
 
 Expected: 全部 PASS / check OK

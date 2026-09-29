@@ -1,4 +1,4 @@
-//! Astro Agent 桌面二进制入口。
+//! Astro Harness 桌面二进制入口。
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

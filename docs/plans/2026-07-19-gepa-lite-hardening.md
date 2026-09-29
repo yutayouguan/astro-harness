@@ -157,7 +157,7 @@ Run:
 ```bash
 cargo test -p evolution search_budget -- --nocapture
 cargo test -p memory evolution_search -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；搜索预算不会超出配置上限。
@@ -243,7 +243,7 @@ Run:
 ```bash
 cargo test -p evolution search -- --nocapture
 cargo test -p evolution proposal -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；无效 patch 不再进入模型评分。
@@ -351,7 +351,7 @@ Run:
 ```bash
 cargo test -p evolution search -- --nocapture
 cargo test -p memory evolution_search -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；`population_size=1` 时行为与旧实现兼容。
@@ -527,7 +527,7 @@ Run:
 ```bash
 cargo test -p evolution evalset -- --nocapture
 cargo test -p evolution history -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；重复运行划分结果稳定。
@@ -607,7 +607,7 @@ Run:
 ```bash
 cargo test -p evolution history -- --nocapture
 cargo test -p evolution --lib
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；旧 history 数据兼容。
@@ -772,7 +772,7 @@ pub enum CurateSuggestion {
 ```bash
 cargo test -p skills usage -- --nocapture
 cargo test -p memory learning -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；旧 `skills curate` 仍返回可读 Markdown。
@@ -857,7 +857,7 @@ pub fn find_overlap_clusters(
 cargo test -p skills --lib
 cargo test -p evolution curator -- --nocapture
 cargo test -p evolution history -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS；文档说明 Curator 与 search/reflect/dspy 并列。
@@ -902,7 +902,7 @@ cargo fmt --check
 cargo clippy -p evolution -p memory -- -D warnings
 cargo test -p evolution --lib
 cargo test -p memory --lib
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 完成 Phase 5（Task 8–9）后额外满足：

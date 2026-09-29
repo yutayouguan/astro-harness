@@ -172,11 +172,11 @@ export const settingsMessages = {
 
     "prefs.app.aboutTitle": "关于Astro",
     "prefs.app.about":
-      "Astro（阿童木）：集对话、记忆、工具和 Skills 于一体的本地 AI 工作站。",
+      "Astro Harness：集对话、记忆、工具与 Skills 的本地 AI 工作站。",
 
     "prefs.system.title": "系统",
     "prefs.system.autostart": "开机自启动",
-    "prefs.system.autostartDesc": "登录时自动启动 Astro Agent",
+    "prefs.system.autostartDesc": "登录时自动启动 Astro Harness",
 
     "prefs.lang.title": "界面语言",
     "prefs.lang.zh": "中文",
@@ -551,7 +551,7 @@ export const settingsMessages = {
     "prefs.system.title": "System",
     "prefs.system.autostart": "Launch at login",
     "prefs.system.autostartDesc":
-      "Automatically start Astro Agent when you log in",
+      "Automatically start Astro Harness when you log in",
 
     "prefs.lang.title": "Language",
     "prefs.lang.zh": "中文",

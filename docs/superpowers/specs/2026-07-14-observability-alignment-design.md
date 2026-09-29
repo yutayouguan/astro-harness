@@ -26,7 +26,7 @@ Astro 已具备参考架构同级的 **Agent 运行时** 可观测骨架：
 缺口（相对运维痛点）主要是：
 
 1. **回合级 ID 缺失**：`session_id` 已有，但同一会话多轮无法在日志/用量行上稳定关联  
-2. **日志未分层**：桌面端多为单一 `astro-agent` / `backend` 文件，无 `errors` 专用面  
+2. **日志未分层**：桌面端多为单一 `astro-harness` / `backend` 文件，无 `errors` 专用面  
 3. **无应用内按 session/turn 过滤日志**：排查依赖裸读文件或 `RUST_LOG`
 
 ## 目标
@@ -146,7 +146,7 @@ Astro 已具备参考架构同级的 **Agent 运行时** 可观测骨架：
 
 说明：
 
-- 桌面入口今日 `init_logging("astro-agent")`、backend `init_logging("backend")`：**S1 归一为 agent 语义文件名** `agent.log`（可保留 component 标签字段；避免再散落多套命名）  
+- 桌面入口今日 `init_logging("astro-harness")`、backend `init_logging("backend")`：**S1 归一为 agent 语义文件名** `agent.log`（可保留 component 标签字段；避免再散落多套命名）  
 - 若未来独立 gateway 进程，再增 `gateway.log`（**S1 不做**）  
 - 继续按日滚动（`tracing_appender::rolling::daily`）；查询需覆盖当日及必要的滚动后缀策略（至少读「当前活动文件」；可选同前缀最近一份）
 

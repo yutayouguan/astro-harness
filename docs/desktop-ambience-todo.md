@@ -52,7 +52,7 @@
 
 新增验证：6项随机选择/收藏单元测试，原生过期/串宠请求拒绝测试，11项组件交互测试
 （包括重载保留收藏和锁定、随机范围、禁用提示、锁定后手动选择和配色可用）。
-本轮定向前端单元测试共31项、原生氛围事务5项全部通过；TypeScript、前端生产构建（含CSS层顺序校验）及cargo check -p astro-agent通过。
+本轮定向前端单元测试共31项、原生氛围事务5项全部通过；TypeScript、前端生产构建（含CSS层顺序校验）及cargo check -p astro-harness通过。
 未调用图片模型，未新增图片素材，不自动启动定时轮播。
 
 | Before | After | Why |
@@ -78,7 +78,7 @@
 | 仅重置活动样式来换颜色 | 保留背景/图标/其余token的活动变体 | 不让配色影响其他外观设置 |
 
 定向前端测试25项、原生场景测试16项、氛围事务测试4项、另存场景测试1项通过。
-组件交互与窄屏亮暗截图测试8项通过；TypeScript、前端构建、`cargo check -p astro-agent`和`cargo build -p astro-agent`通过。
+组件交互与窄屏亮暗截图测试8项通过；TypeScript、前端构建、`cargo check -p astro-harness`和`cargo build -p astro-harness`通过。
 全量前端测试932/934通过，两项现存侧栏断言失败：
 `sidebarInformationArchitecture.test.mjs`的rail preview条件、`windowChromeSafeArea.test.mjs`的sidebar occupancy属性。
 它们在本轮修改前的App快照中也不匹配，本轮不修改侧栏。

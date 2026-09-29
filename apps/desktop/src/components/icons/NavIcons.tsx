@@ -392,7 +392,7 @@ export function IconMonitor(props: IconProps) {
   );
 }
 
-/** 关于 Astro / 阿童木 — 核可填；轨道始终只描边 */
+/** 关于 Astro / Astro Harness — 核可填；轨道始终只描边 */
 export function IconAtom(props: IconProps) {
   return (
     <NavIconBase {...props}>

@@ -6,7 +6,7 @@
 
 **Architecture:** 在 `providers::media_http` 增加 `openai_vision_completions` helper；`vision` 工具读取本地/远程图，Google→OpenAI 凭证与 `tts` 相同；`vision_model` 沿现有 `image_gen_*` 透传链进入 `ImageGenCreds`。
 
-**Tech Stack:** Rust (`providers`/`tools`/`proto`/`backend`/`astro-agent`)、Tauri `ProvidersPanel`、i18n。
+**Tech Stack:** Rust (`providers`/`tools`/`proto`/`backend`/`astro-harness`)、Tauri `ProvidersPanel`、i18n。
 
 **参考:** `docs/superpowers/specs/2026-07-15-vision-openai-compat-design.md`；[Gemini OpenAI 图片理解](https://ai.google.dev/gemini-api/docs/openai?hl=zh-cn#javascript_4)
 
@@ -123,7 +123,7 @@ vision_model: resolve_media_model(
 ),
 ```
 
-- [x] **Step 3: `cargo check -p tools -p backend -p astro-agent`**  
+- [x] **Step 3: `cargo check -p tools -p backend -p astro-harness`**  
 Expected: 无错误
 
 - [x] **Step 4: Commit**

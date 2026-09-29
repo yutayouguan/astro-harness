@@ -1,7 +1,7 @@
 # 更新日志
 
 本项目从 0.1.0 起以闭源二进制形式分发，源码仓库保持私有；安装包、更新签名与
-`latest.json` 发布在公开资产仓库 `yutayouguan/astro-agent-releases`。
+`latest.json` 发布在公开资产仓库 `yutayouguan/astro-harness-releases`。
 
 ## [Unreleased]
 
@@ -20,5 +20,5 @@
 - 发布工作流增加发布前置检查（版本号一致性、tag 对齐、密钥完整性）与发布后校验
   （`latest.json` 必须覆盖全部四个平台条目）。
 
-[Unreleased]: https://github.com/yutayouguan/astro-agent-releases/releases
-[0.1.0]: https://github.com/yutayouguan/astro-agent-releases/releases/tag/v0.1.0
+[Unreleased]: https://github.com/yutayouguan/astro-harness-releases/releases
+[0.1.0]: https://github.com/yutayouguan/astro-harness-releases/releases/tag/v0.1.0

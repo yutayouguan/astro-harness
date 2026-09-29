@@ -6,7 +6,7 @@
 
 **Architecture:** `AgentLoop` / `ToolContext` 并列持有 `MemoryManager` + `SessionStore`；`dispatch_memory_tool` 只处理 `memory`；`session::dispatch_session_tool` 处理 `session_search`；Tauri/backend 纯会话路径直接 `SessionStore::open_sessions_dir`。
 
-**Tech Stack:** Rust workspace、`session` / `memory` / `agent` / `tools` / `astro-agent` / `backend`、rusqlite、现有集成测试。
+**Tech Stack:** Rust workspace、`session` / `memory` / `agent` / `tools` / `astro-harness` / `backend`、rusqlite、现有集成测试。
 
 **Spec:** `docs/superpowers/specs/2026-07-16-memory-manager-session-split-design.md`
 
@@ -519,7 +519,7 @@ fn open_sessions() -> Result<session::SessionStore, String> {
 - [x] **Step 4: Verify**
 
 ```bash
-cargo check -p backend -p astro-agent
+cargo check -p backend -p astro-harness
 ```
 
 Expected: Finished
@@ -555,7 +555,7 @@ Expected: `format_recalled_context` 仅出现在 `session/` 与调用方 `sessio
 
 ```bash
 cargo test -p session -p memory -p agent -p tools
-cargo check -p backend -p astro-agent
+cargo check -p backend -p astro-harness
 ```
 
 Expected: 全部通过

@@ -252,7 +252,7 @@ EOF
 ```bash
 cargo test -p memory --test usage_db_test
 cargo test -p agent --test streaming_test
-cargo check -p agent -p backend -p astro-agent
+cargo check -p agent -p backend -p astro-harness
 cd frontend && ./node_modules/.bin/tsc -b --pretty false
 ```
 

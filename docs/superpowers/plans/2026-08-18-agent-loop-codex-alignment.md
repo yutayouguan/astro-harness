@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** 将 Astro Agent Loop 落成 `AstroThread::submit(Op) → bounded submission queue → Session::submission_loop → run_turn → EventMsg → rollout → app-server/TUI/exec` 的单一事件事实链。
+**Goal:** 将 Astro Harness Loop 落成 `AstroThread::submit(Op) → bounded submission queue → Session::submission_loop → run_turn → EventMsg → rollout → app-server/TUI/exec` 的单一事件事实链。
 
 **Architecture:** 新增独立的 `agent-protocol` 与 `agent-rollout` crate，分别承载 Core 领域协议和 append-only JSONL 历史。Core 只暴露一个 `AstroThread` 顺序事件 receiver；Server 以单 listener 重建活动 Turn，并通过每连接 128 容量的队列分发。恢复使用 rollout + active snapshot，旧 Chat/SessionEvents 仅在迁移期作为新协议适配器。
 
@@ -3470,7 +3470,7 @@ mod tests {
 
 - [x] **Step 2: Run tests and verify failure**
 
-Run `cargo test -p astro-agent thread_events::tests`.
+Run `cargo test -p astro-harness thread_events::tests`.
 
 Expected: FAIL because the bridge does not exist.
 
@@ -3539,8 +3539,8 @@ Do not spawn a second gRPC stream per chat. `chat_control(cancel)` becomes `Op::
 Run:
 
 ```bash
-cargo test -p astro-agent thread_events::tests
-cargo check -p astro-agent --all-targets
+cargo test -p astro-harness thread_events::tests
+cargo check -p astro-harness --all-targets
 cd apps/desktop && npx tsc --noEmit
 ```
 
@@ -3691,7 +3691,7 @@ Run:
 cargo test -p server --test thread_events_test
 cargo test -p agent --all-targets
 cargo check -p server --all-targets
-cargo check -p astro-agent --all-targets
+cargo check -p astro-harness --all-targets
 ```
 
 Expected: PASS and `rg -n "SessionEventHub|MultiTurnStreamItem|pub struct EventBus|after_event_id|stream_id" crates/agent-core crates/agent-server apps/desktop/src-tauri` returns no runtime implementation hits.

@@ -1,4 +1,4 @@
-# Astro Agent 学习闭环
+# Astro Harness 学习闭环
 
 Astro 将「可复用工作流」固化为 **Skills（程序性记忆）**，将「长期偏好/事实」写入 **Memory**，并在对话中用 **nudge** 提醒 Agent 何时沉淀经验。完整学习闭环分三层：
 

@@ -20,7 +20,7 @@
 - 前端全量 905 项：903 通过；2 项既有失败位于 sidebarInformationArchitecture / windowChromeSafeArea，不属于本改动。
 - 隔离 Storybook/Playwright 明暗主题、窄布局、浏览不应用、新增场景、菜单 Escape 测试 3 项通过；截图位于 apps/desktop/test-results/pet-manager-*.png。这些不是原生窗口验收。
 - QA 原生应用构建通过；CUA 报告 Mac 锁屏，原生焦点/点击/场景应用验收待解锁。
-- 正式 Astro Agent.app 已重新构建，未绑定 QA 数据根。提交前另从暂存区快照检查类型，避免依赖其他任务尚未提交的连续眨眼实现；工作区保留该实现及迁移后的预览接线。
+- 正式 Astro Harness.app 已重新构建，未绑定 QA 数据根。提交前另从暂存区快照检查类型，避免依赖其他任务尚未提交的连续眨眼实现；工作区保留该实现及迁移后的预览接线。
 - 布丁待完成：已保存形象提示词，但三次已授权 Azure gpt-image-2 CLI 尝试均在响应前断连，无图片返回。认证 GET /models 返回 HTTP 200，暂不归因为密钥错误；未加入假素材或拿奶糖替代布丁。详情在 output/imagegen/pudding-20260910/base-generation-notes.md。
 
 ## 界面审查

@@ -1,6 +1,6 @@
 # proto
 
-Protobuf / tonic gRPC 服务契约 -- Astro Agent 桌面壳与 backend 之间的唯一通信边界。
+Protobuf / tonic gRPC 服务契约 -- Astro Harness 桌面壳与 backend 之间的唯一通信边界。
 
 ## 核心职责
 

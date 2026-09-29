@@ -427,8 +427,8 @@ async fn fetch_and_store() -> Result<usize, String> {
         .map_err(|e| e.to_string())?;
     let resp = client
         .get(OPENROUTER_MODELS_URL)
-        .header("HTTP-Referer", "https://github.com/astro-agent")
-        .header("X-Title", "Astro Agent")
+        .header("HTTP-Referer", "https://github.com/astro-harness")
+        .header("X-Title", "Astro Harness")
         .send()
         .await
         .map_err(|e| format!("下载 OpenRouter 模型表失败: {e}"))?;

@@ -4,7 +4,7 @@
 
 ## 概述
 
-Astro Agent 使用 GitHub Actions 实现两条独立流水线：**PR 验证流水线**（每次 Pull Request 触发）和**发布流水线**（tag push 触发）。Eval 质量门控嵌入两条流水线，确保每次发布都满足质量基准。
+Astro Harness 使用 GitHub Actions 实现两条独立流水线：**PR 验证流水线**（每次 Pull Request 触发）和**发布流水线**（tag push 触发）。Eval 质量门控嵌入两条流水线，确保每次发布都满足质量基准。
 
 ---
 
@@ -277,7 +277,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Astro Agent ${{ github.ref_name }}'
+          releaseName: 'Astro Harness ${{ github.ref_name }}'
           releaseBody: |
             查看 [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解本版本变更。
           releaseDraft: false
@@ -287,7 +287,7 @@ jobs:
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: astro-agent-${{ matrix.artifact_suffix }}
+          name: astro-harness-${{ matrix.artifact_suffix }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/
 

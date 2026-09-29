@@ -190,7 +190,7 @@ export const OnboardingBrandMotion = memo(function OnboardingBrandMotion({
           animate={wordmarkBounds}
           transition={transition}
         >
-          Astro Agent
+          Astro Harness
         </motion.span>
       )}
     </>,

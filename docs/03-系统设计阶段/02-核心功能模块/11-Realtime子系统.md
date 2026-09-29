@@ -203,7 +203,7 @@ Astro 当前生产路径由 WebView `getUserMedia` / WebRTC 或 PCM WebSocket �
 - `agent-protocol` / `agent-rollout`：typed event serde、durable policy 和 history 重建。
 - 多 session：旧 transcript →旧 closed →新 started 的顺序，以及 rollout 跨 session 边界原样恢复。
 - Desktop：WebRTC 默认路径、`oai-events`、SDP answer、ExistingCall 不启动本地录音。
-- 组合检查：`agent` + `server` + `astro-agent`，并对共享工作区中的非 Realtime
+- 组合检查：`agent` + `server` + `astro-harness`，并对共享工作区中的非 Realtime
   迁移失败单独归因。
 
 ## 实现索引

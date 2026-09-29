@@ -43,7 +43,7 @@ my-code-assistant.agent (ZIP)
 
 ```json
 {
-  "$schema": "https://releases.astro-agent.io/schemas/agent-manifest-v1.json",
+  "$schema": "https://releases.astro-harness.io/schemas/agent-manifest-v1.json",
   "name": "code-assistant",
   "version": "1.2.0",
   "description": "全功能代码审查与测试生成助手",
@@ -344,7 +344,7 @@ version = "1.2.0"
 description = "代码审查、测试生成、重构建议全能助手"
 category = "development"
 tags = ["code", "testing", "refactor"]
-download_url = "https://releases.astro-agent.io/agents/code-assistant-1.2.0.agent"
+download_url = "https://releases.astro-harness.io/agents/code-assistant-1.2.0.agent"
 sha256 = "a3f8b2c1..."
 installs = 12500
 rating = 4.8
@@ -355,7 +355,7 @@ version = "0.8.0"
 description = "学术研究助手：文献检索、摘要、引用管理"
 category = "research"
 tags = ["research", "academic", "writing"]
-download_url = "https://releases.astro-agent.io/agents/research-assistant-0.8.0.agent"
+download_url = "https://releases.astro-harness.io/agents/research-assistant-0.8.0.agent"
 sha256 = "d9e7f3a2..."
 installs = 8300
 rating = 4.6
@@ -366,7 +366,7 @@ version = "1.0.0"
 description = "写作助手：文章润色、结构优化、多语言翻译"
 category = "writing"
 tags = ["writing", "editing", "translation"]
-download_url = "https://releases.astro-agent.io/agents/writing-assistant-1.0.0.agent"
+download_url = "https://releases.astro-harness.io/agents/writing-assistant-1.0.0.agent"
 sha256 = "b1c4e9f7..."
 installs = 15200
 rating = 4.9
@@ -377,7 +377,7 @@ version = "0.5.0"
 description = "数据分析师：CSV/Excel 处理、可视化、统计分析"
 category = "data"
 tags = ["data", "analysis", "visualization"]
-download_url = "https://releases.astro-agent.io/agents/data-analyst-0.5.0.agent"
+download_url = "https://releases.astro-harness.io/agents/data-analyst-0.5.0.agent"
 sha256 = "f2a8d3b6..."
 installs = 6100
 rating = 4.5
@@ -443,7 +443,7 @@ pub async fn install_agent_package(
 pub async fn list_marketplace(
     category: Option<String>,
 ) -> Result<Vec<CatalogEntry>, String> {
-    let catalog_url = "https://releases.astro-agent.io/catalog.toml";
+    let catalog_url = "https://releases.astro-harness.io/catalog.toml";
     let content = reqwest::get(catalog_url)
         .await
         .map_err(|e| e.to_string())?

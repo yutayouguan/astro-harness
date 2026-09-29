@@ -93,7 +93,7 @@ tauri/backend 会话 → SessionStore；精炼记忆 → MemoryManager
 
 - 迁移 `memory` 内依赖会话 API 的单测（如 `memory_manager_session_test`）到 `session` 或改为只测记忆面
 - `cargo test -p session -p memory -p agent -p tools`
-- `cargo check -p backend -p astro-agent`
+- `cargo check -p backend -p astro-harness`
 - 验收清单：
   - [ ] `MemoryManager` 无 `session_store` 字段与会话方法
   - [ ] `session_search` 不经过 `dispatch_memory_tool`

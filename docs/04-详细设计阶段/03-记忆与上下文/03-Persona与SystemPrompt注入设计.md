@@ -5,7 +5,7 @@
 > 版本：v1.0 | 日期：2026-08-07 | 状态：草稿
 > 对应需求：F-11 Agent 人格配置（Persona）、M-13 Agent 人格配置模块
 
-本文档描述 Astro Agent 的 System Prompt **确定性多槽位注入**机制：8 个槽位按固定顺序拼接，各组件（SOUL.md 身份、工作区 Prompt、记忆、Skills 指南等）独立可控、可叠加、可调试。
+本文档描述 Astro Harness 的 System Prompt **确定性多槽位注入**机制：8 个槽位按固定顺序拼接，各组件（SOUL.md 身份、工作区 Prompt、记忆、Skills 指南等）独立可控、可叠加、可调试。
 
 ---
 

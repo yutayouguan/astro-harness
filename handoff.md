@@ -82,7 +82,7 @@
 
 ### 验证结果
 
-- `cargo check -p agent -p server -p subagents -p astro-agent`：通过。
+- `cargo check -p agent -p server -p subagents -p astro-harness`：通过。
 - `cargo test -p home`：通过，包含 canonical resolver、SQLite 文件族迁移、split-brain 拒绝和旧 Cron 文件名迁移。
 - `cargo test -p usage -p artifacts -p cron -p memory --lib`：通过。
 - `cargo test -p usage --test usage_db_test migrated_legacy_usage_database_remains_visible -- --exact`：通过，确认迁移后 usage 记录可见且旧库不会重建。
@@ -234,7 +234,7 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 
 - `cargo test -p providers --lib -p agent-protocol -p agent-rollout`：271 项通过。
 - `cargo test -p agent --test streaming_test billing_token_count_total_includes_cached_tokens -- --nocapture`：通过。
-- `cargo check -p agent -p server -p astro-agent`：通过。
+- `cargo check -p agent -p server -p astro-harness`：通过。
 - `node --test src/lib/chat/contextUsage.test.ts`：8 项通过。
 
 ## H-005 Context usage 分类测试与实现数量脱节
@@ -276,17 +276,17 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 
 ### 问题与证据
 
-`apps/desktop/src-tauri/src/commands/compaction.rs` 的两个测试仍对已异步化的 `agent::Session::new()` 直接调用 `.unwrap()`。执行 `cargo test -p astro-agent matching_ack_drains_provisional_nonterminal_events_before_terminal_in_order` 时在目标测试前报 `E0599`，建议将两个用例改为 Tokio async test 并 `await` Session 构造。
+`apps/desktop/src-tauri/src/commands/compaction.rs` 的两个测试仍对已异步化的 `agent::Session::new()` 直接调用 `.unwrap()`。执行 `cargo test -p astro-harness matching_ack_drains_provisional_nonterminal_events_before_terminal_in_order` 时在目标测试前报 `E0599`，建议将两个用例改为 Tokio async test 并 `await` Session 构造。
 
 ### 验收标准
 
-- `astro-agent` 测试目标可编译。
+- `astro-harness` 测试目标可编译。
 - 两个 manual compaction hook 用例保持原断言。
 
 ### 验证结果
 
-- `cargo test -p astro-agent manual_compaction -- --nocapture`：通过。
-- `cargo test -p astro-agent manual_pre_compact_can_stop_before_side_effects -- --nocapture`：通过。
+- `cargo test -p astro-harness manual_compaction -- --nocapture`：通过。
+- `cargo test -p astro-harness manual_pre_compact_can_stop_before_side_effects -- --nocapture`：通过。
 
 ## H-007 旧 TokenCount rollout 的未缓存输入投影为零
 
@@ -312,7 +312,7 @@ Astro 已能从部分 Provider 读取 input、output、cache read/write 和 reas
 
 ### 验证结果
 
-`cargo test -p astro-agent token_count_projection_preserves_cache_reasoning_and_reporting_state -- --nocapture`：通过。
+`cargo test -p astro-harness token_count_projection_preserves_cache_reasoning_and_reporting_state -- --nocapture`：通过。
 
 ## H-008 Desktop 全量 TypeScript 检查被不可达分支与死变量阻塞
 

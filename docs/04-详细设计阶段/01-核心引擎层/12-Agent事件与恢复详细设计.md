@@ -6,7 +6,7 @@
 > 日期：2026-09-04
 > 状态：已实现
 > 适用范围：`agent-protocol`、`agent-rollout`、`agent-core`、`agent-server`、
-> `agent-session`、`astro-agent`（Tauri）
+> `agent-session`、`astro-harness`（Tauri）
 
 ## 1. 文档地位
 

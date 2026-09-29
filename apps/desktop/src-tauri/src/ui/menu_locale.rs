@@ -98,7 +98,7 @@ impl MenuStrings {
             select_all: "全选",
             tray_show: "显示 Astro",
             tray_quit: "退出 Astro",
-            tray_tooltip: "Astro Agent",
+            tray_tooltip: "Astro Harness",
         }
     }
 
@@ -127,7 +127,7 @@ impl MenuStrings {
             select_all: "Select All",
             tray_show: "Show Astro",
             tray_quit: "Quit Astro",
-            tray_tooltip: "Astro Agent",
+            tray_tooltip: "Astro Harness",
         }
     }
 }

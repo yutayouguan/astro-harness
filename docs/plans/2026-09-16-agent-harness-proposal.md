@@ -4,7 +4,7 @@
 >
 > 日期：2026-09-16
 >
-> 适用仓库：Astro Agent（Rust workspace + Tauri 2 + React/Vite）
+> 适用仓库：Astro Harness（Rust workspace + Tauri 2 + React/Vite）
 >
 > 定位：本文是能力建议与演进路线，不是运行时契约。与
 > [Agent Harness 总体架构](../03-系统设计阶段/01-架构设计/11-Agent-Harness总体架构.md)

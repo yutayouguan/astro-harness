@@ -8,7 +8,7 @@
 
 | 项目 | 内容 |
 | ---- | ---- |
-| 产品名称 | Astro Agent |
+| 产品名称 | Astro Harness |
 | 文档版本 | v0.1 |
 | 创建日期 | 待填写 |
 | 最后更新 | 待填写 |
@@ -20,7 +20,7 @@
 
 ### 1.1 项目定位
 
-Astro Agent 是一款**本地优先的多模态 AI Agent 桌面应用**，基于 Rust + Tauri v2 构建。目标是为重度 AI 用户提供统一的多模态交互入口，支持 Skills 编排、子 Agent 派生、自我进化和可视化工作流，同时保证数据本地可控、执行过程透明。
+Astro Harness 是一款**本地优先的多模态 AI Agent 桌面应用**，基于 Rust + Tauri v2 构建。目标是为重度 AI 用户提供统一的多模态交互入口，支持 Skills 编排、子 Agent 派生、自我进化和可视化工作流，同时保证数据本地可控、执行过程透明。
 
 ### 1.2 目标用户
 
@@ -115,7 +115,7 @@ Skills 采用目录结构，兼容 agentskills.io 开放标准，每个 Skill �
 | ---- | ---- | ---- |
 | MCP 客户端 | 连接外部 MCP Server（STDIO/Streamable HTTP） | P1 |
 | MCP Server 目录 | 浏览和安装社区 MCP Server | P2 |
-| 自暴露为 MCP Server | 允许外部工具调用 Astro Agent | P2 |
+| 自暴露为 MCP Server | 允许外部工具调用 Astro Harness | P2 |
 
 #### F-05 子 Agent 派生
 

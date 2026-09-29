@@ -42,7 +42,7 @@ pub(crate) fn show_task<R: Runtime>(app: &AppHandle<R>, kind: TaskNotice) {
     if let Err(err) = app
         .notification()
         .builder()
-        .title("Astro Agent")
+        .title("Astro Harness")
         .body(notice_copy(kind))
         .show()
     {

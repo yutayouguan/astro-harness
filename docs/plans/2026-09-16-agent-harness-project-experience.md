@@ -27,7 +27,7 @@
 
 ## 1. 简历版（30 秒读完）
 
-**项目**：Astro Agent —— 本地优先的多模态 AI Agent 桌面工作站
+**项目**：Astro Harness —— 本地优先的多模态 AI Agent 桌面工作站
 **技术栈**：Rust（tokio / tonic gRPC）+ SQLite（WAL / FTS5）+ Tauri 2 + React / Vite + MCP
 **角色**：Agent Harness 层架构设计与实现
 

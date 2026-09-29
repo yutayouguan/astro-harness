@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 统一 Astro Agent 的版本号：tauri.conf.json、src-tauri/Cargo.toml、package.json、Cargo.lock。
+// 统一 Astro Harness 的版本号：tauri.conf.json、src-tauri/Cargo.toml、package.json、Cargo.lock。
 //
 // 用法：
 //   node tools/bump-version.mjs 0.2.0     # 写入新版本号并同步 Cargo.lock
@@ -68,14 +68,14 @@ const targets = [
   {
     file: CARGO_LOCK,
     read: (text) => {
-      const astroAgent = text.match(/\[\[package\]\]\nname = "astro-agent"\nversion = "([^"]+)"/);
+      const astroAgent = text.match(/\[\[package\]\]\nname = "astro-harness"\nversion = "([^"]+)"/);
       const server = text.match(/\[\[package\]\]\nname = "server"\nversion = "([^"]+)"/);
       if (!astroAgent || !server) {
-        throw new Error(`${CARGO_LOCK} 里没有找到 astro-agent / server 的 package 条目`);
+        throw new Error(`${CARGO_LOCK} 里没有找到 astro-harness / server 的 package 条目`);
       }
       if (astroAgent[1] !== server[1]) {
         throw new Error(
-          `${CARGO_LOCK} 里 astro-agent (${astroAgent[1]}) 与 server (${server[1]}) 版本不一致`,
+          `${CARGO_LOCK} 里 astro-harness (${astroAgent[1]}) 与 server (${server[1]}) 版本不一致`,
         );
       }
       return astroAgent[1];
@@ -83,7 +83,7 @@ const targets = [
     write: (text, version) =>
       text
         .replace(
-          /(\[\[package\]\]\nname = "astro-agent"\nversion = ")[^"]+(")/,
+          /(\[\[package\]\]\nname = "astro-harness"\nversion = ")[^"]+(")/,
           `$1${version}$2`,
         )
         .replace(/(\[\[package\]\]\nname = "server"\nversion = ")[^"]+(")/, `$1${version}$2`),

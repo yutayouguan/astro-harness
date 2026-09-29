@@ -2,7 +2,7 @@
 
 受管网络代理 -- 为 Agent 子进程提供基于策略的出站网络隔离与审批机制。
 
-属于 [Astro Agent](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
+属于 [Astro Harness](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
 
 ## 核心职责
 

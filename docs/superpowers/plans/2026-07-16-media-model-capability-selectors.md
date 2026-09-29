@@ -85,8 +85,8 @@ fn litellm_tts_mode_does_not_set_music_gen() {
 Run:
 
 ```bash
-cargo test -p astro-agent --lib model_meta::tests::litellm_music -- --nocapture
-cargo test -p astro-agent --lib model_meta::tests::litellm_audio_only_chat_sets_music_gen -- --nocapture
+cargo test -p astro-harness --lib model_meta::tests::litellm_music -- --nocapture
+cargo test -p astro-harness --lib model_meta::tests::litellm_audio_only_chat_sets_music_gen -- --nocapture
 ```
 
 Expected: FAIL because `music_gen` and `supported_output_modalities` do not exist.
@@ -146,8 +146,8 @@ Apply the `!is_music` guard in both existing non-chat and chat branches so a Lyr
 Run:
 
 ```bash
-cargo test -p astro-agent --lib model_meta::tests -- --nocapture
-cargo test -p astro-agent --lib litellm_meta::tests -- --nocapture
+cargo test -p astro-harness --lib model_meta::tests -- --nocapture
+cargo test -p astro-harness --lib litellm_meta::tests -- --nocapture
 ```
 
 Expected: PASS.
@@ -428,8 +428,8 @@ fn google_music_model_defaults_to_lyria_clip() {
 Run:
 
 ```bash
-cargo test -p astro-agent --lib provider_without_music_model -- --nocapture
-cargo test -p astro-agent --lib google_music_model_defaults -- --nocapture
+cargo test -p astro-harness --lib provider_without_music_model -- --nocapture
+cargo test -p astro-harness --lib google_music_model_defaults -- --nocapture
 ```
 
 Expected: FAIL because the field and helper do not exist.
@@ -511,8 +511,8 @@ Run:
 
 ```bash
 cargo fmt --all -- --check
-cargo test -p astro-agent --lib providers_commands::tests -- --nocapture
-cargo check -p proto -p tools -p backend -p astro-agent
+cargo test -p astro-harness --lib providers_commands::tests -- --nocapture
+cargo check -p proto -p tools -p backend -p astro-harness
 ```
 
 Expected: formatting check, tests, and all four package checks PASS.
@@ -906,8 +906,8 @@ Expected: all tests PASS.
 - [x] **Step 2: Run focused Rust tests**
 
 ```bash
-cargo test -p astro-agent --lib model_meta::tests -- --nocapture
-cargo test -p astro-agent --lib providers_commands::tests -- --nocapture
+cargo test -p astro-harness --lib model_meta::tests -- --nocapture
+cargo test -p astro-harness --lib providers_commands::tests -- --nocapture
 cargo test -p tools --lib music_gen::tests -- --nocapture
 cargo test -p providers --lib interactions_http::tests::resolve_lyria -- --nocapture
 ```
@@ -918,7 +918,7 @@ Expected: all tests PASS.
 
 ```bash
 cargo fmt --all -- --check
-cargo check -p proto -p providers -p tools -p backend -p astro-agent
+cargo check -p proto -p providers -p tools -p backend -p astro-harness
 cd frontend && npx tsc -b --pretty false
 ```
 

@@ -75,7 +75,7 @@ SHA-256 和状态，随后逐项原子更新。同步文件，并在支持的平
 
 ```sh
 cargo test -p home --lib storage_cleanup
-cargo test -p astro-agent --lib native_cleanup_requires_confirmation
+cargo test -p astro-harness --lib native_cleanup_requires_confirmation
 cd apps/desktop
 node --test src/lib/settings/storageCleanup.test.ts
 npx playwright test storage-cleanup.spec.ts storage-diagnostics.spec.ts

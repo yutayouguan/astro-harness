@@ -45,7 +45,7 @@ let stopping = false;
 let build;
 let restoreBuild = false;
 let nativeExecutable;
-const buildArgs = ["build", "-p", "astro-agent", "--bin", "astro-agent"];
+const buildArgs = ["build", "-p", "astro-harness", "--bin", "astro-harness"];
 const normalBuildEnv = { ...process.env };
 delete normalBuildEnv.TAURI_CONFIG;
 delete normalBuildEnv.ASTRO_NATIVE_ACCEPTANCE_ROOT;
@@ -166,12 +166,12 @@ try {
 		await mkdir(join(contents, "MacOS"), { recursive: true });
 		await mkdir(join(contents, "Resources"), { recursive: true });
 		await copyFile(
-			join(repo, "target/debug/astro-agent"),
-			join(contents, "MacOS/astro-agent"),
+			join(repo, "target/debug/astro-harness"),
+			join(contents, "MacOS/astro-harness"),
 		);
-		nativeExecutable = await realpath(join(contents, "MacOS/astro-agent"));
+		nativeExecutable = await realpath(join(contents, "MacOS/astro-harness"));
 		await assertNativeBinaryBinding(nativeExecutable, astroRoot);
-		await chmod(join(contents, "MacOS/astro-agent"), 0o755);
+		await chmod(join(contents, "MacOS/astro-harness"), 0o755);
 		await cp(
 			join(frontend, "src-tauri/resources"),
 			join(contents, "Resources"),
@@ -181,7 +181,7 @@ try {
 			join(contents, "Info.plist"),
 			`<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>astro-agent</string>
+<key>CFBundleExecutable</key><string>astro-harness</string>
 <key>CFBundleIdentifier</key><string>${identifier}</string>
 <key>CFBundleName</key><string>${appName}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -247,7 +247,7 @@ enabled = false
 			JSON.stringify(manifest, null, 2),
 		);
 	} else {
-		nativeExecutable = await realpath(join(contents, "MacOS/astro-agent"));
+		nativeExecutable = await realpath(join(contents, "MacOS/astro-harness"));
 	}
 	if (stopping) throw new Error("Native acceptance cancelled");
 	console.log(`NATIVE_CONFIG_QA=${JSON.stringify(manifest)}`);

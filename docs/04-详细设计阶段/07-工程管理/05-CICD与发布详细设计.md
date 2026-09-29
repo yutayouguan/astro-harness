@@ -508,7 +508,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         with:
           tagName: ${{ env.TAG }}
-          releaseName: "Astro Agent ${{ env.TAG }}"
+          releaseName: "Astro Harness ${{ env.TAG }}"
           releaseBody: |
             查看 [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解本版本变更。
           releaseDraft: false
@@ -518,7 +518,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: astro-agent-${{ matrix.artifact_suffix }}
+          name: astro-harness-${{ matrix.artifact_suffix }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/
           retention-days: 30
@@ -599,7 +599,7 @@ jobs:
           # 等待 CDN 传播
           sleep 30
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://releases.astro-agent.dev/latest.json)
+            https://releases.astro-harness.dev/latest.json)
           if [ "$HTTP_CODE" != "200" ]; then
             echo "ERROR: latest.json not accessible (HTTP $HTTP_CODE)"
             exit 1
@@ -768,8 +768,8 @@ jobs:
 ```json
 // apps/desktop/src-tauri/tauri.conf.json
 {
-  "productName": "Astro Agent",
-  "identifier": "dev.astro-agent.app",
+  "productName": "Astro Harness",
+  "identifier": "dev.astro-harness.app",
   "version": "0.4.0",
   "build": {
     "beforeBuildCommand": "pnpm build",
@@ -821,7 +821,7 @@ jobs:
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6...",
       "endpoints": [
-        "https://releases.astro-agent.dev/latest.json"
+        "https://releases.astro-harness.dev/latest.json"
       ],
       "dialog": false
     }
@@ -1135,7 +1135,7 @@ channel = "stable"    # stable | beta | nightly
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://releases.astro-agent.dev/{channel}.json"
+        "https://releases.astro-harness.dev/{channel}.json"
       ]
     }
   }
@@ -1208,18 +1208,18 @@ gh workflow run nightly.yml
 ### 7.1 GitHub Release 资产命名规范
 
 ```text
-astro-agent_{VERSION}_{PLATFORM}.{EXT}
+astro-harness_{VERSION}_{PLATFORM}.{EXT}
 
 示例（v0.4.0）：
-├── astro-agent_0.4.0_aarch64.dmg           # macOS ARM64
-├── astro-agent_0.4.0_x64.dmg               # macOS Intel
-├── astro-agent_0.4.0_x64-setup.exe          # Windows NSIS 安装包
-├── astro-agent_0.4.0_x64_en-US.msi          # Windows MSI 安装包
-├── astro-agent_0.4.0_amd64.AppImage         # Linux AppImage
-├── astro-agent_0.4.0_amd64.deb              # Linux Debian 包
-├── astro-agent_0.4.0_aarch64.dmg.sig        # macOS ARM64 Updater 签名
-├── astro-agent_0.4.0_x64-setup.exe.sig      # Windows Updater 签名
-├── astro-agent_0.4.0_amd64.AppImage.sig     # Linux Updater 签名
+├── astro-harness_0.4.0_aarch64.dmg           # macOS ARM64
+├── astro-harness_0.4.0_x64.dmg               # macOS Intel
+├── astro-harness_0.4.0_x64-setup.exe          # Windows NSIS 安装包
+├── astro-harness_0.4.0_x64_en-US.msi          # Windows MSI 安装包
+├── astro-harness_0.4.0_amd64.AppImage         # Linux AppImage
+├── astro-harness_0.4.0_amd64.deb              # Linux Debian 包
+├── astro-harness_0.4.0_aarch64.dmg.sig        # macOS ARM64 Updater 签名
+├── astro-harness_0.4.0_x64-setup.exe.sig      # Windows Updater 签名
+├── astro-harness_0.4.0_amd64.AppImage.sig     # Linux Updater 签名
 └── latest.json                               # Tauri Updater 清单
 ```
 
@@ -1230,11 +1230,11 @@ astro-agent_{VERSION}_{PLATFORM}.{EXT}
 https://github.com/{owner}/{repo}/releases/download/v{VERSION}/{FILENAME}
 
 # CDN 加速下载（stable 发布后同步）
-https://releases.astro-agent.dev/v{VERSION}/{FILENAME}
+https://releases.astro-harness.dev/v{VERSION}/{FILENAME}
 
 # 最新版清单
-https://releases.astro-agent.dev/latest.json   # stable
-https://releases.astro-agent.dev/beta.json     # beta
+https://releases.astro-harness.dev/latest.json   # stable
+https://releases.astro-harness.dev/beta.json     # beta
 ```
 
 ### 7.3 Tauri Updater 清单 (latest.json)
@@ -1246,19 +1246,19 @@ https://releases.astro-agent.dev/beta.json     # beta
   "pub_date": "2026-08-09T00:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://releases.astro-agent.dev/v0.4.0/astro-agent_0.4.0_aarch64.dmg",
+      "url": "https://releases.astro-harness.dev/v0.4.0/astro-harness_0.4.0_aarch64.dmg",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6..."
     },
     "darwin-x86_64": {
-      "url": "https://releases.astro-agent.dev/v0.4.0/astro-agent_0.4.0_x64.dmg",
+      "url": "https://releases.astro-harness.dev/v0.4.0/astro-harness_0.4.0_x64.dmg",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6..."
     },
     "windows-x86_64": {
-      "url": "https://releases.astro-agent.dev/v0.4.0/astro-agent_0.4.0_x64-setup.exe",
+      "url": "https://releases.astro-harness.dev/v0.4.0/astro-harness_0.4.0_x64-setup.exe",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6..."
     },
     "linux-x86_64": {
-      "url": "https://releases.astro-agent.dev/v0.4.0/astro-agent_0.4.0_amd64.AppImage",
+      "url": "https://releases.astro-harness.dev/v0.4.0/astro-harness_0.4.0_amd64.AppImage",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6..."
     }
   }
@@ -1299,7 +1299,7 @@ def main():
     parser.add_argument("--tag", required=True)
     parser.add_argument("--artifacts-dir", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--repo", default="AstroAgent/astro-agent")
+    parser.add_argument("--repo", default="AstroHarness/astro-harness")
     args = parser.parse_args()
 
     version = args.tag.lstrip("v")
@@ -1436,7 +1436,7 @@ echo "Run 'git tag v$VERSION && git push origin v$VERSION' to trigger release"
 header = """
 # Changelog
 
-All notable changes to Astro Agent will be documented in this file.\n
+All notable changes to Astro Harness will be documented in this file.\n
 """
 body = """
 {% if version %}\
@@ -1449,7 +1449,7 @@ body = """
     {% for commit in commits %}
         - {% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
             {{ commit.message | upper_first }}\
-            ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/AstroAgent/astro-agent/commit/{{ commit.id }}))\
+            ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/AstroHarness/astro-harness/commit/{{ commit.id }}))\
     {% endfor %}
 {% endfor %}\n
 """
@@ -1548,11 +1548,11 @@ gh secret set WINDOWS_CERTIFICATE_PASSWORD --body "new_password"
 
 ```bash
 # 1. 生成新的密钥对
-pnpm tauri signer generate -w ~/.tauri/astro-agent-v2.key
+pnpm tauri signer generate -w ~/.tauri/astro-harness-v2.key
 
 # 2. 更新 tauri.conf.json 中的公钥
 # 3. 更新 GitHub Secret
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/astro-agent-v2.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/astro-harness-v2.key
 
 # 注意：密钥轮换后，旧版本客户端无法验证新版本签名
 # 需要先发布一个过渡版本，同时支持新旧两个公钥
@@ -1597,19 +1597,19 @@ cat > latest-rollback.json << EOF
   "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/AstroAgent/astro-agent/releases/download/v${SAFE_VERSION}/astro-agent_${SAFE_VERSION}_aarch64.dmg",
+      "url": "https://github.com/AstroHarness/astro-harness/releases/download/v${SAFE_VERSION}/astro-harness_${SAFE_VERSION}_aarch64.dmg",
       "signature": "$(cat sigs/v${SAFE_VERSION}_aarch64.sig)"
     },
     "darwin-x86_64": {
-      "url": "https://github.com/AstroAgent/astro-agent/releases/download/v${SAFE_VERSION}/astro-agent_${SAFE_VERSION}_x64.dmg",
+      "url": "https://github.com/AstroHarness/astro-harness/releases/download/v${SAFE_VERSION}/astro-harness_${SAFE_VERSION}_x64.dmg",
       "signature": "$(cat sigs/v${SAFE_VERSION}_x64.sig)"
     },
     "windows-x86_64": {
-      "url": "https://github.com/AstroAgent/astro-agent/releases/download/v${SAFE_VERSION}/astro-agent_${SAFE_VERSION}_x64-setup.exe",
+      "url": "https://github.com/AstroHarness/astro-harness/releases/download/v${SAFE_VERSION}/astro-harness_${SAFE_VERSION}_x64-setup.exe",
       "signature": "$(cat sigs/v${SAFE_VERSION}_x64-setup.sig)"
     },
     "linux-x86_64": {
-      "url": "https://github.com/AstroAgent/astro-agent/releases/download/v${SAFE_VERSION}/astro-agent_${SAFE_VERSION}_amd64.AppImage",
+      "url": "https://github.com/AstroHarness/astro-harness/releases/download/v${SAFE_VERSION}/astro-harness_${SAFE_VERSION}_amd64.AppImage",
       "signature": "$(cat sigs/v${SAFE_VERSION}_amd64.sig)"
     }
   }
@@ -1623,7 +1623,7 @@ aws s3 cp latest-rollback.json \
 
 # 4. 同时更新 GitHub Release
 gh release upload "v${SAFE_VERSION}" latest-rollback.json \
-  --repo AstroAgent/astro-agent --clobber
+  --repo AstroHarness/astro-harness --clobber
 
 # 5. 将问题版本标记为 pre-release（降低可见性）
 gh release edit "v${BROKEN_VERSION}" --prerelease \
@@ -1671,7 +1671,7 @@ pub async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> 
 
 /// 检查服务端是否标记了强制回滚
 async fn check_forced_rollback(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
-    let resp = reqwest::get("https://releases.astro-agent.dev/rollback.json")
+    let resp = reqwest::get("https://releases.astro-harness.dev/rollback.json")
         .await
         .map_err(|e| e.to_string())?;
 

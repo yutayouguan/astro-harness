@@ -83,7 +83,7 @@ reqwest      = { version = "0.12", features = ["json", "stream", "rustls-tls", "
 | `crates/agent-tools` | `tools` | 全部内置工具实现（`register_all`）、`ToolRegistry`（`ToolExposure` 五级暴露 Direct/DirectModelOnly/Deferred/DeferredModelOnly/Hidden + BM25 工具搜索）、审批逻辑、HITL、schema sanitization。内部目录：`engine/`（注册表/分发/catalog/schema）、`builtin/`（shell/agents/hitl/media/memory/present）。工具域：exec_command（原 terminal）、apply_patch（Freeform 补丁工具，替代 file_ops）、write_stdin、request_permissions、code_exec、memory、skills、subagents（6 个 V2 工具）、tool_search、media 等。`FreeformToolFormat` 支持非 JSON 工具输入（Lark 语法）。 |
 | `crates/agent-core` | `agent` | Agent 运行时核心：`Session` 状态机、`AstroThread` 句柄、`submission_loop` 有序提交、`SessionTask`/`ActiveTurn` 任务生命周期、`TurnContext`/`StepContext` 层级上下文、工具路由（`ToolRouter`）、压缩、HITL、hooks、prompt 组装、`git_worktree`（项目根解析与 worktree 隔离）。 |
 | `crates/agent-server` | `server` | gRPC 服务端（tonic）：Thread submit/resume/subscribe RPC、`ThreadHistoryBuilder` 活跃 Turn 快照、per-connection 128 容量队列、慢消费者断连。`run_embedded()` 供 Tauri in-process 使用。 |
-| `apps/desktop/src-tauri` | `astro-agent` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。Thread 事件流桥接。 |
+| `apps/desktop/src-tauri` | `astro-harness` | Tauri 2 桌面 shell。默认内嵌 backend（随机端口 `127.0.0.1:0`），单实例，系统托盘。Thread 事件流桥接。 |
 
 ---
 

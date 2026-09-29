@@ -8,7 +8,7 @@
 
 > 阶段：系统设计 | 状态：定稿 | 说明：Tera 模板引擎、模型差异、反模式、测试方法
 
-本文档面向**开发者**，指导如何为 astro-agent 编写 Skill Prompt 和系统 Prompt。这不是 Prompt 工程的理论综述，而是实际可用的模板、规范和注意事项。
+本文档面向**开发者**，指导如何为 astro-harness 编写 Skill Prompt 和系统 Prompt。这不是 Prompt 工程的理论综述，而是实际可用的模板、规范和注意事项。
 
 ---
 
@@ -61,7 +61,7 @@
 以下是 `prompts/zh-CN/system.md` 的完整内容：
 
 ```markdown
-你是 {{workspace_name}} 工作区的 AI 助手，由 astro-agent 驱动。
+你是 {{workspace_name}} 工作区的 AI 助手，由 astro-harness 驱动。
 
 ## 身份与能力
 
@@ -532,7 +532,7 @@ cargo run --bin agent-evals -- \
 
 > **注**：下方代码示例为历史设计方案。当前 Prompt 版本管理由 `agent-evolution` crate 承载。
 
-astro-agent 使用 content-addressable 存储管理 Prompt 版本，每次修改自动生成新版本 hash，进化引擎优化时保留完整历史。
+astro-harness 使用 content-addressable 存储管理 Prompt 版本，每次修改自动生成新版本 hash，进化引擎优化时保留完整历史。
 
 ```rust
 // crates/agent-evolution/src/prompt_store.rs（概念示例）

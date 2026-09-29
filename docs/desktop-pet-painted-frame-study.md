@@ -100,7 +100,7 @@ Python 环境需要 Pillow 与 NumPy；本轮使用 Codex bundled Python。原�
 重跑真实导入器测试（只写新的临时测试目录，不操作原生UI或真实用户资料）：
 
 ```sh
-ASTRO_PET_QA_MANIFEST='/Users/iswm/Desktop/04-知识库/Rust/code/astro/output/imagegen/naitang-painted-actions-20260913/qa-package/pet.json' cargo test -p astro-agent imports_external_apng_candidate_without_applying --lib -- --ignored --nocapture
+ASTRO_PET_QA_MANIFEST='/Users/iswm/Desktop/04-知识库/Rust/code/astro/output/imagegen/naitang-painted-actions-20260913/qa-package/pet.json' cargo test -p astro-harness imports_external_apng_candidate_without_applying --lib -- --ignored --nocapture
 ```
 
 新建验收环境用 `node tools/verify-config-native.mjs --pet`；既有启动进程退出后可用 `--resume <上述manifest.json>` 恢复，无需重编译。已有进程仍运行时直接使用该 App，不重复启动私有Vite端口。

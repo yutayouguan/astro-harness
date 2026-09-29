@@ -39,6 +39,6 @@ Flare 制作森林小屋与雨天小窝；Sunburst 制作晴日草地与海边�
 - 原生 UI 显示与交互验收独立于 CLI/API 成功，不把单元测试当成原生 App 验收。
 
 本轮验证：前端定向测试29项、Rust模型元数据18项、图片HTTP契约9项通过；
-`tsc --noEmit`、`npm run build`及`cargo check -p astro-agent`通过。
+`tsc --noEmit`、`npm run build`及`cargo check -p astro-harness`通过。
 前端构建仍有既有的大chunk/混合动态导入提示。六张原图与入库副本哈希一致，
 追加事务只改变scenes/revision，幂等重试不新增记录。

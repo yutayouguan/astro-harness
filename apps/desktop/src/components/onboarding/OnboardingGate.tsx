@@ -958,7 +958,7 @@ export function FirstRunOnboarding({
               className="onboarding-header-wordmark-anchor"
               data-onboarding-wordmark-anchor="header"
             >
-              Astro Agent
+              Astro Harness
             </span>
           </div>
         </div>
@@ -1024,7 +1024,7 @@ export function FirstRunOnboarding({
                 data-onboarding-wordmark-anchor="intro"
                 aria-hidden
               >
-                Astro Agent
+                Astro Harness
               </span>
               <motion.div
                 className="onboarding-intro-copy"

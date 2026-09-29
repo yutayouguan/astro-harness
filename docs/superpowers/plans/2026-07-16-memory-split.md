@@ -62,7 +62,7 @@
 - `crates/agent-memory/src/lib.rs`：继续 `pub use session_store` / `message_db`（指向本包或 session）
 - manager 的 `use crate::session_store` 保持有效
 
-**Verify：** `cargo test -p memory --tests`；`cargo check -p agent -p tools -p backend -p astro-agent`
+**Verify：** `cargo test -p memory --tests`；`cargo check -p agent -p tools -p backend -p astro-harness`
 
 ---
 

@@ -2,7 +2,7 @@
 
 文件空间索引与知识内容检索 -- 管理 Agent 产出文件与用户上传文件的 SQLite 元数据索引，以及基于 FTS5 的文档正文检索。
 
-属于 [Astro Agent](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
+属于 [Astro Harness](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
 
 ## 核心职责
 

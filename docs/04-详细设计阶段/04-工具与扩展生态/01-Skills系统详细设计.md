@@ -34,7 +34,7 @@
 - 可信项目安装：`<project>/.astro/skills/<skill>/SKILL.md`
 - 编译进应用的 bundled Skills：只读，`scope=builtin`
 
-外部 machine scope 可扫描 `.agents/.codex/.claude/.cursor/.astro` 的 Skills，但不会因为被扫描到就自动获得 Astro Agent 的写权限；链接和启用状态仍由 Astro 管理层决定。
+外部 machine scope 可扫描 `.agents/.codex/.claude/.cursor/.astro` 的 Skills，但不会因为被扫描到就自动获得 Astro Harness 的写权限；链接和启用状态仍由 Astro 管理层决定。
 
 ### 2.2 当前核心数据结构
 

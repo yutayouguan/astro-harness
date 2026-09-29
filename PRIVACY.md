@@ -1,6 +1,6 @@
-# Astro Agent 隐私说明
+# Astro Harness 隐私说明
 
-Astro Agent 是本地优先的桌面应用：会话、记忆、文件索引、日志和配置默认都存放在本机
+Astro Harness 是本地优先的桌面应用：会话、记忆、文件索引、日志和配置默认都存放在本机
 `~/.astro/` 目录下，应用本身不接入自建的服务端账号体系，也不做使用行为上报。
 
 ## 会在本机保存什么
@@ -18,7 +18,7 @@ Astro Agent 是本地优先的桌面应用：会话、记忆、文件索引、�
   数据处理方式由该 Provider 的政策决定，与本应用无关。
 - **内置浏览器与网页工具**：只有在你或 Agent 主动发起访问时才会连接对应站点。
 - **自动更新**：检查更新时仅向公开资产仓库
-  `github.com/yutayouguan/astro-agent-releases` 请求 `latest.json`，不上报任何本机信息。
+  `github.com/yutayouguan/astro-harness-releases` 请求 `latest.json`，不上报任何本机信息。
 - **MCP / 插件**：只有你显式配置的 MCP 服务或扩展才会被连接。
 
 应用不含遥测与崩溃上报。若后续接入任何统计或上报能力，会在此文件与设置页中同步说明，

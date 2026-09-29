@@ -101,7 +101,7 @@ export async function loadNativeManifest(file) {
 	}
 	const binary = join(
 		scratch,
-		`${appDirectory}/Contents/MacOS/astro-agent`,
+		`${appDirectory}/Contents/MacOS/astro-harness`,
 	);
 	if ((await realpath(binary)) !== binary || !(await lstat(binary)).isFile())
 		throw new Error("Invalid acceptance executable");

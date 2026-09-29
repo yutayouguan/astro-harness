@@ -577,7 +577,7 @@ const restored: ChatMessage[] = history.messages.map((m) => ({
 
 - [x] **Step 3: Manual/compile check**
 
-Run: `cargo check -p astro-agent`（或 workspace tauri crate 名）  
+Run: `cargo check -p astro-harness`（或 workspace tauri crate 名）  
 Run: `cd frontend && npx tsc --noEmit`（若项目惯用）
 
 - [x] **Step 4: Commit**

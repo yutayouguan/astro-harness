@@ -40,7 +40,7 @@ export const zh = {
   "about.tagline": "本地 AI 桌面工作站",
   "about.version": "版本 {v}",
   "about.body":
-    "名字取自经典动漫《铁臂阿童木》——希望它像阿童木一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
+    "名字取自经典动漫《铁臂Astro Harness》——希望它像Astro Harness一样，成为你身边可靠、聪明、敢闯敢干的助手。支持智能对话、记忆召回、工作区与文件空间，可接入多家模型，并调用工具与 Skills 完成复杂任务；还能在使用中沉淀经验、自我进化。偏好设置保存在本机。",
   "about.feature.chat": "智能对话",
   "about.feature.memory": "记忆召回",
   "about.feature.workspace": "工作区",
@@ -49,7 +49,7 @@ export const zh = {
   "about.close": "好的",
 
   "page.chat.title": "智能对话",
-  "page.chat.sub": "与 Astro Agent 对话，自动召回记忆并调用工具",
+  "page.chat.sub": "与 Astro Harness 对话，自动召回记忆并调用工具",
   "page.memory.title": "记忆",
   "page.memory.sub":
     "每个 Agent 一个工作区：长期 MEMORY.md、每日日记、专属 skills/",
@@ -1136,7 +1136,7 @@ export const zh = {
   "status.emptyResponse": "模型没有返回内容，请重试或更换模型。",
 
   welcome:
-    "你好，我是 Astro Agent。\n在下方输入消息开始对话；左侧可切换记忆与工作区。",
+    "你好，我是 Astro Harness。\n在下方输入消息开始对话；左侧可切换记忆与工作区。",
 
   "chat.placeholder": "输入消息，Enter 发送",
   "chat.placeholderStreaming": "输入跟进，将加入队列…",

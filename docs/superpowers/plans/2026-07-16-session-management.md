@@ -399,7 +399,7 @@ pub async fn delete_session_permanently(session_id: String) -> Result<(), String
 
 在 `generate_handler!` 注册五个新命令。
 
-Run: `cargo check -p astro-agent`  
+Run: `cargo check -p astro-harness`  
 Expected: PASS。
 
 - [x] **Step 5: Commit**
@@ -584,7 +584,7 @@ git commit -m "feat(chat): add session archive and delete controls"
 ```bash
 cargo test -p session -- --nocapture
 cargo test -p backend -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 node --import tsx --test apps/desktop/src/lib/chat/sessionManagement.test.ts
 cd frontend && npm run build
 ```

@@ -265,8 +265,8 @@ async fn fetch_json(url: reqwest::Url, api_key: Option<&str>) -> Result<Value, S
     let mut request = client
         .get(url.clone())
         .header("Accept", "application/json")
-        .header("HTTP-Referer", "https://github.com/astro-agent")
-        .header("X-Title", "Astro Agent");
+        .header("HTTP-Referer", "https://github.com/astro-harness")
+        .header("X-Title", "Astro Harness");
     if let Some(key) = api_key {
         request = request.bearer_auth(key);
     }

@@ -25,7 +25,7 @@ test("native onboarding is explicit and cannot reset a resumed profile", () => {
 test("resume rejects an unbound executable", async (t) => {
 	const { file, data } = await fixture(t);
 	await writeFile(
-		join(data.app, "Contents/MacOS/astro-agent"),
+		join(data.app, "Contents/MacOS/astro-harness"),
 		"ordinary executable fixture",
 	);
 	await assert.rejects(loadNativeManifest(file), /expected isolated data root/);
@@ -42,7 +42,7 @@ async function fixture(t, purpose) {
 	await mkdir(join(app, "Contents/MacOS"), { recursive: true });
 	await mkdir(astroRoot);
 	await writeFile(
-		join(app, "Contents/MacOS/astro-agent"),
+		join(app, "Contents/MacOS/astro-harness"),
 		`never executed in unit tests; binding=${astroRoot}`,
 	);
 	await writeFile(

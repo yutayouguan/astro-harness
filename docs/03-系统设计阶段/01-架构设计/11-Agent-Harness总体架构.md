@@ -36,7 +36,7 @@ Scaffold 是 Harness 在每个 sampling step 中交给 Model 的“可见工作�
 
 ## 3. 职责范围
 
-Astro Agent Harness 包含七个不可缺失的职责面：
+Astro Harness 包含七个不可缺失的职责面：
 
 1. **执行循环**：接收输入，调用模型，处理 tool call，回灌观察，继续 sampling，直到完成、中断或耗尽。
 2. **上下文与记忆**：构造每次模型可见内容，管理长期记忆、FTS 召回、工具结果压缩和上下文预算。

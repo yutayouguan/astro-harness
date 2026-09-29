@@ -113,7 +113,7 @@ fn backup_skill_dir(agent_id, folder) -> Result<PathBuf>; // 拷贝到 skill-bac
 - `preview_skill_update(folder, agentId?) -> SkillUpdatePreview`
 - `update_installed_skill(folder, agentId?, force?, backupIfDirty?)` 扩展可选参数（默认 force=true backupIfDirty=true 保兼容）
 
-- [x] `cargo check -p astro-agent`
+- [x] `cargo check -p astro-harness`
 - [x] commit `feat(tauri): preview and safer skill update options`
 
 ---

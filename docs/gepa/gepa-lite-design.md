@@ -413,7 +413,7 @@ Phase 5 完成后额外满足：
 ```bash
 cargo test -p evolution   # 92 tests
 cargo test -p memory      # 59 tests
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 ---

@@ -30,7 +30,7 @@ cd apps/desktop
 node --test src/lib/ui/petApng.test.ts src/lib/ui/petActionCatalog.test.ts src/lib/ui/desktopPetLeisure.test.ts src/lib/ui/petMotionClip.test.ts
 npx playwright test --config=playwright.apng.config.ts
 # 仓库根目录
-cargo test -p astro-agent apng --lib
+cargo test -p astro-harness apng --lib
 python3 -m unittest discover -s tools/desktop-pet -p test_export_apng.py
 ```
 

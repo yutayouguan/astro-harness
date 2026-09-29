@@ -194,7 +194,7 @@ fn scan_skill(content: &str) -> ScanResult {
 
 v0.3 MVP 不建设独立平台，直接基于 GitHub：
 
-- 官方仓库 `astro-agent/skills-hub` 收录 verified Skill
+- 官方仓库 `astro-harness/skills-hub` 收录 verified Skill
 - 安装命令：`skill_manage install github:user/repo/skill_name`
 - 搜索：`skill_manage search "关键词"`（搜索官方仓库 README 索引）
 
@@ -271,7 +271,7 @@ skill_manage rollback deploy-k8s 1.1.0
 {
   "deploy-k8s": {
     "version": "1.2.0",
-    "source": "github:astro-agent/skills-hub/deploy-k8s",
+    "source": "github:astro-harness/skills-hub/deploy-k8s",
     "trust_level": "verified",
     "installed_at": "2026-07-15T10:30:00Z",
     "quarantine": false

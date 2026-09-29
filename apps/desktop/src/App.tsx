@@ -1736,7 +1736,7 @@ export default function App() {
                     data-onboarding-brand-target
                   />
                 </div>
-                <div className="sidebar-brand-text">Astro Agent</div>
+                <div className="sidebar-brand-text">Astro Harness</div>
               </div>
               <div className="sidebar-primary-actions">
                 <button

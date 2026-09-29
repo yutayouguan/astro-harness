@@ -1206,7 +1206,7 @@ Run:
 ```bash
 cargo test -p subagents -- --nocapture
 cargo test -p agent exec::dispatch::tests -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: recovery, idempotent close, real timeline read, and Tauri compilation pass.
@@ -1294,7 +1294,7 @@ Run:
 ```bash
 cargo test -p server session_events -- --nocapture
 cargo test -p server --test agent_thread_events -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: sequence replay, filtering, watcher deduplication, proto mapping, and desktop bridge compile pass.

@@ -324,7 +324,7 @@ pub fn auxiliary_targets(&self, task: AuxiliaryTask) -> Vec<ChatTarget>
 
 - [x] **Step 5: 注册 commands 并编译**
 
-Run: `cargo check -p astro-agent`  
+Run: `cargo check -p astro-harness`  
 Expected: PASS。
 
 - [x] **Step 6: Commit**
@@ -447,10 +447,10 @@ async fn summarize_with_targets(
 
 - [x] **Step 3: 验证**
 
-Run: `cargo test -p astro-agent compaction -- --nocapture`  
+Run: `cargo test -p astro-harness compaction -- --nocapture`  
 Expected: PASS。
 
-Run: `cargo check -p astro-agent`  
+Run: `cargo check -p astro-harness`  
 Expected: PASS。
 
 - [x] **Step 4: Commit**
@@ -529,7 +529,7 @@ git commit -m "feat(approval): use configured auxiliary model"
 Run: `cargo test -p agent exec::memory_review -- --nocapture`  
 Expected: PASS。
 
-Run: `cargo check -p astro-agent`  
+Run: `cargo check -p astro-harness`  
 Expected: PASS。
 
 - [x] **Step 5: Commit**
@@ -611,7 +611,7 @@ Run:
 cargo test -p session -- --nocapture
 cargo test -p agent title_generation -- --nocapture
 cargo test -p backend session_events -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 cd frontend && npm run build
 ```
 
@@ -647,7 +647,7 @@ cargo test -p memory -- --nocapture
 cargo test -p session -- --nocapture
 cargo test -p agent -- --nocapture
 cargo test -p backend -- --nocapture
-cargo check -p astro-agent
+cargo check -p astro-harness
 cd frontend && npm run build
 ```
 

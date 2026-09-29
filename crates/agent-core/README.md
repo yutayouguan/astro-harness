@@ -117,7 +117,7 @@ Agent 运行时核心 crate：以 `AstroThread -> SessionTask -> TurnContext -> 
 | 依赖 | `artifacts` | 文件空间索引 |
 | 依赖 | `usage` | 用量事件与成本估算 |
 | 被依赖 | `agent-server` | gRPC 服务端通过本 crate 驱动 Agent 循环 |
-| 被依赖 | `astro-agent`（Tauri） | 桌面应用通过本 crate 构建 Session |
+| 被依赖 | `astro-harness`（Tauri） | 桌面应用通过本 crate 构建 Session |
 
 ## 关键不变量
 

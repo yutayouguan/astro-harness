@@ -171,13 +171,13 @@ async fn write_browser_response(stream: &mut TcpStream, success: bool) {
         (
             "200 OK",
             "Authentication complete",
-            "You can return to Astro Agent.",
+            "You can return to Astro Harness.",
         )
     } else {
         (
             "400 Bad Request",
             "Authentication failed",
-            "Return to Astro Agent to see the error.",
+            "Return to Astro Harness to see the error.",
         )
     };
     let body = format!(

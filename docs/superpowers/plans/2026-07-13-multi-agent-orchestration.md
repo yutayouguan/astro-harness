@@ -439,7 +439,7 @@ EOF
 ```bash
 cargo test -p memory --test orchestration_db_test
 cargo test -p memory --test usage_db_test
-cargo check -p memory -p tools -p agent -p backend -p astro-agent
+cargo check -p memory -p tools -p agent -p backend -p astro-harness
 ```
 
 - [x] **Step 2: 手工（可选）**  

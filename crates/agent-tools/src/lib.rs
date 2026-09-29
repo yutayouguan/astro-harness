@@ -1,4 +1,4 @@
-//! Astro Agent 内置工具集：注册、分发与解析。
+//! Astro Harness 内置工具集：注册、分发与解析。
 //!
 //! 本 crate 提供 Agent 可调用的全部内置工具实现，以及注册表、目录、
 //! schema 清理、路径安全与 tool call 解析等基础设施。

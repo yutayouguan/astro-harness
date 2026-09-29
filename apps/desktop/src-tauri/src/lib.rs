@@ -1,4 +1,4 @@
-//! Astro Agent Tauri 库：菜单、窗口与 `invoke` 命令注册入口。
+//! Astro Harness Tauri 库：菜单、窗口与 `invoke` 命令注册入口。
 
 #![allow(unexpected_cfgs)] // 旧版 objc 的 msg_send!/sel! 使用 cfg(feature = "cargo-clippy")
 

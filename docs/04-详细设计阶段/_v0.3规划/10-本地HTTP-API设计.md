@@ -6,7 +6,7 @@
 
 ## 1. 概述
 
-Astro Agent 监听本地端口（默认 `127.0.0.1:9527`），接受外部 HTTP 请求触发任务。
+Astro Harness 监听本地端口（默认 `127.0.0.1:9527`），接受外部 HTTP 请求触发任务。
 
 **使用场景**：
 
@@ -332,7 +332,7 @@ fn sign_payload(secret: &str, payload: &[u8]) -> String {
 }
 ```
 
-接收方验证签名以确保请求来自 Astro Agent。`secret` 为空时不发送签名头。
+接收方验证签名以确保请求来自 Astro Harness。`secret` 为空时不发送签名头。
 
 ### 4.5 重试策略
 

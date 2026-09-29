@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Route Astro Agent lifecycle hooks through one canonical `HookRuntime::dispatch` path and align the main-turn `SessionStart`, `UserPromptSubmit`, `Stop`, and `AgentEnd` behavior with the approved Codex contract.
+**Goal:** Route Astro Harness lifecycle hooks through one canonical `HookRuntime::dispatch` path and align the main-turn `SessionStart`, `UserPromptSubmit`, `Stop`, and `AgentEnd` behavior with the approved Codex contract.
 
 **Architecture:** `Session` owns an `Arc<HookRuntime>` instead of only a Plugin bus, enriches every **Session-owned** payload with stable session/model/cwd/permission fields, and delegates those events to one dispatcher that reaches Plugin, Gateway, and Shell exactly once. Tool-local `TransformTerminalOutput` and request-bus `SubagentStart` / `SubagentStop` remain documented Plugin-only direct-fire exceptions. The main lifecycle retries blocked `SessionStart` admission with the same source, consumes that source once on its first non-`Block` outcome, evaluates prompt hooks before persistence, evaluates Stop for every terminal candidate with a bounded continuation loop, and emits one AgentEnd from `RegularTask` on both success and failure.
 

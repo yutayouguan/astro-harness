@@ -1,10 +1,10 @@
-# Astro Agent 文档
+# Astro Harness 文档
 
 存储检查入口、清理预览边界与保存/重启回归见 [存储诊断](storage-diagnostics.md)。
 
 本机数据目录、唯一 TOML 配置入口及离线迁移边界见 [本机数据的领域布局](home-layout.md)。
 
-Astro Agent 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。
+Astro Harness 是一款本地优先的多模态 AI Agent 桌面应用，基于 Rust + Tauri v2 构建。项目文档按软件工程阶段组织。
 
 全局可编辑设置的 TOML 收口、运行状态边界与显式迁移说明见 [全局设置](global-settings.md)。
 

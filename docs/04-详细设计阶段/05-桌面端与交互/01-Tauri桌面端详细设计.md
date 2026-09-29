@@ -305,8 +305,8 @@ app.global_shortcut_manager().register("CmdOrCtrl+Shift+Space", move || {
 
 ### 11.2 窗口标识
 
-- 标题栏格式："{对话标题} — Astro Agent" 或 "{工作区名} — Astro Agent"
-- 主窗口标题栏无前缀，直接显示 "Astro Agent"
+- 标题栏格式："{对话标题} — Astro Harness" 或 "{工作区名} — Astro Harness"
+- 主窗口标题栏无前缀，直接显示 "Astro Harness"
 - macOS: 窗口代理图标（proxy icon）显示工作区路径
 
 ### 11.3 窗口生命周期

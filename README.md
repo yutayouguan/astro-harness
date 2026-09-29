@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/images/app-overview.webp" alt="Astro Agent 主界面" width="920" />
+<img src="docs/images/app-overview.webp" alt="Astro Harness 主界面" width="920" />
 
-# Astro Agent（阿童木）
+# Astro Harness
 
 **本地优先的多模态 AI 桌面工作站**：Rust 内核 · Tauri 2 外壳 · React 界面
 
@@ -43,7 +43,7 @@
 
 ## 这是什么
 
-Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌面应用。它不是浏览器里的聊天框，而是一个把 **模型 + 工具 + 记忆 + 文件 + 自动化** 装进同一套进程的工作站。
+Astro Harness（中文名「Astro Harness」）是一款跑在本机的 AI Agent 桌面应用。它不是浏览器里的聊天框，而是一个把 **模型 + 工具 + 记忆 + 文件 + 自动化** 装进同一套进程的工作站。
 
 - **Agent 运行在本地进程内**：Rust 内核负责 Agent 循环、工具路由、沙箱与持久化；Tauri 壳默认以同进程方式启动 backend，双击 App 即可对话，无需另开终端。
 - **数据留在本机**：会话、记忆、文件索引、用量与安全审计写入 `~/.astro`，SQLite（WAL + FTS5）与 append-only rollout 是唯一事实源。
@@ -66,7 +66,7 @@ Astro Agent（中文名「阿童木」）是一款跑在本机的 AI Agent 桌�
 
 ## Agent = Model + Harness
 
-模型只负责「想」，其余全在 Harness 里。同一个模型放进不同质量的 Harness，表现可以差一个量级：**Astro Agent 的产品定位，就是把 Harness 做完整。**
+模型只负责「想」，其余全在 Harness 里。同一个模型放进不同质量的 Harness，表现可以差一个量级：**Astro Harness 的产品定位，就是把 Harness 做完整。**
 
 ```text
 Agent = Model + Harness
@@ -101,7 +101,7 @@ Agent = Model + Harness
 
 主界面左侧是导航与任务侧栏（会话、项目、定时任务、工作流、插件），中间是对话流，底部 Composer 负责模型选择、交互模式、审批策略与附件；右上角工具栏可以随时打开文件、终端、浏览器等停靠面板。
 
-> 本文截图均截取自运行中的 Astro Agent 桌面端真实窗口（含真实壁纸、桌宠与本地工作区），不是设计稿。
+> 本文截图均截取自运行中的 Astro Harness 桌面端真实窗口（含真实壁纸、桌宠与本地工作区），不是设计稿。
 
 ## 功能模块
 
@@ -311,7 +311,7 @@ astro/
 | 安全 | `agent-sandbox` (`sandbox`) | 三级权限模型、平台原生沙箱与审计 |
 | | `agent-network-proxy` (`network-proxy`) | 受管 CONNECT 代理、域名裁决与 DNS 重绑定防护 |
 | | `agent-delegate` (`worktree`) | 显式桌面任务的 git worktree 隔离 |
-| 外壳 | `astro-agent` | Tauri 2 桌面壳：内嵌 backend、托盘、单实例与 32 个命令模块 |
+| 外壳 | `astro-harness` | Tauri 2 桌面壳：内嵌 backend、托盘、单实例与 32 个命令模块 |
 
 ## 快速开始
 
@@ -394,7 +394,7 @@ target/release/bundle/nsis|appimage|deb|rpm/...     # Windows / Linux
 | Workflow | 触发 | 作用 |
 | --- | --- | --- |
 | `build-tauri` | PR（相关路径变更）/ 手动 | PR 只构建 Linux；手动触发构建 macOS arm64 + x86_64、Linux x64、Windows x64 并上传 Artifacts |
-| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-agent-releases`；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
+| `release-tauri` | 手动 / `v*` 标签 | 三平台构建 + Tauri 更新签名，安装包与 `latest.json` 上传到公开资产仓库 `astro-harness-releases`；手动触发可用 `platforms=macos` 只发 Mac 版、`macos_runner=self-hosted` 走本机 runner |
 
 - Tauri 需要在对应系统上原生构建，无法在一台机器上交叉打出全部 OS 安装包。
 - 私有仓库的 macOS runner 按 10 倍、Windows 按 2 倍消耗 Actions 分钟额度，所以 PR 只跑 Linux，全平台矩阵留给手动触发与发布。

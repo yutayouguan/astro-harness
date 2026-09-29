@@ -1,4 +1,4 @@
-# Astro Agent SQLite Schema 设计
+# Astro Harness SQLite Schema 设计
 
 > 阶段：系统设计 | 状态：定稿 | 说明：21 表 + 3 虚拟表 + 1 视图 DDL（权威）
 

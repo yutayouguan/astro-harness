@@ -156,7 +156,7 @@ node tools/verify-config-native.mjs --resume /absolute/path/to/astro-config-nati
 Hook。专用 debug 二进制通过编译期 `ASTRO_NATIVE_ACCEPTANCE_ROOT` 绑定数据根，在日志与
 凭证加载前校验目录和标记；缺失、错误或软链接标记都会拒绝启动，不回落真实数据根。
 普通构建不设置该变量，release 构建不包含此分支。复制 QA 包后重新构建普通 dev 工件，
-避免共享 `target/debug/astro-agent` 留下验收专用身份。
+避免共享 `target/debug/astro-harness` 留下验收专用身份。
 
 `ASTRO_ENV_HYDRATE=disabled` 显式跳过 Astro 的 `.env` 加载、登录 shell 密钥发现和自动
 持久化，默认行为不变。此开关不清空进程原有环境变量，也不禁用其他代码的 Keychain 访问；
@@ -164,7 +164,7 @@ Hook。专用 debug 二进制通过编译期 `ASTRO_NATIVE_ACCEPTANCE_ROOT` 绑�
 安全沙箱。脚本会在执行前核对二进制中包含预期数据根，防止误拷贝普通构建产物。
 
 恢复入口校验应用标识、数据与日志路径、回环 URL、标记和二进制绑定；只跟踪精确 QA
-可执行路径，不按 `astro-agent` 名称结束其他实例。退出 QA 或中断脚本会停止其私有前端，
+可执行路径，不按 `astro-harness` 名称结束其他实例。退出 QA 或中断脚本会停止其私有前端，
 保留验收文件。稍后重新打开 QA 包时仍绑定相同数据根，但必须恢复其私有前端；可以刷新
 窗口重新加载页面。屏幕锁定时停止 GUI 操作，解锁后再继续，不以后台进程存活代替 UI 验收。
 
@@ -172,8 +172,8 @@ Hook。专用 debug 二进制通过编译期 `ASTRO_NATIVE_ACCEPTANCE_ROOT` 绑�
 
 ```bash
 node --test tools/verify-config-native.test.mjs
-cargo test -p astro-agent --bin astro-agent native_acceptance -- --test-threads=1
-cargo test -p astro-agent --lib hydration_is_enabled -- --test-threads=1
+cargo test -p astro-harness --bin astro-harness native_acceptance -- --test-threads=1
+cargo test -p astro-harness --lib hydration_is_enabled -- --test-threads=1
 ```
 
 2026-09-09 已观察到原生 MCP 页面显示独立 `mcp/servers.toml` 来源；将禁用 server 的默认

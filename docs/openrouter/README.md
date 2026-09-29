@@ -1,6 +1,6 @@
 # OpenRouter Responses API 接入说明
 
-> 状态：已接入 Astro Agent Responses 链路
+> 状态：已接入 Astro Harness Responses 链路
 >
 > 更新日期：2026-09-04
 

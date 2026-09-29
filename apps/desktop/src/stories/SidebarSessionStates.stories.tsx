@@ -151,7 +151,7 @@ function SidebarSessionStates({ labels = true }: { labels?: boolean }) {
             <div className="sidebar-logo" aria-hidden>
               <AstroLogoMark width={26} height={26} />
             </div>
-            <div className="sidebar-brand-text">Astro Agent</div>
+            <div className="sidebar-brand-text">Astro Harness</div>
           </div>
           <div className="sidebar-primary-actions">
             <button type="button" className="sidebar-new-chat">

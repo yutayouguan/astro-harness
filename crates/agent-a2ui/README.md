@@ -2,7 +2,7 @@
 
 AG-UI 声明式生成式 UI 表面 -- 定义 Agent 可向前端推送的结构化 UI 组件目录、模板构建函数与校验逻辑。
 
-属于 [Astro Agent](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
+属于 [Astro Harness](../../README.md) workspace，详见根目录 `CLAUDE.md` 的 Crate Map。
 
 ## 核心职责
 

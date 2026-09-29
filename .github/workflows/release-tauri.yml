@@ -1,7 +1,7 @@
-# 在 macOS / Windows / Linux 上构建 Astro Agent 桌面安装包并发布到公开资产仓库。
+# 在 macOS / Windows / Linux 上构建 Astro Harness 桌面安装包并发布到公开资产仓库。
 #
 # 触发：手动运行（workflow_dispatch）或推送 v* 标签。
-# 安装包、更新签名和 latest.json 只写入 yutayouguan/astro-agent-releases，
+# 安装包、更新签名和 latest.json 只写入 yutayouguan/astro-harness-releases，
 # 私有源码不会被推送过去。
 #
 # 所需 Secrets（配置方式见 docs/03-系统设计阶段/06-桌面端/11-桌面端更新发布.md）：
@@ -159,16 +159,16 @@ jobs:
           # 读权限不能证明能建 Release，因此这里做一次可回收的真实写入探测。
           tag="release-token-probe-$(date +%s)"
           id=$(GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X POST \
-            repos/yutayouguan/astro-agent-releases/releases \
+            repos/yutayouguan/astro-harness-releases/releases \
             -f tag_name="$tag" -f name="release token probe" -F draft=true \
             --jq .id 2>&1) || {
             echo "::error::发布 token 无法在公开仓库创建 Release：$id"
             exit 1
           }
           GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X DELETE \
-            "repos/yutayouguan/astro-agent-releases/releases/$id" >/dev/null 2>&1 || true
+            "repos/yutayouguan/astro-harness-releases/releases/$id" >/dev/null 2>&1 || true
           GH_TOKEN="$ASTRO_RELEASE_TOKEN" gh api -X DELETE \
-            "repos/yutayouguan/astro-agent-releases/git/refs/tags/$tag" >/dev/null 2>&1 || true
+            "repos/yutayouguan/astro-harness-releases/git/refs/tags/$tag" >/dev/null 2>&1 || true
           echo "发布 token 写入探测通过（草稿 Release 与探测 tag 已清理）"
 
   plan:
@@ -290,7 +290,7 @@ jobs:
               echo "### 安装提示（未签名构建）"
               echo ""
               if [[ "${{ needs.preflight.outputs.apple_signed }}" != "true" ]]; then
-                echo "- **macOS**：本次安装包未做 Developer ID 签名与公证。首次打开请右键点击 App 选择「打开」，或安装后执行 \`xattr -dr com.apple.quarantine \"/Applications/Astro Agent.app\"\`。"
+                echo "- **macOS**：本次安装包未做 Developer ID 签名与公证。首次打开请右键点击 App 选择「打开」，或安装后执行 \`xattr -dr com.apple.quarantine \"/Applications/Astro Harness.app\"\`。"
               fi
               if [[ "${{ needs.preflight.outputs.windows_signed }}" != "true" ]]; then
                 echo "- **Windows**：本次安装包未做 Authenticode 签名，SmartScreen 会提示「未知发布者」，选择「更多信息 → 仍要运行」即可。"
@@ -362,7 +362,7 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.ASTRO_RELEASE_TOKEN }}
-          ASTRO_UPDATE_ENDPOINT: https://github.com/yutayouguan/astro-agent-releases/releases/latest/download/latest.json
+          ASTRO_UPDATE_ENDPOINT: https://github.com/yutayouguan/astro-harness-releases/releases/latest/download/latest.json
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Tauri 只在 CI=true 且该变量不为 true 时才给 bundle_dmg.sh 传 --skip-jenkins。
@@ -372,9 +372,9 @@ jobs:
         with:
           projectPath: apps/desktop
           owner: yutayouguan
-          repo: astro-agent-releases
+          repo: astro-harness-releases
           tagName: v__VERSION__
-          releaseName: Astro Agent v__VERSION__
+          releaseName: Astro Harness v__VERSION__
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-nightly') }}
@@ -417,7 +417,7 @@ jobs:
           EXPECTED: ${{ needs.plan.outputs.expected }}
         run: |
           set -euo pipefail
-          URL="https://github.com/yutayouguan/astro-agent-releases/releases/download/v${VERSION}/latest.json"
+          URL="https://github.com/yutayouguan/astro-harness-releases/releases/download/v${VERSION}/latest.json"
           for attempt in $(seq 1 12); do
             if curl -fsSL "$URL" -o latest.json; then break; fi
             echo "等待 latest.json 可下载（第 $attempt 次）：$URL"

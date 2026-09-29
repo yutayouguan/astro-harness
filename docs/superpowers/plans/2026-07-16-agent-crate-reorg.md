@@ -6,7 +6,7 @@
 
 **Architecture:** 按运行时阶段分目录；巨石文件按职责切开；`lib.rs` 只 `pub use` 产品入口（Builder / Loop / 流式入口 / HITL·Interrupt / ToolRegistry）。旧路径（`loop_`、`cron_exec` 等）不保留对外兼容别名。
 
-**Tech Stack:** Rust workspace、`agent` / `backend` / `astro-agent`（Tauri）、现有 `cargo test -p agent` 集成测试。
+**Tech Stack:** Rust workspace、`agent` / `backend` / `astro-harness`（Tauri）、现有 `cargo test -p agent` 集成测试。
 
 **Spec:** `docs/superpowers/specs/2026-07-16-agent-crate-reorg-design.md`
 
@@ -16,7 +16,7 @@
 - 不拆成多个 crate；不改前端 / proto。
 - 对外不保留 `agent::loop_` / `agent::cron_exec` 等旧路径兼容层。
 - 单文件目标约 400–600 行；`delegate` 超标可留 Task 7 再拆，不阻塞主路径。
-- 每个 Task 结束：`cargo test -p agent` 通过；涉及调用方时再 `cargo check -p backend` / `cargo check -p astro-agent`。
+- 每个 Task 结束：`cargo test -p agent` 通过；涉及调用方时再 `cargo check -p backend` / `cargo check -p astro-harness`。
 - 频繁提交；一次 Task 一到数个 commit。
 - 若工作区已有无关 WIP（如 session 硬切），先 stash / 另分支，避免混进本计划 diff。
 
@@ -260,7 +260,7 @@ pub mod cron_exec {
 ```bash
 cargo test -p agent
 cargo check -p backend
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: PASS / 无 error
@@ -607,7 +607,7 @@ Expected: 无业务代码命中（spec/plan 历史文档除外）
 ```bash
 cargo test -p agent
 cargo check -p backend
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 Expected: 全部成功
@@ -649,7 +649,7 @@ Expected: 顶层仅 `lib.rs`、`builder.rs`、`event_bus.rs`、`timeline.rs` + �
 ```bash
 cargo test -p agent
 cargo check -p backend
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 - [x] **Step 4: Commit（若有文档/再拆改动）**

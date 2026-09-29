@@ -47,7 +47,7 @@ for (const reducedMotion of ["reduce", "no-preference"] as const) {
     await page.emulateMedia({ reducedMotion });
     await page.goto("/iframe.html?id=app-first-run-onboarding--intro&viewMode=story");
     const wordmark = page.locator(".onboarding-brand-wordmark");
-    await expect(wordmark).toHaveText("Astro Agent");
+    await expect(wordmark).toHaveText("Astro Harness");
     await expect(wordmark).toHaveAttribute("data-phase", "intro");
     const wordmarkNode = (await wordmark.elementHandle())!;
     const logoNode = (await page.locator(".onboarding-brand-motion").elementHandle())!;

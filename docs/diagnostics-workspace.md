@@ -63,6 +63,6 @@ WAL 与 schema 版本保留在详情，不再作为“健康状态”的大字�
 
 本次未覆盖：受限宿主（620×440、380×640）的原生核对没有做——该实例窗口拒绝按坐标拖拽缩放（`windowNotFoundAtPosition`），其受限布局结论仍来自浏览器样板。
 
-未触碰真实数据根的核对：`~/.astro/automation/cron/jobs.json` 与 `~/.astro/config.toml` 的时间戳在验收前后一致，隔离根内没有生成 `.env`。开发版 `target/debug/astro-agent` 是未打包进程，CUA 无法选中（`cua.getApp(<二进制路径>)` 返回 `Invalid app`），所以原生验收必须经由上述 QA 应用包；底座结束时会重建回普通 dev 工件。
+未触碰真实数据根的核对：`~/.astro/automation/cron/jobs.json` 与 `~/.astro/config.toml` 的时间戳在验收前后一致，隔离根内没有生成 `.env`。开发版 `target/debug/astro-harness` 是未打包进程，CUA 无法选中（`cua.getApp(<二进制路径>)` 返回 `Invalid app`），所以原生验收必须经由上述 QA 应用包；底座结束时会重建回普通 dev 工件。
 
 本轮完整前端测试快照：1082 项中 1077 通过、5 项未通过，集中在桌宠与侧栏的现有源码断言；这些文件不在本次修改范围。诊断、存储和设置相关的 69 项定向测试全部通过，TypeScript、Stylelint、生产构建和 CSS 层检查通过。

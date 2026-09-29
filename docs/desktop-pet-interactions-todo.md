@@ -44,7 +44,7 @@ InteractionCard（主会话和桌宠）`。
 
 原生 QA 已构建并启动；gRPC 实查返回两个活请求，窗口循环记录 `visible=true tasks=1 requests=2 open=true`。随后 Mac 锁屏，CUA 明确无法继续，因此不把日志当作点击/焦点验收证据。QA 进程已结束，未触碰正式会话与凭证。
 
-最终普通包通过 `tsc -b`、Vite 和 Tauri debug bundle 构建，产物为 `target/debug/bundle/macos/Astro Agent.app`。构建源为 HEAD 加本轮 36 个相关文件的隔离快照，不包含 QA 注入；未自动替换/重启正在使用的正式应用。Vite 仍有既有大 chunk 与混合动态导入警告。
+最终普通包通过 `tsc -b`、Vite 和 Tauri debug bundle 构建，产物为 `target/debug/bundle/macos/Astro Harness.app`。构建源为 HEAD 加本轮 36 个相关文件的隔离快照，不包含 QA 注入；未自动替换/重启正在使用的正式应用。Vite 仍有既有大 chunk 与混合动态导入警告。
 
 尚待解锁后原生逐项确认：自动弹出不打断其他应用输入、单击填写、收起/恢复草稿、审批 ACK 后下一项、会话跳转/主窗去重、多屏边缘与透明区域穿透。
 
@@ -72,7 +72,7 @@ InteractionCard（主会话和桌宠）`。
 - 回归测试先在修复前失败（点击输入框左侧后 selectionStart 仍为 16），修复后通过；全部 4 项桌宠 Playwright 流程通过，TypeScript 检查与 13 项请求状态/历史观察测试通过。
 - 原生 QA 主窗口、桌宠窗口可启动；在 QA 主窗口输入测试草稿、关窗进入托盘、在 TextEdit 输入后，gRPC 确认两个测试请求进入待办。但没有取得弹窗的原生可操作证据；加诊断后再次启动时系统明确报告 Mac 锁屏。未把后台成功或浏览器测试标为原生通过。
 - 此次未确认的项目继续保留：弹窗不抢焦点、单击填写/提交、草稿收起恢复、会话跳转、主窗去重、透明穿透、多屏位置。前一次 QA 进程已结束；测试代码仅存在临时源码副本，不进入普通应用包或仓库。
-- 已重新完成不带 QA 环境绑定的普通 `Astro Agent.app` 构建（TypeScript、Vite、CSS layer 检查及 Tauri debug bundle）；未启动或重启正式应用。
+- 已重新完成不带 QA 环境绑定的普通 `Astro Harness.app` 构建（TypeScript、Vite、CSS layer 检查及 Tauri debug bundle）；未启动或重启正式应用。
 
 ## 毛玻璃与圆角优化（2026-09-12）
 

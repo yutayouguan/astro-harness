@@ -53,7 +53,7 @@ export const en: Record<MessageKey, string> = {
   "about.close": "OK",
 
   "page.chat.title": "Chat",
-  "page.chat.sub": "Talk with Astro Agent — memory recall and tools included",
+  "page.chat.sub": "Talk with Astro Harness — memory recall and tools included",
   "page.memory.title": "Memory",
   "page.memory.sub":
     "One workspace per Agent: long-term MEMORY.md, daily diary, agent skills/",
@@ -1218,7 +1218,7 @@ export const en: Record<MessageKey, string> = {
     "The model returned no content. Please retry or switch models.",
 
   welcome:
-    "Hi, I'm Astro Agent.\nType below to start chatting; use the sidebar for memory and workspace.",
+    "Hi, I'm Astro Harness.\nType below to start chatting; use the sidebar for memory and workspace.",
 
   "chat.placeholder": "Message… Enter to send",
   "chat.placeholderStreaming": "Add a follow-up — it will be queued…",

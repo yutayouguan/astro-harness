@@ -934,7 +934,7 @@ mod tests {
         let TurnItem::WebSearch(item) = tool_turn_item_with_execution(
             "search-1",
             "web_search",
-            serde_json::json!({"type":"search","query":"Astro Agent"}),
+            serde_json::json!({"type":"search","query":"Astro Harness"}),
             None,
             Vec::new(),
             ToolStatus::Completed,
@@ -945,7 +945,7 @@ mod tests {
         assert_eq!(
             item.web_action,
             Some(WebSearchAction::Search {
-                query: Some("Astro Agent".into()),
+                query: Some("Astro Harness".into()),
                 queries: None,
             })
         );

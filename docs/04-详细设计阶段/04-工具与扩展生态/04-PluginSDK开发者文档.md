@@ -6,7 +6,7 @@
 > 面向对象：第三方插件开发者
 > 前置文档：[04-WASM插件沙箱API设计.md](../_v0.3规划/04-WASM插件沙箱API设计.md)、[06-Agent市场详细设计.md](../_v0.3规划/06-Agent市场详细设计.md)、[08-Hooks系统详细设计.md](../01-核心引擎层/08-Hooks系统详细设计.md)、[01-Skills系统详细设计.md](01-Skills系统详细设计.md)
 
-本文档面向希望为 Astro Agent 平台构建插件的第三方开发者。你将学到如何从零开始创建插件、开发自定义工具和 Hook、打包 Skill、测试调试，以及最终发布到市场。
+本文档面向希望为 Astro Harness 平台构建插件的第三方开发者。你将学到如何从零开始创建插件、开发自定义工具和 Hook、打包 Skill、测试调试，以及最终发布到市场。
 
 ---
 
@@ -14,14 +14,14 @@
 
 ### 1.1 什么是插件
 
-Astro Agent 插件是一个运行在 WASM 沙箱中的扩展包。通过插件，你可以为 Agent 添加以下能力：
+Astro Harness 插件是一个运行在 WASM 沙箱中的扩展包。通过插件，你可以为 Agent 添加以下能力：
 
 - **自定义工具（Tool）**：让 Agent 能调用你编写的函数，例如翻译、代码分析、数据查询等
 - **Hook（钩子）**：在 Agent 执行管线的关键节点（如工具调用前、LLM 调用前）介入处理
 - **Skill（技能）**：打包结构化提示词模块，教会 Agent 在特定场景下如何行动
 - **MCP Server 集成**：声明插件依赖的 MCP Server，由宿主统一管理
 
-插件以 `.agent` 包格式分发，可通过 Astro Agent 市场安装，也可本地加载。
+插件以 `.agent` 包格式分发，可通过 Astro Harness 市场安装，也可本地加载。
 
 ### 1.2 插件运行原理
 
@@ -29,7 +29,7 @@ Astro Agent 插件是一个运行在 WASM 沙箱中的扩展包。通过插件�
 
 ```text
 ┌─────────────────────────────────────────────┐
-│                 Astro Agent 宿主              │
+│                 Astro Harness 宿主              │
 │                                               │
 │  ┌─────────────┐     ┌──────────────────┐    │
 │  │ ToolRegistry │     │   HookRegistry   │    │
@@ -57,8 +57,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # 添加 WASM 编译目标
 rustup target add wasm32-wasip1
 
-# 安装 Astro Agent CLI（包含插件开发工具链）
-cargo install astro-agent-cli
+# 安装 Astro Harness CLI（包含插件开发工具链）
+cargo install astro-harness-cli
 
 # 验证安装
 astro --version
@@ -143,7 +143,7 @@ homepage = "https://github.com/you/my-translator"  # 可选。项目主页
 entry = "plugin.wasm"                   # 必须。WASM 主文件路径
 
 # === 兼容性 ===
-min_host_version = "0.5.0"             # 必须。最低兼容的 Astro Agent 版本
+min_host_version = "0.5.0"             # 必须。最低兼容的 Astro Harness 版本
 
 [capabilities]
 # === 权限声明 ===
@@ -220,7 +220,7 @@ file = "skills/summarize/SKILL.md"
 | `license` | string | 否 | 许可证标识（如 `MIT`、`Apache-2.0`） |
 | `homepage` | string | 否 | 项目主页 URL |
 | `entry` | string | 是 | 编译后的 WASM 文件名 |
-| `min_host_version` | string | 是 | 最低兼容的 Astro Agent 版本 |
+| `min_host_version` | string | 是 | 最低兼容的 Astro Harness 版本 |
 
 **`[capabilities]` 部分**：
 
@@ -937,7 +937,7 @@ Skill 正文支持动态注入命令输出，使 Skill 能携带当前环境的�
 
 ### 8.1 本地测试
 
-Astro Agent CLI 提供了完整的插件测试工具链：
+Astro Harness CLI 提供了完整的插件测试工具链：
 
 ```bash
 # 编译插件
@@ -1084,13 +1084,13 @@ ctx.log_debug(&format!("API 响应：{} bytes", resp.body.len()));
 
 发布到市场后，debug 级别的日志默认不输出，但用户可在设置中开启插件调试模式查看。
 
-### 8.6 在本地 Astro Agent 中加载测试
+### 8.6 在本地 Astro Harness 中加载测试
 
 ```bash
 # 构建插件
 astro plugin build
 
-# 在本地 Astro Agent 中加载插件（不安装到市场）
+# 在本地 Astro Harness 中加载插件（不安装到市场）
 astro plugin load ./plugin.wasm
 
 # 查看已加载的插件
@@ -1173,7 +1173,7 @@ astro plugin verify my-translator-1.0.0.agent
 ### 9.4 发布到市场
 
 ```bash
-# 发布到 Astro Agent 市场
+# 发布到 Astro Harness 市场
 astro plugin publish my-translator-1.0.0.agent
 
 # 发布前会执行以下检查：

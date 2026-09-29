@@ -20,7 +20,7 @@ use sse_stream::Sse;
 
 use crate::config::{McpHttpAuth, McpServerConfig, McpTransportType};
 
-const KEYRING_SERVICE: &str = "com.astro-agent.mcp.oauth";
+const KEYRING_SERVICE: &str = "com.astro-harness.mcp.oauth";
 
 /// OAuth 流程开始后的浏览器 URL 与内存状态机。
 pub struct McpOAuthSession {
@@ -218,7 +218,7 @@ pub async fn begin_oauth(
         manager.set_credential_store(McpKeyringCredentialStore::new(config));
     }
     state
-        .start_authorization(&[], redirect_uri, Some("Astro Agent"))
+        .start_authorization(&[], redirect_uri, Some("Astro Harness"))
         .await?;
     let authorization_url = state.get_authorization_url().await?;
     Ok(McpOAuthSession {

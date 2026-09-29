@@ -6,7 +6,7 @@
 
 **Architecture:** 在 `memory-paths` 增加 `GeneratedKind` + `generated_dir` + `GENERATED_SUBDIRS` 单一真相；`ensure_agent_space` 脚手架创建目录；`image_gen` / `video_gen` / `tts` 与 Tauri `generate_image` 改用该助手；模板轻量引导 Agent 自写产物。
 
-**Tech Stack:** Rust workspace（memory-paths / memory / tools / astro-agent Tauri）；既有 Node 测 `resolveMediaSrc`。
+**Tech Stack:** Rust workspace（memory-paths / memory / tools / astro-harness Tauri）；既有 Node 测 `resolveMediaSrc`。
 
 **Spec:** [`docs/superpowers/specs/2026-07-15-generated-typed-subdirs-design.md`](../specs/2026-07-15-generated-typed-subdirs-design.md)
 
@@ -377,8 +377,8 @@ std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
 - [x] **Step 2: Check compile**
 
-Run: `cargo check -p astro-agent`  
-Expected: OK（包名以 `apps/desktop/src-tauri/Cargo.toml` 的 `name = "astro-agent"` 为准）
+Run: `cargo check -p astro-harness`  
+Expected: OK（包名以 `apps/desktop/src-tauri/Cargo.toml` 的 `name = "astro-harness"` 为准）
 
 - [x] **Step 3: Commit**
 

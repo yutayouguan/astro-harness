@@ -1,4 +1,4 @@
-// Astro Agent gRPC 协议：桌面壳 / 独立 backend 共用的服务与消息定义。
+// Astro Harness gRPC 协议：桌面壳 / 独立 backend 共用的服务与消息定义。
 //
 syntax = "proto3";
 package astro;

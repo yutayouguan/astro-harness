@@ -2,7 +2,7 @@
 
 **日期：** 2026-08-16
 **状态：** 已按官方权限文档修订，待分阶段实施
-**范围：** Astro Agent 本地工具执行、权限配置、越界审批与桌面端权限选择器
+**范围：** Astro Harness 本地工具执行、权限配置、越界审批与桌面端权限选择器
 **官方基线：**
 
 - [Sandbox](https://learn.chatgpt.com/docs/sandboxing)

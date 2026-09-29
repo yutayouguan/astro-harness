@@ -172,7 +172,7 @@ check_skill_updates(agent_id?) -> Vec<SkillUpdateCheckResult>
 update_all_skills(agent_id?, only_outdated?: bool) // 默认 true for v2 callers
 ```
 
-- [x] `cargo check -p astro-agent`
+- [x] `cargo check -p astro-harness`
 - [x] commit  
   `feat(tauri): expose check_skill_updates command`
 

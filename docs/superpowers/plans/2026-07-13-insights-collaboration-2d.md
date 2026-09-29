@@ -427,7 +427,7 @@ pub async fn get_collaboration_insights(
 - [x] **Step 2: Check**
 
 ```bash
-cargo check -p astro-agent
+cargo check -p astro-harness
 ```
 
 - [x] **Step 3: Commit**
@@ -589,7 +589,7 @@ EOF
 cargo test -p memory --test orchestration_db_test
 cargo test -p memory --test collab_insights_test
 cargo test -p memory --test usage_db_test
-cargo check -p memory -p astro-agent
+cargo check -p memory -p astro-harness
 cd frontend && npx tsc --noEmit
 ```
 

@@ -9,14 +9,14 @@ const cwd = fileURLToPath(new URL("../", import.meta.url));
 const root = realpathSync(mkdtempSync(join(tmpdir(), "astro-settings-restart-")));
 const env = { ...process.env, ASTRO_MEMORY_DIR: root, ASTRO_SETTINGS_RESTART_ROOT: root, OPENAI_API_KEY: "storage-fixture-placeholder-not-a-real-key" };
 const cases = [
-  ["astro-agent", "commands::providers::core::tests::settings_restart_write_fixture"],
-  ["astro-agent", "commands::providers::core::tests::settings_restart_read_fixture"],
+  ["astro-harness", "commands::providers::core::tests::settings_restart_write_fixture"],
+  ["astro-harness", "commands::providers::core::tests::settings_restart_read_fixture"],
   ["server", "cron_runner::tests::settings_restart_read_fixture"],
   ["workflow", "engine::tests::settings_restart_read_fixture"],
 ];
 try {
   console.log("Compiling one consistent test snapshot for all restart phases");
-  const build = spawnSync("cargo", ["test", "-p", "astro-agent", "-p", "server", "-p", "workflow", "--lib", "--no-run", "--message-format=json"],
+  const build = spawnSync("cargo", ["test", "-p", "astro-harness", "-p", "server", "-p", "workflow", "--lib", "--no-run", "--message-format=json"],
     { cwd, env, encoding: "utf8", timeout: 1_200_000, maxBuffer: 32 * 1024 * 1024 });
   if (build.error || build.status !== 0) {
     process.stderr.write(build.stderr ?? "");
@@ -31,7 +31,7 @@ try {
   }
   for (const [pkg, name] of cases) {
     console.log(`Verifying ${pkg}: ${name.split("::").at(-1)}`);
-    const executable = executables.get(pkg === "astro-agent" ? "astro_agent_lib" : pkg);
+    const executable = executables.get(pkg === "astro-harness" ? "astro_agent_lib" : pkg);
     if (!executable) throw new Error(`Missing test executable: ${pkg}`);
     const run = spawnSync(executable, [name, "--ignored", "--exact", "--nocapture"],
       { cwd, env, encoding: "utf8", timeout: 1_200_000, maxBuffer: 16 * 1024 * 1024 });

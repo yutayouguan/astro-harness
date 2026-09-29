@@ -428,7 +428,7 @@ impl UrlIngestor {
         Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(30))
-                .user_agent("AstroAgent/1.0")
+                .user_agent("AstroHarness/1.0")
                 .build()
                 .expect("failed to build HTTP client"),
         }

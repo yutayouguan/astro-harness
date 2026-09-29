@@ -1,6 +1,6 @@
 # memory
 
-Astro Agent 记忆子系统：管理精炼记忆（MEMORY.md）、用户档案（USER.md）、待审批记忆队列、dreaming 入梦管道、决策日志与权限审计。
+Astro Harness 记忆子系统：管理精炼记忆（MEMORY.md）、用户档案（USER.md）、待审批记忆队列、dreaming 入梦管道、决策日志与权限审计。
 
 ## 核心职责
 
